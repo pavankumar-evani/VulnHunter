@@ -1,0 +1,5 @@
+vulnerable-demo-app/venv/
+vulnerable-demo-app/vulnshop.db
+vulnerable-demo-app/.env
+**/__pycache__/
+*.pyc
