@@ -7,6 +7,21 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Fixed
+- **Content area capped at 1200px regardless of viewport or sidebar state**
+  (`dashboard/static/style.css`) - widened the default cap to 1600px, and removed it
+  entirely while the sidebar is collapsed, since a fixed cap defeated the whole point
+  of that full-screen view.
+- **Permanent, confusing horizontal scrollbar in the sidebar** - not a text-wrapping
+  bug (nav labels do wrap correctly), but every nav item's hover-tooltip: a CSS
+  `::after` positioned absolute inside `.side-nav` (which has `overflow-y: auto`,
+  forcing `overflow-x` to `auto` too per the CSS overflow spec) still counted toward
+  `.side-nav`'s scrollable width even at `opacity: 0`/rest, inflating it by the
+  tooltip's up-to-220px reach. Replaced the pure-CSS `[data-tooltip]::after` approach
+  with a single shared tooltip element (`dashboard/static/js/tooltip.js`) positioned
+  via JS on hover/focus and appended to `<body>` - living outside any scrolling
+  ancestor's box avoids this class of bug for good, sitewide (KPI cards, tenant
+  switcher, not just the sidebar), and clamps to the viewport as a bonus so a tooltip
+  near a screen edge never renders off-screen.
 - **Timing-based email-enumeration side-channel in local login** (`dashboard/auth/users.py`).
   `verify_login()` used `not user or not verify_password(...)`, whose `or`
   short-circuits and skips the deliberately-slow (600k-iteration PBKDF2)
@@ -45,6 +60,27 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   dedicated security-review pass across this session's work.
 
 ### Added
+- **Container and API Vulnerabilities as real Security Domains categories**
+  (`dashboard/static/js/pages/vulnhunt.js`, `appsec.js`, `.claude/agents/vuln-scanner.md`).
+  `/vulnhunt`'s category classifier already had the data - the scanner has detected
+  Dockerfile/container issues (root user, baked-in secrets, unpinned base images) since
+  an earlier wave, they were just fallen through to the generic "Other" bucket (no
+  CWE-250 mapping, and no CWE at all for "unpinned base image"). Added `CWE-250 ->
+  Container`, a Dockerfile-path fallback for the no-CWE case, and new API-security CWE
+  mappings (CWE-284/863/942/915), plus new scanner detection guidance for API/
+  authorization issues (missing auth on a route, wildcard CORS, mass assignment) for
+  future scans to actually find. Both get their own Security Domains nav entry and
+  `/appsec` hub card. Honest about scope, matching the existing DAST precedent: API
+  Vulnerabilities shows 0 findings today since the demo app has no planted example -
+  not faked just to fill the category.
+- **`.github/dependabot.yml`** — automated version-bump PRs for the real product
+  dependencies (`dashboard/`, `remediation/config|connectors|enrichment`) and GitHub
+  Actions. Deliberately excludes `vulnerable-demo-app/` and `vulnerable-demo-multilang/`
+  - those are intentionally vulnerable scan-target fixtures, so an automated PR bumping
+  their pinned-old dependencies would break the demo's purpose, not fix a real issue.
+  Note this only controls future version-bump PRs - it doesn't affect Dependabot's
+  Security tab alerts, which GitHub generates automatically from the dependency graph
+  regardless of this file.
 - **Pattern-matched owner/team suggestions for the Asset Inventory**
   (`remediation/inventory/pattern_recognition.py`) — answers the ask for "machine
   learning... to learn from the data and predict patterns for assets, hosts, IPs,

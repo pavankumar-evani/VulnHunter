@@ -7,6 +7,7 @@ import { renderSidebar } from "./nav.js";
 import { initNotificationBell } from "./notifications.js";
 import { initGlobalSearch } from "./search.js";
 import { initSidebarToggle } from "./sidebarToggle.js";
+import { initTooltips } from "./tooltip.js";
 
 const routes = [
   { pattern: /^\/$/, load: () => import("./pages/overview.js") },
@@ -121,4 +122,5 @@ initGlobalSearch();
 initNotificationBell();
 initAccountChip();
 initSidebarToggle();
+initTooltips();
 renderRoute();

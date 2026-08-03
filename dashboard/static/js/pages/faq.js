@@ -45,6 +45,13 @@ const FAQS = [
     "and lets you attach an owner/team, stored in a real, editable local file - not a " +
     "sync from a real CMDB/asset-management system. It also has a CMDB CSV import " +
     "panel to bulk-assign owner/team from an uploaded export."],
+  ["Are Container and API Vulnerabilities real categories, or placeholders?",
+    "Both real, different maturity. Container Vulnerabilities surfaces findings the " +
+    "scanner already detected (root user, baked-in secrets, unpinned base image) - they " +
+    "were just falling into a generic \"Other\" bucket before a small category-mapping " +
+    "fix. API Vulnerabilities is new detection guidance for future scans (missing auth, " +
+    "wildcard CORS, mass assignment) - same honest treatment as DAST: wired up and real, " +
+    "but shows 0 findings today since the demo app has no planted example."],
   ["Is the owner suggestion on Asset Inventory real machine learning?",
     "No. It's three transparent, weighted pattern-matching signals - hostname naming " +
     "convention, IP subnet, and asset type (plus MAC vendor matching for type " +

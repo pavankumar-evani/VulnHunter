@@ -30,8 +30,18 @@ path for issues including (not limited to):
   CVEs. You may use Bash to run `pip index versions` or check version numbers logically,
   but do not fabricate specific CVE IDs you're not sure of — say "likely outdated, verify
   against CVE database" if uncertain.
-- **Container/Docker issues**: running as root (no `USER` directive), secrets baked into
-  image layers via `ENV`/`ARG`, use of `latest` or unpinned base images.
+- **Container/Docker issues**: running as root - no `USER` directive (CWE-250), secrets
+  baked into image layers via `ENV`/`ARG` (CWE-798), use of `latest` or an unpinned base
+  image tag.
+- **API/authorization issues**: a route/endpoint handler with no authentication or
+  authorization check at all on data that isn't genuinely public (Flask/FastAPI missing
+  a `Depends(...)`/`@login_required`-style guard, Express missing an auth middleware in
+  its chain) (CWE-284/CWE-863); a CORS configuration that allows any origin -
+  `Access-Control-Allow-Origin: *`, FastAPI/Starlette `CORSMiddleware(allow_origins=["*"])`,
+  Flask-CORS `resources={r"/*": {"origins": "*"}}` - on a route that isn't genuinely
+  public (CWE-942); "mass assignment" - binding an entire raw request body/dict directly
+  onto a database model or ORM object with no explicit field allow-list, letting a
+  caller set fields like `role`/`is_admin` they should never control (CWE-915).
 
 ### Python (`.py`)
 

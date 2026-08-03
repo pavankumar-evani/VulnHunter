@@ -138,6 +138,11 @@ body {
   text-decoration: none;
   font-size: 0.88rem;
   border-left: 3px solid transparent;
+  /* Without this, a flex item's automatic minimum width defaults to its content's
+     max-content size - so a long, unwrapped label (e.g. "SAST (Static Application
+     Security Testing)") refuses to shrink to the sidebar's width at all, forcing a
+     horizontal scrollbar on .side-nav instead of wrapping onto multiple lines. */
+  min-width: 0;
 }
 .side-nav a:hover { background: rgba(255,255,255,0.06); color: white; }
 .side-nav a.active {
@@ -146,7 +151,8 @@ body {
   border-left-color: var(--brand-accent);
   font-weight: 600;
 }
-.nav-icon { display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
+.nav-icon { display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; flex-shrink: 0; }
+.nav-label { flex: 1; min-width: 0; }
 .nav-icon .icon { display: block; }
 
 .sidebar-footer {
@@ -457,7 +463,11 @@ a.notif-item:hover { background: var(--bg); }
   50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(22,163,74,0); }
 }
 
-.content { padding: 24px 32px 60px; max-width: 1200px; }
+.content { padding: 24px 32px 60px; max-width: 1600px; }
+/* Collapsing the sidebar (sidebarToggle.js) is meant to give a genuine full-screen
+   content view - a fixed max-width would defeat that on a wide monitor, so drop the
+   cap entirely while collapsed instead of just widening it. */
+.app-shell.sidebar-collapsed .content { max-width: none; }
 
 h1 { font-size: 1.5rem; margin-bottom: 4px; }
 h2 { font-size: 1.15rem; margin-top: 32px; }
@@ -732,13 +742,17 @@ th.sortable:hover { color: var(--text); }
 }
 
 /* --- Hover tooltips (nav items, tenant switcher, KPI cards) --- */
-[data-tooltip] { position: relative; }
-[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%) translateY(4px);
+/* A single shared element (tooltip.js), positioned via JS on hover/focus and
+   appended to <body> - not a per-element ::after inside .side-nav. A CSS ::after
+   positioned absolute inside a vertically-scrolling container (.side-nav has
+   overflow-y:auto, which forces overflow-x to auto too per the CSS overflow spec)
+   still counts toward that container's scrollable width even at opacity:0/rest,
+   inflating .side-nav's scrollWidth by the tooltip's up-to-220px reach and producing
+   a permanent, confusing horizontal scrollbar that goes nowhere useful. Living
+   outside any scrolling ancestor's box entirely avoids that class of bug for good. */
+.js-tooltip {
+  position: fixed;
+  display: none;
   background: #14171a;
   color: white;
   padding: 6px 10px;
@@ -750,18 +764,10 @@ th.sortable:hover { color: var(--text); }
   width: max-content;
   max-width: 220px;
   text-align: left;
-  z-index: 40;
-  opacity: 0;
+  z-index: 1000;
   pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
   box-shadow: 0 4px 14px rgba(0,0,0,0.2);
 }
-[data-tooltip]:hover::after, [data-tooltip]:focus-within::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-.side-nav [data-tooltip]::after { left: 100%; bottom: auto; top: 50%; transform: translate(8px, -50%); }
-.side-nav [data-tooltip]:hover::after { transform: translate(12px, -50%); }
 
 /* --- Icons --- */
 .icon { flex-shrink: 0; }

@@ -27,6 +27,10 @@ const NAV = [
       tip: "Remediation Queue pre-filtered to Software Composition Analysis findings (vulnerable third-party/bundled libraries)." },
     { path: "/queue?category=cert-mgmt", label: "Certificate Vulnerabilities", icon: "certmgmt",
       tip: "Remediation Queue pre-filtered to Certificate & TLS Lifecycle Management findings." },
+    { path: "/vulnhunt?category=Container", label: "Container Vulnerabilities", icon: "container",
+      tip: "Code Scan pre-filtered to base-image/Dockerfile findings (root user, baked-in secrets, unpinned tags)." },
+    { path: "/vulnhunt?category=API", label: "API Vulnerabilities", icon: "api",
+      tip: "Code Scan pre-filtered to API-security findings (missing auth, permissive CORS, mass assignment) - no sample data yet, see the FAQ." },
   ] },
   { group: "Remediation Engine", items: [
     { path: "/vulnhunt", label: "Code Scan", icon: "scan",
@@ -100,7 +104,7 @@ export function renderSidebar(currentPath, currentSearch = "") {
         ? currentPath === pathname
         : currentPath === pathname && currentSearch === search;
       return `<a href="${item.path}" data-link data-tooltip="${item.tip}" class="${active ? "active" : ""}">` +
-        `<span class="nav-icon">${icon(item.icon, 17)}</span> ${item.label}</a>`;
+        `<span class="nav-icon">${icon(item.icon, 17)}</span><span class="nav-label">${item.label}</span></a>`;
     }).join("");
     return `<div class="nav-group"><div class="nav-group-label">${group.group}</div>${itemsHtml}</div>`;
   }).join("");

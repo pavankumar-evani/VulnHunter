@@ -1,7 +1,8 @@
-// Application Security hub: a single landing page that rolls up the four AppSec-specific
-// finding categories (SAST, DAST, SCA, Secrets-in-code) into one view with a count and a
-// deep link into each's real, pre-filtered page - rather than making a user hunt across
-// /vulnhunt and /queue to answer "what does our application security posture look like."
+// Application Security hub: a single landing page that rolls up the AppSec-specific
+// finding categories (SAST, DAST, SCA, Secrets-in-code, Container, API) into one view
+// with a count and a deep link into each's real, pre-filtered page - rather than making
+// a user hunt across /vulnhunt and /queue to answer "what does our application security
+// posture look like."
 // Infrastructure Vulnerability Management and Certificate/TLS findings are deliberately
 // NOT rolled up here - those are asset/network-facing categories, not application security
 // ones, and each already has its own top-level Security Domains nav entry.
@@ -28,13 +29,16 @@ export async function render(container) {
 
   const sastFindings = vh.available ? vh.findings : [];
   const sastTotal = sastFindings.length;
-  const secretsTotal = sastFindings.filter((f) => categoryFor(f.CWE) === "Secrets").length;
+  const secretsTotal = sastFindings.filter((f) => categoryFor(f.CWE, f.File) === "Secrets").length;
+  const containerTotal = sastFindings.filter((f) => categoryFor(f.CWE, f.File) === "Container").length;
+  const apiTotal = sastFindings.filter((f) => categoryFor(f.CWE, f.File) === "API").length;
   const scaTotal = queue.findings.filter((f) => f.scan_type === "sca").length;
   const dastTotal = queue.findings.filter((f) => f.scan_type === "dast").length;
 
   container.innerHTML = `
     <p class="subtitle">Application-layer findings only - source code (SAST), bundled/
-    third-party libraries (SCA), hardcoded secrets, and dynamic/runtime testing (DAST).
+    third-party libraries (SCA), hardcoded secrets, dynamic/runtime testing (DAST),
+    container/base-image issues, and API-security findings.
     Infrastructure and certificate findings live under their own Security Domains entries.</p>
 
     <div class="domain-card-grid">
@@ -53,6 +57,14 @@ export async function render(container) {
       ${domainCard({
         href: "/vulnhunt?category=Secrets", iconName: "secrets", label: "Secrets Management", count: secretsTotal,
         note: "Hardcoded credentials/keys found in source (CWE-798).",
+      })}
+      ${domainCard({
+        href: "/vulnhunt?category=Container", iconName: "container", label: "Container Vulnerabilities", count: containerTotal,
+        note: "Base-image and Dockerfile issues - root user, baked-in secrets, unpinned tags.",
+      })}
+      ${domainCard({
+        href: "/vulnhunt?category=API", iconName: "api", label: "API Vulnerabilities", count: apiTotal,
+        note: apiTotal ? "Missing auth, permissive CORS, or mass-assignment findings." : "No sample API-security finding yet - see the FAQ.",
       })}
     </div>
 

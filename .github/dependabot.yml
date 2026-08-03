@@ -1,0 +1,31 @@
+# Automated dependency version-bump PRs for VulnHunter's real product dependencies.
+#
+# Deliberately does NOT cover vulnerable-demo-app/ or vulnerable-demo-multilang/ -
+# those directories are intentionally vulnerable, planted fixtures for /vulnhunt to
+# scan and demonstrate the pipeline against (see README.md and SECURITY.md). An
+# automated PR bumping their pinned-old dependencies would break the demo's purpose,
+# not fix a real issue. Note this config only controls automated version-bump PRs -
+# it does not affect (and cannot suppress) Dependabot's Security tab alerts, which
+# GitHub generates automatically from the dependency graph regardless of this file.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/dashboard"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/remediation/config"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/remediation/connectors"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/remediation/enrichment"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

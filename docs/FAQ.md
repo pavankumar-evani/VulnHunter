@@ -119,6 +119,21 @@ severity, KEV exposure) and lets you attach an owner/team, stored in
 sync from a real CMDB/asset-management system - see the module docstring for what a
 production version would need instead.
 
+### Are Container and API Vulnerabilities real categories, or placeholders?
+
+Both are real, but at different maturity. **Container Vulnerabilities** surfaces
+findings the scanner has already been detecting since an earlier wave (Dockerfile
+issues: running as root, secrets baked into image layers, unpinned base image tags) -
+they were just falling into a generic "Other" bucket because "no CWE" (unpinned base
+image has none) or an unmapped CWE (CWE-250 for running as root) didn't match the
+category lookup in `dashboard/static/js/pages/vulnhunt.js`. That's fixed, so this
+category shows real findings today. **API Vulnerabilities** is newly-added detection
+guidance in `.claude/agents/vuln-scanner.md` (missing authentication on a route,
+wildcard CORS, mass assignment) for scans going forward - same honest treatment as
+DAST: the category and its CWE mappings are real and wired up, but it shows 0
+findings today because the demo app has no planted API-security example, and one
+wasn't fabricated just to fill the card.
+
 ### Is the owner suggestion on `/assets` real machine learning?
 
 No, and calling it that would be dishonest. `/assets` can suggest an owner/team for an

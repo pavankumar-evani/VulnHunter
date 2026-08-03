@@ -15,21 +15,34 @@ const EXPORT_COLUMNS = [
 ];
 
 // A coarse, honest categorization by CWE - matches .claude/agents/vuln-scanner.md's own
-// "What to look for" taxonomy (Injection / Secrets / Auth-Crypto / Insecure Config).
-// Unmapped CWEs (e.g. container/dependency findings without one of these IDs) fall back
-// to "Other" rather than guessing.
+// "What to look for" taxonomy (Injection / Secrets / Auth-Crypto / Insecure Config /
+// Container / API). Unmapped CWEs with no other signal fall back to "Other" rather
+// than guessing.
 const CWE_CATEGORY = {
   "CWE-89": "Injection", "CWE-78": "Injection", "CWE-95": "Injection", "CWE-502": "Injection",
   "CWE-79": "Injection", "CWE-611": "Injection", "CWE-98": "Injection",
   "CWE-798": "Secrets",
   "CWE-256": "Auth/Crypto", "CWE-347": "Auth/Crypto",
   "CWE-489": "Insecure Config", "CWE-1321": "Insecure Config", "CWE-276": "Insecure Config",
+  "CWE-250": "Container",
+  "CWE-284": "API", "CWE-863": "API", "CWE-942": "API", "CWE-915": "API",
 };
 
-export function categoryFor(cwe) {
-  if (!cwe) return "Other";
-  const key = cwe.split(/[,\s]/)[0];
-  return CWE_CATEGORY[key] || "Other";
+// A Dockerfile/compose finding with no CWE at all (e.g. "unpinned base image" has no
+// CWE to assign) still deserves "Container" over the "Other" catch-all - this is a
+// file-path signal, not a guess about the finding's actual nature, so it only applies
+// when the CWE lookup above found nothing.
+function isDockerFile(file) {
+  return /^dockerfile\b|docker-compose/i.test(file || "");
+}
+
+export function categoryFor(cwe, file) {
+  if (cwe) {
+    const key = cwe.split(/[,\s]/)[0];
+    if (CWE_CATEGORY[key]) return CWE_CATEGORY[key];
+  }
+  if (isDockerFile(file)) return "Container";
+  return "Other";
 }
 
 function rowHtml(f) {
@@ -58,7 +71,7 @@ export async function render(container) {
     return;
   }
 
-  const findings = vh.findings.map((f) => ({ ...f, _category: categoryFor(f.CWE) }));
+  const findings = vh.findings.map((f) => ({ ...f, _category: categoryFor(f.CWE, f.File) }));
   const categories = [...new Set(findings.map((f) => f._category))].sort();
   // A nav deep-link (e.g. /vulnhunt?category=Secrets from the Security Domains menu) can
   // preselect the category filter on load.
