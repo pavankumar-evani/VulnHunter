@@ -6,6 +6,41 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Added
+- **AI Assist** (`/ai-assist`, `/api/ai-assist`, `dashboard/ai_assist.py`) — ask Claude to
+  explain a finding, draft remediation steps, or write an executive summary, grounded in
+  that finding's real data. Same dry-run-preview-by-default / explicit-confirm-to-spend
+  pattern as `/run` and `/servicenow`: preview the exact prompt for free, confirm to
+  actually call the real Claude API and spend usage/credits. A per-row "Ask AI" link on
+  the Remediation Queue deep-links here with the finding preselected.
+- **Reports** (`/reports`, `/api/reports/generate[.html]`, `dashboard/reports.py`) — a
+  real, on-demand report generator (daily/weekly/monthly/quarterly/half-yearly/yearly
+  framing) summarizing SLA, KEV/EPSS, risk-tier, and asset-coverage KPIs from the actual
+  artifacts, downloadable as a standalone HTML snapshot. Honest caveat built into the
+  report itself: without a persistence layer, every period currently renders the same
+  real, current-moment snapshot rather than aggregating historical data.
+- **Illustrative MSSP tenant-switcher demo** (`dashboard/static/js/tenant.js`) — a sidebar
+  selector ("All Tenants" / "Acme Financial Corp (demo)" / "Northwind Bank (demo)") that
+  partitions the same real findings by asset category on the Remediation Queue page, with
+  a persistent on-page banner and FAQ entry making clear this is a UI-only illustration,
+  not real per-tenant authentication or data isolation.
+- **Categorization/filtering** on Code Scan (severity, CWE-derived category), Remediation
+  Queue (priority, asset type, KEV-only), and Remediation Plan (risk tier, automation
+  target) — all client-side over already-fetched data, with a live match count.
+- **Live-refresh indicators** on Overview and the Remediation Queue — poll the same real
+  API every 20s with a "Live · updated Xs ago" badge, so the dashboard reflects changes
+  (e.g. a priority-rules edit) without a manual reload.
+- **Visual/brand redesign** — a real SVG logo mark + favicon, a hand-drawn stroke-icon set
+  replacing the earlier unicode-glyph nav icons, hover tooltips on every nav item and the
+  tenant switcher explaining what each does, dark-mode-aware form inputs.
+- **Support and FAQ pages** (`/support`, `/faq`) plus a full `docs/` folder (`USER_GUIDE.md`,
+  `FAQ.md`, `AI_COMMANDS.md`, `INTEGRATIONS.md`, `REMEDIATION_WORKFLOWS.md`,
+  `COMPLIANCE_MAPPING.md`, `SUPPORT.md`) covering usage, every AI-facing entry point,
+  integrations, the remediation lifecycle, and an explicitly non-certifying
+  control-mapping reference (NIST CSF / SOC2 categories - not a compliance claim).
+- 37 new tests (`test_ai_assist.py`, `test_reports.py`, plus new `dashboard` API test
+  classes) — full suite now 219/219 across 11 files.
+
 ### Changed
 - **Dashboard: Flask + Jinja2 → FastAPI + a hand-rolled vanilla-JS single-page app.**
   Reframed from a hackathon entry toward a commercial-grade product, the ask included

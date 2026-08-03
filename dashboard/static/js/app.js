@@ -12,11 +12,20 @@ const routes = [
   { pattern: /^\/priority-rules\/?$/, load: () => import("./pages/priorityRules.js") },
   { pattern: /^\/servicenow\/?$/, load: () => import("./pages/servicenow.js") },
   { pattern: /^\/run\/?$/, load: () => import("./pages/run.js") },
+  { pattern: /^\/ai-assist\/?$/, load: () => import("./pages/aiAssist.js") },
+  { pattern: /^\/reports\/?$/, load: () => import("./pages/reports.js") },
+  { pattern: /^\/support\/?$/, load: () => import("./pages/support.js") },
+  { pattern: /^\/faq\/?$/, load: () => import("./pages/faq.js") },
   { pattern: /^\/playbooks\/([^/]+)$/, load: () => import("./pages/playbookDetail.js") },
 ];
 
 const appEl = document.getElementById("app");
 const titleEl = document.getElementById("page-title");
+const topbarExtraEl = document.getElementById("topbar-extra");
+
+// A page's render() may return a cleanup function (e.g. to clearInterval on an
+// auto-refresh poller) - it's called right before navigating to the next page.
+let currentCleanup = null;
 
 function matchRoute(pathname) {
   for (const route of routes) {
@@ -27,6 +36,12 @@ function matchRoute(pathname) {
 }
 
 async function renderRoute() {
+  if (currentCleanup) {
+    currentCleanup();
+    currentCleanup = null;
+  }
+  topbarExtraEl.innerHTML = "";
+
   const pathname = window.location.pathname;
   renderSidebar(pathname);
 
@@ -44,7 +59,7 @@ async function renderRoute() {
     const heading = typeof mod.title === "function" ? mod.title(...matched.params) : mod.title;
     titleEl.textContent = heading;
     document.title = `${heading} · VulnHunter`;
-    await mod.render(appEl, ...matched.params);
+    currentCleanup = (await mod.render(appEl, ...matched.params)) || null;
   } catch (err) {
     console.error(err);
     appEl.innerHTML = `<div class="flash flash-error">Failed to load page: ${err.message || err}</div>`;
@@ -59,8 +74,8 @@ document.addEventListener("click", (event) => {
   const url = new URL(link.href, window.location.origin);
   if (url.origin !== window.location.origin) return;
   event.preventDefault();
-  if (url.pathname === window.location.pathname) return;
-  window.history.pushState({}, "", url.pathname);
+  if (url.pathname + url.search === window.location.pathname + window.location.search) return;
+  window.history.pushState({}, "", url.pathname + url.search);
   renderRoute();
 });
 

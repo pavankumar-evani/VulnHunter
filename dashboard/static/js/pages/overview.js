@@ -1,15 +1,15 @@
 import { api } from "../api.js";
-import { escapeHtml } from "../dom.js";
+import { escapeHtml, timeAgo } from "../dom.js";
 
 export const title = "Security Posture Overview";
+
+const REFRESH_MS = 20000;
 
 function kpi(value, label, cls = "") {
   return `<div class="kpi-card ${cls}"><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div>`;
 }
 
-export async function render(container) {
-  const data = await api.overview();
-
+function renderBody(data) {
   const riskRows = Object.entries(data.plan.risk_tier_counts || {}).map(([tier, count]) => `
     <tr>
       <td><span class="badge badge-${tier.replaceAll("-", "_")}">${escapeHtml(tier)}</span></td>
@@ -19,7 +19,7 @@ export async function render(container) {
   const assetRows = Object.entries(data.asset_type_breakdown).map(([type, count]) => `
     <tr><td>${escapeHtml(type)}</td><td>${count}</td></tr>`).join("");
 
-  container.innerHTML = `
+  return `
     <p class="subtitle">Real results from the last validated run of both pipelines — not simulated.</p>
 
     <div class="kpi-grid">
@@ -72,4 +72,31 @@ export async function render(container) {
       against real infrastructure automatically. See the safety model in
       <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision" target="_blank" rel="noopener">KNOWLEDGE_TRANSFER.md §4.3</a>.
     </div>`;
+}
+
+export async function render(container) {
+  const topbarExtra = document.getElementById("topbar-extra");
+  let lastFetched = null;
+
+  function renderLiveBadge() {
+    if (!topbarExtra) return;
+    topbarExtra.innerHTML = `<span class="live-badge" data-tooltip="Auto-refreshes every ${REFRESH_MS / 1000}s">` +
+      `<span class="live-dot"></span> Live · updated ${lastFetched ? timeAgo(lastFetched) : "just now"}</span>`;
+  }
+
+  async function load() {
+    const data = await api.overview();
+    lastFetched = new Date();
+    container.innerHTML = renderBody(data);
+    renderLiveBadge();
+  }
+
+  await load();
+  const tickTimer = setInterval(renderLiveBadge, 1000);
+  const refreshTimer = setInterval(() => { load().catch((err) => console.error(err)); }, REFRESH_MS);
+
+  return () => {
+    clearInterval(tickTimer);
+    clearInterval(refreshTimer);
+  };
 }

@@ -20,7 +20,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "dashboard"))
@@ -269,13 +269,100 @@ class ApiServiceNow(unittest.TestCase):
         self.assertIn("required", resp.json()["detail"])
 
 
+class ApiAiAssist(unittest.TestCase):
+    def test_preview_builds_a_real_prompt_with_no_confirm(self):
+        resp = client.post("/api/ai-assist", json={"finding_id": "FIND-12", "action": "explain"})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["dry_run"])
+        self.assertIn("FIND-12", payload["prompt"])
+        self.assertIn("Log4Shell", payload["prompt"])
+
+    def test_preview_never_calls_the_real_claude_binary(self):
+        """The critical safety test, same pattern as /api/run and /api/servicenow/send:
+        without confirm, no subprocess is ever spawned, regardless of action."""
+        with patch("app.subprocess.run") as mock_run:
+            resp = client.post("/api/ai-assist", json={"finding_id": "FIND-1", "action": "remediate"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["dry_run"])
+        mock_run.assert_not_called()
+
+    def test_works_for_a_code_scan_finding_too(self):
+        resp = client.post("/api/ai-assist", json={"finding_id": "VULN-2", "action": "summarize"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("VULN-2", resp.json()["prompt"])
+
+    def test_unknown_finding_returns_404(self):
+        resp = client.post("/api/ai-assist", json={"finding_id": "FIND-999", "action": "explain"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_unknown_action_returns_400(self):
+        resp = client.post("/api/ai-assist", json={"finding_id": "FIND-1", "action": "delete_everything"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_confirm_true_calls_the_real_binary_exactly_once(self):
+        """Only ever exercised with the real subprocess call mocked out - this proves
+        the confirm=True path is wired up correctly without ever spending real API
+        usage/credits in the test suite."""
+        fake_result = MagicMock(returncode=0, stdout="This is a mocked AI response.", stderr="")
+        with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+             patch("app.subprocess.run", return_value=fake_result) as mock_run:
+            resp = client.post("/api/ai-assist", json={
+                "finding_id": "FIND-1", "action": "explain", "confirm": True,
+            })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertFalse(payload["dry_run"])
+        self.assertEqual(payload["response"], "This is a mocked AI response.")
+        mock_run.assert_called_once()
+
+    def test_confirm_true_surfaces_a_failed_call_as_502(self):
+        fake_result = MagicMock(returncode=1, stdout="", stderr="something went wrong")
+        with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+             patch("app.subprocess.run", return_value=fake_result):
+            resp = client.post("/api/ai-assist", json={
+                "finding_id": "FIND-1", "action": "explain", "confirm": True,
+            })
+        self.assertEqual(resp.status_code, 502)
+
+
+class ApiReports(unittest.TestCase):
+    def test_generate_returns_real_computed_kpis(self):
+        resp = client.get("/api/reports/generate", params={"period": "weekly"})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["period"], "weekly")
+        self.assertEqual(payload["remediation_total"], 14)
+        self.assertEqual(payload["vulnhunt_total"], 9)
+
+    def test_invalid_period_is_rejected(self):
+        resp = client.get("/api/reports/generate", params={"period": "fortnightly"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_html_report_is_served_inline_by_default(self):
+        resp = client.get("/api/reports/generate.html", params={"period": "daily"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text/html", resp.headers["content-type"])
+        self.assertNotIn("content-disposition", resp.headers)
+        self.assertIn("Daily Security Report", resp.text)
+
+    def test_html_report_download_sets_content_disposition(self):
+        resp = client.get("/api/reports/generate.html", params={"period": "monthly", "download": "true"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("attachment", resp.headers["content-disposition"])
+        self.assertIn("vulnhunter-monthly-report.html", resp.headers["content-disposition"])
+
+
 class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
     """The frontend is a single static/index.html shell served for every page route;
     static/js/app.js reads window.location.pathname client-side and calls the JSON
     API above to render each page. These tests confirm the shell is served correctly
     (and only the shell - no server-side templating), not what it renders to."""
 
-    SHELL_ROUTES = ["/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow"]
+    SHELL_ROUTES = [
+        "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
+        "/ai-assist", "/reports", "/support", "/faq",
+    ]
 
     def test_every_known_route_serves_the_same_spa_shell(self):
         bodies = set()

@@ -41,19 +41,32 @@ empty state with instructions instead of erroring.
 - **`dashboard/data.py`** — unchanged by the rewrite. It has no Flask/FastAPI-specific
   code at all; it just parses real artifacts into plain dicts, and both the old Flask
   routes and the new FastAPI routes called it the same way.
+- **`dashboard/ai_assist.py`** — pure prompt-construction for the AI-assist feature
+  (`build_ai_assist_prompt(finding, action)`); no subprocess/network code of its own.
+- **`dashboard/reports.py`** — real, live-computed report generation
+  (`generate_report_data`, `render_report_html`) for the Reports page and
+  `/api/reports/*`; no fabricated numbers, and honest about what "period" does and
+  doesn't mean without a persistence layer (see its module docstring).
+- **`dashboard/static/js/tenant.js`** — the illustrative MSSP tenant-switcher demo
+  (client-side only, partitions findings by asset category - not real per-tenant
+  auth/data isolation, see the FAQ page).
 
 ## Pages
 
 | Route | Shows |
 |---|---|
-| `/` | KPI overview across both pipelines, SLA/KEV/EPSS summary, risk-tier + asset-class breakdown |
-| `/vulnhunt` | Code scan findings table (from `SECURITY_REPORT.md`) |
-| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable client-side |
-| `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks |
+| `/` | KPI overview across both pipelines, SLA/KEV/EPSS summary, risk-tier + asset-class breakdown, live-refreshed every 20s |
+| `/vulnhunt` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category |
+| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable and filterable client-side (priority, asset type, KEV-only), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link |
+| `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target |
 | `/playbooks/<filename>` | Full content of one generated Ansible playbook |
 | `/priority-rules` | Live YAML editor for `remediation/config/priority_rules.yaml` |
 | `/servicenow` | ServiceNow Incident preview (no credentials needed) and send form |
 | `/run` | Form to trigger a pipeline run (dry-run by default), plus recent-run audit log |
+| `/ai-assist` | Ask Claude to explain/remediate/summarize a finding - dry-run preview by default, explicit confirm to spend real API usage |
+| `/reports` | Generate a real, downloadable KPI/SLA/coverage snapshot report (daily through yearly framing) |
+| `/support` | How to get help, known limitations, before-you-file-a-bug checklist |
+| `/faq` | Direct answers about what this product does and doesn't do |
 | `/api/status` | JSON health/status endpoint |
 
 ## The `/run` and `/servicenow` safety design
@@ -101,7 +114,12 @@ This is a single-process, no-auth, no-persistence MVP:
 - **Synchronous pipeline execution** — a real (non-dry-run) `/api/run` submission blocks
   the request until the pipeline finishes, which can be slow. A production version needs
   a job queue.
-- **Single-tenant** — one repo's worth of findings, not a multi-customer SaaS view.
+- **Single-tenant** — one repo's worth of findings, not a multi-customer SaaS view. The
+  sidebar's tenant switcher is a UI-only demo (partitions the same dataset by asset
+  category) - not real per-tenant auth or data isolation.
+- **No report history** — `/reports`' period selector (daily/weekly/monthly/...) labels
+  the report's intended cadence, but every period currently renders the same real,
+  current-moment snapshot; there's no historical data to aggregate yet.
 
 These are exactly the gaps [KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md)'s
 commercialization roadmap (Tier 2b/3) already names — this MVP is meant to prove the

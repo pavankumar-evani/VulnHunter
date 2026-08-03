@@ -1,3 +1,16 @@
+test_explain_action_asks_for_plain_english_explanation (test_ai_assist.PromptConstruction.test_explain_action_asks_for_plain_english_explanation) ... ok
+test_missing_cve_renders_as_not_applicable (test_ai_assist.PromptConstruction.test_missing_cve_renders_as_not_applicable) ... ok
+test_missing_description_is_omitted_without_error (test_ai_assist.PromptConstruction.test_missing_description_is_omitted_without_error) ... ok
+test_prompt_includes_asset_name_and_type (test_ai_assist.PromptConstruction.test_prompt_includes_asset_name_and_type) ... ok
+test_prompt_includes_cve_and_severity (test_ai_assist.PromptConstruction.test_prompt_includes_cve_and_severity) ... ok
+test_prompt_includes_description_when_present (test_ai_assist.PromptConstruction.test_prompt_includes_description_when_present) ... ok
+test_prompt_includes_finding_id_and_title (test_ai_assist.PromptConstruction.test_prompt_includes_finding_id_and_title) ... ok
+test_prompt_requests_plain_text_concise_response (test_ai_assist.PromptConstruction.test_prompt_requests_plain_text_concise_response) ... ok
+test_remediate_action_asks_for_remediation_steps (test_ai_assist.PromptConstruction.test_remediate_action_asks_for_remediation_steps) ... ok
+test_same_inputs_produce_the_same_prompt (test_ai_assist.PromptConstruction.test_same_inputs_produce_the_same_prompt)
+Pure function: no hidden state, no timestamps baked into the prompt itself. ... ok
+test_summarize_action_asks_for_executive_summary (test_ai_assist.PromptConstruction.test_summarize_action_asks_for_executive_summary) ... ok
+test_unknown_action_raises_value_error (test_ai_assist.PromptConstruction.test_unknown_action_raises_value_error) ... ok
 test_all_matches_can_return_more_than_one_technique (test_attack_mapping.KeywordMatching.test_all_matches_can_return_more_than_one_technique) ... ok
 test_certificate_expiry_is_deliberately_unmapped (test_attack_mapping.KeywordMatching.test_certificate_expiry_is_deliberately_unmapped)
 A cert nearing expiry isn't an attack technique - it's a lifecycle finding. ... ok
@@ -44,6 +57,15 @@ test_poll_returns_chunks_when_finished (test_connectors.TenablePollAndDownload.t
 test_to_csv_row_handles_missing_cve_gracefully (test_connectors.TenableRecordMapping.test_to_csv_row_handles_missing_cve_gracefully) ... ok
 test_to_csv_row_maps_documented_shape (test_connectors.TenableRecordMapping.test_to_csv_row_maps_documented_shape) ... ok
 test_fetch_and_write_csv_matches_sample_schema (test_connectors.TenableWritesSampleCompatibleCsv.test_fetch_and_write_csv_matches_sample_schema) ... ok
+test_confirm_true_calls_the_real_binary_exactly_once (test_dashboard.ApiAiAssist.test_confirm_true_calls_the_real_binary_exactly_once)
+Only ever exercised with the real subprocess call mocked out - this proves ... ok
+test_confirm_true_surfaces_a_failed_call_as_502 (test_dashboard.ApiAiAssist.test_confirm_true_surfaces_a_failed_call_as_502) ... ok
+test_preview_builds_a_real_prompt_with_no_confirm (test_dashboard.ApiAiAssist.test_preview_builds_a_real_prompt_with_no_confirm) ... ok
+test_preview_never_calls_the_real_claude_binary (test_dashboard.ApiAiAssist.test_preview_never_calls_the_real_claude_binary)
+The critical safety test, same pattern as /api/run and /api/servicenow/send: ... ok
+test_unknown_action_returns_400 (test_dashboard.ApiAiAssist.test_unknown_action_returns_400) ... ok
+test_unknown_finding_returns_404 (test_dashboard.ApiAiAssist.test_unknown_finding_returns_404) ... ok
+test_works_for_a_code_scan_finding_too (test_dashboard.ApiAiAssist.test_works_for_a_code_scan_finding_too) ... ok
 test_queue_lists_all_findings_sorted_by_priority (test_dashboard.ApiLiveQueue.test_queue_lists_all_findings_sorted_by_priority) ... ok
 test_queue_shows_sla_and_attack_tags (test_dashboard.ApiLiveQueue.test_queue_shows_sla_and_attack_tags) ... ok
 test_overview_returns_expected_shape_and_counts (test_dashboard.ApiOverview.test_overview_returns_expected_shape_and_counts) ... ok
@@ -53,6 +75,10 @@ test_get_returns_current_rules_text (test_dashboard.ApiPriorityRules.test_get_re
 test_post_invalid_yaml_is_rejected_and_file_unchanged (test_dashboard.ApiPriorityRules.test_post_invalid_yaml_is_rejected_and_file_unchanged) ... ok
 test_post_valid_yaml_saves (test_dashboard.ApiPriorityRules.test_post_valid_yaml_saves) ... ok
 test_lists_all_fourteen_findings_and_playbook_links (test_dashboard.ApiRemediate.test_lists_all_fourteen_findings_and_playbook_links) ... ok
+test_generate_returns_real_computed_kpis (test_dashboard.ApiReports.test_generate_returns_real_computed_kpis) ... ok
+test_html_report_download_sets_content_disposition (test_dashboard.ApiReports.test_html_report_download_sets_content_disposition) ... ok
+test_html_report_is_served_inline_by_default (test_dashboard.ApiReports.test_html_report_is_served_inline_by_default) ... ok
+test_invalid_period_is_rejected (test_dashboard.ApiReports.test_invalid_period_is_rejected) ... ok
 test_dry_run_post_never_calls_real_api (test_dashboard.ApiRunPipeline.test_dry_run_post_never_calls_real_api)
 The critical safety test: submitting without confirm must never spend real ... ok
 test_get_returns_default_budget_and_audit_log_shape (test_dashboard.ApiRunPipeline.test_get_returns_default_budget_and_audit_log_shape) ... ok
@@ -181,6 +207,21 @@ test_score_findings_sorts_highest_priority_first (test_priority_engine.ScoreFind
 test_sla_breached_when_past_due_date (test_priority_engine.SlaComputation.test_sla_breached_when_past_due_date) ... ok
 test_sla_due_date_and_not_breached (test_priority_engine.SlaComputation.test_sla_due_date_and_not_breached) ... ok
 test_sla_handles_missing_first_seen_gracefully (test_priority_engine.SlaComputation.test_sla_handles_missing_first_seen_gracefully) ... ok
+test_accepts_every_documented_period (test_reports.GenerateReportData.test_accepts_every_documented_period) ... ok
+test_generated_at_is_present_and_looks_like_an_iso_timestamp (test_reports.GenerateReportData.test_generated_at_is_present_and_looks_like_an_iso_timestamp) ... ok
+test_pulls_kev_and_epss_counts (test_reports.GenerateReportData.test_pulls_kev_and_epss_counts) ... ok
+test_pulls_sla_summary_from_the_data_module (test_reports.GenerateReportData.test_pulls_sla_summary_from_the_data_module) ... ok
+test_pulls_vulnhunt_and_remediation_totals (test_reports.GenerateReportData.test_pulls_vulnhunt_and_remediation_totals) ... ok
+test_rejects_invalid_period (test_reports.GenerateReportData.test_rejects_invalid_period) ... ok
+test_top_priority_findings_are_capped_at_five (test_reports.GenerateReportData.test_top_priority_findings_are_capped_at_five) ... ok
+test_generate_report_data_against_real_artifacts (test_reports.RealArtifactIntegration.test_generate_report_data_against_real_artifacts) ... ok
+test_render_report_html_against_real_artifacts (test_reports.RealArtifactIntegration.test_render_report_html_against_real_artifacts) ... ok
+test_escapes_html_in_finding_titles (test_reports.RenderReportHtml.test_escapes_html_in_finding_titles)
+A finding title containing HTML must never be injected unescaped - this ... ok
+test_includes_kpi_numbers (test_reports.RenderReportHtml.test_includes_kpi_numbers) ... ok
+test_includes_the_no_persistence_caveat (test_reports.RenderReportHtml.test_includes_the_no_persistence_caveat) ... ok
+test_includes_the_period_in_the_title (test_reports.RenderReportHtml.test_includes_the_period_in_the_title) ... ok
+test_renders_valid_looking_html_document (test_reports.RenderReportHtml.test_renders_valid_looking_html_document) ... ok
 test_base_url_built_from_instance_name (test_servicenow_connector.AuthAndConstruction.test_base_url_built_from_instance_name) ... ok
 test_can_target_a_different_table (test_servicenow_connector.AuthAndConstruction.test_can_target_a_different_table) ... ok
 test_default_table_is_incident (test_servicenow_connector.AuthAndConstruction.test_default_table_is_incident) ... ok
@@ -201,7 +242,7 @@ test_finds_existing_incident_by_correlation_id (test_servicenow_connector.FindEx
 test_returns_none_when_nothing_found (test_servicenow_connector.FindExistingIncident.test_returns_none_when_nothing_found) ... ok
 
 ----------------------------------------------------------------------
-Ran 182 tests in 3.065s
+Ran 219 tests in 7.376s
 
 OK
 Would run: C:\Users\pavane\AppData\Roaming\Claude\claude-code\2.1.219\claude.exe -p /vulnhunt vulnerable-demo-app --output-format json --permission-mode acceptEdits --allowedTools Read Grep Glob Bash Edit Write --max-budget-usd 2.00

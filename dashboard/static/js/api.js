@@ -37,4 +37,6 @@ export const api = {
   runGet: () => request("GET", "/api/run"),
   runPost: (body) => request("POST", "/api/run", body),
   status: () => request("GET", "/api/status"),
+  aiAssist: (body) => request("POST", "/api/ai-assist", body),
+  reportGenerate: (period) => request("GET", `/api/reports/generate?period=${encodeURIComponent(period)}`),
 };

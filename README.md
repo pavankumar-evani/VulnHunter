@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-182%2F182%20passing-brightgreen.svg)](TEST_CASES.md)
+[![Tests](https://img.shields.io/badge/tests-219%2F219%20passing-brightgreen.svg)](TEST_CASES.md)
 
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
@@ -19,7 +19,9 @@ Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
 statement, the idea and why it's built this way, product/solution details for both
 pipelines, step-by-step instructions to actually run everything, test evidence, and a
 troubleshooting log of what broke and how it was fixed. For the detailed test case log
-(182 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
+(219 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
+For task-oriented usage docs, FAQs, AI commands, integrations, and remediation
+workflows, see the [docs/](docs/README.md) folder.
 
 ## The problem
 
@@ -184,7 +186,12 @@ with a sidebar-navigation dashboard:
   with zero credentials required; only sends anything if you provide real credentials
   and explicitly confirm.
 - **Overview** — SLA breached/at-risk/on-track counts alongside the existing KEV/EPSS
-  and asset-coverage KPIs.
+  and asset-coverage KPIs, live-refreshed every 20s.
+- **AI Assist** (`/ai-assist`) — ask Claude to explain a finding, draft remediation
+  steps, or write an executive summary; same dry-run-preview-first safety pattern.
+- **Reports** (`/reports`) — generate a real, downloadable KPI/SLA/coverage snapshot.
+- **Filtering** on Code Scan/Queue/Remediation Plan (severity, category, asset type,
+  risk tier, KEV-only), and an illustrative (demo, not real) MSSP tenant switcher.
 
 See [dashboard/README.md](dashboard/README.md) for what this MVP still doesn't have
 (auth, persistence, multi-tenancy) before considering it beyond a local/trusted-network
@@ -268,9 +275,13 @@ reason no fixer exists yet for that asset class.
 │   └── init_db.py
 ├── vulnerable-demo-multilang/   # intentionally vulnerable Java/JS/Go/PHP/Perl fixtures
 │                                #   proving vuln-scanner.md's per-language coverage
-├── tests/                       # 182 tests (pipeline artifacts, CLI, dashboard, connectors,
+├── docs/                        # USER_GUIDE, FAQ, AI_COMMANDS, INTEGRATIONS,
+│                                #   REMEDIATION_WORKFLOWS, COMPLIANCE_MAPPING (non-
+│                                #   certifying), SUPPORT - see docs/README.md
+├── tests/                       # 219 tests (pipeline artifacts, CLI, dashboard, connectors,
 │                                #   enrichment, priority engine, ATT&CK, ServiceNow,
-│                                #   multi-language scanner patterns), see TEST_CASES.md
+│                                #   multi-language scanner patterns, AI-assist, reports),
+│                                #   see TEST_CASES.md
 ├── .github/                     # CI workflow, issue/PR templates, CODEOWNERS
 ├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md

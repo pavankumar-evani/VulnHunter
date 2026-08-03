@@ -463,8 +463,9 @@ for network devices or IoT/OT. To add one:
 ├── tests/
 │   ├── test_pipeline_artifacts.py   35 automated tests, stdlib only
 │   ├── test_cli.py                  13 tests for the headless CLI (no real API calls)
-│   ├── test_dashboard.py            31 tests for the dashboard (FastAPI TestClient - JSON
-│   │                                API contract + SPA shell routes, no real server)
+│   ├── test_dashboard.py            42 tests for the dashboard (FastAPI TestClient - JSON
+│   │                                API contract + SPA shell routes, no real server;
+│   │                                incl. AI-assist and reports endpoint safety tests)
 │   ├── test_connectors.py           18 tests for the Tenable/Armis connectors (mocked HTTP)
 │   ├── test_enrichment.py           13 tests for KEV/EPSS enrichment (mostly mocked, 1 live)
 │   ├── test_priority_engine.py      14 tests for the configurable priority/SLA engine
@@ -473,10 +474,17 @@ for network devices or IoT/OT. To add one:
 │   ├── test_multilang_scanner_patterns.py  31 tests: static consistency checks between
 │   │                                vuln-scanner.md's per-language detection guidance and
 │   │                                the vulnerable-demo-multilang/ fixture files
-│   └── test_results.txt             a captured passing run (182/182)
+│   ├── test_ai_assist.py            12 tests for dashboard/ai_assist.py's pure prompt
+│   │                                construction (no subprocess/network)
+│   ├── test_reports.py              14 tests for dashboard/reports.py's report generator
+│   │                                (stub-data + real-artifact integration tests)
+│   └── test_results.txt             a captured passing run (219/219)
 ├── deliverables/
 │   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
 │   └── VulnHunter_Project_Report.docx     full project & test report
+├── docs/                  USER_GUIDE, FAQ, AI_COMMANDS, INTEGRATIONS,
+│                          REMEDIATION_WORKFLOWS, COMPLIANCE_MAPPING (non-certifying),
+│                          SUPPORT - see docs/README.md
 ├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md    a real, generated sample /remediate output
 ├── README.md              pitch-oriented overview + demo script
@@ -489,7 +497,7 @@ for network devices or IoT/OT. To add one:
 
 ## 8. Test Evidence & Results
 
-182 tests, 0 failures, across nine suites (exact counts below are from each file's own
+219 tests, 0 failures, across eleven suites (exact counts below are from each file's own
 `python -m unittest` run, not hand-counted — this project got bitten once already by a
 hand-counting error, see the "Fixed" entries in CHANGELOG.md). None of it calls the real
 Claude API (see each file's docstring for why that's a hard rule, not an oversight) — the
@@ -501,13 +509,15 @@ failing if network is unavailable).
 |---|---|---|
 | `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 35 |
 | `tests/test_cli.py` | Headless CLI command construction, binary discovery, one real dry-run subprocess call | 13 |
-| `tests/test_dashboard.py` | Dashboard JSON API contract + SPA shell routes (FastAPI TestClient, incl. live queue, priority-rules editor, ServiceNow preview) | 31 |
+| `tests/test_dashboard.py` | Dashboard JSON API contract + SPA shell routes (FastAPI TestClient, incl. live queue, priority-rules editor, ServiceNow preview, AI-assist, reports) | 42 |
 | `tests/test_connectors.py` | Live Tenable/Armis connector auth/pagination/mapping logic against mocked HTTP | 18 |
 | `tests/test_enrichment.py` | CISA KEV + EPSS enrichment logic, mostly mocked plus one real live-API smoke test | 13 |
 | `tests/test_priority_engine.py` | Configurable priority scoring + SLA computation against the real rules file | 14 |
 | `tests/test_attack_mapping.py` | MITRE ATT&CK keyword heuristic, including deliberate non-matches | 11 |
 | `tests/test_servicenow_connector.py` | ServiceNow Table API adapter — idempotency, body construction, batch error handling | 16 |
 | `tests/test_multilang_scanner_patterns.py` | Static consistency between vuln-scanner.md's per-language guidance and the Java/JS/Go/PHP/Perl fixture files (no runtime execution - see §11.1) | 31 |
+| `tests/test_ai_assist.py` | Pure prompt-construction for the AI-assist feature, no subprocess/network | 12 |
+| `tests/test_reports.py` | Report-generation logic (real KPI data, stub + real-artifact tests), HTML rendering incl. XSS-escaping | 14 |
 
 `test_pipeline_artifacts.py` breakdown:
 
@@ -642,6 +652,25 @@ What a real buyer's security architect will actually ask for. Some of this is no
   Java, Go, PHP, and Perl idioms (not just Python), each with real fixture files under
   `vulnerable-demo-multilang/`. See §11.1 for why this — not rewriting the platform
   itself in each language — is where "polyglot" actually adds product value.
+- **AI Assist** (`/ai-assist`, `dashboard/ai_assist.py`) — a real, working per-finding AI
+  feature (explain / draft remediation / executive summary) using the same
+  dry-run-preview / explicit-confirm-to-spend safety pattern as `/run` and `/servicenow`.
+- **Reports** (`/reports`, `dashboard/reports.py`) — real, on-demand report generation
+  (daily through yearly framing) from live data, downloadable as standalone HTML; honest
+  about not having a persistence layer to aggregate actual historical periods yet.
+- **Illustrative MSSP tenant-switcher demo** (`dashboard/static/js/tenant.js`) — a
+  sidebar selector that partitions the same real findings by asset-type category
+  (e.g. "Acme Financial Corp" = windows-server/unix-server/network-*, "Northwind Bank" =
+  application/certificate/iot-ot-device) on the Remediation Queue page, with a banner
+  and FAQ entry making clear it is UI-only — not real per-tenant auth or data isolation.
+  See §11 for why that's a real database/auth architecture decision, not a UI feature.
+- **Filtering/categorization** on Code Scan, Remediation Queue, and Remediation Plan
+  (severity, CWE-derived category, asset type, risk tier, KEV-only), plus a real SVG
+  brand mark/favicon and hover tooltips replacing the earlier unicode nav icons.
+- **A full `docs/` folder** (`USER_GUIDE.md`, `FAQ.md`, `AI_COMMANDS.md`,
+  `INTEGRATIONS.md`, `REMEDIATION_WORKFLOWS.md`, `COMPLIANCE_MAPPING.md`, `SUPPORT.md`) —
+  `COMPLIANCE_MAPPING.md` is explicitly an informational NIST CSF/SOC2 control-mapping
+  reference, not a certification claim.
 
 **Not started, needs a business/architecture decision first:**
 - **Auth, RBAC, SSO, multi-tenancy** — the current dashboard has zero authentication and

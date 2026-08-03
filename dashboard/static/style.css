@@ -44,14 +44,36 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 20px 18px;
+  padding: 18px;
   color: white;
   text-decoration: none;
   font-weight: 700;
   font-size: 1.05rem;
+  letter-spacing: -0.01em;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
-.brand-mark { font-size: 1.2rem; }
+.brand-mark { display: flex; align-items: center; }
+.brand-mark svg { display: block; }
+
+/* --- Tenant switcher (illustrative MSSP demo, see tenant.js) --- */
+.tenant-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.tenant-switcher .nav-icon { opacity: 0.65; }
+.tenant-switcher select {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.9);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-size: 0.78rem;
+}
+.tenant-switcher select option { color: #14171a; }
 
 .side-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
 .nav-group { margin-bottom: 18px; }
@@ -80,7 +102,8 @@ body {
   border-left-color: var(--brand-accent);
   font-weight: 600;
 }
-.nav-icon { width: 16px; text-align: center; opacity: 0.85; }
+.nav-icon { display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
+.nav-icon .icon { display: block; }
 
 .sidebar-footer {
   padding: 14px 18px;
@@ -96,8 +119,34 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 18px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
-.page-title { margin: 0; font-size: 1.3rem; }
+.page-title { margin: 0; font-size: 1.3rem; letter-spacing: -0.01em; }
+.topbar-extra { flex-shrink: 0; }
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--brand-accent);
+  animation: vh-pulse 1.6s ease-in-out infinite;
+}
+@keyframes vh-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(22,163,74,0.35); }
+  50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(22,163,74,0); }
+}
 
 .content { padding: 24px 32px 60px; max-width: 1200px; }
 
@@ -316,4 +365,123 @@ th.sortable:hover { color: var(--text); }
   .data-table tbody tr:hover { background: #1c2124; }
   code { background: #22272b; }
   .config-form textarea { background: var(--surface); color: var(--text); }
+  .live-badge { background: #1c2124; }
 }
+
+/* --- Hover tooltips (nav items, tenant switcher, KPI cards) --- */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
+  background: #14171a;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: normal;
+  width: max-content;
+  max-width: 220px;
+  text-align: left;
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+}
+[data-tooltip]:hover::after, [data-tooltip]:focus-within::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.side-nav [data-tooltip]::after { left: 100%; bottom: auto; top: 50%; transform: translate(8px, -50%); }
+.side-nav [data-tooltip]:hover::after { transform: translate(12px, -50%); }
+
+/* --- Icons --- */
+.icon { flex-shrink: 0; }
+
+/* --- Filter bar (Queue / Code Scan / Remediation Plan) --- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+.filter-bar label { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+.filter-bar select {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.filter-bar .checkbox-label { flex-direction: row; gap: 6px; }
+.filter-count { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; }
+
+/* --- AI-assist entry points --- */
+.ai-assist-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #7c3aed;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ai-assist-link:hover { text-decoration: underline; }
+
+/* --- Modal (AI-assist panel etc.) --- */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15,18,20,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal-card {
+  background: var(--surface);
+  border-radius: 10px;
+  max-width: 640px; width: 100%;
+  max-height: 85vh; overflow-y: auto;
+  position: relative;
+  padding: 28px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+}
+.modal-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; font-size: 1.4rem;
+  line-height: 1; cursor: pointer; color: var(--text-muted);
+}
+.modal-close:hover { color: var(--text); }
+
+/* --- FAQ accordion --- */
+.faq-list { display: flex; flex-direction: column; gap: 10px; }
+.faq-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 16px;
+}
+.faq-item summary {
+  cursor: pointer;
+  padding: 12px 0;
+  font-weight: 600;
+  list-style: none;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::before { content: "▸ "; color: var(--brand-accent); }
+.faq-item[open] summary::before { content: "▾ "; }
+.faq-item p { color: var(--text-muted); margin: 0 0 14px; line-height: 1.6; }
+
+.asset-type-cell { color: var(--text-muted); font-size: 0.82rem; }

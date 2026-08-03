@@ -7,13 +7,14 @@ what a production version would add on top of this.
 Run with: python dashboard/app.py
 Then open http://127.0.0.1:5050
 """
+import subprocess
 import sys
 from pathlib import Path
 
 import uvicorn
 import yaml
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,7 +22,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import ai_assist  # noqa: E402
 import data as dashboard_data  # noqa: E402
+import reports  # noqa: E402
 import vulnhunter as cli  # noqa: E402
 from remediation.connectors.servicenow_connector import (  # noqa: E402
     ServiceNowConnector, build_incident_body,
@@ -208,6 +211,97 @@ def api_run_post(body: RunBody):
     return {"dry_run": dry_run, "exit_code": exit_code, "message": message}
 
 
+def _find_any_finding(finding_id):
+    """Looks up a finding by ID across both pipelines' output - the remediation
+    findings (FIND-N) and the code-scan findings (VULN-N), reshaped into a common
+    minimal shape so ai_assist.build_ai_assist_prompt() can treat either uniformly."""
+    for f in dashboard_data.load_remediation_findings():
+        if f.get("id") == finding_id:
+            return f
+    vh = dashboard_data.load_vulnhunt_data()
+    for f in vh.get("findings", []):
+        if f.get("ID") == finding_id:
+            return {
+                "id": f.get("ID"),
+                "title": f.get("Title"),
+                "severity": f.get("Severity"),
+                "cve": None,
+                "asset": {"name": f.get("File"), "type": "source-code"},
+                "description": f"{f.get('CWE', '')} finding in {f.get('File', '')}".strip(),
+            }
+    return None
+
+
+class AiAssistBody(BaseModel):
+    finding_id: str
+    action: str = "explain"
+    confirm: bool = False
+
+
+@app.post("/api/ai-assist")
+def api_ai_assist(body: AiAssistBody):
+    """Same dry-run-preview-by-default / explicit-confirm-to-spend pattern as /api/run
+    and /api/servicenow/send: without confirm, this only builds and returns the prompt
+    text, at zero cost. With confirm, it calls the real `claude` CLI (same binary
+    discovery as cli/vulnhunter.py) and spends real API usage/credits."""
+    finding = _find_any_finding(body.finding_id)
+    if not finding:
+        raise HTTPException(status_code=404, detail=f"Finding {body.finding_id} not found")
+    if body.action not in ai_assist.ACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"action must be one of {ai_assist.ACTIONS}, got {body.action!r}",
+        )
+
+    prompt = ai_assist.build_ai_assist_prompt(finding, body.action)
+
+    if not body.confirm:
+        return {
+            "dry_run": True,
+            "prompt": prompt,
+            "message": "Preview only (no API call made). Set confirm to actually ask "
+                       "the AI - this spends real API usage/credits.",
+        }
+
+    try:
+        claude_bin = cli.find_claude_binary()
+    except cli.ClaudeBinaryNotFound as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    command = [claude_bin, "-p", prompt, "--output-format", "text"]
+    result = subprocess.run(  # noqa: S603 - fixed binary + a prompt string, no shell
+        command, cwd=cli.REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
+    )
+    if result.returncode != 0:
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI assist call failed: {result.stderr.strip()[:500]}",
+        )
+
+    return {"dry_run": False, "prompt": prompt, "response": result.stdout.strip()}
+
+
+@app.get("/api/reports/generate")
+def api_generate_report(period: str = "weekly"):
+    try:
+        return reports.generate_report_data(period, dashboard_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/reports/generate.html", response_class=HTMLResponse)
+def api_generate_report_html(period: str = "weekly", download: bool = False):
+    try:
+        data = reports.generate_report_data(period, dashboard_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    html_body = reports.render_report_html(data)
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="vulnhunter-{period}-report.html"'
+    return HTMLResponse(content=html_body, headers=headers)
+
+
 @app.get("/api/status")
 def api_status():
     """A trivial machine-readable health/status endpoint."""
@@ -235,7 +329,10 @@ def _serve_shell():
     return FileResponse(STATIC_DIR / "index.html")
 
 
-for _route in ("/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow"):
+for _route in (
+    "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
+    "/ai-assist", "/reports", "/support", "/faq",
+):
     app.api_route(_route, methods=["GET", "HEAD"], include_in_schema=False)(_serve_shell)
 
 

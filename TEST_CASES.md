@@ -1,9 +1,12 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all nine test files: `tests/test_pipeline_artifacts.py` (both
+Formal test case log for all eleven test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
 `tests/test_dashboard.py` (the web dashboard's FastAPI JSON API and SPA shell routes,
-including the live queue, priority-rules editor, and ServiceNow preview),
+including the live queue, priority-rules editor, ServiceNow preview, AI-assist endpoint,
+and on-demand reports), `tests/test_ai_assist.py` (pure prompt-construction logic for the
+dashboard's AI-assist feature), `tests/test_reports.py` (the dashboard's on-demand
+report-generation logic, both stub-data and real-artifact),
 `tests/test_multilang_scanner_patterns.py` (static consistency checks between the
 scanner's per-language detection guidance and the Java/JS/Go/PHP/Perl fixture files),
 `tests/test_connectors.py` (live Tenable/Armis connectors), `tests/test_enrichment.py`
@@ -23,7 +26,7 @@ pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 182 / 182 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 219 / 219 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -64,6 +67,12 @@ evidence rather than a mocked demo.
 | Dashboard `/api/priority-rules` editor | `ApiPriorityRules` | TC-DASH-20 – 22 | 3/3 PASS |
 | Dashboard `/api/servicenow/*` | `ApiServiceNow` | TC-DASH-23 – 25 | 3/3 PASS |
 | Dashboard SPA shell routes | `HtmlShellRoutesServeTheSpaShell` | TC-DASH-26 – 31 | 6/6 PASS |
+| Dashboard `/api/ai-assist` | `ApiAiAssist` | TC-DASH-32 – 38 | 7/7 PASS |
+| Dashboard `/api/reports/*` | `ApiReports` | TC-DASH-39 – 42 | 4/4 PASS |
+| Dashboard AI-assist prompt construction | `PromptConstruction` | TC-AI-01 – 12 | 12/12 PASS |
+| Dashboard report data generation | `GenerateReportData` | TC-REPORTGEN-01 – 07 | 7/7 PASS |
+| Dashboard report HTML rendering | `RenderReportHtml` | TC-REPORTGEN-08 – 12 | 5/5 PASS |
+| Dashboard report generation against real artifacts | `RealArtifactIntegration` | TC-REPORTGEN-13 – 14 | 2/2 PASS |
 | Multi-language fixture directory sanity | `FixtureDirectoryIsSeparateFromDemoApp` | TC-LANG-01 – 03 | 3/3 PASS |
 | Multi-language Java fixture | `JavaFixture` | TC-LANG-04 – 07 | 4/4 PASS |
 | Multi-language JavaScript fixture | `JavaScriptFixture` | TC-LANG-08 – 11 | 4/4 PASS |
@@ -84,7 +93,7 @@ evidence rather than a mocked demo.
 | ServiceNow construction + auth | `AuthAndConstruction`, `BuildIncidentBodyPureFunction` | TC-SNOW-01 – 06 | 6/6 PASS |
 | ServiceNow incident creation | `FindExistingIncident`, `CreateIncident` | TC-SNOW-07 – 14 | 8/8 PASS |
 | ServiceNow batch handling | `CreateIncidentsForFindingsBatch` | TC-SNOW-15 – 16 | 2/2 PASS |
-| **Total** | | **182** | **182/182 PASS** |
+| **Total** | | **219** | **219/219 PASS** |
 
 ---
 
@@ -228,9 +237,11 @@ without ever calling the real Claude API in a test.
 pipeline test suite about what the artifacts say (no silent drift between the two), every
 JSON endpoint returns the correct shape and status code, the single-page frontend shell
 (`dashboard/static/index.html` + `static/js/app.js`) is served identically for every page
-route while `/api/*` and `/static/*` still 404 correctly, and the two routes that could
-have a real-world side effect (`/api/run` and `/api/servicenow/send`) never trigger it in
-a test. As of this suite's rewrite, the dashboard backend migrated from Flask + Jinja2
+route while `/api/*` and `/static/*` still 404 correctly, and the three routes that could
+have a real-world side effect or spend real API usage (`/api/run`,
+`/api/servicenow/send`, and `/api/ai-assist`) never trigger it in a test unless the
+underlying `subprocess.run`/binary-discovery call is explicitly mocked. As of this
+suite's rewrite, the dashboard backend migrated from Flask + Jinja2
 server-rendered HTML to a FastAPI JSON API with a vanilla-JS single-page frontend — these
 tests validate the JSON contract and the served SPA shell rather than grepping rendered
 HTML for substrings; the actual client-side rendering (sidebar nav, tables, KPI cards,
@@ -242,7 +253,10 @@ playbooks) present on disk; `remediation/config/priority_rules.yaml` present. Al
 requests go through FastAPI's `TestClient` (Starlette's in-process ASGI test client) — no
 real HTTP server, no network, no Claude API or ServiceNow calls. TC-DASH-20–22
 additionally patch `priority_engine.DEFAULT_RULES_PATH` to a temp copy so the suite never
-mutates the real, shipped rules file.
+mutates the real, shipped rules file. TC-DASH-37 and TC-DASH-38 additionally patch
+`app.subprocess.run` and `app.cli.find_claude_binary` so the two `/api/ai-assist`
+test cases that exercise the `confirm=True` path never spawn a real process or spend
+real API usage/credits.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -277,10 +291,86 @@ mutates the real, shipped rules file.
 | TC-DASH-29 | Unknown `/api/*` route returns a real 404 (not the SPA shell) | `GET /api/this-does-not-exist` | HTTP 404 (negative test) | 404 | PASS |
 | TC-DASH-30 | Unknown `/static/*` asset returns a real 404 | `GET /static/this-does-not-exist.js` | HTTP 404 (negative test) | 404 | PASS |
 | TC-DASH-31 | Static assets (CSS/JS) are actually served | `GET /static/style.css` and `GET /static/js/app.js` | Both HTTP 200; `app.js` response contains `renderRoute` | Matches | PASS |
+| TC-DASH-32 | `/api/ai-assist` preview builds a real prompt with no confirm | `POST /api/ai-assist` with `finding_id="FIND-12"`, `action="explain"`, `confirm` omitted | HTTP 200; `dry_run` true; `prompt` contains `"FIND-12"` and `"Log4Shell"` | Matches | PASS |
+| TC-DASH-33 | Preview never calls the real Claude binary (critical safety test) | `POST /api/ai-assist` with `finding_id="FIND-1"`, `action="remediate"`, `confirm` omitted, with `app.subprocess.run` mocked | HTTP 200; `dry_run` true; mocked `subprocess.run` never called | Matches | PASS |
+| TC-DASH-34 | Works for a code-scan (`VULN-`) finding too, not just infra findings | `POST /api/ai-assist` with `finding_id="VULN-2"`, `action="summarize"` | HTTP 200; `prompt` contains `"VULN-2"` | Matches | PASS |
+| TC-DASH-35 | Unknown finding ID returns 404 | `POST /api/ai-assist` with `finding_id="FIND-999"` | HTTP 404 (negative test) | 404 | PASS |
+| TC-DASH-36 | Unknown action returns 400 | `POST /api/ai-assist` with `finding_id="FIND-1"`, `action="delete_everything"` | HTTP 400 (negative test) | 400 | PASS |
+| TC-DASH-37 | `confirm=true` calls the real binary exactly once | `POST /api/ai-assist` with `confirm=true`, with `app.cli.find_claude_binary` and `app.subprocess.run` mocked to return a successful result | HTTP 200; `dry_run` false; `response` equals the mocked stdout; mocked `subprocess.run` called exactly once | Matches | PASS |
+| TC-DASH-38 | `confirm=true` surfaces a failed call as 502 | Same as above but the mocked `subprocess.run` result has `returncode=1` | HTTP 502 | 502 | PASS |
+| TC-DASH-39 | `/api/reports/generate` returns real computed KPIs | `GET /api/reports/generate?period=weekly` | HTTP 200; `period=="weekly"`, `remediation_total==14`, `vulnhunt_total==9` | Matches | PASS |
+| TC-DASH-40 | Invalid report period is rejected | `GET /api/reports/generate?period=fortnightly` | HTTP 400 (negative test) | 400 | PASS |
+| TC-DASH-41 | HTML report is served inline by default | `GET /api/reports/generate.html?period=daily` | HTTP 200; `content-type` contains `text/html`; no `content-disposition` header; body contains `"Daily Security Report"` | Matches | PASS |
+| TC-DASH-42 | HTML report download sets `Content-Disposition` | `GET /api/reports/generate.html?period=monthly&download=true` | `content-disposition` contains `"attachment"` and `"vulnhunter-monthly-report.html"` | Matches | PASS |
 
 ---
 
-## Suite 10: Multi-language scanner pattern consistency (`tests/test_multilang_scanner_patterns.py`)
+## Suite 10: Dashboard AI-assist prompt construction (`dashboard/ai_assist.py`)
+
+**Purpose:** prove the dashboard's AI-assist feature builds a correct, deterministic
+prompt from a finding's real fields before it's ever handed to the `claude` CLI — this
+module is deliberately pure (no subprocess, no network, no API spend), so every
+assertion here is a direct check on prompt text rather than a mock of an external call;
+the actual invocation of the real binary is instead covered (dry-run by default) in
+Suite 9's `ApiAiAssist` tests.
+**Preconditions (all TC-AI):** `dashboard/ai_assist.py` importable; no network, no
+subprocess, no fixture files on disk required — every test constructs its own in-memory
+finding dict.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-AI-01 | `explain` action asks for a plain-English explanation | `build_ai_assist_prompt(finding, "explain")` | Prompt contains `"Explain, in plain English"` | Matches | PASS |
+| TC-AI-02 | `remediate` action asks for remediation steps | `build_ai_assist_prompt(finding, "remediate")` | Prompt contains `"remediation steps"` | Matches | PASS |
+| TC-AI-03 | `summarize` action asks for an executive summary | `build_ai_assist_prompt(finding, "summarize")` | Prompt contains `"executive summary"` | Matches | PASS |
+| TC-AI-04 | Prompt includes the finding's ID and title | Build with the sample Log4Shell finding (`id="FIND-12"`, title contains "Log4Shell") | Prompt contains `"FIND-12"` and `"Log4Shell"` | Matches | PASS |
+| TC-AI-05 | Prompt includes the asset's name and type | Same finding (`asset={"name": "APP-ORDERS01", "type": "application"}`) | Prompt contains `"APP-ORDERS01"` and `"application"` | Matches | PASS |
+| TC-AI-06 | Prompt includes the CVE and severity | Same finding (`cve="CVE-2021-44228"`, `severity="Critical"`) | Prompt contains `"CVE-2021-44228"` and `"Critical"` | Matches | PASS |
+| TC-AI-07 | Prompt includes the description when present | Same finding (`description` mentions "order-processing application") | Prompt contains `"order-processing application"` | Matches | PASS |
+| TC-AI-08 | Missing CVE renders as `N/A`, not `None` or blank | Build with `cve=None` | Prompt contains `"CVE: N/A"` | Matches | PASS |
+| TC-AI-09 | Missing description is omitted without error | Build with the `description` key deleted entirely | Prompt does NOT contain `"Description:"`, no `KeyError` | Absent, no error | PASS |
+| TC-AI-10 | Unknown action raises `ValueError` | Call with `action="delete_everything"` | `ValueError` raised | Raised | PASS |
+| TC-AI-11 | Same inputs always produce the same prompt (pure function) | Call twice with identical finding + action | Both prompts are equal (no hidden state or timestamp) | Equal | PASS |
+| TC-AI-12 | Prompt requests a plain-text, concise response | Build with `action="explain"` | Prompt contains `"plain text only"` and `"under 150 words"` | Matches | PASS |
+
+---
+
+## Suite 11: Dashboard on-demand report generation (`dashboard/reports.py`)
+
+**Purpose:** prove the `/reports` page's data layer computes real KPI/SLA numbers (no
+fabricated figures) for every documented reporting period, renders them into a
+self-contained, correctly-escaped HTML document, and that both still hold up against the
+real repo artifacts (not just a stub). Honest limitation carried over from the module's
+own docstring: because the dashboard has no persistence/history layer yet, every period
+(`daily` through `yearly`) currently summarizes the same real, current-moment snapshot
+rather than actual historical data for that window — `RenderReportHtml`'s caveat test
+confirms the report is honest about this rather than inventing trend numbers.
+**Preconditions (all TC-REPORTGEN):** `dashboard/reports.py` importable. `GenerateReportData`
+and `RenderReportHtml` inject a `_StubDataModule` stand-in for `dashboard/data.py` so
+those 12 cases are deterministic and touch no real artifacts. `RealArtifactIntegration`'s
+2 cases instead import the real `dashboard/data.py` (as `dashboard_data`) and run against
+the actual pipeline artifacts on disk, the same real-artifact rule the rest of this suite
+follows.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-REPORTGEN-01 | Invalid period is rejected | `generate_report_data("fortnightly", stub)` | `ValueError` raised | Raised | PASS |
+| TC-REPORTGEN-02 | Every documented period is accepted | Loop over `reports.VALID_PERIODS` (`daily`/`weekly`/`monthly`/`quarterly`/`half-yearly`/`yearly`), generating data for each | Each result's `data["period"]` equals the period passed in | Matches | PASS |
+| TC-REPORTGEN-03 | SLA summary is pulled from the data module | `generate_report_data("weekly", stub)` where the stub's `sla_summary` returns `{"breached": 1, "at_risk": 0, "on_track": 1}` | `data["sla"]` equals that exact dict | Matches | PASS |
+| TC-REPORTGEN-04 | KEV and EPSS counts are pulled from the data module | Same stub call | `data["kev_count"] == 1`, `data["high_epss_count"] == 1` | Matches | PASS |
+| TC-REPORTGEN-05 | VulnHunt and remediation totals are pulled correctly | Same stub call | `data["vulnhunt_total"] == 9`, `data["vulnhunt_auto_fixable"] == 6`, `data["remediation_total"] == 2`, `data["playbook_count"] == 1` | Matches | PASS |
+| TC-REPORTGEN-06 | Top-priority findings are capped at 5 | Stub `load_live_queue()` returns 20 findings | `len(data["top_priority_findings"]) == 5` | Matches | PASS |
+| TC-REPORTGEN-07 | `generated_at` is present and looks like an ISO timestamp | `generate_report_data("weekly", stub)` | `data["generated_at"]` matches `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}` | Matches | PASS |
+| TC-REPORTGEN-08 | Renders a valid-looking HTML document | `render_report_html(data)` for a `"monthly"` report | Output starts with `"<!doctype html>"` and contains `"</html>"` | Matches | PASS |
+| TC-REPORTGEN-09 | Period is included in the title | Same monthly report | Output contains `"Monthly Security Report"` | Matches | PASS |
+| TC-REPORTGEN-10 | No-persistence caveat is included | Same monthly report | Output contains `"no persistence layer"` | Matches | PASS |
+| TC-REPORTGEN-11 | KPI numbers are included | Same monthly report (stub's breached/kev_count/high_epss all `1`) | Output contains `">1<"` | Matches | PASS |
+| TC-REPORTGEN-12 | HTML in a finding title is escaped, not injected (XSS guard) | Render with `top_priority_findings` containing a title of `"<script>alert(1)</script>"` | Output does NOT contain the raw `<script>alert(1)</script>`; contains the escaped `"&lt;script&gt;"` | Matches | PASS |
+| TC-REPORTGEN-13 | `generate_report_data` against the real dashboard data module | `generate_report_data("weekly", dashboard_data)` against the real, imported `dashboard/data.py` | `remediation_total == 14`, `vulnhunt_total == 9`, `len(top_priority_findings) <= 5` | Matches | PASS |
+| TC-REPORTGEN-14 | `render_report_html` against real artifacts | `render_report_html(generate_report_data("yearly", dashboard_data))` | Output contains `"Yearly Security Report"` | Matches | PASS |
+
+---
+
+## Suite 12: Multi-language scanner pattern consistency (`tests/test_multilang_scanner_patterns.py`)
 
 **Purpose:** these are static text-consistency checks, not live scanner-invocation
 results — this environment has no Java, Go, PHP, or Node/npm runtime available, so
@@ -336,7 +426,7 @@ the documentation are internally consistent with each other.
 
 ---
 
-## Suite 11: Live Tenable connector (`remediation/connectors/tenable_connector.py`)
+## Suite 13: Live Tenable connector (`remediation/connectors/tenable_connector.py`)
 
 **Purpose:** prove the connector's auth, export-polling, and record-mapping logic is
 correct against Tenable.io's documented API shapes, entirely via mocked HTTP — see
@@ -357,9 +447,9 @@ does and does not prove (it has never called the real Tenable API).
 | TC-CONN-10 | `to_csv_row` handles a missing CVE gracefully | Feed a record with no `cve` list | `CVE` field is `""`, no `IndexError` | No error | PASS |
 | TC-CONN-11 | `fetch_and_write_csv` writes a sample-compatible file | Full mocked export -> poll -> chunk flow, write to a temp file | Output CSV's header exactly matches `CSV_FIELDNAMES`; row values correct | Matches | PASS |
 
-## Suite 12: Live Armis connector (`remediation/connectors/armis_connector.py`)
+## Suite 14: Live Armis connector (`remediation/connectors/armis_connector.py`)
 
-**Purpose:** same goal as Suite 11, for Armis's token-auth + paginated AQL search flow.
+**Purpose:** same goal as Suite 13, for Armis's token-auth + paginated AQL search flow.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -373,7 +463,7 @@ does and does not prove (it has never called the real Tenable API).
 
 ---
 
-## Suite 13: CISA KEV + EPSS enrichment (`remediation/enrichment/kev_epss.py`)
+## Suite 15: CISA KEV + EPSS enrichment (`remediation/enrichment/kev_epss.py`)
 
 **Purpose:** prove the enrichment logic correctly parses both real APIs' documented
 response shapes and assembles them onto findings correctly — and, uniquely in this test
@@ -397,7 +487,7 @@ suite, prove it actually works against the real live endpoints (see TC-ENR-13).
 
 ---
 
-## Suite 14: Configurable priority + SLA engine (`remediation/config/priority_engine.py`)
+## Suite 16: Configurable priority + SLA engine (`remediation/config/priority_engine.py`)
 
 **Purpose:** prove the scoring/SLA math is correct against an in-memory rules dict (so
 tests don't break if someone reasonably retunes the real rules file), plus validate the
@@ -420,7 +510,7 @@ real shipped rules file is well-formed and produces a sane result on real sample
 | TC-PRIO-13 | Real `priority_rules.yaml` loads with all expected keys | Load the real shipped file | All 7 top-level keys present | Matches | PASS |
 | TC-PRIO-14 | Real rules file scores a known real finding correctly | Score PrintNightmare (FIND-1) from real sample data against the real rules file | `priority == "Critical"` | Matches | PASS |
 
-## Suite 15: MITRE ATT&CK keyword tagging (`remediation/enrichment/attack_mapping.py`)
+## Suite 17: MITRE ATT&CK keyword tagging (`remediation/enrichment/attack_mapping.py`)
 
 **Purpose:** prove the heuristic fires on realistic finding text, and — just as
 importantly — proves it does NOT guess when there's no real signal (empty list, not a
@@ -440,7 +530,7 @@ fabricated technique).
 | TC-ATTACK-10 | Batch tagging adds field without mutating input | Tag a findings list | Original dicts unchanged; tagged copies have `attack_techniques` | Matches | PASS |
 | TC-ATTACK-11 | Batch tagging against real sample data | Tag all 14 real findings | PrintNightmare (FIND-1) gets ≥1 technique; SSL cert expiry (FIND-13) gets none | Matches | PASS |
 
-## Suite 16: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
+## Suite 18: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
 
 **Purpose:** prove the Table API request construction, idempotency check, and batch
 error handling are correct against mocked HTTP shaped like ServiceNow's documentation —
