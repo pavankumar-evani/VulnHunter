@@ -1,0 +1,42 @@
+test_no_real_looking_secrets_in_tracked_files (test_pipeline_artifacts.NoRealSecretsLeakedAnywhere.test_no_real_looking_secrets_in_tracked_files) ... ok
+test_all_three_sources_represented (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_all_three_sources_represented) ... ok
+test_asset_type_classification_spot_checks (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_asset_type_classification_spot_checks) ... ok
+test_eleven_findings_total (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_eleven_findings_total) ... ok
+test_every_finding_has_required_fields (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_every_finding_has_required_fields) ... ok
+test_no_fabricated_cve_ids (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_no_fabricated_cve_ids)
+Every non-null CVE must match the standard CVE-YYYY-NNNN(N...) format - ... ok
+test_remediation_domain_only_set_for_supported_domains (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_remediation_domain_only_set_for_supported_domains) ... ok
+test_seven_findings_eligible_for_automation (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_seven_findings_eligible_for_automation) ... ok
+test_every_finding_id_referenced_in_plan (test_pipeline_artifacts.RemediationPlanIsConsistentWithFindings.test_every_finding_id_referenced_in_plan) ... ok
+test_manual_only_domains_explicitly_called_out (test_pipeline_artifacts.RemediationPlanIsConsistentWithFindings.test_manual_only_domains_explicitly_called_out) ... ok
+test_change_approval_marker_matches_risk_tier (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_change_approval_marker_matches_risk_tier)
+Playbooks for needs-change-approval findings must carry the warning ... ok
+test_every_playbook_corresponds_to_an_automatable_finding (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_every_playbook_corresponds_to_an_automatable_finding) ... ok
+test_every_playbook_has_finding_id_rollback_and_hosts (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_every_playbook_has_finding_id_rollback_and_hosts) ... ok
+test_exactly_seven_playbooks_generated (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_exactly_seven_playbooks_generated) ... ok
+test_no_playbook_for_manual_only_findings (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_no_playbook_for_manual_only_findings) ... ok
+test_command_injection_now_uses_arg_list (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_command_injection_now_uses_arg_list) ... ok
+test_debug_mode_now_gated_by_env_var (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_debug_mode_now_gated_by_env_var) ... ok
+test_dockerfile_now_has_non_root_user (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_dockerfile_now_has_non_root_user) ... ok
+test_dockerfile_secret_removed (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_dockerfile_secret_removed)
+The secret must no longer be baked in as an ENV assignment - a comment ... ok
+test_fixed_app_py_still_valid_python (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_fixed_app_py_still_valid_python) ... ok
+test_manual_review_findings_untouched (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_manual_review_findings_untouched)
+eval() and plaintext password storage must NOT be modified - the fixer ... ok
+test_secret_now_from_environment (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_secret_now_from_environment) ... ok
+test_sql_injection_now_parameterized (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_sql_injection_now_parameterized) ... ok
+test_all_nine_finding_ids_present (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_all_nine_finding_ids_present) ... ok
+test_reports_nine_findings (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_reports_nine_findings) ... ok
+test_reports_six_auto_fixed (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_reports_six_auto_fixed) ... ok
+test_command_injection_shell_true_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_command_injection_shell_true_present) ... ok
+test_debug_mode_hardcoded_true (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_debug_mode_hardcoded_true) ... ok
+test_dockerfile_has_no_user_directive (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_dockerfile_has_no_user_directive) ... ok
+test_dockerfile_secret_baked_in (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_dockerfile_secret_baked_in) ... ok
+test_eval_on_user_input_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_eval_on_user_input_present) ... ok
+test_hardcoded_secret_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_hardcoded_secret_present) ... ok
+test_sql_injection_string_concat_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_sql_injection_string_concat_present) ... ok
+
+----------------------------------------------------------------------
+Ran 33 tests in 1.140s
+
+OK
