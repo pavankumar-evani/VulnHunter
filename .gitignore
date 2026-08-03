@@ -3,3 +3,6 @@ vulnerable-demo-app/vulnshop.db
 vulnerable-demo-app/.env
 **/__pycache__/
 *.pyc
+
+# CLI audit logs are runtime output (may include scan results) - not source, don't commit
+.vulnhunter/

@@ -330,7 +330,24 @@ behavior. Expect `OK` with 0 failures; `tests/test_results.txt` has a captured r
 this after editing any `.claude/agents/*.md` or `.claude/commands/*.md` file to catch
 drift.
 
-### Step 8: Extend it
+### Step 8: Run it headlessly (CI/automation, no interactive session)
+
+```bash
+python cli/vulnhunter.py --dry-run scan vulnerable-demo-app --fix   # preview only
+python cli/vulnhunter.py scan vulnerable-demo-app --fix              # spends real API usage
+python cli/vulnhunter.py --dry-run remediate --generate
+python cli/vulnhunter.py remediate --generate
+```
+
+`cli/vulnhunter.py` is a thin wrapper around `claude -p` (Claude Code's non-interactive
+mode) — it doesn't reimplement any pipeline logic, it just removes the requirement for a
+human to be typing into a live session, which is what makes this usable from CI, cron, or
+any other automation. **Every non-dry-run invocation spends real Claude API usage** — see
+[cli/README.md](cli/README.md) before wiring this into anything that runs unattended or
+on every push. `tests/test_cli.py` covers the command-construction logic without ever
+calling the real API.
+
+### Step 9: Extend it
 
 The most likely next build-out, per [§9 Roadmap](#9-roadmap), is a new remediation fixer
 for network devices or IoT/OT. To add one:
@@ -367,6 +384,13 @@ for network devices or IoT/OT. To add one:
 │   └── commands/
 │       ├── vulnhunt.md                   orchestrates the code pipeline
 │       └── remediate.md                  orchestrates the infra pipeline
+├── .github/
+│   ├── workflows/ci.yml       runs the full test suite on every push/PR
+│   ├── CODEOWNERS, ISSUE_TEMPLATE/, PULL_REQUEST_TEMPLATE.md
+├── cli/
+│   ├── vulnhunter.py          headless CLI wrapper around `claude -p` (no API calls
+│   │                          from the prompt logic itself - see cli/README.md)
+│   └── README.md              usage, cost warning, binary discovery order
 ├── remediation/
 │   ├── sample-data/       mock Tenable/Armis/threat-intel exports
 │   ├── schema/            normalized Finding schema documentation
@@ -374,10 +398,12 @@ for network devices or IoT/OT. To add one:
 ├── vulnerable-demo-app/   intentionally vulnerable Flask app — /vulnhunt's scan target
 ├── tests/
 │   ├── test_pipeline_artifacts.py   33 automated tests, stdlib only
+│   ├── test_cli.py                  13 tests for the headless CLI (no real API calls)
 │   └── test_results.txt             a captured passing run
 ├── deliverables/
 │   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
 │   └── VulnHunter_Project_Report.docx     full project & test report
+├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md    a real, generated sample /remediate output
 ├── README.md              pitch-oriented overview + demo script
 ├── CLAUDE.md              instructions for Claude Code working on this repo
@@ -416,24 +442,60 @@ detail on all three in TEST_CASES.md's "Notable findings" section.
 
 ---
 
-## 9. Roadmap
+## 9. Roadmap — Path to Commercial-Grade
 
-Ordered roughly by expected value:
+This project is a Claude Code extension, validated and demoable, not yet a commercial
+product. The gap between the two is real engineering, not polish — laid out here in three
+tiers so priority and sequencing are explicit rather than an undifferentiated backlog.
 
-1. **`remediation-fixer-network`** — vendor CLI config diffs (Cisco IOS/IOS XE, Junos) via
-   Ansible's network collections, same `Read`/`Write`-only tool scoping as the existing
-   fixers.
-2. **`remediation-fixer-iot`** — realistically a per-vendor integration effort given how
-   fragmented IoT/OT management APIs are; start with the highest-volume device types in a
-   real fleet (Armis-visible cameras and building-automation controllers, per the mock
-   data's own examples).
-3. **Live source connectors** — swap the mock Tenable/Armis/threat-intel exports for real
-   API pulls. The normalizer's common schema doesn't need to change; only the
-   ingestion-detection logic gains real API clients alongside the file-parsing it already
-   does.
-4. **Mobile/endpoint remediation via MDM** — findings like "outdated iOS version" route
-   through an MDM platform's compliance policies (Intune/Jamf API), which is a different
-   integration entirely from infra automation, not a gap in this pipeline's design.
+### Tier 1 — Repo & Trust Hygiene ✅ Done
+
+Fast, low-risk, makes the repo look maintained rather than dropped: `LICENSE`,
+`SECURITY.md`, CI (`.github/workflows/ci.yml`) running the full test suite on every
+push/PR, `CODEOWNERS`, issue/PR templates, `CHANGELOG.md`, README badges.
+
+### Tier 2 — Make It an Actual Tool (in progress)
+
+Usable by someone who isn't running Claude Code interactively:
+
+1. **Headless CLI (`cli/vulnhunter.py`)** ✅ Done — wraps `claude -p` so either pipeline
+   runs from a script/CI/cron without a human in an interactive session, without
+   duplicating any prompt logic. Every real invocation spends API usage/credits — see
+   [cli/README.md](cli/README.md).
+2. **Web dashboard** — findings, remediation queue, and one-click approve/generate,
+   reading off the CLI's output and audit logs instead of raw Markdown files. This is
+   the highest-visibility gap for "user-friendly," and the reason it comes after the CLI:
+   it needs something non-interactive to call.
+3. **Live Tenable/Armis connectors** — replace static sample-file ingestion with real API
+   clients. The normalizer's common schema doesn't change; only the source-detection
+   logic gains real API clients alongside the file-parsing it already does. Needs real
+   API credentials to build against and test properly — a business/access decision, not
+   a coding one.
+4. **Persistence + audit log** — a database of runs, findings, and who approved what,
+   replacing the flat JSON audit files the CLI writes today.
+
+Also planned in this tier, lower priority than the four above:
+- **`remediation-fixer-network`** — vendor CLI config diffs (Cisco IOS/IOS XE, Junos) via
+  Ansible's network collections, same `Read`/`Write`-only tool scoping as the existing
+  fixers.
+- **`remediation-fixer-iot`** — realistically a per-vendor integration effort given how
+  fragmented IoT/OT management APIs are; start with the highest-volume device types in a
+  real fleet (Armis-visible cameras and building-automation controllers).
+- **Mobile/endpoint remediation via MDM** — findings like "outdated iOS version" route
+  through an MDM platform's compliance policies (Intune/Jamf API), a different
+  integration entirely from infra automation.
+
+### Tier 3 — Enterprise / Commercial Ready (not started)
+
+What a real buyer's security architect will actually ask for, requiring business
+decisions this document can't make unilaterally:
+
+- **Auth, RBAC, SSO** — who is allowed to approve a domain-controller change?
+- **Ticketing integration** — ServiceNow/Jira sync, Slack/Teams notifications.
+- **Compliance story** — data handling and residency for vulnerability data sent to an
+  LLM, a SOC2-style audit trail of every AI recommendation and human approval.
+- **Deployment + pricing model** — SaaS vs. self-hosted, and a real answer to "what does
+  this cost per customer given Claude API usage at scale."
 
 ---
 

@@ -194,6 +194,10 @@ clear reason no fixer exists yet.
 │   └── commands/
 │       ├── vulnhunt.md
 │       └── remediate.md
+├── cli/
+│   ├── vulnhunter.py            # headless CLI: run either pipeline without an
+│   │                            #   interactive session (see cli/README.md)
+│   └── README.md
 ├── remediation/
 │   ├── sample-data/            # mock Tenable/Armis/threat-intel exports
 │   ├── schema/                 # normalized Finding schema doc
@@ -203,6 +207,9 @@ clear reason no fixer exists yet.
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── init_db.py
+├── tests/                       # 46 tests (33 pipeline artifacts + 13 CLI), see TEST_CASES.md
+├── .github/                     # CI workflow, issue/PR templates, CODEOWNERS
+├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md
 └── README.md
 ```
