@@ -26,6 +26,23 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   could execute a formula for whoever next opens the exported file. Fixed with the
   standard OWASP mitigation: prefix a leading `'` when a cell starts with one of those
   characters, forcing every spreadsheet app to read it as literal text.
+- **Unescaped account-identity XSS in the topbar account chip** (`dashboard/static/js/auth.js`).
+  `initAccountChip()` inserted `user.email`/`user.role` into a `data-tooltip` attribute
+  without `escapeHtml()` - the one place these OIDC-sourced identity fields render
+  unescaped (contrast `profile.js`, which already escapes the same fields correctly).
+  Since `/api/auth/oidc/callback` takes `email`/`name` from the identity provider's
+  `userinfo` response with only a non-empty check, a crafted value there could break
+  out of the attribute and execute on every page load for that session. Fixed by
+  escaping `email`, `role`, and the derived `initials` before insertion.
+- **Unescaped asset-type value in the Remediation Queue's filter dropdown**
+  (`dashboard/static/js/pages/queue.js`). `assetTypeOptions()` inserted `f.asset.type`
+  into an `<option>` element unescaped, the one inconsistent gap in a file that
+  escapes the identical field everywhere else it appears. `/queue` is an
+  unauthenticated route, so this was reachable by any visitor if a future connector or
+  manually-edited fixture ever put unvalidated text in `asset.type` (today's writers
+  all constrain it to a fixed enum, so it wasn't yet exploitable through the app's own
+  APIs - still fixed rather than left as a latent gap). Both findings came from a
+  dedicated security-review pass across this session's work.
 
 ### Added
 - **Pattern-matched owner/team suggestions for the Asset Inventory**

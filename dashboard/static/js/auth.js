@@ -4,6 +4,7 @@
 // sensitive routes); this module exists so the SPA can show/hide UI based on who's
 // logged in, and gate client-side navigation to /login when nobody is.
 import { api } from "./api.js";
+import { escapeHtml } from "./dom.js";
 
 let cachedUser; // undefined = not yet fetched, null = fetched and logged out
 
@@ -34,8 +35,8 @@ export function initAccountChip() {
     }
     const initials = (user.name || user.email).split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
     root.innerHTML = `
-      <a class="account-chip" href="/profile" data-link data-tooltip="${user.email} (${user.role})">
-        <span class="account-avatar">${initials}</span>
+      <a class="account-chip" href="/profile" data-link data-tooltip="${escapeHtml(user.email)} (${escapeHtml(user.role)})">
+        <span class="account-avatar">${escapeHtml(initials)}</span>
       </a>`;
   }
 

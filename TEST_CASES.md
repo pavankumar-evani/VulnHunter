@@ -1277,7 +1277,7 @@ mutation of any kind - every test is a pure function call against in-memory dict
 
 ## Notable findings from testing (not just "all green")
 
-Three real issues surfaced during the development of this suite, listed here because a
+Real issues surfaced during the development of this suite, listed here because a
 test suite that never catches anything is less convincing than one with a track record:
 
 1. **TC-SCAN-06 and TC-FIX-06 initially false-failed** — the first version of these
@@ -1324,3 +1324,20 @@ test suite that never catches anything is less convincing than one with a track 
    and correcting the prose. A reminder that a number written by a human into a report
    is exactly the kind of claim worth verifying against the underlying data before
    trusting it, even when the human is the one who built the pipeline.
+7. **A dedicated security-review pass** (not a pre-written test - a deliberate read of
+   the whole session's new code against common vulnerability classes) found four real
+   issues, all fixed: (a) a timing-based email-enumeration side-channel in
+   `dashboard/auth/users.py`'s `verify_login()` — an unknown email skipped the
+   deliberately-slow PBKDF2 comparison entirely via an `or` short-circuit, making
+   response timing distinguish "no such user" from "wrong password" even though both
+   returned the same `None`; (b) CSV/formula-injection (CWE-1236) in the dashboard's
+   CSV export — a cell starting with `=`/`+`/`-`/`@` (e.g. a crafted asset owner name)
+   would be interpreted as a formula by Excel/Sheets on open; (c) an unescaped
+   `data-tooltip` attribute in the topbar account chip (`auth.js`) that rendered
+   OIDC-sourced email/role fields without `escapeHtml()`, the one inconsistency in an
+   otherwise-consistently-escaped codebase; (d) the same class of gap in the
+   Remediation Queue's asset-type filter dropdown (`queue.js`). All four are fixed and
+   covered either by new regression tests (`tests/test_auth.py`, for (a)) or, for the
+   two frontend XSS gaps, by consistent use of the same `escapeHtml()` helper already
+   used everywhere else those fields render. See `CHANGELOG.md`'s `[Unreleased] Fixed`
+   section for full detail on each.

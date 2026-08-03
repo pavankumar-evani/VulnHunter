@@ -197,7 +197,7 @@ export async function render(container) {
 
   function assetTypeOptions() {
     const types = [...new Set(allFindings.map((f) => f.asset && f.asset.type).filter(Boolean))].sort();
-    return types.map((t) => `<option value="${t}">${t}</option>`).join("");
+    return types.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
   }
 
   function categoryOptions() {

@@ -575,7 +575,11 @@ def api_ingest_generic(body: GenericIngestBody):
     this is a machine-to-machine webhook receiver a SIEM/XDR would call directly, not
     something a logged-in browser session submits. A real deployment should protect it
     with a webhook-specific API key or HMAC request signature instead of cookie auth -
-    that's a real follow-up, not implemented here."""
+    that's a real follow-up, not implemented here. Being unauthenticated also means
+    there's no cap on how often it's called or how large remediation/live-data/
+    generic-ingested.json can grow (each call re-reads and rewrites the whole file) -
+    a real deployment needs request throttling/a size cap alongside the auth mentioned
+    above, not implemented here either."""
     live_data_dir = dashboard_data.REPO_ROOT / "remediation" / "live-data"
     live_data_path = live_data_dir / "generic-ingested.json"
 
