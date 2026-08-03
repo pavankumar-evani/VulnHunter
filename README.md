@@ -14,7 +14,8 @@ Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
 📖 **New here?** [KNOWLEDGE_TRANSFER.md](KNOWLEDGE_TRANSFER.md) has the full picture: problem
 statement, the idea and why it's built this way, product/solution details for both
 pipelines, step-by-step instructions to actually run everything, test evidence, and a
-troubleshooting log of what broke and how it was fixed.
+troubleshooting log of what broke and how it was fixed. For the detailed test case log
+(33 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
 
 ## The problem
 

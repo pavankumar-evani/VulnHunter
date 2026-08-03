@@ -381,6 +381,7 @@ for network devices or IoT/OT. To add one:
 ├── REMEDIATION_PLAN.md    a real, generated sample /remediate output
 ├── README.md              pitch-oriented overview + demo script
 ├── CLAUDE.md              instructions for Claude Code working on this repo
+├── TEST_CASES.md          formal test case log: steps, expected vs. actual, per test
 └── KNOWLEDGE_TRANSFER.md  this document
 ```
 
@@ -402,11 +403,16 @@ the full suite and its docstring for why it's structured this way). Summary by c
 | `RemediationPlaybooksMatchThePlan` | Generated playbooks exactly match automatable findings | 5 |
 | `NoRealSecretsLeakedAnywhere` | No real-looking secret patterns anywhere in tracked files | 1 |
 
+**For the full test case log** — every test's individual steps, preconditions, expected
+result, and actual result, with a TC-ID for traceability — see
+**[TEST_CASES.md](TEST_CASES.md)**.
+
 The suite itself caught 3 real issues worth being upfront about: two false-positive test
 assertions (matching comment prose instead of actual code — fixed by tightening the
 regexes), and one real GitHub secret-scanning block on a fake API key that was
 realistic enough to trip Stripe's key-format detector (fixed by reformatting the fake
-key and rewriting the not-yet-pushed local git history to remove it everywhere).
+key and rewriting the not-yet-pushed local git history to remove it everywhere). Full
+detail on all three in TEST_CASES.md's "Notable findings" section.
 
 ---
 

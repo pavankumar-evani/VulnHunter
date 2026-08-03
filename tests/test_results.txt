@@ -37,6 +37,6 @@ test_hardcoded_secret_present (test_pipeline_artifacts.VulnHuntScannerFindsRealV
 test_sql_injection_string_concat_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_sql_injection_string_concat_present) ... ok
 
 ----------------------------------------------------------------------
-Ran 33 tests in 1.140s
+Ran 33 tests in 3.972s
 
 OK
