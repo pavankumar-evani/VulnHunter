@@ -48,9 +48,10 @@ cannot introduce new ones.
 ## Demo
 
 A deliberately vulnerable Flask app lives in `vulnerable-demo-app/` with 6 planted,
-labeled vulnerabilities (SQL injection, command injection, `eval()` misuse, hardcoded API
-key, plaintext passwords, debug mode, insecure Dockerfile). This is what we run
-VulnHunter against on stage.
+labeled vulnerabilities in `app.py` (SQL injection, command injection, `eval()` misuse,
+hardcoded API key, plaintext passwords, debug mode) plus 3 more in its `Dockerfile`
+(secret baked into an image layer, root user, unpinned base image) — 9 total. This is
+what we run VulnHunter against on stage.
 
 ```bash
 # 1. Point VulnHunter at the vulnerable demo app
@@ -61,10 +62,11 @@ claude
 /vulnhunt vulnerable-demo-app --fix
 ```
 
-Expected result: ~6 findings detected in seconds, 3-4 auto-fixed on a pushed branch, the
-remaining flagged for human review with a clear reason (e.g. "removing eval() here
-requires redesigning the /calc endpoint — needs a human decision"). Opening the actual PR
-from that branch is one click away in GitHub's web UI or VS Code's Source Control panel.
+Expected result: 9 findings detected in seconds (4 Critical, 2 High, 2 Medium, 1 Low), 6
+auto-fixed on a pushed branch, 3 flagged for human review with a clear reason each (e.g.
+"removing eval() here requires redesigning the /calc endpoint — needs a human decision").
+Opening the actual PR from that branch is one click away in GitHub's web UI or VS Code's
+Source Control panel.
 
 ## Why this approach
 
