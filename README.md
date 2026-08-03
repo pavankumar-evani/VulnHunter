@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-33%2F33%20passing-brightgreen.svg)](TEST_CASES.md)
+[![Tests](https://img.shields.io/badge/tests-78%2F78%20passing-brightgreen.svg)](TEST_CASES.md)
 
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
@@ -205,13 +205,15 @@ clear reason no fixer exists yet.
 ├── remediation/
 │   ├── sample-data/            # mock Tenable/Armis/threat-intel exports
 │   ├── schema/                 # normalized Finding schema doc
+│   ├── connectors/             # live Tenable/Armis API clients (unit-tested, not yet
+│   │                           #   verified against a real tenant - see its README)
 │   └── output/                 # normalized findings + generated playbooks land here
 ├── vulnerable-demo-app/        # intentionally vulnerable Flask app for the /vulnhunt demo
 │   ├── app.py
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── init_db.py
-├── tests/                       # 46 tests (33 pipeline artifacts + 13 CLI), see TEST_CASES.md
+├── tests/                       # 78 tests (pipeline artifacts, CLI, dashboard, connectors), see TEST_CASES.md
 ├── .github/                     # CI workflow, issue/PR templates, CODEOWNERS
 ├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md

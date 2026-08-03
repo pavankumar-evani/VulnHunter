@@ -7,6 +7,35 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- `cli/vulnhunter.py` — headless CLI wrapping `claude -p` so either pipeline runs from a
+  script/CI/cron without an interactive session. Spend-capped, dry-run by default in
+  spirit, with a JSON audit log per real invocation. 13 tests, no real API calls made in
+  any test.
+- `dashboard/` — MVP Flask web UI: overview KPIs, code scan findings, remediation queue
+  linked to generated playbooks, playbook detail view, and a run-trigger page wrapping
+  the CLI (dry-run by default). 14 tests via Flask's test client, no real server or API
+  calls in any test.
+- `remediation/connectors/` — live Tenable.io and Armis API clients implementing each
+  vendor's publicly documented contract, writing output in the same file shapes as the
+  sample data so the normalizer needs no changes. 18 tests against mocked HTTP
+  responses. **Not yet verified against a real Tenable/Armis tenant** — no credentials
+  were available while building this; see `remediation/connectors/README.md`.
+- Full test suite now 78/78 passing across 4 files (pipeline artifacts, CLI, dashboard,
+  connectors).
+
+### Fixed
+- A real UTF-8 mojibake bug: `subprocess.run(text=True)` without an explicit
+  `encoding="utf-8"` decoded git's UTF-8 output with the platform default codec (cp1252
+  on Windows), corrupting em-dashes and other non-ASCII characters. Fixed across every
+  affected `subprocess.run` call; caught by manually verifying the dashboard's rendered
+  pages, not by a pre-written test.
+- An actual infinite loop in `TenableConnector.poll_export_status`'s timeout logic
+  (an elapsed-time accumulator that a zero step size could never advance past). Fixed by
+  switching to a wall-clock deadline. Caught by the test suite itself hanging.
+
+## Tier 1 repo hygiene
+
+### Added
 - `LICENSE` (proprietary/all-rights-reserved), `SECURITY.md`, GitHub Actions CI running
   the test suite on every push/PR, `CODEOWNERS`, issue/PR templates, this changelog.
 

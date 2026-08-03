@@ -12,7 +12,7 @@ pip install -r dashboard/requirements.txt   # only needed for test_dashboard.py
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 60 / 60 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 78 / 78 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -43,7 +43,9 @@ evidence rather than a mocked demo.
 | CLI end-to-end dry-run | `DryRunEndToEnd` | TC-CLI-12 – 13 | 2/2 PASS |
 | Dashboard data layer | `DataLayerReadsRealArtifacts` | TC-DASH-01 – 06 | 6/6 PASS |
 | Dashboard routes | `DashboardRoutesRender` | TC-DASH-07 – 14 | 8/8 PASS |
-| **Total** | | **60** | **60/60 PASS** |
+| Tenable connector | `TenableAuthAndExportRequest`, `TenablePollAndDownload`, `TenableRecordMapping`, `TenableWritesSampleCompatibleCsv` | TC-CONN-01 – 11 | 11/11 PASS |
+| Armis connector | `ArmisAuthentication`, `ArmisPagination`, `ArmisDeviceAndAlertAssembly` | TC-CONN-12 – 18 | 7/7 PASS |
+| **Total** | | **78** | **78/78 PASS** |
 
 ---
 
@@ -204,6 +206,43 @@ and the one route that could spend real money never does so in a test.
 
 ---
 
+## Suite 10: Live Tenable connector (`remediation/connectors/tenable_connector.py`)
+
+**Purpose:** prove the connector's auth, export-polling, and record-mapping logic is
+correct against Tenable.io's documented API shapes, entirely via mocked HTTP — see
+[remediation/connectors/README.md](remediation/connectors/README.md) for what this suite
+does and does not prove (it has never called the real Tenable API).
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-CONN-01 | Session gets the correct `X-ApiKeys` auth header | Construct `TenableConnector("access123", "secret456", session=mock)` | Header equals `"accessKey=access123;secretKey=secret456"` | Matches | PASS |
+| TC-CONN-02 | `request_export` returns the export UUID | Mock POST returns `{"export_uuid": "uuid-abc"}` | Returns `"uuid-abc"` | Matches | PASS |
+| TC-CONN-03 | `request_export` includes a `since` filter when given | Call with `since=1700000000` | POST body's `filters.since == 1700000000` | Matches | PASS |
+| TC-CONN-04 | `request_export` raises on an unexpected response shape | Mock POST returns a body with no `export_uuid` key | `TenableExportError` raised | Raised | PASS |
+| TC-CONN-05 | Poll returns chunk IDs when status is `FINISHED` | Mock GET returns `{"status": "FINISHED", "chunks_available": [1,2]}` | Returns `[1, 2]` | Matches | PASS |
+| TC-CONN-06 | Poll raises on `ERROR` status | Mock GET returns `{"status": "ERROR"}` | `TenableExportError` raised | Raised | PASS |
+| TC-CONN-07 | Poll raises on timeout (regression guard) | Mock GET always returns `PROCESSING`, `timeout_seconds=0` | `TenableExportError` raised promptly, no infinite loop | Raised, no hang | PASS |
+| TC-CONN-08 | `download_chunk` returns raw records | Mock GET returns a JSON array | Array returned unchanged | Matches | PASS |
+| TC-CONN-09 | `to_csv_row` maps a documented-shape record correctly | Feed a full nested `plugin`/`asset` record | All 15 CSV fields map to the right values | All correct | PASS |
+| TC-CONN-10 | `to_csv_row` handles a missing CVE gracefully | Feed a record with no `cve` list | `CVE` field is `""`, no `IndexError` | No error | PASS |
+| TC-CONN-11 | `fetch_and_write_csv` writes a sample-compatible file | Full mocked export -> poll -> chunk flow, write to a temp file | Output CSV's header exactly matches `CSV_FIELDNAMES`; row values correct | Matches | PASS |
+
+## Suite 11: Live Armis connector (`remediation/connectors/armis_connector.py`)
+
+**Purpose:** same goal as Suite 10, for Armis's token-auth + paginated AQL search flow.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-CONN-12 | `authenticate` sets the token and `Authorization` header | Mock POST returns `{"data": {"access_token": "tok-123"}}` | Token stored; session header set to `"tok-123"` | Matches | PASS |
+| TC-CONN-13 | `authenticate` raises on a bad response shape | Mock POST returns a body with no `data.access_token` | `ArmisAuthError` raised | Raised | PASS |
+| TC-CONN-14 | `search` triggers authentication automatically if not yet authenticated | Call `search()` on a fresh connector | POST (auth) called exactly once before the GET | Matches | PASS |
+| TC-CONN-15 | `search_all_pages` follows the `next` cursor | Mock two pages: first `next=100`, second `next=None` | Combined results from both pages; exactly 2 GET calls | Matches | PASS |
+| TC-CONN-16 | `search_all_pages` respects `max_pages` (regression guard) | Mock GET always returns a non-null `next` | Loop stops at `max_pages`, doesn't run forever | Stops correctly | PASS |
+| TC-CONN-17 | `_alert_to_sample_shape` maps a raw alert correctly | Feed a raw alert dict | `alertType`/`title`/`cve` map correctly | Matches | PASS |
+| TC-CONN-18 | `fetch_and_write_json` assembles devices with their alerts | Mock one alert referencing one device; mock that device's detail lookup | Output JSON has 1 device with 1 alert, correct field mapping | Matches | PASS |
+
+---
+
 ## Notable findings from testing (not just "all green")
 
 Three real issues surfaced during the development of this suite, listed here because a
@@ -235,3 +274,12 @@ test suite that never catches anything is less convincing than one with a track 
    adding `encoding="utf-8"` to every `subprocess.run` call that reads git or CLI output
    across `dashboard/data.py`, `cli/vulnhunter.py`, `tests/test_pipeline_artifacts.py`,
    and `tests/test_cli.py`. TC-DASH-06 now guards against a regression.
+5. **An actual infinite loop**, caught by the test suite itself hanging instead of
+   finishing: `TenableConnector.poll_export_status`'s original timeout logic tracked
+   elapsed time with `elapsed += poll_interval_seconds` — when `poll_interval_seconds`
+   is `0` (used in tests specifically to avoid real sleeps), `elapsed` never advances
+   past `0`, so `elapsed <= timeout_seconds` (with `timeout_seconds` also `0` in the
+   timeout test) stayed true forever. Fixed by switching to a wall-clock deadline
+   (`time.monotonic() + timeout_seconds`, checked each iteration) instead of an
+   accumulator that a zero step size can get stuck on. TC-CONN-07 now specifically
+   exercises the `timeout_seconds=0` case to guard against a regression.

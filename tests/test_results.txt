@@ -12,6 +12,25 @@ test_remediate_prompt_with_generate (test_cli.PromptConstruction.test_remediate_
 test_remediate_prompt_without_generate (test_cli.PromptConstruction.test_remediate_prompt_without_generate) ... ok
 test_scan_prompt_with_fix (test_cli.PromptConstruction.test_scan_prompt_with_fix) ... ok
 test_scan_prompt_without_fix (test_cli.PromptConstruction.test_scan_prompt_without_fix) ... ok
+test_authenticate_raises_on_bad_shape (test_connectors.ArmisAuthentication.test_authenticate_raises_on_bad_shape) ... ok
+test_authenticate_sets_token_and_header (test_connectors.ArmisAuthentication.test_authenticate_sets_token_and_header) ... ok
+test_search_triggers_authentication_if_needed (test_connectors.ArmisAuthentication.test_search_triggers_authentication_if_needed) ... ok
+test_alert_to_sample_shape_mapping (test_connectors.ArmisDeviceAndAlertAssembly.test_alert_to_sample_shape_mapping) ... ok
+test_fetch_and_write_json_assembles_devices_with_alerts (test_connectors.ArmisDeviceAndAlertAssembly.test_fetch_and_write_json_assembles_devices_with_alerts) ... ok
+test_search_all_pages_follows_next_cursor (test_connectors.ArmisPagination.test_search_all_pages_follows_next_cursor) ... ok
+test_search_all_pages_respects_max_pages_safety_cap (test_connectors.ArmisPagination.test_search_all_pages_respects_max_pages_safety_cap)
+Regression guard: a misbehaving API that always returns a `next` cursor must ... ok
+test_request_export_includes_since_filter_when_given (test_connectors.TenableAuthAndExportRequest.test_request_export_includes_since_filter_when_given) ... ok
+test_request_export_raises_on_unexpected_shape (test_connectors.TenableAuthAndExportRequest.test_request_export_raises_on_unexpected_shape) ... ok
+test_request_export_returns_uuid (test_connectors.TenableAuthAndExportRequest.test_request_export_returns_uuid) ... ok
+test_session_gets_correct_apikeys_header (test_connectors.TenableAuthAndExportRequest.test_session_gets_correct_apikeys_header) ... ok
+test_download_chunk_returns_records (test_connectors.TenablePollAndDownload.test_download_chunk_returns_records) ... ok
+test_poll_raises_on_error_status (test_connectors.TenablePollAndDownload.test_poll_raises_on_error_status) ... ok
+test_poll_raises_on_timeout (test_connectors.TenablePollAndDownload.test_poll_raises_on_timeout) ... ok
+test_poll_returns_chunks_when_finished (test_connectors.TenablePollAndDownload.test_poll_returns_chunks_when_finished) ... ok
+test_to_csv_row_handles_missing_cve_gracefully (test_connectors.TenableRecordMapping.test_to_csv_row_handles_missing_cve_gracefully) ... ok
+test_to_csv_row_maps_documented_shape (test_connectors.TenableRecordMapping.test_to_csv_row_maps_documented_shape) ... ok
+test_fetch_and_write_csv_matches_sample_schema (test_connectors.TenableWritesSampleCompatibleCsv.test_fetch_and_write_csv_matches_sample_schema) ... ok
 test_api_status_endpoint (test_dashboard.DashboardRoutesRender.test_api_status_endpoint) ... ok
 test_dry_run_post_never_calls_real_api (test_dashboard.DashboardRoutesRender.test_dry_run_post_never_calls_real_api)
 The critical safety test: submitting the run form WITHOUT the confirm ... ok
@@ -67,7 +86,7 @@ test_hardcoded_secret_present (test_pipeline_artifacts.VulnHuntScannerFindsRealV
 test_sql_injection_string_concat_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_sql_injection_string_concat_present) ... ok
 
 ----------------------------------------------------------------------
-Ran 60 tests in 3.893s
+Ran 78 tests in 6.298s
 
 OK
 Would run: C:\Users\pavane\AppData\Roaming\Claude\claude-code\2.1.219\claude.exe -p /vulnhunt vulnerable-demo-app --output-format json --permission-mode acceptEdits --allowedTools Read Grep Glob Bash Edit Write --max-budget-usd 2.00

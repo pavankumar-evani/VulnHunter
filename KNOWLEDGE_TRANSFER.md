@@ -414,6 +414,8 @@ for network devices or IoT/OT. To add one:
 ├── remediation/
 │   ├── sample-data/       mock Tenable/Armis/threat-intel exports
 │   ├── schema/            normalized Finding schema documentation
+│   ├── connectors/        live Tenable/Armis API clients - built, unit-tested against
+│   │                      mocked HTTP, but unverified against a real tenant (see its README)
 │   └── output/            normalized findings + generated playbooks (generated, not hand-written)
 ├── vulnerable-demo-app/   intentionally vulnerable Flask app — /vulnhunt's scan target
 ├── tests/
@@ -436,7 +438,7 @@ for network devices or IoT/OT. To add one:
 
 ## 8. Test Evidence & Results
 
-60 tests, 0 failures, across three suites — the original pipeline-artifact tests plus the
+78 tests, 0 failures, across four suites — the original pipeline-artifact tests plus the
 CLI and dashboard added in the commercialization build-out. None of it calls the real
 Claude API (see each file's docstring for why that's a hard rule, not an oversight).
 
@@ -445,6 +447,7 @@ Claude API (see each file's docstring for why that's a hard rule, not an oversig
 | `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 33 |
 | `tests/test_cli.py` | Headless CLI command construction, binary discovery, one real dry-run subprocess call | 13 |
 | `tests/test_dashboard.py` | Dashboard data parsing + every route (Flask test client, in-process, no server) | 14 |
+| `tests/test_connectors.py` | Live connector auth/pagination/mapping logic against mocked HTTP (no real API calls) | 18 |
 
 `test_pipeline_artifacts.py` breakdown:
 
@@ -483,7 +486,7 @@ Fast, low-risk, makes the repo look maintained rather than dropped: `LICENSE`,
 `SECURITY.md`, CI (`.github/workflows/ci.yml`) running the full test suite on every
 push/PR, `CODEOWNERS`, issue/PR templates, `CHANGELOG.md`, README badges.
 
-### Tier 2 — Make It an Actual Tool (in progress)
+### Tier 2 — Make It an Actual Tool (core items done, hardening ongoing)
 
 Usable by someone who isn't running Claude Code interactively:
 
@@ -497,11 +500,16 @@ Usable by someone who isn't running Claude Code interactively:
    environment; see [dashboard/README.md](dashboard/README.md) for that tradeoff and,
    more importantly, what this MVP still lacks (auth/RBAC, persistence, a job queue,
    multi-tenancy) before it's more than a local/trusted-network tool.
-3. **Live Tenable/Armis connectors** — replace static sample-file ingestion with real API
-   clients. The normalizer's common schema doesn't change; only the source-detection
-   logic gains real API clients alongside the file-parsing it already does. Needs real
-   API credentials to build against and test properly — a business/access decision, not
-   a coding one.
+3. **Live Tenable/Armis connectors (`remediation/connectors/`)** ✅ Built, ⚠️ unverified
+   against a real tenant — implements each vendor's publicly documented API contract
+   (Tenable's async vulnerability export workflow; Armis's token auth + paginated AQL
+   search), writing output in the exact same file shapes as the samples so
+   `vuln-ingest-normalizer.md` needs zero changes. 18 tests cover the logic against
+   mocked HTTP responses shaped like each vendor's documentation — but no real API
+   credentials were available while building this, so it has never actually talked to a
+   live Tenable/Armis tenant. See [remediation/connectors/README.md](remediation/connectors/README.md)
+   for exactly what "tested" does and doesn't mean here, and what to verify before
+   pointing it at a real account.
 4. **Persistence + audit log** — a database of runs, findings, and who approved what,
    replacing the flat JSON audit files the CLI writes today and the dashboard reads.
 

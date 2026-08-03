@@ -6,3 +6,7 @@ vulnerable-demo-app/.env
 
 # CLI audit logs are runtime output (may include scan results) - not source, don't commit
 .vulnhunter/
+
+# Live-fetched Tenable/Armis data is real vulnerability data about real infrastructure -
+# never commit it, unlike the fabricated remediation/sample-data/
+remediation/live-data/
