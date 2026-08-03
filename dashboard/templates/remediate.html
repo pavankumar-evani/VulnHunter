@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Remediation · VulnHunter{% endblock %}
+{% block content %}
+<h1>/remediate — Infrastructure Remediation Queue</h1>
+
+{% if not plan.available %}
+<p class="empty-state">
+  No remediation plan found yet. Run <code>/remediate</code> in Claude Code, or use the
+  <a href="{{ url_for('run_pipeline') }}">Run Pipeline</a> page.
+</p>
+{% else %}
+<p class="subtitle">{{ plan.title }}</p>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>ID</th><th>Asset</th><th>Title</th><th>CVE</th><th>Severity</th>
+      <th>Action Type</th><th>Automation Target</th><th>Risk Tier</th><th>Playbook</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in plan.queue %}
+    <tr>
+      <td>{{ row.ID }}</td>
+      <td>{{ row.Asset }}</td>
+      <td>{{ row.Title }}</td>
+      <td><code>{{ row.CVE }}</code></td>
+      <td><span class="badge badge-{{ row.Severity|lower }}">{{ row.Severity }}</span></td>
+      <td>{{ row['Action Type'] }}</td>
+      <td>{{ row['Automation Target'] }}</td>
+      <td><span class="badge badge-{{ row['Risk Tier']|replace('-', '_') }}">{{ row['Risk Tier'] }}</span></td>
+      <td>
+        {% set pb = playbooks_by_finding.get(row.ID) %}
+        {% if pb %}
+          <a href="{{ url_for('playbook_detail', filename=pb.filename) }}">View</a>
+        {% else %}
+          <span class="muted">none</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

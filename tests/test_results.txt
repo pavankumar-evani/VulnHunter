@@ -1,3 +1,33 @@
+test_explicit_env_var_takes_priority (test_cli.ClaudeBinaryDiscovery.test_explicit_env_var_takes_priority) ... ok
+test_build_command_defaults_to_json_output (test_cli.CommandConstruction.test_build_command_defaults_to_json_output) ... ok
+test_build_command_includes_max_budget (test_cli.CommandConstruction.test_build_command_includes_max_budget) ... ok
+test_build_command_includes_permission_mode (test_cli.CommandConstruction.test_build_command_includes_permission_mode) ... ok
+test_build_command_includes_print_and_prompt (test_cli.CommandConstruction.test_build_command_includes_print_and_prompt) ... ok
+test_build_command_never_includes_dangerous_skip_permissions (test_cli.CommandConstruction.test_build_command_never_includes_dangerous_skip_permissions)
+Regression guard: this wrapper must never default to bypassing permission ... ok
+test_build_command_omits_flags_when_falsy (test_cli.CommandConstruction.test_build_command_omits_flags_when_falsy) ... ok
+test_dry_run_remediate_with_generate (test_cli.DryRunEndToEnd.test_dry_run_remediate_with_generate) ... ok
+test_dry_run_scan_prints_command_without_calling_api (test_cli.DryRunEndToEnd.test_dry_run_scan_prints_command_without_calling_api) ... ok
+test_remediate_prompt_with_generate (test_cli.PromptConstruction.test_remediate_prompt_with_generate) ... ok
+test_remediate_prompt_without_generate (test_cli.PromptConstruction.test_remediate_prompt_without_generate) ... ok
+test_scan_prompt_with_fix (test_cli.PromptConstruction.test_scan_prompt_with_fix) ... ok
+test_scan_prompt_without_fix (test_cli.PromptConstruction.test_scan_prompt_without_fix) ... ok
+test_api_status_endpoint (test_dashboard.DashboardRoutesRender.test_api_status_endpoint) ... ok
+test_dry_run_post_never_calls_real_api (test_dashboard.DashboardRoutesRender.test_dry_run_post_never_calls_real_api)
+The critical safety test: submitting the run form WITHOUT the confirm ... ok
+test_overview_page_loads (test_dashboard.DashboardRoutesRender.test_overview_page_loads) ... ok
+test_playbook_detail_page_loads (test_dashboard.DashboardRoutesRender.test_playbook_detail_page_loads) ... ok
+test_remediate_page_lists_all_findings (test_dashboard.DashboardRoutesRender.test_remediate_page_lists_all_findings) ... ok
+test_run_page_loads (test_dashboard.DashboardRoutesRender.test_run_page_loads) ... ok
+test_unknown_playbook_returns_404 (test_dashboard.DashboardRoutesRender.test_unknown_playbook_returns_404) ... ok
+test_vulnhunt_page_lists_all_findings (test_dashboard.DashboardRoutesRender.test_vulnhunt_page_lists_all_findings) ... ok
+test_no_mojibake_in_parsed_text (test_dashboard.DataLayerReadsRealArtifacts.test_no_mojibake_in_parsed_text)
+Regression guard for the subprocess-encoding bug: git output must be decoded ... ok
+test_playbooks_match_known_count (test_dashboard.DataLayerReadsRealArtifacts.test_playbooks_match_known_count) ... ok
+test_remediation_findings_match_known_total (test_dashboard.DataLayerReadsRealArtifacts.test_remediation_findings_match_known_total) ... ok
+test_remediation_plan_queue_matches_findings_count (test_dashboard.DataLayerReadsRealArtifacts.test_remediation_plan_queue_matches_findings_count) ... ok
+test_risk_tier_counts_match_known_split (test_dashboard.DataLayerReadsRealArtifacts.test_risk_tier_counts_match_known_split) ... ok
+test_vulnhunt_data_matches_known_totals (test_dashboard.DataLayerReadsRealArtifacts.test_vulnhunt_data_matches_known_totals) ... ok
 test_no_real_looking_secrets_in_tracked_files (test_pipeline_artifacts.NoRealSecretsLeakedAnywhere.test_no_real_looking_secrets_in_tracked_files) ... ok
 test_all_three_sources_represented (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_all_three_sources_represented) ... ok
 test_asset_type_classification_spot_checks (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_asset_type_classification_spot_checks) ... ok
@@ -37,6 +67,8 @@ test_hardcoded_secret_present (test_pipeline_artifacts.VulnHuntScannerFindsRealV
 test_sql_injection_string_concat_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_sql_injection_string_concat_present) ... ok
 
 ----------------------------------------------------------------------
-Ran 33 tests in 3.972s
+Ran 60 tests in 3.893s
 
 OK
+Would run: C:\Users\pavane\AppData\Roaming\Claude\claude-code\2.1.219\claude.exe -p /vulnhunt vulnerable-demo-app --output-format json --permission-mode acceptEdits --allowedTools Read Grep Glob Bash Edit Write --max-budget-usd 2.00
+(working directory: C:\Users\pavane\OneDrive - Deloitte (O365D)\Desktop\Claud workspace\vulnhunter-project)

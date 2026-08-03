@@ -347,6 +347,20 @@ any other automation. **Every non-dry-run invocation spends real Claude API usag
 on every push. `tests/test_cli.py` covers the command-construction logic without ever
 calling the real API.
 
+### Step 8.5: View it in the dashboard
+
+```bash
+pip install -r dashboard/requirements.txt
+python dashboard/app.py
+# open http://127.0.0.1:5050
+```
+
+A read-mostly web UI over the same artifacts: KPI overview, both findings tables, the
+remediation queue linked to generated playbooks, and a `/run` page that wraps the CLI
+above (dry-run by default, same cost posture). See [dashboard/README.md](dashboard/README.md)
+for the full page list and — importantly — what this MVP deliberately does not have yet
+(auth, persistence, a job queue) before considering exposing it beyond localhost.
+
 ### Step 9: Extend it
 
 The most likely next build-out, per [§9 Roadmap](#9-roadmap), is a new remediation fixer
@@ -391,6 +405,12 @@ for network devices or IoT/OT. To add one:
 │   ├── vulnhunter.py          headless CLI wrapper around `claude -p` (no API calls
 │   │                          from the prompt logic itself - see cli/README.md)
 │   └── README.md              usage, cost warning, binary discovery order
+├── dashboard/
+│   ├── app.py                 Flask MVP dashboard - findings, queue, playbooks, run form
+│   ├── data.py                 parses the same real artifacts, no pipeline logic of its own
+│   ├── templates/, static/     Jinja2 templates + CSS
+│   ├── requirements.txt        flask (only new runtime dependency in the whole repo)
+│   └── README.md                scope, safety design, and explicit "not yet" list
 ├── remediation/
 │   ├── sample-data/       mock Tenable/Armis/threat-intel exports
 │   ├── schema/            normalized Finding schema documentation
@@ -399,7 +419,8 @@ for network devices or IoT/OT. To add one:
 ├── tests/
 │   ├── test_pipeline_artifacts.py   33 automated tests, stdlib only
 │   ├── test_cli.py                  13 tests for the headless CLI (no real API calls)
-│   └── test_results.txt             a captured passing run
+│   ├── test_dashboard.py            14 tests for the dashboard (Flask test client, no real server)
+│   └── test_results.txt             a captured passing run (60/60)
 ├── deliverables/
 │   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
 │   └── VulnHunter_Project_Report.docx     full project & test report
@@ -415,9 +436,17 @@ for network devices or IoT/OT. To add one:
 
 ## 8. Test Evidence & Results
 
-33 tests, 0 failures, covering both pipelines' real output artifacts — not mocked agent
-behavior (see [`tests/test_pipeline_artifacts.py`](tests/test_pipeline_artifacts.py) for
-the full suite and its docstring for why it's structured this way). Summary by category:
+60 tests, 0 failures, across three suites — the original pipeline-artifact tests plus the
+CLI and dashboard added in the commercialization build-out. None of it calls the real
+Claude API (see each file's docstring for why that's a hard rule, not an oversight).
+
+| Test file | What it checks | Count |
+|---|---|---|
+| `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 33 |
+| `tests/test_cli.py` | Headless CLI command construction, binary discovery, one real dry-run subprocess call | 13 |
+| `tests/test_dashboard.py` | Dashboard data parsing + every route (Flask test client, in-process, no server) | 14 |
+
+`test_pipeline_artifacts.py` breakdown:
 
 | Test class | What it checks | Count |
 |---|---|---|
@@ -462,17 +491,19 @@ Usable by someone who isn't running Claude Code interactively:
    runs from a script/CI/cron without a human in an interactive session, without
    duplicating any prompt logic. Every real invocation spends API usage/credits — see
    [cli/README.md](cli/README.md).
-2. **Web dashboard** — findings, remediation queue, and one-click approve/generate,
-   reading off the CLI's output and audit logs instead of raw Markdown files. This is
-   the highest-visibility gap for "user-friendly," and the reason it comes after the CLI:
-   it needs something non-interactive to call.
+2. **Web dashboard (`dashboard/`)** ✅ MVP done — findings, remediation queue, generated
+   playbooks, and a run-trigger page, reading off the same real artifacts. Built with
+   Flask/Jinja2 rather than React because Node.js wasn't available in the build
+   environment; see [dashboard/README.md](dashboard/README.md) for that tradeoff and,
+   more importantly, what this MVP still lacks (auth/RBAC, persistence, a job queue,
+   multi-tenancy) before it's more than a local/trusted-network tool.
 3. **Live Tenable/Armis connectors** — replace static sample-file ingestion with real API
    clients. The normalizer's common schema doesn't change; only the source-detection
    logic gains real API clients alongside the file-parsing it already does. Needs real
    API credentials to build against and test properly — a business/access decision, not
    a coding one.
 4. **Persistence + audit log** — a database of runs, findings, and who approved what,
-   replacing the flat JSON audit files the CLI writes today.
+   replacing the flat JSON audit files the CLI writes today and the dashboard reads.
 
 Also planned in this tier, lower priority than the four above:
 - **`remediation-fixer-network`** — vendor CLI config diffs (Cisco IOS/IOS XE, Junos) via

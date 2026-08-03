@@ -1,24 +1,29 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for [`tests/test_pipeline_artifacts.py`](tests/test_pipeline_artifacts.py).
-Every row below maps 1:1 to one `test_*` method in that file — there is no test case here
-without a corresponding, runnable assertion, and no assertion in the suite that isn't
-documented here.
+Formal test case log for all three test files: `tests/test_pipeline_artifacts.py` (both
+pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI), and
+`tests/test_dashboard.py` (the web dashboard). Every row below maps 1:1 to one `test_*`
+method in one of those files — there is no test case here without a corresponding,
+runnable assertion, and no assertion in any suite that isn't documented here.
 
 **How to reproduce these results yourself:**
 ```bash
+pip install -r dashboard/requirements.txt   # only needed for test_dashboard.py
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 33 / 33 passed, 0 failures, 0 errors (3.97s). Raw output captured in
+**Last run:** 60 / 60 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
 (subagents only run inside an interactive Claude Code session — see
-[KNOWLEDGE_TRANSFER.md §10](KNOWLEDGE_TRANSFER.md#10-troubleshooting--things-that-tripped-us-up)).
-They validate the real artifacts those agents produced during the documented validation
-run — git history for `/vulnhunt`, generated files for `/remediate` — which is what makes
-this both real regression coverage and honest test evidence rather than a mocked demo.
+[KNOWLEDGE_TRANSFER.md §10](KNOWLEDGE_TRANSFER.md#10-troubleshooting--things-that-tripped-us-up)),
+and they never call the real Claude API (the CLI/dashboard tests use `--dry-run` and
+omit the dashboard's `confirm` field specifically so a test run can never spend real
+usage/credits). They validate the real artifacts those agents produced during the
+documented validation run — git history for `/vulnhunt`, generated files for
+`/remediate` — which is what makes this both real regression coverage and honest test
+evidence rather than a mocked demo.
 
 ---
 
@@ -33,7 +38,12 @@ this both real regression coverage and honest test evidence rather than a mocked
 | `/remediate` plan | `RemediationPlanIsConsistentWithFindings` | TC-PLAN-01 – 02 | 2/2 PASS |
 | `/remediate` playbooks | `RemediationPlaybooksMatchThePlan` | TC-PB-01 – 05 | 5/5 PASS |
 | Cross-cutting safety | `NoRealSecretsLeakedAnywhere` | TC-SEC-01 | 1/1 PASS |
-| **Total** | | **33** | **33/33 PASS** |
+| CLI prompt/command construction | `PromptConstruction`, `CommandConstruction` | TC-CLI-01 – 10 | 10/10 PASS |
+| CLI binary discovery | `ClaudeBinaryDiscovery` | TC-CLI-11 | 1/1 PASS |
+| CLI end-to-end dry-run | `DryRunEndToEnd` | TC-CLI-12 – 13 | 2/2 PASS |
+| Dashboard data layer | `DataLayerReadsRealArtifacts` | TC-DASH-01 – 06 | 6/6 PASS |
+| Dashboard routes | `DashboardRoutesRender` | TC-DASH-07 – 14 | 8/8 PASS |
+| **Total** | | **60** | **60/60 PASS** |
 
 ---
 
@@ -147,6 +157,53 @@ secret slipping into demo data or generated output, regardless of which stage pr
 
 ---
 
+## Suite 8: Headless CLI (`cli/vulnhunter.py`)
+
+**Purpose:** prove the CLI wrapper constructs the right `claude -p` invocation and never
+silently defaults to something riskier (a permission bypass) or costlier than intended,
+without ever calling the real Claude API in a test.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-CLI-01 | `scan_prompt` without `--fix` | Call `scan_prompt("vulnerable-demo-app")` | Returns `"/vulnhunt vulnerable-demo-app"` | Matches | PASS |
+| TC-CLI-02 | `scan_prompt` with `--fix` | Call with `fix=True` | Returns the prompt with `--fix` appended | Matches | PASS |
+| TC-CLI-03 | `remediate_prompt` without `--generate` | Call `remediate_prompt()` | Returns `"/remediate"` | Matches | PASS |
+| TC-CLI-04 | `remediate_prompt` with `--generate` | Call with `generate=True` | Returns the prompt with `--generate` appended | Matches | PASS |
+| TC-CLI-05 | Command includes `-p` and the prompt | `build_command("/vulnhunt foo", claude_bin="claude")` | `-p` and the prompt string both present | Present | PASS |
+| TC-CLI-06 | Defaults to JSON output format | Same as above | `--output-format json` present | Present | PASS |
+| TC-CLI-07 | Includes the permission mode | Pass `permission_mode="acceptEdits"` | `--permission-mode acceptEdits` present | Present | PASS |
+| TC-CLI-08 | Includes the max-budget cap | Pass `max_budget_usd="5.00"` | `--max-budget-usd 5.00` present | Present | PASS |
+| TC-CLI-09 | Falsy args are omitted, not passed empty | Pass `permission_mode=None, allowed_tools=None, max_budget_usd=None` | None of those 3 flags appear at all | All 3 absent | PASS |
+| TC-CLI-10 | Never defaults to a full permission bypass | Build a command with default args | `dangerously-skip-permissions` never appears | Absent | PASS |
+| TC-CLI-11 | `CLAUDE_BIN` env var takes priority | Set `CLAUDE_BIN`, call `find_claude_binary()` | Returns the env var's value, not a PATH-discovered binary | Matches | PASS |
+| TC-CLI-12 | Dry-run `scan` subprocess call | Run `python cli/vulnhunter.py --dry-run scan vulnerable-demo-app` as a real subprocess | Exit 0; stdout contains `"Would run:"` and the prompt; no API call made | Matches | PASS |
+| TC-CLI-13 | Dry-run `remediate --generate` subprocess call | Run `python cli/vulnhunter.py --dry-run remediate --generate` | Exit 0; stdout contains `"/remediate --generate"` | Matches | PASS |
+
+## Suite 9: Web Dashboard (`dashboard/`)
+
+**Purpose:** prove the dashboard's parser agrees with the pipeline test suite about what
+the artifacts say (no silent drift between the two), every route renders without error,
+and the one route that could spend real money never does so in a test.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-DASH-01 | `/vulnhunt` data matches known totals | Call `load_vulnhunt_data()` | `total == 9`, `auto_fixable == 6` | Matches | PASS |
+| TC-DASH-02 | Remediation findings count matches | Call `load_remediation_findings()` | `len(findings) == 11` | Matches | PASS |
+| TC-DASH-03 | Remediation plan queue count matches | Call `load_remediation_plan()` | `len(queue) == 11` | Matches | PASS |
+| TC-DASH-04 | Risk tier counts match the known split | Same as above | 2 auto-approvable, 5 needs-change-approval, 4 manual-only | Matches | PASS |
+| TC-DASH-05 | Playbook count matches | Call `load_playbooks()` | `len(playbooks) == 7` | Matches | PASS |
+| TC-DASH-06 | No mojibake in parsed text (regression guard) | Check `vh["title"]` and `plan["title"]` for the mojibake pattern `â€"` | Pattern absent from both | Absent | PASS |
+| TC-DASH-07 | Overview page loads | `GET /` via Flask test client | HTTP 200; contains "Security Posture Overview" | Matches | PASS |
+| TC-DASH-08 | Code scan page lists all findings | `GET /vulnhunt` | HTTP 200; `VULN-1` through `VULN-9` all present | All present | PASS |
+| TC-DASH-09 | Remediation page lists all findings | `GET /remediate` | HTTP 200; `FIND-1` through `FIND-11` all present | All present | PASS |
+| TC-DASH-10 | Playbook detail page loads | `GET /playbooks/FIND-4-sudo-baron-samedit-patch.yml` | HTTP 200; contains "Auto-approvable" | Matches | PASS |
+| TC-DASH-11 | Unknown playbook returns 404 | `GET /playbooks/does-not-exist.yml` | HTTP 404 (negative test) | 404 | PASS |
+| TC-DASH-12 | Run page loads | `GET /run` | HTTP 200; contains "Run a Pipeline" | Matches | PASS |
+| TC-DASH-13 | Dry-run POST never calls the real API | `POST /run` with `confirm` field omitted | HTTP 200 after redirect; response contains "Dry run only"; no audit log written | Matches | PASS |
+| TC-DASH-14 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 9`, `remediation_findings: 11` | Matches | PASS |
+
+---
+
 ## Notable findings from testing (not just "all green")
 
 Three real issues surfaced during the development of this suite, listed here because a
@@ -166,6 +223,15 @@ test suite that never catches anything is less convincing than one with a track 
    flagged string from every commit — confirmed via a full-history grep showing zero
    matches before re-pushing. TC-SEC-01 now guards against a regression of this exact
    class of issue going forward.
-3. All other test cases passed on first implementation, which is expected — they assert
-   behavior the pipeline stages were explicitly designed to produce (e.g. "the fixer
-   never touches `main`"), rather than probing for unknown defects.
+3. All other original 33 test cases passed on first implementation, which is expected —
+   they assert behavior the pipeline stages were explicitly designed to produce (e.g.
+   "the fixer never touches `main`"), rather than probing for unknown defects.
+4. **A real mojibake bug**, caught while manually verifying the dashboard's rendered
+   pages (not by a pre-written test): em-dashes and other non-ASCII characters from
+   `SECURITY_REPORT.md`/`REMEDIATION_PLAN.md` were rendering as `â€"` instead of `—`.
+   Root cause: `subprocess.run(..., text=True)` without an explicit `encoding="utf-8"`
+   decodes `git show`'s UTF-8 output using the platform's default codec, which is
+   `cp1252` on Windows — silently corrupting any non-ASCII byte sequence. Fixed by
+   adding `encoding="utf-8"` to every `subprocess.run` call that reads git or CLI output
+   across `dashboard/data.py`, `cli/vulnhunter.py`, `tests/test_pipeline_artifacts.py`,
+   and `tests/test_cli.py`. TC-DASH-06 now guards against a regression.

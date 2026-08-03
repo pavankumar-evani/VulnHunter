@@ -26,7 +26,7 @@ def git_show(ref, path):
     """Read a file's content at a given git ref without touching the working tree."""
     result = subprocess.run(
         ["git", "show", f"{ref}:{path}"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
     )
     return result.stdout
 
@@ -34,7 +34,7 @@ def git_show(ref, path):
 def find_fix_branch():
     result = subprocess.run(
         ["git", "branch", "--list", f"{FIX_BRANCH_PREFIX}*"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
     )
     branches = [b.strip().lstrip("* ").strip() for b in result.stdout.splitlines() if b.strip()]
     assert branches, "no vulnhunter/auto-fixes-* branch found - has /vulnhunt --fix been run?"
@@ -255,7 +255,7 @@ class NoRealSecretsLeakedAnywhere(unittest.TestCase):
     def test_no_real_looking_secrets_in_tracked_files(self):
         result = subprocess.run(
             ["git", "ls-tree", "-r", "--name-only", "HEAD"],
-            cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+            cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
         )
         for rel_path in result.stdout.splitlines():
             full_path = REPO_ROOT / rel_path

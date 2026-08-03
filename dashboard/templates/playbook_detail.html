@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ playbook.filename }} · VulnHunter{% endblock %}
+{% block content %}
+<h1>{{ playbook.filename }}</h1>
+<p class="subtitle">
+  Finding {{ playbook.finding_id }} &middot;
+  {% if playbook.needs_approval %}
+    <span class="badge badge-needs_change_approval">Change approval required</span>
+  {% else %}
+    <span class="badge badge-auto_approvable">Auto-approvable</span>
+  {% endif %}
+</p>
+
+<div class="callout callout-warn">
+  This is a generated, unreviewed draft. Do not run it against real infrastructure
+  without human review and, if flagged above, formal change-management approval.
+</div>
+
+<pre class="code-block">{{ playbook.content }}</pre>
+
+<p><a href="{{ url_for('remediate_view') }}">&larr; Back to remediation queue</a></p>
+{% endblock %}

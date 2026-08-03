@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}VulnHunter{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('overview') }}">🔍🛡️ VulnHunter</a>
+      <nav>
+        <a href="{{ url_for('overview') }}">Overview</a>
+        <a href="{{ url_for('vulnhunt_view') }}">Code Scan</a>
+        <a href="{{ url_for('remediate_view') }}">Remediation</a>
+        <a href="{{ url_for('run_pipeline') }}">Run Pipeline</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-container">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      MVP dashboard &middot; server-rendered, reads real generated artifacts &middot;
+      see <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/dashboard/README.md">dashboard/README.md</a>
+      for scope and limitations
+    </div>
+  </footer>
+</body>
+</html>

@@ -31,5 +31,8 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install dashboard dependencies
+        run: pip install -r dashboard/requirements.txt
+
       - name: Run test suite
         run: python -m unittest discover -s tests -p "test_*.py" -v

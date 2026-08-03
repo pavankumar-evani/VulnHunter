@@ -124,7 +124,7 @@ def run(prompt, pipeline_name, dry_run=False, **build_kwargs):
 
     print("Running:", " ".join(command))
     print("This calls the real Claude API and will spend usage/credits.")
-    result = subprocess.run(command, cwd=REPO_ROOT, capture_output=True, text=True)
+    result = subprocess.run(command, cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8")
 
     log_path = write_audit_log(pipeline_name, command, result)
     print(f"Audit log written to {log_path}")

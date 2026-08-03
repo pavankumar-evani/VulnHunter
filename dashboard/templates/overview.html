@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Overview · VulnHunter{% endblock %}
+{% block content %}
+<h1>Security Posture Overview</h1>
+<p class="subtitle">Real results from the last validated run of both pipelines.</p>
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-value">{{ vh.total or 0 }}</div>
+    <div class="kpi-label">Code vulnerabilities found</div>
+  </div>
+  <div class="kpi-card kpi-good">
+    <div class="kpi-value">{{ vh.auto_fixable or 0 }}</div>
+    <div class="kpi-label">Auto-fixed on a branch</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-value">{{ remediation_total }}</div>
+    <div class="kpi-label">Infra findings normalized</div>
+  </div>
+  <div class="kpi-card kpi-good">
+    <div class="kpi-value">{{ remediation_eligible }}</div>
+    <div class="kpi-label">Auto-remediable today</div>
+  </div>
+  <div class="kpi-card kpi-warn">
+    <div class="kpi-value">{{ remediation_manual_only }}</div>
+    <div class="kpi-label">Manual-only (no fixer yet)</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-value">{{ playbook_count }}</div>
+    <div class="kpi-label">Playbooks generated</div>
+  </div>
+</div>
+
+{% if plan.available %}
+<h2>Risk tier breakdown (remediation queue)</h2>
+<table class="data-table">
+  <thead><tr><th>Risk Tier</th><th>Count</th></tr></thead>
+  <tbody>
+    {% for tier, count in plan.risk_tier_counts.items() %}
+    <tr>
+      <td><span class="badge badge-{{ tier|replace('-', '_') }}">{{ tier }}</span></td>
+      <td>{{ count }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<div class="callout">
+  Every playbook shown here is a reviewable artifact — nothing in this dashboard executes
+  against real infrastructure automatically. See the safety model in
+  <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision">KNOWLEDGE_TRANSFER.md §4.3</a>.
+</div>
+{% endblock %}

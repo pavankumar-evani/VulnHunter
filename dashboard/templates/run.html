@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Run Pipeline · VulnHunter{% endblock %}
+{% block content %}
+<h1>Run a Pipeline</h1>
+
+<div class="callout callout-warn">
+  ⚠️ Actually running a pipeline (unchecking dry-run) calls the real Claude API and
+  spends real usage/credits against your Claude plan. Preview with dry-run first.
+</div>
+
+<form method="post" class="run-form">
+  <label>
+    Pipeline
+    <select name="pipeline">
+      <option value="scan">/vulnhunt (code scan)</option>
+      <option value="remediate">/remediate (infra remediation)</option>
+    </select>
+  </label>
+
+  <label>
+    Target path (only used for /vulnhunt)
+    <input type="text" name="path" value="vulnerable-demo-app">
+  </label>
+
+  <label class="checkbox-label">
+    <input type="checkbox" name="fix_or_generate">
+    Also apply fixes / generate playbooks (<code>--fix</code> / <code>--generate</code>)
+  </label>
+
+  <label>
+    Max spend cap (USD)
+    <input type="text" name="max_budget_usd" value="{{ default_budget }}">
+  </label>
+
+  <label class="checkbox-label checkbox-danger">
+    <input type="checkbox" name="confirm">
+    I understand this spends real API usage/credits — actually run it (leave unchecked
+    for a dry-run preview only)
+  </label>
+
+  <button type="submit">Submit</button>
+</form>
+
+<h2>Recent runs</h2>
+{% if not audit_log %}
+<p class="empty-state">No real runs yet (dry-run previews aren't logged).</p>
+{% else %}
+<table class="data-table">
+  <thead><tr><th>Timestamp (UTC)</th><th>Pipeline</th><th>Exit Code</th><th>Command</th></tr></thead>
+  <tbody>
+    {% for entry in audit_log %}
+    <tr>
+      <td>{{ entry.timestamp }}</td>
+      <td>{{ entry.pipeline }}</td>
+      <td>{{ entry.returncode }}</td>
+      <td><code>{{ entry.command }}</code></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

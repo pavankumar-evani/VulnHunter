@@ -198,6 +198,10 @@ clear reason no fixer exists yet.
 │   ├── vulnhunter.py            # headless CLI: run either pipeline without an
 │   │                            #   interactive session (see cli/README.md)
 │   └── README.md
+├── dashboard/
+│   ├── app.py                  # Flask MVP dashboard reading real artifacts (see below)
+│   ├── data.py                 # parses SECURITY_REPORT.md / REMEDIATION_PLAN.md / etc.
+│   └── README.md
 ├── remediation/
 │   ├── sample-data/            # mock Tenable/Armis/threat-intel exports
 │   ├── schema/                 # normalized Finding schema doc

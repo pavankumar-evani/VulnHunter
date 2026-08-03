@@ -94,7 +94,7 @@ class DryRunEndToEnd(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(REPO_ROOT / "cli" / "vulnhunter.py"),
              "--dry-run", "scan", "vulnerable-demo-app"],
-            capture_output=True, text=True, cwd=REPO_ROOT,
+            capture_output=True, text=True, encoding="utf-8", cwd=REPO_ROOT,
         )
         self.assertEqual(result.returncode, 0)
         self.assertIn("Would run:", result.stdout)
@@ -104,7 +104,7 @@ class DryRunEndToEnd(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(REPO_ROOT / "cli" / "vulnhunter.py"),
              "--dry-run", "remediate", "--generate"],
-            capture_output=True, text=True, cwd=REPO_ROOT,
+            capture_output=True, text=True, encoding="utf-8", cwd=REPO_ROOT,
         )
         self.assertEqual(result.returncode, 0)
         self.assertIn("/remediate --generate", result.stdout)
