@@ -11,6 +11,11 @@ Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
   threat intel, normalize it, plan remediation by risk tier, and generate reviewable
   fix automation for supported asset classes. See [Remediation Engine](#remediation-engine-remediate).
 
+📖 **New here?** [KNOWLEDGE_TRANSFER.md](KNOWLEDGE_TRANSFER.md) has the full picture: problem
+statement, the idea and why it's built this way, product/solution details for both
+pipelines, step-by-step instructions to actually run everything, test evidence, and a
+troubleshooting log of what broke and how it was fixed.
+
 ## The problem
 
 Static analysis tools produce reports nobody reads. Security debt piles up because
