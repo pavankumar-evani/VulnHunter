@@ -16,6 +16,7 @@ KPI cards, client-side sort, forms) was verified live in a browser during
 development - see KNOWLEDGE_TRANSFER.md - not by this Python suite, which cannot
 execute JavaScript.
 """
+import datetime
 import sys
 import tempfile
 import unittest
@@ -31,11 +32,50 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import data as dashboard_data  # noqa: E402
 from app import app as fastapi_app  # noqa: E402
+from auth import rbac as rbac_module  # noqa: E402
+from auth import users as auth_users  # noqa: E402
 from remediation.config import priority_engine  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory  # noqa: E402
 
 client = TestClient(fastapi_app)
+
+# A temporary, module-scoped user store (never the real, shipped users.json) so every
+# test in this file that needs to be logged in can log in as a known admin/user without
+# depending on the real demo credentials in dashboard/auth/users.json staying fixed.
+TEST_ADMIN_EMAIL = "admin@test.local"
+TEST_ADMIN_PASSWORD = "admin-test-password-1"
+TEST_USER_EMAIL = "user@test.local"
+TEST_USER_PASSWORD = "user-test-password-1"
+
+_auth_tmpdir = None
+_auth_patcher = None
+
+
+def setUpModule():
+    global _auth_tmpdir, _auth_patcher
+    _auth_tmpdir = tempfile.TemporaryDirectory()
+    tmp_users_path = Path(_auth_tmpdir.name) / "users.json"
+    _auth_patcher = patch.object(auth_users, "DEFAULT_USERS_PATH", tmp_users_path)
+    _auth_patcher.start()
+    auth_users.create_user(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, "Test Admin", role="admin")
+    auth_users.create_user(TEST_USER_EMAIL, TEST_USER_PASSWORD, "Test User", role="user")
+
+
+def tearDownModule():
+    _auth_patcher.stop()
+    _auth_tmpdir.cleanup()
+
+
+def _login(email, password):
+    resp = client.post("/api/auth/login", json={"email": email, "password": password})
+    if resp.status_code != 200:
+        raise AssertionError(f"test login as {email!r} failed: {resp.status_code} {resp.text}")
+    return resp
+
+
+def _logout():
+    client.cookies.clear()
 
 
 class DataLayerReadsRealArtifacts(unittest.TestCase):
@@ -171,6 +211,15 @@ class ApiRunPipeline(unittest.TestCase):
         resp = client.post("/api/run", json={"pipeline": "not-a-real-pipeline"})
         self.assertEqual(resp.status_code, 400)
 
+    def test_confirm_true_but_not_logged_in_is_rejected_before_ever_running_anything(self):
+        """Login is required before the real (paid) path even runs cli.run() - not
+        just before returning a result. Never logs in here, so if this test somehow
+        got past the gate it would attempt a real, paid API call."""
+        resp = client.post("/api/run", json={
+            "pipeline": "scan", "path": "vulnerable-demo-app", "confirm": True,
+        })
+        self.assertEqual(resp.status_code, 401)
+
 
 class ApiStatus(unittest.TestCase):
     def test_status_endpoint(self):
@@ -180,6 +229,74 @@ class ApiStatus(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["vulnhunt_findings"], 9)
         self.assertEqual(payload["remediation_findings"], 14)
+
+
+class ApiAuth(unittest.TestCase):
+    def tearDown(self):
+        _logout()
+
+    def test_login_with_correct_credentials_sets_a_session_and_returns_the_user(self):
+        resp = client.post("/api/auth/login", json={"email": TEST_ADMIN_EMAIL, "password": TEST_ADMIN_PASSWORD})
+        self.assertEqual(resp.status_code, 200)
+        user = resp.json()["user"]
+        self.assertEqual(user["email"], TEST_ADMIN_EMAIL)
+        self.assertEqual(user["role"], "admin")
+        self.assertNotIn("password_hash", user)
+        self.assertIn(rbac_module.SESSION_COOKIE_NAME, resp.cookies)
+
+    def test_login_with_wrong_password_is_rejected(self):
+        resp = client.post("/api/auth/login", json={"email": TEST_ADMIN_EMAIL, "password": "not the password"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_login_with_unknown_email_is_rejected(self):
+        resp = client.post("/api/auth/login", json={"email": "nobody@test.local", "password": "anything"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_me_without_login_returns_null_user(self):
+        resp = client.get("/api/auth/me")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.json()["user"])
+
+    def test_me_after_login_returns_the_logged_in_user(self):
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.get("/api/auth/me")
+        self.assertEqual(resp.json()["user"]["email"], TEST_USER_EMAIL)
+
+    def test_logout_clears_the_session(self):
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        logout_resp = client.post("/api/auth/logout")
+        self.assertEqual(logout_resp.status_code, 200)
+        me_resp = client.get("/api/auth/me")
+        self.assertIsNone(me_resp.json()["user"])
+
+    def test_change_password_requires_login(self):
+        resp = client.post("/api/auth/change-password", json={"new_password": "brandnewpassword1"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_change_password_then_old_password_no_longer_logs_in(self):
+        auth_users.create_user("temp@test.local", "originalpassword1", "Temp User")
+        _login("temp@test.local", "originalpassword1")
+        resp = client.post("/api/auth/change-password", json={"new_password": "brandnewpassword1"})
+        self.assertEqual(resp.status_code, 200)
+        _logout()
+        self.assertEqual(
+            client.post("/api/auth/login", json={"email": "temp@test.local", "password": "originalpassword1"}).status_code,
+            401,
+        )
+        self.assertEqual(
+            client.post("/api/auth/login", json={"email": "temp@test.local", "password": "brandnewpassword1"}).status_code,
+            200,
+        )
+
+    def test_oidc_config_reports_disabled_when_no_env_vars_are_set(self):
+        resp = client.get("/api/auth/oidc/config")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["enabled"])
+        self.assertIsNone(resp.json()["provider_name"])
+
+    def test_oidc_login_is_unavailable_when_not_configured(self):
+        resp = client.get("/api/auth/oidc/login", follow_redirects=False)
+        self.assertEqual(resp.status_code, 503)
 
 
 class ApiLiveQueue(unittest.TestCase):
@@ -218,8 +335,10 @@ class ApiPriorityRules(unittest.TestCase):
         )
         self.patcher = patch.object(priority_engine, "DEFAULT_RULES_PATH", self.tmp_rules_path)
         self.patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)  # POST is admin-gated
 
     def tearDown(self):
+        _logout()
         self.patcher.stop()
         self.tmpdir.cleanup()
 
@@ -241,6 +360,17 @@ class ApiPriorityRules(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("invalid YAML", resp.json()["detail"])
         self.assertEqual(self.tmp_rules_path.read_text(encoding="utf-8"), original)
+
+    def test_post_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/priority-rules", json={"rules_text": "sla_days: {}"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_post_as_non_admin_is_rejected(self):
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/priority-rules", json={"rules_text": "sla_days: {}"})
+        self.assertEqual(resp.status_code, 403)
 
 
 class ApiServiceNow(unittest.TestCase):
@@ -264,11 +394,107 @@ class ApiServiceNow(unittest.TestCase):
         self.assertIsNone(payload["results"])
 
     def test_send_with_confirm_but_missing_credentials_is_rejected(self):
-        resp = client.post("/api/servicenow/send", json={
-            "instance": "", "username": "", "password": "", "table": "incident", "confirm": True,
-        })
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/servicenow/send", json={
+                "instance": "", "username": "", "password": "", "table": "incident", "confirm": True,
+            })
+        finally:
+            _logout()
         self.assertEqual(resp.status_code, 400)
         self.assertIn("required", resp.json()["detail"])
+
+    def test_send_with_confirm_but_not_logged_in_is_rejected(self):
+        """The real-send path (confirm=True) requires login even before credential
+        validation - preview (confirm=False, tested above) stays open."""
+        resp = client.post("/api/servicenow/send", json={
+            "instance": "mycompany", "username": "u", "password": "p", "confirm": True,
+        })
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiJira(unittest.TestCase):
+    def test_preview_lists_every_finding_with_no_credentials_needed(self):
+        resp = client.get("/api/jira/preview")
+        self.assertEqual(resp.status_code, 200)
+        previews = resp.json()["previews"]
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 15)})
+        # Uses the documented placeholder project key until a real one is entered.
+        self.assertEqual(previews[0]["body"]["fields"]["project"]["key"], "VULN")
+
+    def test_send_without_confirm_never_touches_the_network(self):
+        """Mirrors /api/servicenow/send's dry-run guarantee: submitting without confirm
+        must never call JiraConnector's network methods, regardless of what
+        credentials are entered."""
+        resp = client.post("/api/jira/send", json={
+            "base_url": "https://mycompany.atlassian.net", "email": "e@example.com",
+            "api_token": "t", "project_key": "PROJ",
+            # confirm intentionally omitted (defaults to False)
+        })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["preview_only"])
+        self.assertIsNone(payload["results"])
+        self.assertEqual(payload["previews"][0]["body"]["fields"]["project"]["key"], "PROJ")
+
+    def test_send_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/jira/send", json={
+                "base_url": "", "email": "", "api_token": "", "project_key": "", "confirm": True,
+            })
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("required", resp.json()["detail"])
+
+    def test_send_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/jira/send", json={
+            "base_url": "https://mycompany.atlassian.net", "email": "e@example.com",
+            "api_token": "t", "project_key": "PROJ", "confirm": True,
+        })
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiSplunk(unittest.TestCase):
+    def test_preview_lists_every_finding_with_no_credentials_needed(self):
+        resp = client.get("/api/splunk/preview")
+        self.assertEqual(resp.status_code, 200)
+        previews = resp.json()["previews"]
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 15)})
+        self.assertEqual(previews[0]["body"]["sourcetype"], "vulnhunter:finding")
+
+    def test_send_without_confirm_never_touches_the_network(self):
+        """Mirrors /api/servicenow/send's dry-run guarantee: submitting without confirm
+        must never call SplunkConnector's network methods, regardless of what
+        credentials are entered."""
+        resp = client.post("/api/splunk/send", json={
+            "hec_url": "https://splunk.example.com:8088/services/collector/event",
+            "hec_token": "t",
+            # confirm intentionally omitted (defaults to False)
+        })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["preview_only"])
+        self.assertIsNone(payload["results"])
+
+    def test_send_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/splunk/send", json={
+                "hec_url": "", "hec_token": "", "confirm": True,
+            })
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("required", resp.json()["detail"])
+
+    def test_send_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/splunk/send", json={
+            "hec_url": "https://splunk.example.com:8088/services/collector/event",
+            "hec_token": "t", "confirm": True,
+        })
+        self.assertEqual(resp.status_code, 401)
 
 
 class ApiAiAssist(unittest.TestCase):
@@ -307,11 +533,15 @@ class ApiAiAssist(unittest.TestCase):
         the confirm=True path is wired up correctly without ever spending real API
         usage/credits in the test suite."""
         fake_result = MagicMock(returncode=0, stdout="This is a mocked AI response.", stderr="")
-        with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
-             patch("app.subprocess.run", return_value=fake_result) as mock_run:
-            resp = client.post("/api/ai-assist", json={
-                "finding_id": "FIND-1", "action": "explain", "confirm": True,
-            })
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)  # confirm=True is admin-gated
+        try:
+            with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+                 patch("app.subprocess.run", return_value=fake_result) as mock_run:
+                resp = client.post("/api/ai-assist", json={
+                    "finding_id": "FIND-1", "action": "explain", "confirm": True,
+                })
+        finally:
+            _logout()
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertFalse(payload["dry_run"])
@@ -320,12 +550,22 @@ class ApiAiAssist(unittest.TestCase):
 
     def test_confirm_true_surfaces_a_failed_call_as_502(self):
         fake_result = MagicMock(returncode=1, stdout="", stderr="something went wrong")
-        with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
-             patch("app.subprocess.run", return_value=fake_result):
-            resp = client.post("/api/ai-assist", json={
-                "finding_id": "FIND-1", "action": "explain", "confirm": True,
-            })
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+                 patch("app.subprocess.run", return_value=fake_result):
+                resp = client.post("/api/ai-assist", json={
+                    "finding_id": "FIND-1", "action": "explain", "confirm": True,
+                })
+        finally:
+            _logout()
         self.assertEqual(resp.status_code, 502)
+
+    def test_confirm_true_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/ai-assist", json={
+            "finding_id": "FIND-1", "action": "explain", "confirm": True,
+        })
+        self.assertEqual(resp.status_code, 401)
 
 
 class ApiReports(unittest.TestCase):
@@ -364,8 +604,12 @@ class ApiExceptions(unittest.TestCase):
         self.tmp_path = Path(self.tmpdir.name) / "exceptions.json"
         self.patcher = patch.object(exceptions_store, "DEFAULT_STORE_PATH", self.tmp_path)
         self.patcher.start()
+        # Create requires any logged-in user, revoke requires admin - log in as admin so
+        # both work in these tests; the 401/403 tests below explicitly log out/switch.
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
 
     def tearDown(self):
+        _logout()
         self.patcher.stop()
         self.tmpdir.cleanup()
 
@@ -432,6 +676,49 @@ class ApiExceptions(unittest.TestCase):
         # A finding with no exception requested against it must show None, not error.
         self.assertIsNone(findings_by_id["FIND-1"]["exception"])
 
+    def test_create_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "r",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2099-01-01",
+        })
+        self.assertEqual(resp.status_code, 401)
+
+    def test_create_as_a_regular_logged_in_user_is_allowed(self):
+        """Create only requires login, not admin - unlike revoke below."""
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "r",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2099-01-01",
+        })
+        self.assertEqual(resp.status_code, 200)
+
+    def test_revoke_without_login_is_rejected(self):
+        created = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "r",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2099-01-01",
+        }).json()
+        _logout()
+        resp = client.post(f"/api/exceptions/{created['id']}/revoke")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_revoke_as_a_regular_user_is_forbidden(self):
+        """Revoke requires admin - a regular logged-in user can create an exception
+        (tested above) but not revoke one."""
+        created = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "r",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2099-01-01",
+        }).json()
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post(f"/api/exceptions/{created['id']}/revoke")
+        self.assertEqual(resp.status_code, 403)
+
 
 class ApiAssets(unittest.TestCase):
     """Every test here uses a temporary ownership file so the suite never mutates the
@@ -442,8 +729,10 @@ class ApiAssets(unittest.TestCase):
         self.tmp_path = Path(self.tmpdir.name) / "asset_ownership.json"
         self.patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_path)
         self.patcher.start()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)  # owner/facing only require login
 
     def tearDown(self):
+        _logout()
         self.patcher.stop()
         self.tmpdir.cleanup()
 
@@ -456,6 +745,33 @@ class ApiAssets(unittest.TestCase):
         self.assertEqual(by_name["WEB-PORTAL01"]["finding_count"], 2)
         self.assertIsNone(by_name["WEB-PORTAL01"]["owner"])
 
+    def test_unowned_assets_have_a_suggestion_key_defaulting_to_none(self):
+        # The temp ownership file starts empty in this test class, so there's
+        # nothing yet to pattern-match against (see pattern_recognition.py) - every
+        # unowned asset's suggestion is None, not a missing key.
+        resp = client.get("/api/assets")
+        for asset in resp.json()["assets"]:
+            self.assertIn("suggestion", asset)
+            if not asset["owner"]:
+                self.assertIsNone(asset["suggestion"])
+
+    def test_owned_asset_produces_a_pattern_suggestion_for_a_same_type_asset(self):
+        client.post("/api/assets/WIN-DC01/owner", json={"owner": "Priya Nair", "team": "Identity"})
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        # WIN-FS02 shares WIN-DC01's asset type (windows-server, the pattern
+        # heuristic's weakest signal) - with only one owned asset in the whole
+        # known-set it's still enough to produce a suggestion.
+        suggestion = by_name["WIN-FS02"]["suggestion"]
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion["owner"], "Priya Nair")
+
+    def test_already_owned_asset_never_gets_a_suggestion_for_itself(self):
+        client.post("/api/assets/WIN-DC01/owner", json={"owner": "Priya Nair", "team": "Identity"})
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        self.assertIsNone(by_name["WIN-DC01"]["suggestion"])
+
     def test_set_owner_then_list_shows_the_new_owner(self):
         set_resp = client.post("/api/assets/WEB-PORTAL01/owner", json={
             "owner": "Web Ops", "team": "Platform",
@@ -466,6 +782,87 @@ class ApiAssets(unittest.TestCase):
         by_name = {a["name"]: a for a in resp.json()["assets"]}
         self.assertEqual(by_name["WEB-PORTAL01"]["owner"], "Web Ops")
         self.assertEqual(by_name["WEB-PORTAL01"]["team"], "Platform")
+
+    def test_new_asset_has_unknown_facing_by_default(self):
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["facing"], "unknown")
+
+    def test_set_facing_then_list_shows_the_new_classification(self):
+        set_resp = client.post("/api/assets/WEB-PORTAL01/facing", json={"facing": "external"})
+        self.assertEqual(set_resp.status_code, 200)
+
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["facing"], "external")
+
+    def test_set_facing_with_invalid_value_is_rejected(self):
+        resp = client.post("/api/assets/WEB-PORTAL01/facing", json={"facing": "space-station"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_set_facing_does_not_clobber_an_existing_owner(self):
+        client.post("/api/assets/WEB-PORTAL01/owner", json={"owner": "Web Ops", "team": "Platform"})
+        client.post("/api/assets/WEB-PORTAL01/facing", json={"facing": "external"})
+
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["owner"], "Web Ops")
+        self.assertEqual(by_name["WEB-PORTAL01"]["facing"], "external")
+
+    def test_set_owner_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/assets/WEB-PORTAL01/owner", json={"owner": "Web Ops", "team": "Platform"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_set_facing_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/assets/WEB-PORTAL01/facing", json={"facing": "external"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_cmdb_import_preview_requires_no_login_and_reconciles_against_real_assets(self):
+        csv_text = "Hostname,Owner,Team\nWEB-PORTAL01,Web Ops,Platform\nNEW-SERVER-01,Someone,SomeTeam\n"
+        _logout()
+        resp = client.post("/api/assets/cmdb-import/preview", json={"csv_text": csv_text})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["column_mapping"]["asset_name"], "Hostname")
+        self.assertEqual(len(payload["matched"]), 1)
+        self.assertEqual(payload["matched"][0]["asset_name"], "WEB-PORTAL01")
+        self.assertEqual(len(payload["unmatched"]), 1)
+
+    def test_cmdb_import_apply_requires_login(self):
+        _logout()
+        resp = client.post("/api/assets/cmdb-import/apply", json={"entries": [
+            {"asset_name": "WEB-PORTAL01", "owner": "Web Ops", "team": "Platform"},
+        ]})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_cmdb_import_apply_then_asset_shows_new_owner(self):
+        resp = client.post("/api/assets/cmdb-import/apply", json={"entries": [
+            {"asset_name": "WEB-PORTAL01", "owner": "Web Ops", "team": "Platform"},
+        ]})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["applied"], 1)
+        by_name = {a["name"]: a for a in client.get("/api/assets").json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["owner"], "Web Ops")
+
+
+class ApiRiskAttackHeatmap(unittest.TestCase):
+    def test_heatmap_covers_the_full_known_taxonomy(self):
+        resp = client.get("/api/risk/attack-heatmap")
+        self.assertEqual(resp.status_code, 200)
+        heatmap = resp.json()["heatmap"]
+        self.assertTrue(len(heatmap) >= 10)  # every known (tactic, technique) pair
+        self.assertTrue(all("tactic" in row and "count" in row for row in heatmap))
+
+    def test_printnightmare_finding_shows_up_under_its_technique(self):
+        """FIND-1/PrintNightmare-style RCE is real sample data - sanity-check it lands
+        under Exploitation of Remote Services (T1210), same as test_attack_mapping.py's
+        own check against normalized-findings.json."""
+        resp = client.get("/api/risk/attack-heatmap")
+        heatmap = resp.json()["heatmap"]
+        by_technique = {row["technique_id"]: row for row in heatmap}
+        self.assertGreater(by_technique["T1210"]["count"], 0)
 
 
 class ApiIngestGeneric(unittest.TestCase):
@@ -524,6 +921,74 @@ class ApiIngestGeneric(unittest.TestCase):
         self.assertTrue(self.LIVE_DATA_PATH.exists())
 
 
+class ApiNotifications(unittest.TestCase):
+    """build_notifications() is real, system-generated data derived from the live
+    queue/exceptions/ingestion state - not person-to-person messages. Exception- and
+    ingestion-derived notifications use temporary store files (same patching pattern as
+    ApiExceptions/ApiIngestGeneric) so this suite never touches the real shipped files."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_exc_path = Path(self.tmpdir.name) / "exceptions.json"
+        self.exc_patcher = patch.object(exceptions_store, "DEFAULT_STORE_PATH", self.tmp_exc_path)
+        self.exc_patcher.start()
+        self.ingest_path = Path(self.tmpdir.name) / "generic-ingested.json"
+        self.ingest_patcher = patch.object(dashboard_data, "GENERIC_INGESTED_PATH", self.ingest_path)
+        self.ingest_patcher.start()
+
+    def tearDown(self):
+        self.exc_patcher.stop()
+        self.ingest_patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_sla_breached_findings_produce_danger_notifications(self):
+        resp = client.get("/api/notifications")
+        self.assertEqual(resp.status_code, 200)
+        notifications = resp.json()["notifications"]
+        sla_ids = {n["id"] for n in notifications if n["category"] == "SLA"}
+        # Matches the known real breach count elsewhere in this suite (queue KPI: 6 breached).
+        self.assertEqual(len(sla_ids), 6)
+        self.assertIn("sla-FIND-1", sla_ids)
+
+    def test_danger_notifications_sort_before_warn_and_info(self):
+        notifications = client.get("/api/notifications").json()["notifications"]
+        ranks = {"danger": 0, "warn": 1, "info": 2}
+        severities = [ranks[n["severity"]] for n in notifications]
+        self.assertEqual(severities, sorted(severities))
+
+    def test_exception_expiring_soon_produces_a_warn_notification(self):
+        soon = (datetime.date.today() + datetime.timedelta(days=5)).isoformat()
+        exceptions_store.create_exception(
+            "FIND-7", "Compensating control", "eng@example.com", "secops@example.com", soon,
+        )
+        notifications = client.get("/api/notifications").json()["notifications"]
+        exc_notifs = [n for n in notifications if n["category"] == "Exception"]
+        self.assertEqual(len(exc_notifs), 1)
+        self.assertEqual(exc_notifs[0]["severity"], "warn")
+        self.assertIn("EXC-1", exc_notifs[0]["message"])
+
+    def test_exception_far_from_expiry_produces_no_notification(self):
+        far_future = (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
+        exceptions_store.create_exception(
+            "FIND-7", "Compensating control", "eng@example.com", "secops@example.com", far_future,
+        )
+        notifications = client.get("/api/notifications").json()["notifications"]
+        self.assertEqual([n for n in notifications if n["category"] == "Exception"], [])
+
+    def test_pending_generic_ingested_findings_produce_an_info_notification(self):
+        self.ingest_path.parent.mkdir(parents=True, exist_ok=True)
+        self.ingest_path.write_text('[{"id": "GEN-1", "title": "t"}]', encoding="utf-8")
+        notifications = client.get("/api/notifications").json()["notifications"]
+        ingest_notifs = [n for n in notifications if n["category"] == "Ingestion"]
+        self.assertEqual(len(ingest_notifs), 1)
+        self.assertIn("1 finding(s)", ingest_notifs[0]["message"])
+        self.assertIsNone(ingest_notifs[0]["link"])
+
+    def test_no_generic_ingested_file_produces_no_ingestion_notification(self):
+        notifications = client.get("/api/notifications").json()["notifications"]
+        self.assertEqual([n for n in notifications if n["category"] == "Ingestion"], [])
+
+
 class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
     """The frontend is a single static/index.html shell served for every page route;
     static/js/app.js reads window.location.pathname client-side and calls the JSON
@@ -532,7 +997,8 @@ class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
 
     SHELL_ROUTES = [
         "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
-        "/ai-assist", "/reports", "/support", "/faq", "/exceptions", "/assets",
+        "/jira", "/splunk", "/xdr", "/ai-assist", "/reports", "/support", "/faq",
+        "/exceptions", "/assets", "/appsec", "/inbox", "/risk", "/login", "/profile",
     ]
 
     def test_every_known_route_serves_the_same_spa_shell(self):

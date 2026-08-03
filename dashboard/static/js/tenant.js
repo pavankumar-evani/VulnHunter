@@ -6,17 +6,26 @@
 // tenancy boundary.
 const KEY = "vulnhunter_tenant";
 
+// `initials`/`avatarColor` render a generated placeholder avatar (like GitHub/Slack
+// show for an org with no uploaded logo) rather than a fabricated real company logo -
+// this demo's "tenants" aren't real companies, so there's no real logo to show.
+// `location` is equally illustrative demo metadata, not a real registered address.
 export const TENANTS = {
-  all: { id: "all", label: "All Tenants (MSSP view)", assetTypes: null },
+  all: {
+    id: "all", label: "All Tenants (MSSP view)", assetTypes: null,
+    initials: null, avatarColor: "#4b5563", location: null,
+  },
   acme: {
     id: "acme",
     label: "Acme Financial Corp (demo)",
     assetTypes: ["windows-server", "unix-server", "network-routing-switching", "network-security-device"],
+    initials: "AF", avatarColor: "#2563eb", location: "New York, USA",
   },
   northwind: {
     id: "northwind",
     label: "Northwind Bank (demo)",
     assetTypes: ["application", "certificate", "iot-ot-device"],
+    initials: "NB", avatarColor: "#7c3aed", location: "Toronto, Canada",
   },
 };
 

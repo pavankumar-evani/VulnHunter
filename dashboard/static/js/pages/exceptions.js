@@ -1,7 +1,19 @@
 import { api } from "../api.js";
 import { escapeHtml, flash } from "../dom.js";
+import { exportButtonsHtml, wireExportButtons } from "../export.js";
 
 export const title = "Vulnerability Exceptions";
+
+const EXPORT_COLUMNS = [
+  { label: "ID", value: (e) => e.id },
+  { label: "Finding", value: (e) => e.finding_id },
+  { label: "Reason", value: (e) => e.reason },
+  { label: "Requested By", value: (e) => e.requested_by },
+  { label: "Approved By", value: (e) => e.approved_by },
+  { label: "Created", value: (e) => e.created_on },
+  { label: "Expires", value: (e) => e.expires_on },
+  { label: "Status", value: (e) => e.computed_status },
+];
 
 const STATUS_CLASS = { active: "badge-auto_approvable", expired: "badge-manual_only", revoked: "badge-critical" };
 
@@ -44,6 +56,9 @@ export async function render(container) {
       <label>Finding
         <select name="finding_id">${findingOptions}</select>
       </label>
+
+      <div class="callout" id="suggested-controls" style="margin:4px 0 0"></div>
+
       <label>Reason / compensating control
         <textarea name="reason" rows="3" required></textarea>
       </label>
@@ -60,6 +75,7 @@ export async function render(container) {
     </form>
 
     <h2>Existing exceptions</h2>
+    ${exceptions.length ? exportButtonsHtml("exceptions") : ""}
     <div class="table-scroll">
       <table class="data-table">
         <thead>
@@ -73,7 +89,40 @@ export async function render(container) {
       ${!exceptions.length ? `<p class="empty-state">No exceptions requested yet.</p>` : ""}
     </div>`;
 
+  const findingsById = new Map(queue.findings.map((f) => [f.id, f]));
+
+  function renderSuggestedControls(findingId) {
+    const panel = container.querySelector("#suggested-controls");
+    if (!panel) return;
+    const finding = findingsById.get(findingId);
+    const controls = (finding && finding.compensating_controls) || [];
+    if (!controls.length) {
+      panel.innerHTML = "";
+      return;
+    }
+    panel.innerHTML = `
+      <strong>Suggested compensating controls</strong> (keyword heuristic, not certified
+      - see <code>remediation/enrichment/compensating_controls.py</code>):
+      <ul style="margin:8px 0 0; padding-left:20px">
+        ${controls.map((c) => `
+          <li style="margin-bottom:4px">
+            ${escapeHtml(c)}
+            <button type="button" class="link-button" data-insert-control="${escapeHtml(c)}">Insert</button>
+          </li>`).join("")}
+      </ul>`;
+  }
+
   const form = container.querySelector("#exception-form");
+  renderSuggestedControls(form.finding_id.value);
+  form.finding_id.addEventListener("change", () => renderSuggestedControls(form.finding_id.value));
+  container.querySelector("#suggested-controls").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-insert-control]");
+    if (!btn) return;
+    const reasonField = form.reason;
+    reasonField.value = reasonField.value ? `${reasonField.value}\n${btn.dataset.insertControl}` : btn.dataset.insertControl;
+    reasonField.focus();
+  });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -89,6 +138,12 @@ export async function render(container) {
     } catch (err) {
       flash(err.message, "error");
     }
+  });
+
+  wireExportButtons(container, "exceptions", {
+    getRows: () => exceptions,
+    columns: EXPORT_COLUMNS,
+    filenameBase: "vulnhunter-exceptions",
   });
 
   container.querySelectorAll("[data-revoke]").forEach((btn) => {

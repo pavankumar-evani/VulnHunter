@@ -6,7 +6,143 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Fixed
+- **Timing-based email-enumeration side-channel in local login** (`dashboard/auth/users.py`).
+  `verify_login()` used `not user or not verify_password(...)`, whose `or`
+  short-circuits and skips the deliberately-slow (600k-iteration PBKDF2)
+  `verify_password()` call entirely when the email doesn't exist - an unknown-email
+  login returned near-instantly while a known-email wrong-password login took the
+  full PBKDF2 cost, a measurable timing difference an attacker could use to enumerate
+  valid emails even though both cases returned the same `None`. Fixed by always
+  running `verify_password()` against a real-or-precomputed-dummy hash regardless of
+  whether the email exists (`_DUMMY_HASH`), so both cases pay the same cost. Two
+  regression tests added to `tests/test_auth.py` (spying on `verify_password` to prove
+  it's always invoked).
+- **CSV/formula-injection (CWE-1236) in dashboard exports** (`dashboard/static/js/export.js`).
+  `csvEscape()` handled CSV quoting/escaping correctly but not Excel/Sheets/LibreOffice's
+  formula interpretation of a cell starting with `=`, `+`, `-`, or `@` - several
+  exported columns are free text a logged-in user (or an uploaded CMDB CSV) controls
+  (asset owner/team, exception reason/requester/approver), so a crafted "owner" name
+  could execute a formula for whoever next opens the exported file. Fixed with the
+  standard OWASP mitigation: prefix a leading `'` when a cell starts with one of those
+  characters, forcing every spreadsheet app to read it as literal text.
+
 ### Added
+- **Pattern-matched owner/team suggestions for the Asset Inventory**
+  (`remediation/inventory/pattern_recognition.py`) — answers the ask for "machine
+  learning... to learn from the data and predict patterns for assets, hosts, IPs,
+  MAC address, owners, or teams" honestly: this is a transparent, explainable, weighted
+  pattern match (hostname naming convention, IP /24 subnet, asset type, MAC vendor OUI)
+  against assets that already have an owner - explicitly NOT real ML, since a ~13-asset
+  demo dataset is far too small to train or validate anything real on, and calling it
+  "ML" would be dishonest in exactly the way this repo's other caveats aren't. Every
+  suggestion shows its confidence and the exact reasons (hover tooltip), and a one-click
+  "Use" button applies it - never automatic. 28 new tests
+  (`tests/test_pattern_recognition.py`), plus `ip`/`mac` fields added to
+  `build_asset_inventory()`'s rows so the signals have real data to work with.
+- **Tenant logo + location on the (illustrative) tenant switcher** (`dashboard/static/js/tenant.js`,
+  `nav.js`) — each demo tenant now shows a generated initials avatar (like GitHub/Slack
+  show for an org with no uploaded logo, not a fabricated real company logo - these
+  demo "tenants" aren't real companies) and a location line (e.g. "New York, USA").
+  "All Tenants" shows a neutral generic icon and no location, since it's the aggregate
+  view. Re-renders instantly on tenant change, no page reload.
+- **Collapsible sidebar** (`dashboard/static/js/sidebarToggle.js`) — a topbar button
+  slides the left nav fully out of view for a full-width, distraction-free content
+  area, and back again. Built entirely on standard web-platform features (a `<button>`,
+  a CSS class toggle animated via `transition`, `localStorage` for cross-reload
+  persistence, and the `inert` attribute so collapsed nav links can't be tabbed into) -
+  no vendor-specific code, so it behaves identically across Chrome, Edge, Firefox,
+  Safari, and Opera. Fails gracefully to the expanded default if `localStorage` throws
+  (e.g. Safari private browsing).
+- **"Integrations" nav renamed to "Adaptors"; Infoblox and Axonius asset-discovery
+  connectors** (`remediation/connectors/infoblox_connector.py`,
+  `remediation/connectors/axonius_connector.py`) — the three "Integrations — X" sidebar
+  groups (Ticketing/SOAR, SIEM, XDR/EDR) are now "Adaptors — X", plus a new
+  "Adaptors — Asset Discovery / IPAM" group. Infoblox pulls DNS host records from an
+  NIOS grid via the documented WAPI `record:host` object (HTTP Basic auth); Axonius
+  pulls aggregated device records via its documented `api-key`/`api-secret` header auth
+  and `/api/devices` endpoint. Both are **pull** connectors like Tenable/Armis/
+  CrowdStrike (reference pages at `/infoblox` and `/axonius`, no send form), but unlike
+  every connector before them they normalize into a plain **asset-inventory** record
+  (`name`, `ip`, `mac`, `type`, `source`, `source_ref`, `extra`), not a vulnerability
+  Finding - since VulnHunter's asset inventory has so far been built entirely from
+  findings, not a real CMDB/DNS/IPAM system. Same "built against public docs,
+  unit-tested against mocked HTTP, unverified against a live tenant/grid" honesty
+  pattern as every other connector in this repo (33 new tests, 489 total).
+- **CMDB CSV import for the Asset Inventory** (`/assets`,
+  `/api/assets/cmdb-import/*`, `remediation/inventory/cmdb_import.py`) — upload a CSV
+  export of asset details; guesses which column is the asset name/owner/team via a
+  keyword heuristic (adjustable, same non-authoritative pattern as the ATT&CK/
+  compensating-control heuristics), reconciles each row against the real,
+  finding-derived asset list (matched / not-yet-seen / invalid), and bulk-applies
+  owner/team via the same upsert the single-asset "Edit owner" form already uses.
+  CSV, not a fabricated `.xlsx` binary parser - same "no new dependency" reasoning as
+  the CSV/JSON/MD export feature.
+- **Local auth MVP + OIDC-ready SSO** (`dashboard/auth/`) — PBKDF2-HMAC-SHA256 password
+  hashing and a from-scratch HMAC-signed session cookie, both Python stdlib only (no
+  `bcrypt`/`passlib`/`itsdangerous` dependency added); `/login`, `/profile`
+  (change-password, logout), an account chip in the topbar. A real OpenID Connect
+  Authorization Code + PKCE client (`dashboard/auth/oidc.py`) built against the public
+  spec using `requests` (no `authlib`/`python-jose` added) - inert (the "Sign in with
+  SSO" button stays hidden) unless a real provider's `OIDC_ISSUER`/`OIDC_CLIENT_ID`/
+  `OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI` are configured, same "built vs. verified"
+  honesty as every connector in this repo. RBAC gates only sensitive mutation routes
+  (real connector sends, real pipeline runs, real AI-assist calls, priority-rule edits,
+  exception create/revoke, asset owner/facing edits) - every read route stays open, a
+  scope decision stated plainly in `dashboard/README.md`. Opt-in local HTTPS via
+  `SSL_KEYFILE`/`SSL_CERTFILE` env vars; a real deployment should terminate TLS at a
+  reverse proxy instead.
+- **Jira, Splunk, and CrowdStrike Falcon connectors** (`remediation/connectors/
+  jira_connector.py`, `splunk_connector.py`, `crowdstrike_connector.py`) — same
+  "built against public docs, unit-tested against mocked HTTP, unverified against a
+  live tenant" pattern as the existing ServiceNow/Tenable/Armis connectors. Jira and
+  Splunk are push connectors with dashboard preview/send pages (`/jira`, `/splunk`);
+  CrowdStrike is a pull connector (OAuth2 client-credentials + query/fetch-entities),
+  documented on a reference page (`/xdr`) rather than a send form, matching how
+  Tenable/Armis are also CLI/connector-driven with no dashboard send UI.
+- **Interactive global search** (`dashboard/static/js/search.js`) — a topbar search box
+  across Code Scan and Remediation Queue findings by ID/title/CVE/asset name; results
+  deep-link to the matching page with `?highlight=<id>`, which scrolls to and
+  highlights the row (or explains why it's filtered out / not found).
+- **System-notification feed** (`/inbox`, `/api/notifications`,
+  `dashboard_data.build_notifications()`) — real, system-generated events (SLA
+  breaches, CISA KEV-listed findings not yet SLA-breached, exceptions expiring within
+  14 days, pending generic-ingested findings) - explicitly not person-to-person
+  messaging, which would need the auth/user system this wave also added. A bell icon +
+  dropdown on every page; read/dismissed state is tracked client-side (localStorage),
+  since there's no per-user server-side state to track it against yet.
+- **Risk Management dashboard** (`/risk`, `/api/risk/attack-heatmap`) — a MITRE ATT&CK
+  heat map (tactic × technique, covering every technique the keyword heuristic
+  supports, including zero-count ones, not just what appears in today's findings), top
+  vulnerabilities by type (grouped by CVE, showing affected-asset count and owner/
+  team), top assets by critical-finding count, an editable internal/external-facing
+  classification per asset (manually set, never auto-detected from a network scan -
+  `remediation/inventory/asset_inventory.py`'s `set_facing`), and a CVSS v3.1
+  severity-definitions reference.
+- **Compensating-control suggestions** (`remediation/enrichment/
+  compensating_controls.py`) — a keyword heuristic (same honesty pattern as
+  `attack_mapping.py`) suggesting candidate compensating controls for a finding,
+  surfaced on the `/exceptions` request form with one-click insert into the reason
+  field.
+- **Configurable prioritization model presets** (`/priority-rules`) — one-click
+  toggles between a pure-CVSS/severity model (KEV/EPSS overrides disabled) and the
+  shipped VPR-style, threat-intel-aware model (both overrides enabled) - both are the
+  same underlying weighted-score engine (`priority_engine.py`), already fully custom
+  via the YAML file; the presets just document and toggle the two most common starting
+  points.
+- **Client-side export** (`dashboard/static/js/export.js`) — CSV/JSON/Markdown-table
+  download (of whatever's currently filtered/sorted on screen, not always the full
+  dataset) wired into Code Scan, Remediation Queue, Remediation Plan, Exceptions,
+  Asset Inventory, and both Risk-dashboard tables. "Excel" is offered as CSV (which
+  Excel opens natively) rather than a fabricated `.xlsx` binary, since generating a
+  real one would need a new dependency this project doesn't otherwise use.
+- **Nav restructure**: a "Security Domains" group (Infrastructure Vulnerabilities,
+  Application Vulnerabilities hub, SAST, DAST, Secrets Management, SCA, Certificate
+  Vulnerabilities - each deep-linking into a pre-filtered Queue/Code Scan view) now
+  precedes the renamed "Remediation Engine" group (Code Scan, Remediation Queue,
+  Remediation Plan); Integrations split into Ticketing/SOAR, SIEM, and XDR/EDR
+  sub-groups instead of one flat list; AI Assist moved to the Overview group, directly
+  under Dashboard.
 - **Vulnerability exception/waiver management** (`/exceptions`, `/api/exceptions*`,
   `remediation/exceptions/store.py`) — a documented, time-boxed risk-acceptance
   workflow: request an exception with a reason/compensating control, requester, and

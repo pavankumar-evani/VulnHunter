@@ -43,7 +43,38 @@ const FAQS = [
   ["Does it track who owns each asset?",
     "Yes - the Asset Inventory page aggregates every asset with findings against it " +
     "and lets you attach an owner/team, stored in a real, editable local file - not a " +
-    "sync from a real CMDB/asset-management system."],
+    "sync from a real CMDB/asset-management system. It also has a CMDB CSV import " +
+    "panel to bulk-assign owner/team from an uploaded export."],
+  ["Is the owner suggestion on Asset Inventory real machine learning?",
+    "No. It's three transparent, weighted pattern-matching signals - hostname naming " +
+    "convention, IP subnet, and asset type (plus MAC vendor matching for type " +
+    "suggestions) - against assets that already have an owner, with the exact reasoning " +
+    "shown on hover. Not a trained model: this demo's asset list has about a dozen " +
+    "entries, far too few to train or validate real ML on. Never auto-applied - a " +
+    "one-click \"Use\" button, same posture as the ATT&CK tags and compensating-control " +
+    "suggestions."],
+  ["Is there a login now? What are the demo credentials?",
+    "Yes - a real local login MVP, not a placeholder. Two demo accounts ship in the " +
+    "seed file (intentionally public, since it's a demo seed, not a real secret): " +
+    "admin@vulnhunter.local / ChangeMe123! (admin) and analyst@vulnhunter.local / " +
+    "ChangeMe123! (user). There's also real OpenID Connect (SSO) client code, but it " +
+    "stays inert - the \"Sign in with SSO\" button won't even appear - unless a real " +
+    "identity provider is configured. See dashboard/README.md's Authentication section " +
+    "for the full design, including exactly which routes require login."],
+  ["Does a suggested compensating control mean it's approved or certified?",
+    "No. The Exceptions request form suggests candidate compensating controls based " +
+    "on keywords in the finding's title/description - same explicitly-non-authoritative " +
+    "heuristic as the MITRE ATT&CK tagging. It's a drafting aid, not a determination " +
+    "that a control is actually in place, adequate, or certified by anyone."],
+  ["Is the Inbox real messaging between users?",
+    "No. It's a feed of system-generated notifications only - SLA breaches, KEV-listed " +
+    "findings, expiring exceptions, pending generic-ingested findings - never a message " +
+    "one person wrote to another. Real person-to-person messaging would need the auth/" +
+    "user system this wave added plus a persistence layer to store messages against."],
+  ["Is the internal/external-facing tag on the Risk dashboard from a real network scan?",
+    "No. It's manually set only, exactly like asset ownership - there's no network " +
+    "scan, firewall analysis, or exposure-scanning tool behind it. It defaults to " +
+    "\"Unknown\" until someone sets it."],
   ["Where does my data go?",
     "Nowhere - everything is local files in this repo (git history, JSON, YAML). " +
     "There's no cloud service and no telemetry."],

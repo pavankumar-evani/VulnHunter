@@ -13,7 +13,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from remediation.enrichment.attack_mapping import map_finding_to_attack, tag_findings  # noqa: E402
+from remediation.enrichment.attack_mapping import (  # noqa: E402
+    ALL_TACTIC_TECHNIQUES, build_attack_heatmap, map_finding_to_attack, tag_findings,
+)
 
 
 class KeywordMatching(unittest.TestCase):
@@ -84,6 +86,29 @@ class TagFindingsBatch(unittest.TestCase):
         by_id = {f["id"]: f for f in tagged}
         self.assertTrue(len(by_id["FIND-1"]["attack_techniques"]) > 0)   # PrintNightmare
         self.assertEqual(by_id["FIND-13"]["attack_techniques"], [])       # SSL cert expiry
+
+
+class AttackHeatmap(unittest.TestCase):
+    def test_heatmap_includes_every_known_tactic_technique_even_with_zero_findings(self):
+        heatmap = build_attack_heatmap([])
+        self.assertEqual(len(heatmap), len(ALL_TACTIC_TECHNIQUES))
+        self.assertTrue(all(row["count"] == 0 for row in heatmap))
+
+    def test_heatmap_counts_real_tagged_findings(self):
+        findings = tag_findings([
+            {"title": "SQL Injection via string concatenation", "description": ""},
+            {"title": "Another SQL Injection", "description": ""},
+            {"title": "Command injection via shell=True", "description": ""},
+        ])
+        heatmap = build_attack_heatmap(findings)
+        by_technique = {row["technique_id"]: row for row in heatmap}
+        self.assertEqual(by_technique["T1190"]["count"], 2)
+        self.assertEqual(by_technique["T1059"]["count"], 1)
+
+    def test_heatmap_ignores_findings_with_no_matched_technique(self):
+        findings = tag_findings([{"title": "SSL certificate nearing expiration", "description": ""}])
+        heatmap = build_attack_heatmap(findings)
+        self.assertTrue(all(row["count"] == 0 for row in heatmap))
 
 
 if __name__ == "__main__":

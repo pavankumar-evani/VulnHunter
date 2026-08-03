@@ -65,3 +65,38 @@ def tag_findings(findings):
         f["attack_techniques"] = map_finding_to_attack(f)
         tagged.append(f)
     return tagged
+
+
+# Every (tactic, technique_id, technique_name) this heuristic can possibly emit - built
+# from _PATTERNS itself so it can never drift out of sync with what map_finding_to_attack
+# actually produces. Excludes the deliberately-unmapped patterns (tid is None).
+ALL_TACTIC_TECHNIQUES = sorted(
+    {(tactic, tid, tname) for _, tid, tname, tactic in _PATTERNS if tid is not None},
+)
+
+
+def build_attack_heatmap(findings):
+    """Returns one row per (tactic, technique) this heuristic knows about - including
+    zero-count rows - so a dashboard heat map shows the full known taxonomy rather than
+    only whatever happened to match today's findings. `findings` must already carry an
+    `attack_techniques` field (see tag_findings) - this function doesn't re-run the
+    heuristic itself, it just aggregates counts.
+
+    Same non-authoritative caveat as the rest of this module: a technique showing 0
+    findings means none of today's findings matched that keyword pattern, not that the
+    technique is absent from the environment."""
+    counts = {}
+    for f in findings:
+        for t in f.get("attack_techniques", []) or []:
+            key = (t["tactic"], t["technique_id"])
+            counts[key] = counts.get(key, 0) + 1
+
+    return [
+        {
+            "tactic": tactic,
+            "technique_id": tid,
+            "technique_name": tname,
+            "count": counts.get((tactic, tid), 0),
+        }
+        for tactic, tid, tname in ALL_TACTIC_TECHNIQUES
+    ]

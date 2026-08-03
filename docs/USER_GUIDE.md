@@ -125,9 +125,22 @@ database and no historical trend view across runs — see
 | Reports | `/reports` | Generate a shareable KPI/SLA/coverage snapshot report (daily/weekly/monthly/quarterly/half-yearly/yearly framing), downloadable as standalone HTML. Every number is real; see the page's own caveat about period aggregation not existing yet (no persistence layer). `[SCREENSHOT: Reports]` |
 | Support | `/support` | How to get help, known limitations, before-you-file-a-bug checklist. |
 | FAQ | `/faq` | Direct answers to common questions — mirrors [FAQ.md](FAQ.md). |
-| Exceptions | `/exceptions` | Request/approve/auto-expire/revoke a time-boxed risk-acceptance waiver per finding. Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
+| Exceptions | `/exceptions` | Request/approve/auto-expire/revoke a time-boxed risk-acceptance waiver per finding, with keyword-suggested compensating controls on the request form. Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
 | Asset Inventory | `/assets` | Every asset with findings against it, aggregated, with an editable owner/team field (local file, not a CMDB sync). `[SCREENSHOT: Asset Inventory]` |
+| Risk Management | `/risk` | MITRE ATT&CK heat map, top vulnerabilities by type, top assets by critical findings, an editable internal/external-facing classification, and a CVSS v3.1 severity reference. See [§9](#9-the-risk-management-dashboard) below. `[SCREENSHOT: Risk Management]` |
+| Inbox | `/inbox` | Real, system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not messages between people. See [§10](#10-the-notification-inbox) below. `[SCREENSHOT: Inbox]` |
+| Jira | `/jira` | Same preview/send pattern as ServiceNow, targeting a Jira Cloud project. |
+| Splunk | `/splunk` | Same preview/send pattern as ServiceNow, sending findings to Splunk as HEC events. |
+| CrowdStrike XDR | `/xdr` | Reference page (no send form - it's a pull connector like Tenable/Armis) describing what the connector fetches and how to use it from Python. |
+| Sign in | `/login` | Local email/password sign-in; shows a "Sign in with SSO" button only when a real OIDC provider is configured. See [§11](#11-logging-in-accounts-and-the-profile-page) below. |
+| Profile | `/profile` | Current user's name/email/role, a change-password form, and logout. See [§11](#11-logging-in-accounts-and-the-profile-page) below. |
 | `/api/status` | — | Machine-readable health/status JSON, not a UI page. |
+
+A **global search box** sits in the topbar on every page (not just one page's table) -
+see [§8](#8-using-the-global-search-bar) below for how to use it. Several table pages
+(Code Scan, Remediation Queue, Remediation Plan, Exceptions, Asset Inventory, and both
+Risk-dashboard tables) also have **CSV/JSON/MD export** buttons - see
+[§12](#12-exporting-a-table-csvjsonmd) below.
 
 The sidebar also has a **tenant switcher** ("All Tenants (MSSP view)" / "Acme Financial
 Corp (demo)" / "Northwind Bank (demo)") that partitions the Remediation Queue by asset
@@ -256,6 +269,102 @@ scanning, that decision is made in Tenable/Armis's own console, not in this repo
 ("Claude Code subagents," the mechanism behind every VulnHunter pipeline stage, is an
 unrelated, third use of the word "agent" — a Claude Code orchestration concept, not a
 scanning deployment mode. See [AI_COMMANDS.md](AI_COMMANDS.md) for what each one does.)
+
+---
+
+## 8. Using the global search bar
+
+A search box sits in the topbar on every page (`dashboard/static/js/search.js`) —
+type at least 2 characters and it searches Code Scan (`/api/vulnhunt`) and the
+Remediation Queue (`/api/queue`) findings by ID, title, CVE, or asset name, showing up
+to 5 matches per source in a dropdown. Click a result and it deep-links you to the
+matching page with `?highlight=<id>` in the URL, which scrolls to and highlights that
+row (or, if the finding isn't visible under the page's current filters, explains why
+instead of just failing silently). It's a client-side index built from the two real
+data sources above — nothing new is scanned or queried on the backend, and it does not
+search the Remediation Plan, Asset Inventory, or Exceptions pages (only Code Scan and
+the live Queue).
+
+## 9. The Risk Management dashboard
+
+`/risk` is a different lens on the same real `/api/queue` and `/api/assets` data the
+Remediation Queue and Asset Inventory pages already show — not a new data source:
+
+- **MITRE ATT&CK heat map** — tactic × technique grid, counting live-queue findings per
+  technique. It deliberately includes every technique the keyword heuristic supports,
+  including ones with zero matching findings today, so you can see the full taxonomy
+  the heuristic covers, not just what happens to be present right now. Hover a cell for
+  the technique name and finding count. Same non-authoritative caveat as everywhere else
+  ATT&CK tagging appears: it's a keyword heuristic, not certified technique attribution
+  (`remediation/enrichment/attack_mapping.py`'s module docstring).
+- **Top vulnerabilities by type** — findings grouped by CVE (or by title, for findings
+  with no CVE, like certificate expiry), showing how many distinct assets each one
+  touches and who owns them. This turns "we have 6 Critical findings" into "which one
+  vulnerability is spread across the most assets, and whose problem is it."
+- **Top assets by critical findings** — the assets with the most Critical-severity
+  findings against them, with their KEV exposure, facing classification, and owner.
+- **Internal/external-facing classification** — a dropdown per asset, right in the
+  table, that you can change on the spot. This is **manually set only** — there is no
+  network scan behind it, exactly like asset ownership. It defaults to "Unclassified"
+  until someone sets it. See [FAQ.md](FAQ.md#is-the-internalexternal-facing-classification-on-the-risk-dashboard-from-a-real-network-scan).
+- **CVSS v3.1 severity-definitions reference** — a plain reminder of what
+  Critical/High/Medium/Low mean on the industry-standard 0-10 scale, per the
+  [FIRST.org CVSS v3.1 specification](https://www.first.org/cvss/v3.1/specification-document).
+
+## 10. The notification inbox
+
+`/inbox`, plus a bell icon and dropdown in the topbar on every page, surfaces **real,
+system-generated notifications**: SLA-breached findings, CISA KEV-listed findings not
+yet SLA-breached, exceptions expiring within 14 days, and pending generic-ingested
+findings awaiting review. This is explicitly **not** person-to-person messaging — there
+is no way to send another user a message in this product. Click a notification to mark
+it read, or "Mark all read" to clear the list; read/dismissed state is tracked in your
+browser's `localStorage`, not on the server, since there's no per-user server-side state
+to track it against yet (logging in on a different browser or clearing site data resets
+it). See [FAQ.md](FAQ.md#is-the-inbox-real-messaging-between-users) for the direct
+yes/no version of this.
+
+## 11. Logging in, accounts, and the profile page
+
+`/login` is a real local sign-in form (`dashboard/auth/`) — email and password, checked
+against `dashboard/auth/users.json` (PBKDF2-HMAC-SHA256 hashing, an HMAC-signed session
+cookie). Two demo accounts ship in the seed file (intentionally public — this is a demo
+seed, not a real secret; change or remove before any real deployment):
+
+| Email | Password | Role |
+|---|---|---|
+| `admin@vulnhunter.local` | `ChangeMe123!` | admin |
+| `analyst@vulnhunter.local` | `ChangeMe123!` | user |
+
+Once logged in, `/profile` shows your name/email/role, a change-password form, and a
+logout button. Only the **admin** role can edit `/priority-rules` or revoke an
+exception; any logged-in user can create an exception or edit an asset's owner/facing
+classification. Every read/GET route (the KPI overview, the queue, findings tables,
+etc.) stays open with no login at all — only sensitive *mutation* routes are gated (real
+connector sends, a real pipeline run, a real AI-assist call, priority-rule edits,
+exception create/revoke, asset owner/facing edits). See
+[dashboard/README.md](../dashboard/README.md#authentication) for the full design and
+exactly why reads aren't gated (yet).
+
+If you see a "Sign in with SSO" button on `/login`, that means a real OpenID Connect
+identity provider has been configured via `OIDC_ISSUER`/`OIDC_CLIENT_ID`/
+`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI` environment variables — the client code
+(`dashboard/auth/oidc.py`) is real, working Authorization Code + PKCE, but it has never
+been exercised against a real identity provider during development, so treat a fresh
+setup the same way you'd treat any other connector here: verify it against a real
+provider before relying on it.
+
+## 12. Exporting a table (CSV/JSON/MD)
+
+Code Scan, Remediation Queue, Remediation Plan, Exceptions, Asset Inventory, and both
+Risk-dashboard tables each have **Export CSV / Export JSON / Export MD** buttons
+(`dashboard/static/js/export.js`). Each one downloads exactly what's currently
+filtered/sorted on screen — not always the full underlying dataset — since that's what
+you're actually looking at when you click the button. All three formats are generated
+entirely client-side (a `Blob` and a temporary download link; no server round-trip, no
+new dependency). "Excel" is deliberately offered as CSV rather than a fabricated
+`.xlsx` binary — Excel opens CSV natively, and generating a real `.xlsx` file would need
+a new library this project doesn't otherwise depend on anywhere.
 
 ---
 

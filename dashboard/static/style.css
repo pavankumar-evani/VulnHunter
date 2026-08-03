@@ -31,6 +31,7 @@ body {
 /* --- Sidebar --- */
 .sidebar {
   width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
   flex-shrink: 0;
   background: var(--brand-dark);
   color: #e8ece9;
@@ -39,6 +40,21 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow: hidden;
+  transition: width 0.22s ease, min-width 0.22s ease, opacity 0.12s ease;
+}
+
+/* Collapsed via the topbar's sidebar-toggle button (sidebarToggle.js) - the sidebar
+   slides to zero width for a full-screen content view. `min-width` has to be
+   overridden alongside `width` - a flex item's automatic minimum width is otherwise
+   its content's min-content size, which would stop it shrinking past ~232px
+   regardless of the `width: 0` above it. State persists across page loads via
+   localStorage, not a server-side preference. */
+.app-shell.sidebar-collapsed .sidebar {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 .sidebar .brand {
   display: flex;
@@ -59,13 +75,32 @@ body {
 .tenant-switcher {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 10px 18px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .tenant-switcher .nav-icon { opacity: 0.65; }
+.tenant-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* Generated initials avatar (like GitHub/Slack show for an org with no uploaded logo) -
+   not a fabricated real company logo. Color comes from each demo tenant's
+   `avatarColor` in tenant.js via an inline style. */
+.tenant-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.tenant-avatar-generic { opacity: 0.85; }
+.tenant-avatar-generic .icon { width: 14px; height: 14px; }
 .tenant-switcher select {
-  flex: 1;
+  width: 100%;
   background: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.9);
   border: 1px solid rgba(255,255,255,0.15);
@@ -74,6 +109,15 @@ body {
   font-size: 0.78rem;
 }
 .tenant-switcher select option { color: #14171a; }
+.tenant-location {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  padding-left: 1px;
+}
+.tenant-location .icon { flex-shrink: 0; }
 
 .side-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
 .nav-group { margin-bottom: 18px; }
@@ -124,8 +168,273 @@ body {
   justify-content: space-between;
   gap: 16px;
 }
-.page-title { margin: 0; font-size: 1.3rem; letter-spacing: -0.01em; }
+.page-title {
+  margin: 0; font-size: 1.3rem; letter-spacing: -0.01em;
+  flex-shrink: 1; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .topbar-extra { flex-shrink: 0; }
+.topbar-search { flex: 1 1 auto; display: flex; justify-content: center; min-width: 140px; }
+
+/* --- Sidebar collapse toggle (sidebarToggle.js) --- */
+.sidebar-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+.sidebar-toggle:hover { background: var(--bg); color: var(--text); }
+.sidebar-toggle:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 1px; }
+.sidebar-toggle[aria-pressed="true"] { color: var(--brand-accent); border-color: var(--brand-accent); }
+.sidebar-toggle .icon { display: block; }
+
+/* --- Global search (topbar) --- */
+.global-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: 420px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: var(--text-muted);
+}
+.global-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+.global-search input::-webkit-search-cancel-button { display: none; }
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  max-height: 360px;
+  overflow-y: auto;
+  z-index: 50;
+}
+.search-empty { padding: 14px; color: var(--text-muted); font-size: 0.85rem; }
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  text-decoration: none;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.search-result:last-child { border-bottom: none; }
+.search-result:hover { background: var(--bg); }
+.search-result-source {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  width: 66px;
+}
+.search-result-id { flex-shrink: 0; font-weight: 600; }
+.search-result-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Row a global-search result linked to - a brief, distinct highlight so it's obvious
+   which row was jumped to, without a fading/animated effect that could feel gimmicky. */
+.row-highlight { background: #fef9c3 !important; }
+.row-highlight td { position: relative; }
+
+/* --- Notification bell + dropdown (topbar) and Inbox page --- */
+.notif-bell-wrap { position: relative; }
+.notif-bell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.notif-bell:hover { color: var(--text); }
+.notif-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: var(--danger);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+}
+.notif-dropdown { left: auto; right: 0; width: 340px; max-width: 90vw; }
+.notif-view-all {
+  display: block;
+  text-align: center;
+  padding: 9px 12px;
+  color: var(--brand);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.notif-view-all:hover { background: var(--bg); }
+
+.notif-list { display: flex; flex-direction: column; gap: 8px; }
+.notif-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border-left: 4px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  text-decoration: none;
+  color: var(--text);
+}
+.notif-item.notif-danger { border-left-color: var(--danger); }
+.notif-item.notif-warn { border-left-color: #d97706; }
+.notif-item.notif-info { border-left-color: var(--info-text); }
+.notif-item.notif-read { opacity: 0.55; }
+a.notif-item:hover { background: var(--bg); }
+.notif-item.notif-compact {
+  border-radius: 0;
+  border-width: 0;
+  border-left-width: 4px;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 12px;
+  font-size: 0.83rem;
+}
+.notif-category {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.notif-message { flex: 1; min-width: 200px; }
+.notif-date { flex-shrink: 0; color: var(--text-muted); font-size: 0.78rem; }
+
+/* --- MITRE ATT&CK heat map (Risk Management page) --- */
+.heatmap-grid {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin: 14px 0;
+}
+.heatmap-column { display: flex; flex-direction: column; gap: 6px; min-width: 130px; }
+.heatmap-tactic {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-align: center;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.heatmap-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+.heatmap-count { font-weight: 700; }
+.heat-0 { background: var(--surface); color: var(--text-muted); }
+.heat-1 { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.heat-2 { background: #fed7aa; color: #9a3412; border-color: #fdba74; }
+.heat-3 { background: #fca5a5; color: #7f1d1d; border-color: #f87171; }
+.heat-4 { background: var(--danger); color: white; border-color: var(--danger); }
+
+.facing-select {
+  font-size: 0.82rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* --- Auth: account chip, login page --- */
+.account-chip { display: flex; align-items: center; text-decoration: none; }
+.account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* On the login page, hide the sidebar/topbar chrome for a distraction-free screen -
+   app.js toggles this class based on the current route. */
+.app-shell.auth-page .sidebar,
+.app-shell.auth-page .topbar {
+  display: none;
+}
+.app-shell.auth-page .content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+.login-card .run-form button { width: 100%; text-align: center; margin-top: 4px; }
 
 .live-badge {
   display: inline-flex;
@@ -171,6 +480,32 @@ h2 { font-size: 1.15rem; margin-top: 32px; }
 .kpi-card.kpi-danger { border-top: 3px solid var(--danger); }
 .kpi-value { font-size: 1.8rem; font-weight: 700; }
 .kpi-label { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+
+/* --- Security Domains hub cards (Application Security page) --- */
+.domain-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin: 20px 0;
+}
+.domain-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--brand-accent);
+  border-radius: 8px;
+  padding: 16px;
+  text-decoration: none;
+  color: var(--text);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.domain-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); transform: translateY(-1px); }
+.domain-card-icon { color: var(--brand-accent); }
+.domain-card-count { font-size: 1.8rem; font-weight: 700; }
+.domain-card-label { font-weight: 600; }
+.domain-card-note { color: var(--text-muted); font-size: 0.82rem; }
 
 .table-scroll {
   overflow-x: auto;
@@ -253,7 +588,8 @@ code {
   padding: 20px;
 }
 .run-form label { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: var(--text-muted); }
-.run-form input[type=text], .run-form input[type=password], .run-form select {
+.run-form input[type=text], .run-form input[type=password], .run-form input[type=email],
+.run-form input[type=search], .run-form input[type=number], .run-form select {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -274,6 +610,21 @@ code {
   align-self: flex-start;
 }
 .run-form button:hover { background: #0b3d26; }
+
+.secondary-button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+.secondary-button:hover { background: var(--bg); }
+
+.export-buttons { display: flex; gap: 8px; margin: 10px 0; }
+.export-buttons .secondary-button { margin-bottom: 0; }
 
 .flash-container { margin-bottom: 18px; }
 .flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-size: 0.9rem; }
@@ -497,6 +848,48 @@ th.sortable:hover { color: var(--text); }
 .faq-item p { color: var(--text-muted); margin: 0 0 14px; line-height: 1.6; }
 
 .asset-type-cell { color: var(--text-muted); font-size: 0.82rem; }
+
+/* --- Pattern-matched owner suggestion (Asset Inventory page, NOT ML - see
+   pattern_recognition.py) --- */
+.asset-suggestion {
+  margin-top: 3px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.asset-suggestion .link-button { font-style: normal; }
+
+/* --- CMDB import (Asset Inventory page) --- */
+.cmdb-import {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 16px 16px;
+  margin: 16px 0;
+}
+.cmdb-import summary {
+  cursor: pointer;
+  padding: 12px 0;
+  font-weight: 600;
+  list-style: none;
+}
+.cmdb-import summary::-webkit-details-marker { display: none; }
+.cmdb-import summary::before { content: "▸ "; color: var(--brand-accent); }
+.cmdb-import[open] summary::before { content: "▾ "; }
+.cmdb-import .run-form { margin-bottom: 4px; }
+.reconciled-owner, .reconciled-team {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  width: 100%;
+}
 
 /* --- Exceptions / asset inventory --- */
 .link-button {

@@ -49,40 +49,159 @@ empty state with instructions instead of erroring.
   doesn't mean without a persistence layer (see its module docstring).
 - **`dashboard/static/js/tenant.js`** — the illustrative MSSP tenant-switcher demo
   (client-side only, partitions findings by asset category - not real per-tenant
-  auth/data isolation, see the FAQ page).
+  auth/data isolation, see the FAQ page). Each demo tenant also shows a generated
+  initials avatar (not a real company logo - there's no real logo to show) and a
+  location line in the sidebar.
 - **`remediation/exceptions/store.py`** and **`remediation/inventory/asset_inventory.py`**
-  — the exception/waiver workflow and asset ownership storage the `/exceptions` and
-  `/assets` routes wrap. Both live under `remediation/` (not `dashboard/`) since they're
-  domain logic, same reasoning as `priority_engine.py`.
+  — the exception/waiver workflow and asset ownership/facing-classification storage the
+  `/exceptions` and `/assets` routes wrap. Both live under `remediation/` (not
+  `dashboard/`) since they're domain logic, same reasoning as `priority_engine.py`.
+- **`remediation/inventory/pattern_recognition.py`** — pattern-matched (hostname
+  naming convention, IP subnet, asset type, MAC vendor OUI) owner/team suggestions for
+  unowned assets on `/assets`. Explicitly NOT machine learning - see its module
+  docstring for why claiming ML on this dataset size would be dishonest. Every
+  suggestion carries its reasoning and a confidence score; nothing is auto-applied.
+- **`remediation/enrichment/compensating_controls.py`** — keyword-heuristic
+  compensating-control suggestions (same honesty pattern as `attack_mapping.py`) shown on
+  the `/exceptions` request form.
+- **`remediation/connectors/jira_connector.py`**, **`splunk_connector.py`**,
+  **`crowdstrike_connector.py`** — same "built against public docs, unverified against a
+  live tenant" pattern as the ServiceNow/Tenable/Armis connectors. Jira and Splunk are
+  push connectors with dashboard preview/send pages (`/jira`, `/splunk`); CrowdStrike is a
+  pull connector like Tenable/Armis, with a reference page (`/xdr`) instead of a send form.
+- **`remediation/connectors/infoblox_connector.py`**, **`axonius_connector.py`** — the
+  sidebar's "Integrations" groups are now "Adaptors"; these two are pull connectors for
+  DNS/IPAM and cyber-asset-management data (WAPI `record:host` and the `/api/devices`
+  API, respectively), each with a reference page (`/infoblox`, `/axonius`). Unlike every
+  connector above, they normalize into a plain asset-inventory record, not a
+  vulnerability Finding — see "Adaptors — Asset Discovery / IPAM" below.
+- **`dashboard/auth/`** — local login MVP + OIDC-ready SSO client. See "Authentication"
+  below.
+- **`dashboard/static/js/sidebarToggle.js`** — the topbar's sidebar-collapse toggle. A
+  `<button>` + CSS class + `localStorage`, no framework; state persists across reloads
+  and the collapsed sidebar is marked `inert` so it can't be tabbed into while hidden.
+- **`dashboard/static/js/export.js`** — client-side CSV/JSON/Markdown-table export,
+  wired into every major table page (Code Scan, Queue, Remediation Plan, Exceptions,
+  Asset Inventory, Risk dashboard).
 
 ## Pages
 
 | Route | Shows |
 |---|---|
 | `/` | KPI overview across both pipelines, SLA/KEV/EPSS summary, risk-tier + asset-class breakdown, live-refreshed every 20s |
-| `/vulnhunt` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category |
-| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable and filterable client-side (priority, asset type, KEV-only), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link |
-| `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target |
-| `/playbooks/<filename>` | Full content of one generated Ansible playbook |
-| `/priority-rules` | Live YAML editor for `remediation/config/priority_rules.yaml` |
-| `/servicenow` | ServiceNow Incident preview (no credentials needed) and send form |
-| `/run` | Form to trigger a pipeline run (dry-run by default), plus recent-run audit log |
 | `/ai-assist` | Ask Claude to explain/remediate/summarize a finding - dry-run preview by default, explicit confirm to spend real API usage |
+| `/inbox` | Real system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not person-to-person messaging; also a bell icon + dropdown in the topbar on every page |
+| `/appsec` | Application Vulnerabilities hub - rolls up SAST/DAST/SCA/Secrets counts with links into each pre-filtered view |
+| `/queue?category=infra-vm` / `?category=dast` / `?category=sca` / `?category=cert-mgmt` | The Security Domains menu's deep links into `/queue`, pre-filtered by category |
+| `/vulnhunt` / `/vulnhunt?category=Secrets` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category; also serves as the SAST and Secrets Management nav entries |
+| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable and filterable client-side (priority, asset type, category, KEV-only), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link, CSV/JSON/MD export |
+| `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target, CSV/JSON/MD export |
+| `/playbooks/<filename>` | Full content of one generated Ansible playbook |
+| `/risk` | Risk Management dashboard - MITRE ATT&CK heat map, top vulnerabilities by type (with affected-asset count and owner), top assets by critical findings, an editable internal/external-facing classification per asset, and a CVSS v3.1 severity-definitions reference |
+| `/exceptions` | Request/approve/revoke time-boxed risk-acceptance waivers per finding, with keyword-suggested compensating controls on the request form, CSV/JSON/MD export |
+| `/assets` | Every asset with findings against it, aggregated, with an editable owner/team, CSV/JSON/MD export, and a "CMDB import" panel to bulk-assign owner/team from an uploaded CSV export (see below) |
+| `/priority-rules` | Live YAML editor for `remediation/config/priority_rules.yaml`, with one-click presets for a pure-CVSS/severity model vs. the shipped VPR-style (threat-intel-aware) model - both are the same underlying weighted-score engine, just with the KEV/EPSS overrides toggled |
+| `/servicenow`, `/jira`, `/splunk` | Ticketing/SIEM Incident/Issue/Event preview (no credentials needed) and send form, one page per connector |
+| `/xdr` | CrowdStrike Falcon reference page - a pull connector like Tenable/Armis, so no send form; shows what the connector does and how to use it from Python |
+| `/infoblox`, `/axonius` | Infoblox NIOS and Axonius asset-discovery/IPAM reference pages - pull connectors like Tenable/Armis/CrowdStrike, so no send form; normalize into asset-inventory records, not vulnerability findings |
+| `/run` | Form to trigger a pipeline run (dry-run by default), plus recent-run audit log |
 | `/reports` | Generate a real, downloadable KPI/SLA/coverage snapshot report (daily through yearly framing) |
 | `/support` | How to get help, known limitations, before-you-file-a-bug checklist |
 | `/faq` | Direct answers about what this product does and doesn't do |
-| `/exceptions` | Request/approve/revoke time-boxed risk-acceptance waivers per finding |
-| `/assets` | Every asset with findings against it, aggregated, with an editable owner/team |
+| `/login` | Local email/password sign-in; shows a "Sign in with SSO" button only when real OIDC provider env vars are configured |
+| `/profile` | Current user's name/email/role, change-password form, log out |
 | `/api/status` | JSON health/status endpoint |
 
-## The `/run` and `/servicenow` safety design
+## The `/run`, `/servicenow`, `/jira`, and `/splunk` safety design
 
-Both forms **default to a dry-run/preview** — `/run` shows the exact command that would
-execute and spends nothing; `/servicenow`'s send form shows exactly what payload would be
-posted to each finding's Incident, with zero network calls. Actually executing either
-requires explicitly checking a confirm box. This mirrors the CLI's own default posture
-(see [cli/README.md](../cli/README.md)) rather than adding a different, looser rule just
-because there's now a button instead of a terminal command.
+All four forms **default to a dry-run/preview** — `/run` shows the exact command that
+would execute and spends nothing; the connector send forms show exactly what payload
+would be posted (a ServiceNow Incident, a Jira Issue, a Splunk HEC event), with zero
+network calls. Actually executing any of them requires explicitly checking a confirm
+box - and, since the auth system was added, being logged in as an **admin** (see
+"Authentication" below; the preview itself never requires login). This mirrors the
+CLI's own default posture (see [cli/README.md](../cli/README.md)) rather than adding a
+different, looser rule just because there's now a button instead of a terminal command.
+
+## Authentication
+
+A real local login MVP, plus genuine OpenID Connect (OIDC) client code that stays
+inert until a real identity provider is configured - see `dashboard/auth/`'s module
+docstrings for the full design. Summary:
+
+- **Password hashing**: PBKDF2-HMAC-SHA256 (`dashboard/auth/passwords.py`), Python
+  stdlib only (`hashlib.pbkdf2_hmac`) - no `bcrypt`/`passlib` dependency added.
+- **Sessions**: a from-scratch HMAC-signed cookie (`dashboard/auth/sessions.py`), stdlib
+  only - a lighter alternative to Starlette's `SessionMiddleware`, which depends on the
+  third-party `itsdangerous` package. Set `VULNHUNTER_SESSION_SECRET` to a real, stable
+  value before any real deployment; without it, a random per-process secret is used and
+  every session is invalidated on restart (a startup warning says so).
+- **Users**: `dashboard/auth/users.json`, a real, editable, committed seed file (same
+  pattern as `priority_rules.yaml`/`exceptions.json`) with two demo accounts (one admin,
+  one regular user) - see the demo credentials below. Not a real user-management system;
+  a production deployment should use real SSO instead (see OIDC below).
+- **OIDC (SSO)**: `dashboard/auth/oidc.py` implements a real Authorization Code + PKCE
+  flow against OIDC discovery/token/userinfo endpoints, using `requests` (already a
+  dependency via the ServiceNow/Jira/Splunk/CrowdStrike connectors) - no `authlib`/
+  `python-jose` dependency added. Like every connector in this repo, it's built against
+  the public spec and has **not been exercised against a real identity provider** - the
+  login page hides the "Sign in with SSO" button entirely unless `OIDC_ISSUER`,
+  `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URI` are all set as real
+  environment variables, since this code can't register a real OAuth application on
+  anyone's behalf.
+- **RBAC scope decision (stated plainly)**: only sensitive *mutation* routes are
+  gated - real ServiceNow/Jira/Splunk sends, a real (paid) pipeline run, a real (paid)
+  AI-assist call, priority-rule edits (admin), exception create (any logged-in user) and
+  revoke (admin), asset owner/facing edits (any logged-in user). Every GET/read route
+  stays open, exactly as before this feature existed - gating every read route too would
+  mean retrofitting auth into the entire existing test suite in one pass; this scopes the
+  security-sensitive *actions* first, mirroring the project's existing dry-run-by-default
+  safety model. The client-side router also redirects an unauthenticated browser to
+  `/login` for every page (not just gated ones) for a coherent UX - but that's a UX gate,
+  not the real security boundary: `curl http://host/api/queue` still returns real data
+  with no cookie at all, by design in this pass.
+- **HTTPS**: opt-in for local dev via `SSL_KEYFILE`/`SSL_CERTFILE` environment variables
+  (uvicorn's native TLS support - see `dashboard/app.py`'s `__main__` block). Generate a
+  self-signed cert for local testing:
+  ```bash
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 365 -subj "/CN=localhost"
+  ```
+  A real deployment should terminate TLS at a reverse proxy (nginx/Caddy) instead of
+  uvicorn's own TLS directly - a self-signed cert is for local dev only, never production.
+
+**Demo credentials** (intentionally public - this is a demo seed file, not a real
+secret; change or remove before any real deployment):
+- `admin@vulnhunter.local` / `ChangeMe123!` (role: admin)
+- `analyst@vulnhunter.local` / `ChangeMe123!` (role: user)
+
+## CMDB import (Asset Inventory)
+
+`/assets` has a "Import owner/team from a CMDB export" panel
+(`remediation/inventory/cmdb_import.py`): upload a CSV export of your asset details,
+and it will:
+
+1. Guess which column is the asset name/owner/team via a keyword heuristic (same
+   non-authoritative-suggestion pattern as `attack_mapping.py`'s ATT&CK tagging and
+   `compensating_controls.py`'s control suggestions) - adjustable in the UI before
+   applying, never applied blind.
+2. Reconcile every row against the real, finding-derived asset list: **matched**
+   (already has findings - owner/team applies immediately), **not yet seen** (no
+   findings yet - owner/team is stored and applies the moment one appears), or
+   **invalid** (no asset name found in the mapped column).
+3. Let you review/edit each row's owner/team inline, then bulk-apply - writing to
+   `remediation/inventory/asset_ownership.json` via the exact same upsert the
+   single-asset "Edit owner" form already uses, just applied to many assets at once.
+
+**CSV, not `.xlsx`**: this accepts CSV, not a fabricated Excel-binary parser - the same
+reasoning as the export feature's download side (see "What this is NOT (yet)" below).
+Every spreadsheet tool (Excel included) exports/opens CSV natively, so "export your
+CMDB sheet to CSV first" is a one-click step, not a real limitation. Real `.xlsx`
+upload would need a new dependency (`openpyxl`) this project doesn't otherwise use -
+a reasonable one to add if genuinely needed, just not added speculatively here.
+
+This is a real, working bulk-import - not a live CMDB sync/connector. There's no
+scheduled or automatic re-sync; re-upload the same export whenever your CMDB data
+changes.
 
 ## Why FastAPI + vanilla JS, not Node/React (or staying on Flask/Jinja2)
 
@@ -110,11 +229,18 @@ JSON endpoints rather than Flask's `render_template` calls.
 
 ## What this is NOT (yet)
 
-This is a single-process, no-auth, no-persistence MVP:
+This is a single-process MVP with a real but partial auth model and no persistence
+layer:
 
-- **No authentication or RBAC** — anyone who can reach the port can view findings and
-  trigger a real (paid) pipeline run. Do not expose this beyond localhost/a trusted
-  network as-is.
+- **Reads are still ungated server-side** — login is required by the client-side router
+  for a coherent UX, and real mutations (sends, real pipeline runs, priority-rule edits,
+  exception revoke) require a real server-side session, but every GET/read API route
+  still returns real data with no login at all if called directly (`curl`, etc). Do not
+  expose this beyond localhost/a trusted network as-is - see "Authentication" above for
+  the full scope decision.
+- **Local users only by default** — the shipped `users.json` has two demo accounts; OIDC
+  (SSO) is real, working client code but stays disabled until a real identity provider's
+  credentials are configured (see "Authentication" above).
 - **No database** — findings/plans are re-read from disk on every request; there's no
   historical trend view across multiple runs.
 - **Synchronous pipeline execution** — a real (non-dry-run) `/api/run` submission blocks
@@ -137,10 +263,18 @@ data layer and interaction model, not to be deployed as-is.
 real HTTP server or network) to verify the JSON API's contract precisely and that every
 route serves the SPA shell correctly. Because the frontend renders client-side, these
 tests validate JSON payloads rather than rendered HTML - the actual DOM rendering was
-verified live in a browser during development (see KNOWLEDGE_TRANSFER.md). The one test
-touching `/api/run`'s POST handler only ever omits `confirm`, so it can never trigger a
-real, paid API call; same rule for `/api/servicenow/send`.
+verified live in a browser during development (see KNOWLEDGE_TRANSFER.md). Every route
+that can trigger a real, paid action (`/api/run`, `/api/servicenow/send`,
+`/api/jira/send`, `/api/splunk/send`, `/api/ai-assist`) is tested only with `confirm`
+omitted or, for the confirm=True path, with login omitted (asserting a 401 before the
+real call would even happen) or with the real subprocess/HTTP call mocked out - never a
+real spend in the test suite. A module-scoped temporary user store
+(`tests/test_dashboard.py`'s `setUpModule`) logs a known admin/user in and out around
+gated-route tests, so the suite never depends on (or mutates) the real shipped
+`dashboard/auth/users.json`.
 
 ```bash
-python -m unittest tests.test_dashboard -v
+python -m unittest tests.test_dashboard -v      # dashboard API + auth-gating tests
+python -m unittest tests.test_auth -v            # passwords/sessions/users/OIDC unit tests
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide
 ```

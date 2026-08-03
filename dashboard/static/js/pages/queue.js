@@ -2,6 +2,24 @@ import { api } from "../api.js";
 import { escapeHtml, timeAgo } from "../dom.js";
 import { icon } from "../icons.js";
 import { getTenant, filterByTenant } from "../tenant.js";
+import { QUEUE_SCAN_TYPES, SCAN_TYPE_LABELS } from "../scanTypes.js";
+import { exportButtonsHtml, wireExportButtons } from "../export.js";
+
+const EXPORT_COLUMNS = [
+  { label: "Priority", value: (f) => f.priority },
+  { label: "ID", value: (f) => f.id },
+  { label: "Asset", value: (f) => f.asset && f.asset.name },
+  { label: "Asset Type", value: (f) => f.asset && f.asset.type },
+  { label: "Category", value: (f) => f.scan_type_label || f.scan_type },
+  { label: "Title", value: (f) => f.title },
+  { label: "CVE", value: (f) => f.cve },
+  { label: "KEV", value: (f) => (f.kev && f.kev.listed ? "Yes" : "No") },
+  { label: "EPSS", value: (f) => (f.epss ? f.epss.score : "") },
+  { label: "SLA Due", value: (f) => f.sla && f.sla.due_date },
+  { label: "SLA Breached", value: (f) => !!(f.sla && f.sla.breached) },
+  { label: "ATT&CK Techniques", value: (f) => (f.attack_techniques || []).map((t) => t.technique_id).join("; ") },
+  { label: "Exception", value: (f) => (f.exception ? f.exception.reason : "") },
+];
 
 export const title = "Live Remediation Queue";
 
@@ -38,7 +56,7 @@ function rowHtml(f) {
     : `<span class="muted">—</span>`;
 
   return `
-    <tr>
+    <tr data-finding-id="${escapeHtml(f.id)}">
       <td><span class="badge badge-priority-${(f.priority || "").toLowerCase()}">${escapeHtml(f.priority)}</span></td>
       <td>${escapeHtml(f.id)}</td>
       <td>${escapeHtml(f.asset && f.asset.name)}</td>
@@ -106,7 +124,14 @@ export async function render(container) {
   let allFindings = [];
   let lastFetched = null;
   let sort = { key: "priority", dir: "desc" };
-  let filters = { priority: "all", assetType: "all", category: "all", kevOnly: false };
+  // A nav deep-link (e.g. /queue?category=infra-vm from the Security Domains menu) can
+  // preselect the category filter on load - falls back to "all" the same as before.
+  const initialCategory = new URLSearchParams(window.location.search).get("category") || "all";
+  let filters = { priority: "all", assetType: "all", category: initialCategory, kevOnly: false };
+  // A global-search result (search.js) deep-links here with ?highlight=<id> - the
+  // matching row gets scrolled into view and visually marked once on load.
+  const highlightId = new URLSearchParams(window.location.search).get("highlight");
+  let hasScrolledToHighlight = false;
 
   function renderLiveBadge() {
     if (!topbarExtra) return;
@@ -142,6 +167,32 @@ export async function render(container) {
     if (breachedEl) breachedEl.textContent = sla.breached;
     if (atRiskEl) atRiskEl.textContent = sla.at_risk;
     if (onTrackEl) onTrackEl.textContent = sla.on_track;
+
+    if (highlightId) applyHighlight(sliced);
+  }
+
+  // Scrolls to and marks the finding a global-search result linked to (?highlight=<id>).
+  // Only auto-scrolls once, so the periodic 20s refresh doesn't keep jerking the page
+  // back to it. If the finding exists but the current tenant/filter selection hides it,
+  // says so instead of silently showing nothing.
+  function applyHighlight(sliced) {
+    const noteEl = container.querySelector("#highlight-note");
+    const row = container.querySelector(`[data-finding-id="${CSS.escape(highlightId)}"]`);
+    if (row) {
+      row.classList.add("row-highlight");
+      if (!hasScrolledToHighlight) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        hasScrolledToHighlight = true;
+      }
+      if (noteEl) noteEl.innerHTML = "";
+      return;
+    }
+    if (!noteEl) return;
+    const existsAtAll = allFindings.some((f) => f.id === highlightId);
+    noteEl.innerHTML = existsAtAll
+      ? `<div class="callout callout-warn">Finding <code>${escapeHtml(highlightId)}</code> exists but is hidden by ` +
+        `the current tenant/filter selection above - clear filters to see it.</div>`
+      : `<div class="callout callout-warn">Finding <code>${escapeHtml(highlightId)}</code> was not found.</div>`;
   }
 
   function assetTypeOptions() {
@@ -150,11 +201,15 @@ export async function render(container) {
   }
 
   function categoryOptions() {
-    const seen = new Map();
+    // Always list every real queue category (not just ones present in today's data) so a
+    // deep link like /queue?category=dast shows a matching, selected dropdown option even
+    // when there's currently no sample finding of that type - see scanTypes.js.
+    const seen = new Map(QUEUE_SCAN_TYPES.map((t) => [t, SCAN_TYPE_LABELS[t]]));
     for (const f of allFindings) {
-      if (f.scan_type) seen.set(f.scan_type, f.scan_type_label || f.scan_type);
+      if (f.scan_type && !seen.has(f.scan_type)) seen.set(f.scan_type, f.scan_type_label || f.scan_type);
     }
-    return [...seen.entries()].sort().map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
+    return [...seen.entries()].sort().map(([value, label]) =>
+      `<option value="${value}" ${value === filters.category ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
   }
 
   function wireControls() {
@@ -186,6 +241,8 @@ export async function render(container) {
           per-tenant data isolation - see the <a href="/faq" data-link>FAQ</a>.
         </div>` : ""}
 
+      <div id="highlight-note"></div>
+
       <div class="kpi-grid">
         <div class="kpi-card kpi-danger"><div class="kpi-value" id="kpi-breached">0</div><div class="kpi-label">SLA breached</div></div>
         <div class="kpi-card kpi-warn"><div class="kpi-value" id="kpi-at-risk">0</div><div class="kpi-label">Due within 3 days</div></div>
@@ -207,11 +264,13 @@ export async function render(container) {
           <select id="f-asset-type"><option value="all">All</option>${assetTypeOptions()}</select>
         </label>
         <label>Category
-          <select id="f-category"><option value="all">All</option>${categoryOptions()}</select>
+          <select id="f-category"><option value="all" ${filters.category === "all" ? "selected" : ""}>All</option>${categoryOptions()}</select>
         </label>
         <label class="checkbox-label"><input type="checkbox" id="f-kev-only"> CISA KEV-listed only</label>
         <span class="filter-count" id="queue-count"></span>
       </div>
+
+      ${exportButtonsHtml("queue")}
 
       <div class="table-scroll">
         <table class="data-table">
@@ -238,6 +297,11 @@ export async function render(container) {
         for what it does and doesn't claim (and why DAST has no sample data yet).
       </div>`;
     wireControls();
+    wireExportButtons(container, "queue", {
+      getRows: () => sortFindings(currentSlice(), sort.key, sort.dir),
+      columns: EXPORT_COLUMNS,
+      filenameBase: "vulnhunter-remediation-queue",
+    });
     renderRows();
   }
 

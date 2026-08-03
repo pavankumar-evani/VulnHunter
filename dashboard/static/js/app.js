@@ -2,7 +2,11 @@
 // ./pages/*.js and exports `render(container, ...params)` plus a `title` (string
 // or function taking the matched URL params). No framework, no build step -
 // dynamic import() is a native browser feature, not a bundler trick.
+import { getCurrentUser, initAccountChip } from "./auth.js";
 import { renderSidebar } from "./nav.js";
+import { initNotificationBell } from "./notifications.js";
+import { initGlobalSearch } from "./search.js";
+import { initSidebarToggle } from "./sidebarToggle.js";
 
 const routes = [
   { pattern: /^\/$/, load: () => import("./pages/overview.js") },
@@ -11,6 +15,11 @@ const routes = [
   { pattern: /^\/queue\/?$/, load: () => import("./pages/queue.js") },
   { pattern: /^\/priority-rules\/?$/, load: () => import("./pages/priorityRules.js") },
   { pattern: /^\/servicenow\/?$/, load: () => import("./pages/servicenow.js") },
+  { pattern: /^\/jira\/?$/, load: () => import("./pages/jira.js") },
+  { pattern: /^\/splunk\/?$/, load: () => import("./pages/splunk.js") },
+  { pattern: /^\/xdr\/?$/, load: () => import("./pages/xdr.js") },
+  { pattern: /^\/infoblox\/?$/, load: () => import("./pages/infoblox.js") },
+  { pattern: /^\/axonius\/?$/, load: () => import("./pages/axonius.js") },
   { pattern: /^\/run\/?$/, load: () => import("./pages/run.js") },
   { pattern: /^\/ai-assist\/?$/, load: () => import("./pages/aiAssist.js") },
   { pattern: /^\/reports\/?$/, load: () => import("./pages/reports.js") },
@@ -18,6 +27,11 @@ const routes = [
   { pattern: /^\/faq\/?$/, load: () => import("./pages/faq.js") },
   { pattern: /^\/exceptions\/?$/, load: () => import("./pages/exceptions.js") },
   { pattern: /^\/assets\/?$/, load: () => import("./pages/assets.js") },
+  { pattern: /^\/appsec\/?$/, load: () => import("./pages/appsec.js") },
+  { pattern: /^\/inbox\/?$/, load: () => import("./pages/inbox.js") },
+  { pattern: /^\/risk\/?$/, load: () => import("./pages/risk.js") },
+  { pattern: /^\/login\/?$/, load: () => import("./pages/login.js") },
+  { pattern: /^\/profile\/?$/, load: () => import("./pages/profile.js") },
   { pattern: /^\/playbooks\/([^/]+)$/, load: () => import("./pages/playbookDetail.js") },
 ];
 
@@ -37,6 +51,11 @@ function matchRoute(pathname) {
   return null;
 }
 
+// Client-side login gate: every page except /login redirects to it when nobody is
+// logged in. This is a UX gate, not the real security boundary - the real one is
+// server-side (app.py's Depends(rbac.require_*) on sensitive mutation routes only).
+// Every GET/read route stays reachable directly (e.g. curl /api/queue) regardless of
+// this client-side check - see dashboard/README.md's "What this is NOT (yet)" section.
 async function renderRoute() {
   if (currentCleanup) {
     currentCleanup();
@@ -44,8 +63,23 @@ async function renderRoute() {
   }
   topbarExtraEl.innerHTML = "";
 
-  const pathname = window.location.pathname;
-  renderSidebar(pathname);
+  let pathname = window.location.pathname;
+
+  if (pathname !== "/login") {
+    const user = await getCurrentUser();
+    if (!user) {
+      const redirect = encodeURIComponent(pathname + window.location.search);
+      window.history.replaceState({}, "", `/login?redirect=${redirect}`);
+      pathname = "/login";
+    }
+  }
+
+  document.querySelector(".app-shell").classList.toggle("auth-page", pathname === "/login");
+  if (pathname === "/login") {
+    document.getElementById("sidebar").innerHTML = "";
+  } else {
+    renderSidebar(pathname, window.location.search);
+  }
 
   const matched = matchRoute(pathname);
   if (!matched) {
@@ -83,4 +117,8 @@ document.addEventListener("click", (event) => {
 
 window.addEventListener("popstate", renderRoute);
 
+initGlobalSearch();
+initNotificationBell();
+initAccountChip();
+initSidebarToggle();
 renderRoute();

@@ -1,27 +1,40 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all fifteen test files: `tests/test_pipeline_artifacts.py` (both
+Formal test case log for all twenty-four test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
 `tests/test_dashboard.py` (the web dashboard's FastAPI JSON API and SPA shell routes,
-including the live queue, priority-rules editor, ServiceNow preview, AI-assist endpoint,
-on-demand reports, the exceptions/risk-acceptance workflow, the asset inventory, and
-generic-connector ingestion), `tests/test_ai_assist.py` (pure prompt-construction logic
-for the dashboard's AI-assist feature), `tests/test_reports.py` (the dashboard's
-on-demand report-generation logic, both stub-data and real-artifact),
+including the live queue, priority-rules editor, ServiceNow/Jira/Splunk preview, the
+local-auth/RBAC gating on every sensitive mutation route, the notification feed, the
+Risk dashboard's ATT&CK heat map, AI-assist, on-demand reports, the
+exceptions/risk-acceptance workflow, the asset inventory, and generic-connector
+ingestion), `tests/test_ai_assist.py` (pure prompt-construction logic for the
+dashboard's AI-assist feature), `tests/test_reports.py` (the dashboard's on-demand
+report-generation logic, both stub-data and real-artifact),
 `tests/test_multilang_scanner_patterns.py` (static consistency checks between the
 scanner's per-language detection guidance and the Java/JS/Go/PHP/Perl fixture files),
 `tests/test_connectors.py` (live Tenable/Armis connectors), `tests/test_enrichment.py`
 (live CISA KEV + EPSS enrichment), `tests/test_priority_engine.py` (the configurable
-priority/SLA engine), `tests/test_attack_mapping.py` (MITRE ATT&CK keyword tagging),
-`tests/test_servicenow_connector.py` (the ServiceNow adapter),
-`tests/test_exceptions_store.py` (the vulnerability exception / risk-acceptance
-workflow), `tests/test_asset_inventory.py` (the per-asset inventory view and editable
-ownership store), `tests/test_generic_connector.py` (the vendor-agnostic "bring your own
-XDR/EDR/SIEM" webhook ingestion adapter), and `tests/test_scan_type_mapping.py` (the
-finding-category taxonomy derived from asset type). Every row below maps 1:1 to one
-`test_*` method in one of those files — there is no test case here without a
-corresponding, runnable assertion, and no assertion in any suite that isn't documented
-here.
+priority/SLA engine), `tests/test_attack_mapping.py` (MITRE ATT&CK keyword tagging,
+including the `/risk` heat-map builder), `tests/test_servicenow_connector.py` (the
+ServiceNow adapter), `tests/test_exceptions_store.py` (the vulnerability exception /
+risk-acceptance workflow), `tests/test_asset_inventory.py` (the per-asset inventory
+view, editable ownership store, and internal/external-facing classification),
+`tests/test_generic_connector.py` (the vendor-agnostic "bring your own XDR/EDR/SIEM"
+webhook ingestion adapter), `tests/test_scan_type_mapping.py` (the finding-category
+taxonomy derived from asset type), `tests/test_auth.py` (local password hashing,
+session cookies, the user store, and the OIDC client), `tests/test_compensating_controls.py`
+(keyword-heuristic compensating-control suggestions), `tests/test_jira_connector.py`,
+`tests/test_splunk_connector.py`, `tests/test_crowdstrike_connector.py` (the
+Jira/Splunk/CrowdStrike Falcon connectors), `tests/test_cmdb_import.py` (bulk
+CMDB-export CSV import for the asset inventory's owner/team fields), and
+`tests/test_infoblox_connector.py`, `tests/test_axonius_connector.py` (the Infoblox
+NIOS and Axonius asset-inventory pull connectors — unlike every connector before them,
+these normalize into asset records, not vulnerability findings), and
+`tests/test_pattern_recognition.py` (the pattern-matched, explicitly-not-machine-learning
+owner/team/type suggestion heuristic for the asset inventory). Every row below
+maps 1:1 to one `test_*` method in one of those files — there is no test case here
+without a corresponding, runnable assertion, and no assertion in any suite that isn't
+documented here.
 
 **How to reproduce these results yourself:**
 ```bash
@@ -32,7 +45,7 @@ pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 288 / 288 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 522 / 522 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -78,6 +91,14 @@ evidence rather than a mocked demo.
 | Dashboard `/api/exceptions` (risk-acceptance workflow) | `ApiExceptions` | TC-DASH-43 – 49 | 7/7 PASS |
 | Dashboard `/api/assets` (asset inventory + ownership) | `ApiAssets` | TC-DASH-50 – 51 | 2/2 PASS |
 | Dashboard `/api/ingest/generic` (generic webhook ingestion) | `ApiIngestGeneric` | TC-DASH-52 – 56 | 5/5 PASS |
+| Dashboard authentication (login/logout/me/change-password/OIDC) | `ApiAuth` | TC-DASH-57 – 66 | 10/10 PASS |
+| Dashboard auth-gating on existing mutation routes | `ApiRunPipeline`, `ApiPriorityRules`, `ApiServiceNow`, `ApiAiAssist`, `ApiExceptions`, `ApiAssets` (additional cases) | TC-DASH-67 – 81 | 15/15 PASS |
+| Dashboard notification feed | `ApiNotifications` | TC-DASH-82 – 87 | 6/6 PASS |
+| Dashboard `/api/risk/attack-heatmap` | `ApiRiskAttackHeatmap` | TC-DASH-88 – 89 | 2/2 PASS |
+| Dashboard `/api/jira/*` | `ApiJira` | TC-DASH-90 – 93 | 4/4 PASS |
+| Dashboard `/api/splunk/*` | `ApiSplunk` | TC-DASH-94 – 97 | 4/4 PASS |
+| Dashboard `/api/assets/cmdb-import/*` | `ApiAssets` (additional cases) | TC-DASH-98 – 100 | 3/3 PASS |
+| Dashboard `/api/assets` pattern-suggestion field | `ApiAssets` (additional cases) | TC-DASH-101 – 103 | 3/3 PASS |
 | Dashboard AI-assist prompt construction | `PromptConstruction` | TC-AI-01 – 12 | 12/12 PASS |
 | Dashboard report data generation | `GenerateReportData` | TC-REPORTGEN-01 – 07 | 7/7 PASS |
 | Dashboard report HTML rendering | `RenderReportHtml` | TC-REPORTGEN-08 – 12 | 5/5 PASS |
@@ -87,6 +108,7 @@ evidence rather than a mocked demo.
 | Asset inventory aggregation | `BuildAssetInventory` | TC-INV-01 – 07 | 7/7 PASS |
 | Asset ownership store | `OwnershipStore` | TC-INV-08 – 11 | 4/4 PASS |
 | Asset ownership real seed-file validation | `RealSeedFileIsValid` | TC-INV-12 | 1/1 PASS |
+| Asset inventory facing classification + critical count | `BuildAssetInventory`, `OwnershipStore` (additional cases) | TC-INV-13 – 19 | 7/7 PASS |
 | Generic connector payload validation | `ValidateGenericPayload` | TC-GENC-01 – 08 | 8/8 PASS |
 | Generic connector finding normalization | `NormalizeGenericFinding` | TC-GENC-09 – 17 | 9/9 PASS |
 | Scan-type classification | `ClassifyFinding` | TC-CAT-01 – 07 | 7/7 PASS |
@@ -109,10 +131,29 @@ evidence rather than a mocked demo.
 | Batch scoring + real rules file validation | `ScoreFindingsBatch`, `RealRulesFileIsValid` | TC-PRIO-11 – 14 | 4/4 PASS |
 | ATT&CK keyword matching | `KeywordMatching` | TC-ATTACK-01 – 09 | 9/9 PASS |
 | ATT&CK batch tagging | `TagFindingsBatch` | TC-ATTACK-10 – 11 | 2/2 PASS |
+| ATT&CK heat map (feeds the `/risk` dashboard) | `AttackHeatmap` | TC-ATTACK-12 – 14 | 3/3 PASS |
 | ServiceNow construction + auth | `AuthAndConstruction`, `BuildIncidentBodyPureFunction` | TC-SNOW-01 – 06 | 6/6 PASS |
 | ServiceNow incident creation | `FindExistingIncident`, `CreateIncident` | TC-SNOW-07 – 14 | 8/8 PASS |
 | ServiceNow batch handling | `CreateIncidentsForFindingsBatch` | TC-SNOW-15 – 16 | 2/2 PASS |
-| **Total** | | **288** | **288/288 PASS** |
+| Local auth MVP (passwords/sessions/users/OIDC) | `PasswordHashing`, `SessionCookies`, `UserStore`, `RealSeedFileIsValid`, `OidcConfiguration`, `OidcFlow` | TC-AUTH-01 – 32 | 32/32 PASS |
+| Compensating-control suggestions | `SuggestCompensatingControls`, `TagCompensatingControlsBatch` | TC-COMP-01 – 08 | 8/8 PASS |
+| Jira construction + issue body | `AuthAndConstruction`, `BuildIssueBodyPureFunction` | TC-JIRA-01 – 10 | 10/10 PASS |
+| Jira issue creation + batch | `FindExistingIssue`, `CreateIssue`, `CreateIssuesForFindingsBatch` | TC-JIRA-11 – 19 | 9/9 PASS |
+| Splunk construction + auth | `AuthAndConstruction`, `BuildHecEventPureFunction` | TC-SPLUNK-01 – 10 | 10/10 PASS |
+| Splunk event sending | `SendEvent` | TC-SPLUNK-11 – 15 | 5/5 PASS |
+| Splunk batch handling (deliberately no dedup) | `SendEventsForFindingsBatch` | TC-SPLUNK-16 – 19 | 4/4 PASS |
+| CrowdStrike Falcon connector: auth + alert fetch | `AuthFlow`, `FetchAlertIds`, `FetchAlertDetails` | TC-CS-01 – 10 | 10/10 PASS |
+| CrowdStrike Falcon connector: normalization + orchestration | `NormalizeAlert`, `FetchAndNormalizeAlerts` | TC-CS-11 – 24 | 14/14 PASS |
+| CMDB bulk import (CSV parsing, column mapping, reconciliation, apply) | `ParseCsvText`, `SuggestColumnMapping`, `ReconcileRows`, `ApplyImport` | TC-CMDB-01 – 14 | 14/14 PASS |
+| Infoblox NIOS connector: construction + host-record fetch | `InfobloxConstruction`, `InfobloxFetchHostRecords` | TC-IBLOX-01 – 09 | 9/9 PASS |
+| Infoblox NIOS connector: normalization + orchestration | `InfobloxNormalizeHostRecord`, `InfobloxFetchAndNormalizeHosts` | TC-IBLOX-10 – 16 | 7/7 PASS |
+| Axonius connector: construction + device fetch | `AxoniusConstruction`, `AxoniusFetchDevices` | TC-AXON-01 – 08 | 8/8 PASS |
+| Axonius connector: normalization + orchestration | `AxoniusNormalizeDevice`, `AxoniusFetchAndNormalizeDevices` | TC-AXON-09 – 17 | 9/9 PASS |
+| Pattern-recognition helpers (hostname prefix, IP subnet, MAC OUI) | `HostnamePrefix`, `IpSubnet`, `MacOui` | TC-PATTERN-01 – 10 | 10/10 PASS |
+| Pattern-recognition owner/team suggestion | `SuggestOwnerTeam` | TC-PATTERN-11 – 18 | 8/8 PASS |
+| Pattern-recognition type suggestion | `SuggestType` | TC-PATTERN-19 – 23 | 5/5 PASS |
+| Pattern-recognition batch annotation | `AnnotateUnownedAssets` | TC-PATTERN-24 – 28 | 5/5 PASS |
+| **Total** | | **522** | **522/522 PASS** |
 
 ---
 
@@ -294,6 +335,25 @@ real, gitignored `remediation/live-data/generic-ingested.json` path — the same
 live Tenable/Armis connectors write to — rather than a temp file, since exercising that
 real write is the point of TC-DASH-56.
 
+This wave adds a fourth kind of gating to verify: authentication and role-based access
+control. TC-DASH-57–66 (`ApiAuth`) cover the login/logout/me/change-password/OIDC-config
+endpoints themselves. A module-scoped `setUpModule`/`tearDownModule` pair creates a
+temporary user store (patching `auth_users.DEFAULT_USERS_PATH` to a temp directory)
+seeded with one known admin and one known regular user, so the real, shipped
+`dashboard/auth/users.json` is never read or mutated by the suite. Two small
+module-level helpers, `_login(email, password)` (POSTs to `/api/auth/login` and asserts
+success) and `_logout()` (clears the shared `TestClient`'s cookies), are called around
+every test that needs a specific login state, rather than each test reimplementing the
+login POST. From TC-DASH-67 onward, the suite also verifies that every route with a
+real-world or administrative side effect enforces this login/role gating *before* doing
+anything sensitive: `/api/run` and `/api/ai-assist` (`confirm=true`), `/api/priority-rules`
+(POST, admin-only), `/api/servicenow/send` (`confirm=true`), `/api/exceptions` (create
+requires login, revoke requires admin), and `/api/assets/*/owner` + `/facing` (login
+required) each get an explicit 401-when-logged-out (and, where relevant, 403-when-non-admin)
+test case. TC-DASH-90–97 (`ApiJira`/`ApiSplunk`) are new connector preview/send endpoints
+that mirror `ApiServiceNow`'s exact dry-run/confirm/credentials/login-gating pattern
+test-for-test.
+
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
 | TC-DASH-01 | `/vulnhunt` data matches known totals | Call `load_vulnhunt_data()` | `total == 9`, `auto_fixable == 6` | Matches | PASS |
@@ -352,6 +412,53 @@ real write is the point of TC-DASH-56.
 | TC-DASH-54 | An invalid payload is rejected with specific per-item errors | `POST /api/ingest/generic` with one finding that has only `title` set | HTTP 200 (batch endpoint — per-item errors, not a 4xx); `accepted==0`; exactly 1 rejected entry with `index==0` | Matches | PASS |
 | TC-DASH-55 | A mixed batch accepts valid and rejects invalid entries independently | Batch of one valid finding plus one with `severity="Nonsense"` | `accepted==1`; exactly 1 rejected entry | Matches | PASS |
 | TC-DASH-56 | Accepted findings are written to `remediation/live-data/generic-ingested.json` | Ingest one valid finding | The live-data file now exists on disk (removed again in the test's `tearDown`) | Matches | PASS |
+| TC-DASH-57 | Login with correct credentials sets a session and returns the user | `POST /api/auth/login` with the test admin's email/password | HTTP 200; `user.email` equals the admin email, `user.role=="admin"`, `user` has no `password_hash` key; the session cookie is set in the response | Matches | PASS |
+| TC-DASH-58 | Login with unknown email is rejected | `POST /api/auth/login` with `email="nobody@test.local"`, `password="anything"` | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-59 | Login with wrong password is rejected | `POST /api/auth/login` with the admin email but a wrong password | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-60 | `/api/auth/me` after login returns the logged-in user | `_login()` as the regular test user; `GET /api/auth/me` | `user.email` equals the regular test user's email | Matches | PASS |
+| TC-DASH-61 | `/api/auth/me` without login returns a null user | `GET /api/auth/me` with no session cookie | HTTP 200; `user` is `null` | Matches | PASS |
+| TC-DASH-62 | Logout clears the session | `_login()`; `POST /api/auth/logout`; `GET /api/auth/me` | Logout returns HTTP 200; subsequent `/api/auth/me` returns `user: null` | Matches | PASS |
+| TC-DASH-63 | Change-password requires login | `POST /api/auth/change-password` with a new password, no session | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-64 | Changing password invalidates the old password | Create a temp user, log in, `POST /api/auth/change-password` with a new password; log out; try logging in with the old and then the new password | Change returns HTTP 200; login with the old password returns 401; login with the new password returns 200 | Matches | PASS |
+| TC-DASH-65 | OIDC config reports disabled when no env vars are set | `GET /api/auth/oidc/config` | HTTP 200; `enabled` is `false`; `provider_name` is `null` | Matches | PASS |
+| TC-DASH-66 | OIDC login is unavailable when not configured | `GET /api/auth/oidc/login` with `follow_redirects=False` | HTTP 503 | 503 | PASS |
+| TC-DASH-67 | `/api/run` with `confirm=true` but not logged in is rejected before ever running anything | `POST /api/run` with `pipeline="scan"`, `path="vulnerable-demo-app"`, `confirm=True`, no session | HTTP 401 (negative test) — login is enforced before `cli.run()` is ever called, i.e. before any subprocess/API spend could happen | 401 | PASS |
+| TC-DASH-68 | `/api/priority-rules` POST without login is rejected | `_logout()`; `POST /api/priority-rules` with a valid `rules_text` | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-69 | `/api/priority-rules` POST as a non-admin is rejected | `_login()` as the regular test user; `POST /api/priority-rules` with a valid `rules_text` | HTTP 403 (negative test) — edits require the `admin` role specifically, not just any logged-in user | 403 | PASS |
+| TC-DASH-70 | `/api/servicenow/send` with confirm but not logged in is rejected | `POST /api/servicenow/send` with real-looking credentials, `confirm=True`, no session | HTTP 401 (negative test) — the real-send path requires login even before credential validation | 401 | PASS |
+| TC-DASH-71 | `/api/ai-assist` with confirm but not logged in is rejected | `POST /api/ai-assist` with `finding_id="FIND-1"`, `action="explain"`, `confirm=True`, no session | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-72 | Creating an exception without login is rejected | `_logout()`; `POST /api/exceptions` with a full valid body | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-73 | Creating an exception as a regular logged-in user is allowed | `_login()` as the regular test user; `POST /api/exceptions` with a full valid body | HTTP 200 — create only requires login, not admin | Matches | PASS |
+| TC-DASH-74 | Revoking an exception without login is rejected | Create an exception (as admin), `_logout()`; `POST /api/exceptions/{id}/revoke` | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-75 | Revoking an exception as a regular user is forbidden | Create an exception (as admin), `_login()` as the regular test user; `POST /api/exceptions/{id}/revoke` | HTTP 403 (negative test) — revoke requires admin specifically, unlike create | 403 | PASS |
+| TC-DASH-76 | Setting an asset owner without login is rejected | `_logout()`; `POST /api/assets/WEB-PORTAL01/owner` with `owner="Web Ops"`, `team="Platform"` | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-77 | Setting an asset's facing classification without login is rejected | `_logout()`; `POST /api/assets/WEB-PORTAL01/facing` with `facing="external"` | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-78 | A new asset has `unknown` facing by default | `GET /api/assets` (against a temp, empty ownership file) | `WEB-PORTAL01` row's `facing=="unknown"` | Matches | PASS |
+| TC-DASH-79 | Setting facing then listing shows the new classification | `POST /api/assets/WEB-PORTAL01/facing` with `facing="external"`; then `GET /api/assets` | Set returns HTTP 200; list shows `WEB-PORTAL01`'s `facing=="external"` | Matches | PASS |
+| TC-DASH-80 | Setting facing with an invalid value is rejected | `POST /api/assets/WEB-PORTAL01/facing` with `facing="space-station"` | HTTP 400 (negative test) | 400 | PASS |
+| TC-DASH-81 | Setting facing does not clobber an existing owner | Set an owner on `WEB-PORTAL01`; then set its facing; then `GET /api/assets` | `WEB-PORTAL01`'s `owner` is still set AND `facing` is now `"external"` — the two fields persist independently | Matches | PASS |
+| TC-DASH-82 | SLA-breached findings produce danger notifications | `GET /api/notifications` | HTTP 200; exactly 6 notifications have `category=="SLA"` (matches the known queue KPI of 6 breached findings) | Matches | PASS |
+| TC-DASH-83 | An exception expiring soon produces a warn notification | Create an exception on `FIND-7` expiring 5 days from today; `GET /api/notifications` | Exactly 1 notification has `category=="Exception"`; its `severity=="warn"` | Matches | PASS |
+| TC-DASH-84 | An exception far from expiry produces no notification | Create an exception on `FIND-7` expiring 365 days from today; `GET /api/notifications` | No notifications with `category=="Exception"` | Matches | PASS |
+| TC-DASH-85 | Pending generic-ingested findings produce an info notification | Write one pending finding to the temp generic-ingested path; `GET /api/notifications` | Exactly 1 notification has `category=="Ingestion"`; its `message` mentions the pending count | Matches | PASS |
+| TC-DASH-86 | No generic-ingested file produces no ingestion notification | `GET /api/notifications` with no generic-ingested file present | No notifications with `category=="Ingestion"` | Matches | PASS |
+| TC-DASH-87 | Danger notifications sort before warn and info | `GET /api/notifications` | Sorting by severity (danger/warn/info) yields an already non-decreasing sequence (danger-first ordering) | Matches | PASS |
+| TC-DASH-88 | ATT&CK heat map covers the full known taxonomy | `GET /api/risk/attack-heatmap` | HTTP 200; `heatmap` includes every known tactic/technique pair, including zero-count ones; every row has both a `tactic` and a `count` key | Matches | PASS |
+| TC-DASH-89 | PrintNightmare finding shows up under its technique on the heat map | `GET /api/risk/attack-heatmap` | The row keyed `T1210` has `count > 0` (FIND-1/PrintNightmare-style RCE) | Matches | PASS |
+| TC-DASH-90 | Jira preview lists every finding with no credentials needed | `GET /api/jira/preview` | HTTP 200; preview `finding_id`s equal exactly `FIND-1`...`FIND-14` | Matches | PASS |
+| TC-DASH-91 | Jira send without confirm never touches the network | `POST /api/jira/send` with real-looking `base_url`/`email`/`api_token`/`project_key`, `confirm` omitted | HTTP 200; `preview_only` true; `results` is `null` | Matches | PASS |
+| TC-DASH-92 | Jira send with confirm but missing credentials is rejected | Log in as admin; `POST /api/jira/send` with blank credentials, `confirm=true` | HTTP 400; `detail` contains `"required"` | Matches | PASS |
+| TC-DASH-93 | Jira send with confirm but not logged in is rejected | `POST /api/jira/send` with real-looking credentials, `confirm=true`, no session | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-94 | Splunk preview lists every finding with no credentials needed | `GET /api/splunk/preview` | HTTP 200; preview `finding_id`s equal exactly `FIND-1`...`FIND-14` | Matches | PASS |
+| TC-DASH-95 | Splunk send without confirm never touches the network | `POST /api/splunk/send` with real-looking `hec_url`/`hec_token`, `confirm` omitted | HTTP 200; `preview_only` true; `results` is `null` | Matches | PASS |
+| TC-DASH-96 | Splunk send with confirm but missing credentials is rejected | Log in as admin; `POST /api/splunk/send` with blank credentials, `confirm=true` | HTTP 400; `detail` contains `"required"` | Matches | PASS |
+| TC-DASH-97 | Splunk send with confirm but not logged in is rejected | `POST /api/splunk/send` with real-looking credentials, `confirm=true`, no session | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-98 | CMDB import preview requires no login and reconciles against real assets | `_logout()`; `POST /api/assets/cmdb-import/preview` with a 3-row CSV (`WEB-PORTAL01` real, `NEW-SERVER-01` not real) | HTTP 200; guessed `column_mapping.asset_name == "Hostname"`; exactly 1 matched entry (`asset_name=="WEB-PORTAL01"`); exactly 1 unmatched entry | Matches | PASS |
+| TC-DASH-99 | CMDB import apply requires login | `_logout()`; `POST /api/assets/cmdb-import/apply` with one valid entry | HTTP 401 (negative test) | 401 | PASS |
+| TC-DASH-100 | CMDB import apply then the asset shows its new owner | `POST /api/assets/cmdb-import/apply` with `{asset_name: "WEB-PORTAL01", owner: "Web Ops", team: "Platform"}`; then `GET /api/assets` | Apply returns `applied==1`; `WEB-PORTAL01`'s `owner=="Web Ops"` in the list | Matches | PASS |
+| TC-DASH-101 | Unowned assets carry a `suggestion` key, `None` when nothing matches | `GET /api/assets` against the temp (empty) ownership file | Every asset has a `suggestion` key; every unowned one is `None` (nothing owned yet to pattern-match against) | Matches | PASS |
+| TC-DASH-102 | An owned asset produces a pattern suggestion for a same-type asset | `POST /api/assets/WIN-DC01/owner` (`Priya Nair`/`Identity`); then `GET /api/assets` | `WIN-FS02`'s (same type, `windows-server`) `suggestion.owner == "Priya Nair"` | Matches | PASS |
+| TC-DASH-103 | An already-owned asset never gets a suggestion for itself | `POST /api/assets/WIN-DC01/owner`; then `GET /api/assets` | `WIN-DC01`'s own `suggestion` is `None` | Matches | PASS |
 
 ---
 
@@ -461,17 +568,23 @@ instead. TC-EXC-15 (`RealSeedFileIsValid`) instead calls `load_exceptions()` wit
 ## Suite 13: Asset inventory + ownership (`remediation/inventory/asset_inventory.py`)
 
 **Purpose:** prove the per-asset inventory view correctly aggregates findings (count,
-highest severity, KEV exposure) grouped by asset name, that ownership can be
-set/persisted/read back via a small editable store, and that the real shipped ownership
-file is well-formed.
+highest severity, critical-finding count, KEV exposure) grouped by asset name, that
+ownership and the internal/external-facing classification can both be
+set/persisted/read back (independently of each other) via a small editable store, and
+that the real shipped ownership file is well-formed.
 **Preconditions (all TC-INV):** `remediation/inventory/asset_inventory.py` importable.
-TC-INV-08–11 (`OwnershipStore`) each use a fresh temporary ownership file passed
+TC-INV-08–11, 16–19 (`OwnershipStore`) each use a fresh temporary ownership file passed
 explicitly via `path=...`, never the real, shipped `asset_ownership.json` — this module
 had the exact same bound-default-parameter bug (and the same fix) as
 `remediation/exceptions/store.py`, documented in Suite 12's Preconditions note.
-TC-INV-01–07 (`BuildAssetInventory`) pass an in-memory `ownership` dict directly and
-touch no file at all. TC-INV-12 (`RealSeedFileIsValid`) calls `load_ownership()` with no
-`path` override, against the real, shipped `asset_ownership.json`.
+TC-INV-01–07, 13–15 (`BuildAssetInventory`) pass an in-memory `ownership` dict directly
+and touch no file at all. TC-INV-12 (`RealSeedFileIsValid`) calls `load_ownership()`
+with no `path` override, against the real, shipped `asset_ownership.json`. TC-INV-13–19
+were added alongside the Risk Management dashboard's editable internal/external-facing
+column (`/risk`, `remediation/inventory/asset_inventory.py`'s `set_facing()`) and prove
+it's manually set only (never auto-detected from a network scan), defaults to
+`"unknown"`, and coexists with — rather than overwrites — the owner/team fields already
+covered by TC-INV-06/09/10.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -487,6 +600,13 @@ touch no file at all. TC-INV-12 (`RealSeedFileIsValid`) calls `load_ownership()`
 | TC-INV-10 | `set_owner` overwrites a previous entry for the same asset | Set once, then set again with different values | Reloaded entry reflects only the second call's values | Matches | PASS |
 | TC-INV-11 | `set_owner` requires an asset name | Call with `asset_name=""` | `ValueError` raised | Raised | PASS |
 | TC-INV-12 | Real, shipped `asset_ownership.json` is well-formed | `load_ownership()` (no `path` override) | Returns a dict; every key is a string; every value has `owner`/`team` keys | Matches | PASS |
+| TC-INV-13 | Critical count only counts Critical-severity findings | One asset with two Critical findings and one High finding | Row's `critical_count==2` (High excluded) | Matches | PASS |
+| TC-INV-14 | Facing defaults to `unknown` when not set | One finding against an unclassified asset, empty `ownership={}` | Row's `facing=="unknown"` | Matches | PASS |
+| TC-INV-15 | Facing is attached from the ownership map | One finding against `WEB-PORTAL01`; `ownership={"WEB-PORTAL01": {"facing": "external"}}` | Row's `facing=="external"` | Matches | PASS |
+| TC-INV-16 | `set_facing` does not clobber an existing owner/team | `set_owner("WIN-DC01", "Priya Nair", "Identity", path=path)`; then `set_facing("WIN-DC01", "internal", path=path)`; reload | Reloaded entry's `owner=="Priya Nair"` AND `facing=="internal"` (both persist together) | Matches | PASS |
+| TC-INV-17 | `set_facing` rejects an invalid value | `set_facing("WIN-DC01", "space-station", path=path)` | `ValueError` raised | Raised | PASS |
+| TC-INV-18 | `set_facing` requires an asset name | `set_facing("", "external", path=path)` | `ValueError` raised | Raised | PASS |
+| TC-INV-19 | `set_owner` does not clobber an existing facing classification | `set_facing("WIN-DC01", "external", path=path)`; then `set_owner("WIN-DC01", "Priya Nair", "Identity", path=path)`; reload | Reloaded entry's `facing=="external"` AND `owner=="Priya Nair"` (setting owner preserves the previously-set facing) | Matches | PASS |
 
 ---
 
@@ -694,7 +814,11 @@ real shipped rules file is well-formed and produces a sane result on real sample
 
 **Purpose:** prove the heuristic fires on realistic finding text, and — just as
 importantly — proves it does NOT guess when there's no real signal (empty list, not a
-fabricated technique).
+fabricated technique). Also covers `build_attack_heatmap()` (TC-ATTACK-12–14), added
+this wave to feed the `/risk` dashboard's tactic × technique heat map — it covers every
+technique in the full known taxonomy, including techniques with zero matching findings
+today, not just whatever happens to appear in the current sample data (see Suite 9's
+`ApiRiskAttackHeatmap`, TC-DASH-88–89, for the API-level equivalent check).
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -709,6 +833,9 @@ fabricated technique).
 | TC-ATTACK-09 | `all_matches=True` can return more than one technique | Tag "Command injection RCE via eval()" with `all_matches=True` | Result includes T1059 among possibly others | Matches | PASS |
 | TC-ATTACK-10 | Batch tagging adds field without mutating input | Tag a findings list | Original dicts unchanged; tagged copies have `attack_techniques` | Matches | PASS |
 | TC-ATTACK-11 | Batch tagging against real sample data | Tag all 14 real findings | PrintNightmare (FIND-1) gets ≥1 technique; SSL cert expiry (FIND-13) gets none | Matches | PASS |
+| TC-ATTACK-12 | Heatmap counts real tagged findings | Tag 3 findings (two SQL-injection-style, one command-injection-style) via `tag_findings`; call `build_attack_heatmap(findings)` | Row keyed `T1190` has `count==2`; row keyed `T1059` has `count==1` | Matches | PASS |
+| TC-ATTACK-13 | Heatmap ignores findings with no matched technique | Tag one certificate-expiry finding (no keyword match); call `build_attack_heatmap(findings)` | Every row's `count==0` | Matches | PASS |
+| TC-ATTACK-14 | Heatmap includes every known tactic/technique even with zero findings | `build_attack_heatmap([])` (empty findings list) | Every known tactic/technique pair is present as a row; every row's `count==0` | Matches | PASS |
 
 ## Suite 22: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
 
@@ -735,6 +862,416 @@ does and doesn't prove (never exercised against a real ServiceNow instance).
 | TC-SNOW-14 | Raises on an unexpected response shape | Mock a POST response with no `result` key | `ServiceNowError` raised | Raised | PASS |
 | TC-SNOW-15 | Batch creates incidents for all findings | Run `create_incidents_for_findings` on a findings list | Correct count and status per finding | Matches | PASS |
 | TC-SNOW-16 | Batch continues past a single finding's failure | Include one malformed finding in the batch | Both findings get a result; the bad one reports `status="error"` with a message, the batch doesn't abort | Matches | PASS |
+
+---
+
+## Suite 23: Local authentication (`dashboard/auth/`)
+
+**Purpose:** prove password hashing (PBKDF2-HMAC-SHA256, stdlib only — no bcrypt/argon2/
+passlib dependency), HMAC-signed session cookies (a from-scratch, stdlib-only
+alternative to Starlette's `itsdangerous`-based `SessionMiddleware`), the local user
+store (create/login/change-password, case-insensitive email, never leaking a password
+hash), and the OIDC Authorization Code + PKCE client all behave correctly. Same "built
+vs. verified" honesty as every connector in this repo (Tenable/Armis/ServiceNow/CISA
+KEV+EPSS): the OIDC client is built against the real OpenID Connect Discovery and
+Authorization Code + PKCE specs and tested entirely via mocked HTTP, but has never been
+exercised against a real identity provider (Okta, Azure AD/Entra, Auth0, Google, etc.) —
+`is_configured()` stays `False`, and the dashboard's SSO button stays hidden, until a
+real operator supplies real `OIDC_*` credentials.
+**Preconditions (all TC-AUTH):** `dashboard/auth/` (`passwords.py`, `sessions.py`,
+`users.py`, `oidc.py`) importable. `UserStore` tests (TC-AUTH-12–21) each use a fresh
+temporary `users.json` file passed explicitly via `path=...`, never the real, shipped
+`dashboard/auth/users.json`; `SessionCookies` tests (TC-AUTH-06–11) use a fixed,
+test-only secret, never any real deployment secret. TC-AUTH-22 (`RealSeedFileIsValid`)
+instead calls `load_users()` with no `path` override, against the real, shipped
+`users.json` (the two demo accounts: `admin@vulnhunter.local`, role `admin`;
+`analyst@vulnhunter.local`, role `user`). `OidcFlow` tests (TC-AUTH-26–30) mock
+`requests`-shaped session objects passed explicitly as `session=...`, so no real network
+call or real identity provider is ever contacted; `OidcConfiguration` tests
+(TC-AUTH-23–25) patch `os.environ` directly and restore it in `tearDown`.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-AUTH-01 | Correct password verifies against its own hash | `hash_password("correct horse battery staple")`; `verify_password()` with the same password | Returns `True` | True | PASS |
+| TC-AUTH-02 | Malformed/blank/None stored hash fails closed instead of raising | `verify_password("anything", "not-a-real-hash")`, then with `""`, then with `None` | All three return `False`, no exception raised | All False, no error | PASS |
+| TC-AUTH-03 | Hashing the same password twice yields different output (random salt per call) | Call `hash_password("same password")` twice | The two stored hash strings are not equal | Not equal | PASS |
+| TC-AUTH-04 | Stored hash embeds its own iteration count and still verifies | `hash_password("x", iterations=1000)`; check for `"$1000$"`; `verify_password("x", stored)` | Iteration count present in the stored string; verification succeeds | Matches | PASS |
+| TC-AUTH-05 | Wrong password does not verify | Hash `"correct horse battery staple"`; `verify_password("wrong password", stored)` | `False` | False | PASS |
+| TC-AUTH-06 | Cookie's `exp` claim reflects the requested `max_age` | Record `time.time()`; `create_session_cookie({}, SECRET, max_age_seconds=3600)`; verify and read `claims["exp"]` | `exp` is within 5 seconds of `now + 3600` | Within delta | PASS |
+| TC-AUTH-07 | Expired cookie is rejected | Create a cookie with `max_age_seconds=-1` (already expired); verify it | `None` | None | PASS |
+| TC-AUTH-08 | Garbage, blank, or `None` cookie value fails closed, not with an exception | Verify `"not-a-real-cookie"`, `""`, and `None` as the cookie value | All three return `None`, no exception | All None, no error | PASS |
+| TC-AUTH-09 | Tampering with the payload while keeping the old signature is rejected | Create a cookie; append `"x"` to its payload segment while leaving the signature segment untouched; verify | `None` (signature no longer matches) | None | PASS |
+| TC-AUTH-10 | Valid cookie round-trips its claims | Create a cookie with `email`/`role` claims; verify it | Returned claims dict has the same `email` and `role` values | Matches | PASS |
+| TC-AUTH-11 | Cookie signed with one secret fails verification under a different secret | Create a cookie with `SECRET`; verify it against `"a-different-secret"` | `None` | None | PASS |
+| TC-AUTH-12 | Creating a user then logging in with the same credentials succeeds and never leaks the hash | `create_user("Someone@Example.com", "correcthorsebatterystaple", "Someone", role="admin", path=tmp)`; `verify_login("someone@example.com", "correcthorsebatterystaple", path=tmp)` | Non-`None` result; `role=="admin"`; `email=="someone@example.com"` (lowercased); no `password_hash` key in the result | Matches | PASS |
+| TC-AUTH-13 | Creating a user with an already-registered email is rejected | `create_user("someone@example.com", ...)`; call `create_user` again with the same email | Second call raises `ValueError` | Raised | PASS |
+| TC-AUTH-14 | Creating a user with a too-short password is rejected | `create_user("someone@example.com", "short", "Someone", path=tmp)` | `ValueError` raised (below `MIN_PASSWORD_LENGTH`) | Raised | PASS |
+| TC-AUTH-15 | Creating a user with an unrecognized role is rejected | `create_user(..., role="superuser", path=tmp)` | `ValueError` raised (`role` not in `VALID_ROLES`) | Raised | PASS |
+| TC-AUTH-16 | Loading from a missing users file returns an empty dict | `load_users(path)` where `path` has never been written | `{}` | Matches | PASS |
+| TC-AUTH-17 | Login is case-insensitive on email | Create a user with a lowercase email; `verify_login` with the same email upper-cased | Non-`None` result (same account) | Matches | PASS |
+| TC-AUTH-18 | Changing the password of an unknown user raises `KeyError` | `set_password("nobody@example.com", "newpassword12345", path=tmp)` with no such user in the store | `KeyError` raised | Raised | PASS |
+| TC-AUTH-19 | After changing a password, the old password no longer works and the new one does | Create a user; `set_password` to a new password; `verify_login` with the old password, then with the new password | Old password returns `None`; new password returns a non-`None` result | Matches | PASS |
+| TC-AUTH-20 | Logging in with an unknown email returns `None`, not an error | `verify_login("nobody@example.com", "anything", path=tmp)` against an empty store | `None` | None | PASS |
+| TC-AUTH-21 | Logging in with the wrong password returns `None` | Create a user; `verify_login` with an incorrect password | `None` | None | PASS |
+| TC-AUTH-22 | Real, shipped `users.json` is well-formed and has both demo roles | `load_users()` (no `path` override) against the real, shipped `dashboard/auth/users.json` | Returns a dict; role set includes both `"admin"` and `"user"`; every key is already lowercased; every `password_hash` starts with `"pbkdf2_sha256$"` | Matches | PASS |
+| TC-AUTH-23 | `is_configured()` is `True` once all four OIDC env vars are set | Set `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI`; call `oidc.is_configured()` | `True` | True | PASS |
+| TC-AUTH-24 | `is_configured()` is `False` when only some of the four env vars are set | Set only `OIDC_ISSUER` and `OIDC_CLIENT_ID`; call `is_configured()` | `False` | False | PASS |
+| TC-AUTH-25 | `is_configured()` is `False` with none of the four env vars set | Ensure all four `OIDC_*` vars are unset; call `is_configured()` | `False` | False | PASS |
+| TC-AUTH-26 | `build_authorize_url` includes the state, PKCE challenge, and client ID | `build_authorize_url("state-xyz", "challenge-abc", discovery_doc=DISCOVERY_DOC)` (mocked discovery doc, `client_id="client-123"` from env) | URL starts with the discovery doc's `authorization_endpoint`; contains `state=state-xyz`, `code_challenge=challenge-abc`, `code_challenge_method=S256`, `client_id=client-123` | Matches | PASS |
+| TC-AUTH-27 | `discover()` fetches the standard `.well-known/openid-configuration` path | `oidc.discover("https://idp.example.com", session=mock_session)` | Mocked session's `get` called exactly once with `"https://idp.example.com/.well-known/openid-configuration"` | Matches | PASS |
+| TC-AUTH-28 | `exchange_code_for_token` POSTs the `authorization_code` grant with the PKCE verifier and client secret | Mock a token-endpoint POST response; `exchange_code_for_token("auth-code", "verifier-xyz", discovery_doc=DISCOVERY_DOC, session=mock_session)` | Returns the mocked token response (`access_token=="at-123"`); POST body's `grant_type=="authorization_code"`, `code=="auth-code"`, `code_verifier=="verifier-xyz"`, `client_secret=="secret-abc"` | Matches | PASS |
+| TC-AUTH-29 | `fetch_userinfo` sends the access token as a Bearer header | Mock the userinfo-endpoint GET response; `fetch_userinfo("at-123", discovery_doc=DISCOVERY_DOC, session=mock_session)` | Returns the mocked userinfo (`email=="person@example.com"`); GET call's `headers["Authorization"]=="Bearer at-123"` | Matches | PASS |
+| TC-AUTH-30 | `generate_pkce_pair` produces a challenge that's the correct S256 hash of its own verifier | Call `generate_pkce_pair()`; independently recompute the expected S256 challenge from the returned verifier | Returned `challenge` equals the independently recomputed base64url(SHA-256(verifier)) value | Matches | PASS |
+| TC-AUTH-31 | An unknown email still runs the real password-hash comparison (timing-safety regression) | Spy on `passwords.verify_password` (wraps the real function); call `verify_login("nobody@example.com", "anything")` | The spy is called exactly once - the deliberately-slow PBKDF2 comparison is never skipped just because the email doesn't exist | Called once | PASS |
+| TC-AUTH-32 | A known-email-wrong-password login and an unknown-email login hit the identical code path | Spy on `passwords.verify_password`; call `verify_login()` once with a real email + wrong password, once with a fake email | The spy is called exactly twice - both cases reach the same comparison, closing the timing side-channel between them | Called twice | PASS |
+
+---
+
+## Suite 24: Compensating-control suggestions (`remediation/enrichment/compensating_controls.py`)
+
+**Purpose:** prove the keyword heuristic fires the right suggestion category on
+realistic finding text (exposed management service, injection, hardcoded secret,
+certificate expiry), that an unmatched finding still gets a sane, non-empty default
+rather than an empty list, and that batch tagging works against the real 14-finding
+sample set without mutating its input. Same explicit non-authoritative caveat as
+`attack_mapping.py`'s ATT&CK tagging (Suite 21): there is no single "the" correct
+compensating control for a given vulnerability, so every suggestion here is a keyword
+heuristic surfacing something to *consider* on the Exceptions request form — not an
+approved or certified control, and not a substitute for a security engineer's own
+judgment about what's actually appropriate for a given asset and environment.
+**Preconditions (all TC-COMP):** `remediation/enrichment/compensating_controls.py`
+importable; pure, in-memory functions only — no network, no mocked HTTP required.
+TC-COMP-08 additionally reads the real, shipped `remediation/output/normalized-
+findings.json` (the same 14-finding sample set used throughout this log) to confirm
+every real finding gets a non-empty suggestion list.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-COMP-01 | Certificate-expiry finding suggests expiry monitoring | `suggest_compensating_controls({"title": "SSL certificate nearing expiration", "description": ""})` | At least one suggested control contains `"expiry"` | Matches | PASS |
+| TC-COMP-02 | Exposed management-interface finding suggests a network ACL/firewall restriction | `suggest_compensating_controls({"title": "Telnet management interface exposed", "description": ""})` | At least one suggested control contains `"ACL"` or `"firewall"` | Matches | PASS |
+| TC-COMP-03 | Hardcoded-secret finding suggests credential rotation | `suggest_compensating_controls({"title": "Hardcoded Stripe API key", "description": ""})` | At least one suggested control contains `"Rotate"` | Matches | PASS |
+| TC-COMP-04 | Injection finding suggests a WAF rule | `suggest_compensating_controls({"title": "SQL Injection via string concatenation", "description": ""})` | At least one suggested control contains `"WAF"` | Matches | PASS |
+| TC-COMP-05 | `suggest_compensating_controls` never returns an empty list | Call with 5 different titles (including `""` and unrelated text) | Every call returns a non-empty list | Matches | PASS |
+| TC-COMP-06 | A title matching no keyword pattern falls back to `DEFAULT_CONTROLS` | `suggest_compensating_controls({"title": "Something entirely unrelated to any pattern", "description": ""})` | Returned list equals `DEFAULT_CONTROLS` exactly (not a guessed/fabricated suggestion) | Matches | PASS |
+| TC-COMP-07 | `tag_compensating_controls` adds the field without mutating its input | Tag a one-finding list; compare the original dict's key set before/after | Original finding's keys unchanged (no `compensating_controls` key added to it); the returned (copied) finding has a `compensating_controls` key | Matches | PASS |
+| TC-COMP-08 | Tagging the real, shipped sample findings never produces an empty suggestion list | Load the real `remediation/output/normalized-findings.json` (all 14 findings); `tag_compensating_controls(findings)` | Every tagged finding has a non-empty `compensating_controls` list | Matches | PASS |
+
+---
+
+## Suite 25: Jira connector (`remediation/connectors/jira_connector.py`)
+
+**Purpose:** prove the Jira Cloud REST API v3 issue-body construction, the label-based
+idempotency check, and batch error handling are correct against mocked HTTP shaped like
+Atlassian's documentation — see
+[remediation/connectors/README.md](remediation/connectors/README.md) for what this does
+and doesn't prove (never exercised against a real Jira Cloud site). Jira has no
+built-in correlation-id field the way ServiceNow's Table API does, so this connector
+uses a `vulnhunter-{finding_id}` label as its idempotency key instead — searched for via
+JQL before create, and stamped onto every issue it creates — which is a genuinely
+different mechanism from ServiceNow's `correlation_id` field lookup, not just a
+renamed copy of it. The issue description is also built as a minimal Atlassian Document
+Format (ADF) document rather than a plain string, since that's what the v3 API requires.
+**Preconditions (all TC-JIRA):** `remediation/connectors/jira_connector.py` importable;
+`requests.Session` is replaced with a `MagicMock` in every test — no real Jira Cloud
+site touched, no Atlassian API token required. `BuildIssueBodyPureFunction`'s 7 cases
+call `build_issue_body` directly with no connector or session at all, exercising the
+same code path the dashboard's preview mode would use to show what would be sent
+without live credentials.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-JIRA-01 | `build_issue_body` builds the correct body with no network calls | Call `build_issue_body(SAMPLE_FINDING, "PROJ")` directly | `fields.project.key=="PROJ"`; `fields.summary` contains `"FIND-1"`; `fields.labels == ["vulnhunter-FIND-1"]` | Matches | PASS |
+| TC-JIRA-02 | `create_issue` and `build_issue_body` produce the same shape (regression guard) | Mock `session.get`→`{"issues": []}`, `session.post`→a created issue; call `conn.create_issue(SAMPLE_FINDING)`; compare the posted JSON body to `build_issue_body(SAMPLE_FINDING, "PROJ")` | Identical dicts (the refactor that extracted `build_issue_body` must not have changed what `create_issue` actually sends) | Matches | PASS |
+| TC-JIRA-03 | Description is a valid minimal ADF doc | Inspect `build_issue_body(...)["fields"]["description"]` | `type=="doc"`, `version==1`; `content[0].type=="paragraph"`; its `content[0].type=="text"` with a string `text` value | Matches | PASS |
+| TC-JIRA-04 | Description text includes KEV and EPSS context | Extract the ADF text node from the built body | Text contains `"KEV-listed"`, `"EPSS score"`, and `"CVE-2021-34527"` | Matches | PASS |
+| TC-JIRA-05 | Issue type defaults to Bug | `build_issue_body(SAMPLE_FINDING, "PROJ")` with no `issue_type` override | `fields.issuetype.name == "Bug"` | Matches | PASS |
+| TC-JIRA-06 | Issue type can be overridden | `build_issue_body(SAMPLE_FINDING, "PROJ", issue_type="Task")` | `fields.issuetype.name == "Task"` | Matches | PASS |
+| TC-JIRA-07 | Label is used as the idempotency key, distinct per finding | Build bodies for `SAMPLE_FINDING` (`FIND-1`) and a copy with `id="FIND-2"` | Labels equal `["vulnhunter-FIND-1"]` and `["vulnhunter-FIND-2"]` respectively | Matches | PASS |
+| TC-JIRA-08 | Session gets HTTP Basic auth configured | Construct `JiraConnector(url, "e@acme.com", "tok1", "PROJ", session=mock)` | `session.auth == ("e@acme.com", "tok1")` | Matches | PASS |
+| TC-JIRA-09 | Base URL stored and trailing slash stripped | Construct with `base_url="https://acme.atlassian.net/"` | `conn.base_url == "https://acme.atlassian.net"` | Matches | PASS |
+| TC-JIRA-10 | Project key stored on the connector | Construct with `project_key="PROJ"` | `conn.project_key == "PROJ"` | Matches | PASS |
+| TC-JIRA-11 | Finds an existing issue by its label via JQL | Mock `session.get`→`{"issues": [{"id": "10000", "key": "PROJ-1"}]}`; call `conn.find_existing_issue("FIND-1")` | Returns the issue with `key=="PROJ-1"`; the GET's `params["jql"]` contains `"vulnhunter-FIND-1"` | Matches | PASS |
+| TC-JIRA-12 | Returns `None` when nothing is found | Mock `session.get`→`{"issues": []}`; call `find_existing_issue("FIND-999")` | `None` returned | Matches | PASS |
+| TC-JIRA-13 | Creates a new issue when none exists | Mock empty lookup + successful POST (`key="PROJ-2"`); call `conn.create_issue(SAMPLE_FINDING)` | `_vulnhunter_status == "created"`, `key == "PROJ-2"` | Matches | PASS |
+| TC-JIRA-14 | Skips creation when an issue already exists | Mock a matching lookup; call `create_issue(SAMPLE_FINDING)` | `_vulnhunter_status == "already_existed"`; `session.post` never called | Matches | PASS |
+| TC-JIRA-15 | `skip_if_exists=False` always creates, skipping the lookup | Call `create_issue(SAMPLE_FINDING, skip_if_exists=False)` | `session.get` never called (no existence check performed); `session.post` called exactly once | Matches | PASS |
+| TC-JIRA-16 | Raises on an unexpected response shape | Mock POST response `{"unexpected": "shape"}` (no `key`) | `JiraError` raised | Raised | PASS |
+| TC-JIRA-17 | `create_issue` posts to the correct issue endpoint | Call `create_issue(SAMPLE_FINDING)`; inspect the POST URL | Equals `"https://acme.atlassian.net/rest/api/3/issue"` | Matches | PASS |
+| TC-JIRA-18 | Batch creates issues for all findings | Mock empty lookup + successful POST; call `create_issues_for_findings([SAMPLE_FINDING])` | 1 result; `status=="created"`, `issue_key=="PROJ-1"` | Matches | PASS |
+| TC-JIRA-19 | Batch continues past a single finding's failure | Mock POST to always return `{"unexpected": "shape"}`; call `create_issues_for_findings([SAMPLE_FINDING, {"id": "FIND-2", "title": "t", "asset": {}}])` | 2 results; both `status=="error"`; `results[0]["error"]` is not `None` (one malformed/failing finding must not abort the whole batch) | Matches | PASS |
+
+---
+
+## Suite 26: Splunk connector (`remediation/connectors/splunk_connector.py`)
+
+**Purpose:** prove the HTTP Event Collector (HEC) event-envelope construction, token
+header auth, and batch handling are correct against mocked HTTP shaped like Splunk's
+documented HEC contract — see
+[remediation/connectors/README.md](remediation/connectors/README.md) for what this does
+and doesn't prove (never exercised against a real Splunk instance). Unlike Jira and
+ServiceNow, this connector authenticates with a `Splunk <token>` header rather than
+HTTP Basic auth, and — a deliberate design difference, not an oversight — has no
+idempotency/dedup check before sending: HEC events are an append-only log stream, not a
+ticket system, so re-sending the same finding on a pipeline re-run is normal and
+expected (Splunk correlates/dedups downstream in search, not at ingest time).
+TC-SPLUNK-18 exists specifically to document and prove that behavior — two sends of the
+identical finding both succeed and both hit the wire, rather than the second being
+silently skipped the way Jira/ServiceNow's `skip_if_exists` would.
+**Preconditions (all TC-SPLUNK):** `remediation/connectors/splunk_connector.py`
+importable; `requests.Session` is replaced with a `MagicMock` in every test (with a real
+`dict` substituted for `.headers`, since the connector sets the `Authorization` header
+directly on it rather than via `session.auth`) — no real Splunk instance touched, no HEC
+token required. `BuildHecEventPureFunction`'s 8 cases call `build_hec_event` directly
+with no connector or session at all, the same preview-mode code path as Jira's and
+ServiceNow's pure body-builder tests.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-SPLUNK-01 | Event wraps the full finding, not a hand-picked subset | `build_hec_event(SAMPLE_FINDING)` | `event["event"] == SAMPLE_FINDING` | Matches | PASS |
+| TC-SPLUNK-02 | Default sourcetype | `build_hec_event(SAMPLE_FINDING)` with no override | `event["sourcetype"] == "vulnhunter:finding"` | Matches | PASS |
+| TC-SPLUNK-03 | Custom sourcetype can be passed through | `build_hec_event(SAMPLE_FINDING, sourcetype="custom:type")` | `event["sourcetype"] == "custom:type"` | Matches | PASS |
+| TC-SPLUNK-04 | Index key is omitted when none is given | `build_hec_event(SAMPLE_FINDING)` with no `index` | `"index"` not in `event` | Matches | PASS |
+| TC-SPLUNK-05 | Index key is included when given | `build_hec_event(SAMPLE_FINDING, index="vulnhunter_findings")` | `event["index"] == "vulnhunter_findings"` | Matches | PASS |
+| TC-SPLUNK-06 | Event time is derived from `last_seen` | `build_hec_event(SAMPLE_FINDING)` where `last_seen=="2026-08-02"` | `event["time"]` equals `datetime(2026,8,2,tzinfo=UTC).timestamp()` | Matches | PASS |
+| TC-SPLUNK-07 | Time defaults to now when `last_seen` is missing | Build from a finding with the `last_seen` key removed entirely, bracketed by `time.time()` before/after | `event["time"]` falls between the before/after bounds | Matches | PASS |
+| TC-SPLUNK-08 | Time defaults to now when `last_seen` is unparseable | Build with `last_seen="not-a-date"`, bracketed by `time.time()` before/after | `event["time"]` falls between the before/after bounds (falls back to now rather than raising) | Matches | PASS |
+| TC-SPLUNK-09 | Session gets the HEC token auth header | Construct `SplunkConnector(hec_url, "hec-tok-1", session=mock)` | `session.headers["Authorization"] == "Splunk hec-tok-1"` | Matches | PASS |
+| TC-SPLUNK-10 | HEC URL stored as given | Construct with `hec_url="https://splunk:8088/services/collector/event"` | `conn.hec_url` equals that exact URL, unmodified | Matches | PASS |
+| TC-SPLUNK-11 | `send_event` posts to the HEC URL | Mock POST→`{"text": "Success", "code": 0}`; call `conn.send_event(SAMPLE_FINDING)` | POST called with that exact HEC URL | Matches | PASS |
+| TC-SPLUNK-12 | `send_event`'s body matches `build_hec_event`'s output | Call `conn.send_event(SAMPLE_FINDING, sourcetype="vulnhunter:finding", index="idx1")` | Posted JSON body equals `build_hec_event(SAMPLE_FINDING, sourcetype="vulnhunter:finding", index="idx1")` | Matches | PASS |
+| TC-SPLUNK-13 | `send_event` returns the parsed HEC response | Mock POST→`{"text": "Success", "code": 0}` | `send_event(...)` returns that dict unchanged | Matches | PASS |
+| TC-SPLUNK-14 | `send_event` raises on an HTTP error | Mock response's `raise_for_status` to raise `Exception("500 Server Error")` | Exception propagates out of `send_event` | Raised | PASS |
+| TC-SPLUNK-15 | `send_event` raises on an unexpected response shape | Mock POST→`{"unexpected": "shape"}` (no `text` key) | `SplunkHECError` raised | Raised | PASS |
+| TC-SPLUNK-16 | Batch sends events for all findings | Mock POST→success; call `send_events_for_findings([SAMPLE_FINDING])` | 1 result; `status=="sent"`, `error is None` | Matches | PASS |
+| TC-SPLUNK-17 | Batch continues past a single finding's failure | Mock POST to always return `{"unexpected": "shape"}`; call `send_events_for_findings([SAMPLE_FINDING, {"id": "FIND-2"}])` | 2 results; both `status=="error"`; `results[0]["error"]` is not `None` (one bad record must not abort the whole batch) | Matches | PASS |
+| TC-SPLUNK-18 | Batch has no dedup — resending the same finding twice, both succeed | Mock POST→success; call `send_events_for_findings([SAMPLE_FINDING, SAMPLE_FINDING])` (the identical finding object, twice) | 2 results, both `status=="sent"`; `session.post.call_count == 2` — unlike ServiceNow/Jira, there is no skip-if-exists here, and this is deliberate: HEC events are a stream, not a ticket to dedupe against | Matches | PASS |
+| TC-SPLUNK-19 | Batch passes custom sourcetype and index through | Call `send_events_for_findings([SAMPLE_FINDING], sourcetype="custom:type", index="idx2")` | Posted body's `sourcetype=="custom:type"`, `index=="idx2"` | Matches | PASS |
+
+---
+
+## Suite 27: CrowdStrike Falcon connector (`remediation/connectors/crowdstrike_connector.py`)
+
+**Purpose:** prove the connector's OAuth2 client-credentials auth flow, its
+alert-ID-query-then-fetch-entities flow (CrowdStrike's documented two-step "query IDs,
+then batch-resolve composite IDs into full alert objects" pattern — conceptually the same
+shape as Armis's token-auth + paginated AQL search, just batch-fetch instead of cursor
+pagination), and its mapping of a raw Falcon alert into VulnHunter's normalized Finding
+schema are all correct against mocked HTTP shaped like CrowdStrike's documented Falcon
+Alerts API — this connector has never been exercised against a real CrowdStrike tenant,
+the same caveat that applies to every other connector in this repo (see
+[remediation/connectors/README.md](remediation/connectors/README.md)). CrowdStrike Falcon
+alerts are EDR/XDR behavioral detections ("suspicious PowerShell encoded command",
+"process injection", etc.), not CVE-scoped vulnerability-scanner findings the way
+Tenable/Armis records are — so `cve`, `cvss`, `kev`, and `epss` are always `None` on a
+normalized CrowdStrike finding (TC-CS-11 proves this explicitly); that's a deliberate,
+expected property of this source, not a gap in the mapping. Like Tenable and Armis, and
+unlike the push-style Jira/Splunk/ServiceNow connectors, CrowdStrike is a **pull**
+connector — there's nothing to "send," only alerts to fetch and normalize — so the
+dashboard has no CrowdStrike send form, only a read-only reference page at `/xdr`.
+**Preconditions (all TC-CS):** `remediation/connectors/crowdstrike_connector.py`
+importable; every HTTP call goes through a mocked `requests.Session` (`MagicMock()`)
+injected into `CrowdStrikeConnector`'s constructor — no real network calls, no real
+CrowdStrike credentials, no real Falcon tenant touched.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-CS-01 | Authenticate POSTs `client_id`/`client_secret` as form data | Construct connector with a mocked session; call `authenticate()` with a mocked POST returning `{"access_token": "tok-abc", "expires_in": 1799}` | POST called at `https://api.crowdstrike.com/oauth2/token` with `data == {"client_id": "client-id-1", "client_secret": "client-secret-1"}` | Matches | PASS |
+| TC-CS-02 | Authenticate raises on an unexpected response shape | Mock POST returns `{"unexpected": "shape"}` (no `access_token` key); call `authenticate()` | `CrowdStrikeAuthError` raised | Raised | PASS |
+| TC-CS-03 | Authenticate sets the bearer token and session header | Mock POST returns `{"access_token": "tok-abc", ...}`; call `authenticate()` | `session.headers["Authorization"] == "Bearer tok-abc"`; `conn._access_token == "tok-abc"` | Matches | PASS |
+| TC-CS-04 | `_ensure_authenticated` only authenticates once | Call `fetch_alert_ids()` twice in a row | `session.post.call_count == 1` (the one auth call is not repeated on the second fetch) | Matches | PASS |
+| TC-CS-05 | `_ensure_authenticated` triggers auth lazily on first use | Check `conn._access_token is None` before any call; call `fetch_alert_ids()` | `conn._access_token == "tok-abc"` afterward (auth happens on demand, not at construction) | Matches | PASS |
+| TC-CS-06 | `filter` query param omitted when no filter given | Call `fetch_alert_ids()` with no `filter_query` | `"filter"` key absent from the GET `params` (negative test) | Absent | PASS |
+| TC-CS-07 | `filter` query param passed through when given | Call `fetch_alert_ids(filter_query="status:'new'")` | GET `params["filter"] == "status:'new'"` | Matches | PASS |
+| TC-CS-08 | `limit` query param is passed through | Call `fetch_alert_ids(limit=50)` | GET `params["limit"] == 50` | Matches | PASS |
+| TC-CS-09 | Returns the raw `resources` array of alert IDs | Mock GET returns `{"resources": ["id1", "id2"]}` | `fetch_alert_ids()` returns `["id1", "id2"]` unchanged | Matches | PASS |
+| TC-CS-10 | Alert-details fetch POSTs composite IDs and returns the resources array | Call `fetch_alert_details(["abcd1234:ind:5678"])`; mock POST returns `{"resources": [SAMPLE_ALERT]}` | POST to `https://api.crowdstrike.com/alerts/entities/alerts/v2` with body `{"composite_ids": ["abcd1234:ind:5678"]}`; returns `[SAMPLE_ALERT]` | Matches | PASS |
+| TC-CS-11 | `cve`/`cvss`/`kev`/`epss` are always `None` on a normalized finding | `normalize_alert(SAMPLE_ALERT)` | All four fields are `None` (Falcon EDR/XDR behavioral detections have no CVE the way a scanner finding does — this is deliberate, not a mapping gap) | All `None` | PASS |
+| TC-CS-12 | Missing behavior timestamps default both dates to today | Normalize an alert with `first_behavior`/`last_behavior` both removed | `first_seen` and `last_seen` both equal `datetime.date.today().isoformat()` | Matches | PASS |
+| TC-CS-13 | Basic identity and asset fields map correctly | `normalize_alert(SAMPLE_ALERT)` | `source == "crowdstrike"`, `source_ref == "abcd1234:ind:5678"`, `title == "Suspicious PowerShell encoded command"`, `asset.name == "WIN-DC01"`, `asset.ip == "10.20.30.41"` | Matches | PASS |
+| TC-CS-14 | Non-Windows platform maps to `unix-server` | Normalize an alert with `device.platform_name == "Linux"` | `asset.type == "unix-server"` (the connector's platform mapping is a simple two-bucket Windows/not-Windows fallback, not a full OS taxonomy) | Matches | PASS |
+| TC-CS-15 | Severity defaults to Low when there's no severity info at all | Normalize an alert with both `severity` and `severity_name` keys removed | `severity == "Low"` | Matches | PASS |
+| TC-CS-16 | A recognized `severity_name` tier wins over the numeric score | Normalize an alert with `severity_name="High"` but `severity=10` (a Low-range number) | `severity == "High"` — the named-tier path short-circuits and the numeric threshold path is never consulted | Matches | PASS |
+| TC-CS-17 | Numeric severity ≥ 90 maps to Critical | Normalize an alert with `severity_name=None`, `severity=95` | `severity == "Critical"` | Matches | PASS |
+| TC-CS-18 | Numeric severity ≥ 70 (and < 90) maps to High | Normalize an alert with `severity_name=None`, `severity=75` | `severity == "High"` | Matches | PASS |
+| TC-CS-19 | Numeric severity < 40 maps to Low | Normalize an alert with `severity_name=None`, `severity=10` | `severity == "Low"` | Matches | PASS |
+| TC-CS-20 | Numeric severity ≥ 40 (and < 70) maps to Medium | Normalize an alert with `severity_name=None`, `severity=50` | `severity == "Medium"` | Matches | PASS |
+| TC-CS-21 | `first_behavior`/`last_behavior` are used as `first_seen`/`last_seen` when present | `normalize_alert(SAMPLE_ALERT)` | `first_seen == "2026-07-28T10:00:00Z"`, `last_seen == "2026-08-02T14:30:00Z"` | Matches | PASS |
+| TC-CS-22 | Windows platform maps to `windows-endpoint` | `normalize_alert(SAMPLE_ALERT)` (`device.platform_name == "Windows"`) | `asset.type == "windows-endpoint"` | Matches | PASS |
+| TC-CS-23 | Full orchestration chains ID-fetch, detail-fetch, and normalize | Mock the auth POST, then a details POST returning `[SAMPLE_ALERT]`, and a GET returning one alert ID; call `fetch_and_normalize_alerts()` | Returns 1 finding; `source_ref == "abcd1234:ind:5678"`, `source == "crowdstrike"` | Matches | PASS |
+| TC-CS-24 | No alert IDs short-circuits to an empty list | Mock GET (alert-ID query) returns `{"resources": []}` | `fetch_and_normalize_alerts()` returns `[]` (detail-fetch and normalize are never invoked) | Matches | PASS |
+
+---
+
+## Suite 28: CMDB CSV import (`remediation/inventory/cmdb_import.py`)
+
+**Purpose:** prove the CSV-upload reconciliation workflow on the Asset Inventory page
+works correctly end to end: parsing an uploaded CSV via the stdlib `csv` module (not a
+fabricated `.xlsx` binary parser - see the module docstring for why CSV is the honest
+choice here, same reasoning as `dashboard/static/js/export.js`'s download side),
+guessing which column is the asset name/owner/team via a keyword heuristic (same
+non-authoritative-suggestion pattern as `attack_mapping.py`/`compensating_controls.py`),
+classifying each row against the real, finding-derived asset list (matched / not-yet-seen
+/ invalid), and bulk-writing owner/team into `asset_ownership.json` via the exact same
+`asset_inventory.set_owner` upsert the single-asset "Edit owner" form already uses.
+**Preconditions (all TC-CMDB):** `remediation/inventory/cmdb_import.py` importable;
+`ApplyImport`'s tests use a temporary ownership file (never the real, shipped
+`asset_ownership.json`).
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-CMDB-01 | CSV text parses into headers and rows | `parse_csv_text("Hostname,Application Owner,Team\nWEB-PORTAL01,Web Ops,Platform\n")` | `headers == ["Hostname", "Application Owner", "Team"]`; one row dict keyed by those headers | Matches | PASS |
+| TC-CMDB-02 | Quoted fields with embedded commas parse correctly | Parse a row with `"Domain controller, primary site"` as a quoted CSV field | The field value is the full string including the comma, not split into two fields | Matches | PASS |
+| TC-CMDB-03 | Empty CSV text returns no rows | `parse_csv_text("")` | `rows == []` (no crash on empty input) | Matches | PASS |
+| TC-CMDB-04 | Common header names are matched | `suggest_column_mapping(["Hostname", "Application Owner", "Team"])` | `{"asset_name": "Hostname", "owner": "Application Owner", "team": "Team"}` | Matches | PASS |
+| TC-CMDB-05 | Alternate header names are also matched | `suggest_column_mapping(["Asset", "Contact", "Department"])` | `{"asset_name": "Asset", "owner": "Contact", "team": "Department"}` | Matches | PASS |
+| TC-CMDB-06 | No keyword match returns `None`, not a guess | `suggest_column_mapping(["Column A", "Column B"])` | All three mapping values are `None` (negative test - never invents a mapping) | Matches | PASS |
+| TC-CMDB-07 | A known asset matches case-insensitively and normalizes casing | Reconcile a row with `Hostname="web-portal01"` against known asset `"WEB-PORTAL01"` | Row lands in `matched`; its `asset_name` is normalized to the real `"WEB-PORTAL01"` casing | Matches | PASS |
+| TC-CMDB-08 | An asset with no current findings is unmatched, not dropped | Reconcile a row for `"NEW-SERVER-01"` (not in the known-asset list) | Row lands in `unmatched` (not silently discarded) | Matches | PASS |
+| TC-CMDB-09 | A row with no asset name is invalid | Reconcile a row with an empty `Hostname` value | Row lands in `invalid`; `matched`/`unmatched` both stay empty for this row | Matches | PASS |
+| TC-CMDB-10 | A mixed batch classifies each row independently | Reconcile 3 rows: one known asset, one unknown, one with a blank name | Exactly 1 `matched`, 1 `unmatched`, 1 `invalid` | Matches | PASS |
+| TC-CMDB-11 | No asset-name column mapped makes every row invalid | Reconcile with `column_mapping.asset_name = None` | Every row lands in `invalid` (there's no column to read a name from) | Matches | PASS |
+| TC-CMDB-12 | Apply writes owner and team for each entry | `apply_import([{asset_name: "WEB-PORTAL01", owner: "Web Ops", team: "Platform"}, {asset_name: "WIN-DC01", owner: "Priya Nair", team: "Identity"}])` against a temp ownership file | `applied == 2`; the temp file's entries match exactly | Matches | PASS |
+| TC-CMDB-13 | Entries with no asset name are skipped, not written | `apply_import([{asset_name: "", owner: "X", team: "Y"}])` | `applied == 0`, `skipped == 1`; the temp ownership file stays empty | Matches | PASS |
+| TC-CMDB-14 | Applying for an unmatched (not-yet-seen) asset still stores ownership | `apply_import([{asset_name: "FUTURE-SERVER-01", owner: "Someone", team: "SomeTeam"}])` | The temp file gets a real entry for `"FUTURE-SERVER-01"` even though no finding against it exists yet - it applies the moment one does | Matches | PASS |
+
+---
+
+## Suite 29: Infoblox NIOS connector (`remediation/connectors/infoblox_connector.py`)
+
+**Purpose:** prove the connector's HTTP Basic-auth session construction, its WAPI
+`record:host` fetch (endpoint URL, `_return_fields`/`_max_results` query params), and its
+mapping of a raw WAPI host-record object into VulnHunter's shared asset-inventory shape
+(`name`, `ip`, `mac`, `type`, `source`, `source_ref`, `extra`) are all correct against
+mocked HTTP shaped like Infoblox's publicly documented WAPI Guide — this connector has
+never been exercised against a real Infoblox NIOS grid, the same caveat that applies to
+every other connector in this repo (see
+[remediation/connectors/README.md](remediation/connectors/README.md)). Unlike every
+finding-producing connector above (Tenable through CrowdStrike), Infoblox is a DNS/IPAM
+system, not a vulnerability scanner — it produces plain asset-inventory records, not
+normalized Findings, and `mac`/`type` are always `None`/`"unknown"` because a
+`record:host` object simply doesn't carry that data (TC-IBLOX-10 proves this
+explicitly), a deliberate, honest property of this source, not a mapping gap. Like
+Tenable/Armis/CrowdStrike, this is a **pull** connector — the dashboard has no send form,
+only a read-only reference page at `/infoblox`.
+**Preconditions (all TC-IBLOX):** `remediation/connectors/infoblox_connector.py`
+importable; every HTTP call goes through a mocked `requests.Session` (`MagicMock()`)
+injected into `InfobloxConnector`'s constructor — no real network calls, no real
+Infoblox credentials, no real grid touched.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-IBLOX-01 | Session gets Basic auth credentials | Construct `InfobloxConnector("gm.example.com", "admin", "pw", session=mock)` | `session.auth == ("admin", "pw")` | Matches | PASS |
+| TC-IBLOX-02 | Base URL uses the default WAPI version | Construct connector with no `api_version` argument | `base_url == "https://gm.example.com/wapi/v2.12"` (`DEFAULT_API_VERSION`) | Matches | PASS |
+| TC-IBLOX-03 | Base URL honors a custom WAPI version | Construct connector with `api_version="v2.5"` | `base_url == "https://gm.example.com/wapi/v2.5"` | Matches | PASS |
+| TC-IBLOX-04 | Session gets an `Accept: application/json` header | Construct the connector | `session.headers.update` called with `{"Accept": "application/json"}` | Matches | PASS |
+| TC-IBLOX-05 | Fetch hits the correct `record:host` URL | Call `fetch_host_records()` | GET called at `{base_url}/record:host` | Matches | PASS |
+| TC-IBLOX-06 | Fetch sends `_return_fields` and `_max_results` params | Call `fetch_host_records(max_results=250)` | `params["_return_fields"] == RETURN_FIELDS`, `params["_max_results"] == 250` | Matches | PASS |
+| TC-IBLOX-07 | `_max_results` defaults to 1000 | Call `fetch_host_records()` with no argument | `params["_max_results"] == 1000` | Matches | PASS |
+| TC-IBLOX-08 | Returns the raw JSON array unchanged | Mock GET returns `[{"name": "host1"}, {"name": "host2"}]` | `fetch_host_records()` returns that exact list | Matches | PASS |
+| TC-IBLOX-09 | Fetch raises on an HTTP error | Mock GET's `raise_for_status()` to raise | `fetch_host_records()` raises | Raised | PASS |
+| TC-IBLOX-10 | Normalize maps the documented shape, including the honest unknown fields | Normalize a host record with `_ref`, `name`, `ipv4addrs`, `view`, `extattrs` set | `ip` == first `ipv4addr`; `mac is None`; `type == "unknown"`; `source == "infoblox"`; `source_ref == record["_ref"]`; `extra["view"]`/`extra["extattrs"]` preserved | Matches | PASS |
+| TC-IBLOX-11 | Multiple IPs on one host record take the first | Normalize a record with two `ipv4addrs` entries | `ip` equals the first entry's `ipv4addr`, not the second | Matches | PASS |
+| TC-IBLOX-12 | No IPs (empty list or missing key) yields `ip=None`, not a crash | Normalize `{"ipv4addrs": []}` and a record missing `ipv4addrs` entirely | Both yield `ip is None`; `extra["extattrs"] == {}` | Matches | PASS |
+| TC-IBLOX-13 | A missing `name` field yields `name=None`, not a crash | Normalize a record with no `name` key | `name is None`; `ip` still correctly extracted | Matches | PASS |
+| TC-IBLOX-14 | Orchestration returns a fully normalized list | Mock GET returns two host records (one with an IP, one without); call `fetch_and_normalize_hosts()` | 2 assets returned; first has the expected `name`/`ip`; second has `ip is None`; both `source == "infoblox"` | Matches | PASS |
+| TC-IBLOX-15 | Orchestration passes `max_results` through to the fetch | Call `fetch_and_normalize_hosts(max_results=42)` | `params["_max_results"] == 42` on the underlying GET | Matches | PASS |
+| TC-IBLOX-16 | Orchestration handles an empty response | Mock GET returns `[]` | `fetch_and_normalize_hosts()` returns `[]` | Matches | PASS |
+
+---
+
+## Suite 30: Axonius connector (`remediation/connectors/axonius_connector.py`)
+
+**Purpose:** prove the connector's `api-key`/`api-secret` header-based auth
+construction, its `/api/devices` fetch (endpoint URL, offset/limit pagination body), and
+its mapping of a raw (assumed-flattened) Axonius device record into VulnHunter's shared
+asset-inventory shape are all correct against mocked HTTP shaped like Axonius's publicly
+documented REST API — this connector has never been exercised against a real Axonius
+tenant, the same caveat that applies to every other connector in this repo (see
+[remediation/connectors/README.md](remediation/connectors/README.md)). Like Infoblox,
+Axonius produces plain asset-inventory records, not vulnerability Findings — its
+distinctive concept is aggregating asset data across many source adapters (CMDB, EDR,
+cloud, network) into one inventory, so each normalized record keeps the reporting
+`adapters` list in `extra` (TC-AXON-06 proves this). Two documented scope limits also
+get explicit coverage: the exact response envelope key (`"assets"`) is the connector's
+best guess against varying public documentation, and it fetches a single page only, not
+a full offset/limit pagination loop. Like Infoblox, this is a **pull** connector with a
+read-only reference page at `/axonius`, not a dashboard send form.
+**Preconditions (all TC-AXON):** `remediation/connectors/axonius_connector.py`
+importable; every HTTP call goes through a mocked `requests.Session` (`MagicMock()`)
+injected into `AxoniusConnector`'s constructor — no real network calls, no real Axonius
+credentials, no real tenant touched.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-AXON-01 | Session gets `api-key`/`api-secret` headers | Construct `AxoniusConnector(url, "key123", "secret456", session=mock)` | `session.headers.update` called with `header["api-key"] == "key123"`, `header["api-secret"] == "secret456"` | Matches | PASS |
+| TC-AXON-02 | Base URL strips a trailing slash | Construct connector with `"https://axonius.example.com/"` | `base_url == "https://axonius.example.com"` | Matches | PASS |
+| TC-AXON-03 | Session gets a `Content-Type: application/json` header | Construct the connector | `header["Content-Type"] == "application/json"` | Matches | PASS |
+| TC-AXON-04 | Fetch hits the correct `/api/devices` URL | Call `fetch_devices()` | POST called at `{base_url}/api/devices` | Matches | PASS |
+| TC-AXON-05 | Fetch sends the offset/limit pagination body | Call `fetch_devices(page_size=50, offset=100)` | POST `json` body `== {"page": {"offset": 100, "limit": 50}}` | Matches | PASS |
+| TC-AXON-06 | Offset defaults to 0 | Call `fetch_devices(page_size=DEFAULT_PAGE_SIZE)` | `body["page"]["offset"] == 0`, `body["page"]["limit"] == DEFAULT_PAGE_SIZE` | Matches | PASS |
+| TC-AXON-07 | Returns the raw JSON response unchanged | Mock POST returns `{"assets": [{"hostname": "h1"}]}` | `fetch_devices()` returns that exact dict | Matches | PASS |
+| TC-AXON-08 | Fetch raises on an HTTP error | Mock POST's `raise_for_status()` to raise | `fetch_devices()` raises | Raised | PASS |
+| TC-AXON-09 | Normalize maps the documented flattened shape | Normalize a device with `internal_axon_id`, `hostname`, `ip`, `mac`, `os_type="Windows"`, `adapters` set | `name`, `ip`, `mac` map directly; `type == "windows-server"`; `source == "axonius"`; `source_ref == "abc123"`; `extra["adapters"]` preserved | Matches | PASS |
+| TC-AXON-10 | Falls back to `ips`/`macs` list variants when scalars are absent | Normalize a device with only `ips`/`macs` list keys | `ip`/`mac` equal the first entry of each list | Matches | PASS |
+| TC-AXON-11 | `os_type="Linux"` maps to `unix-server` | Normalize a device with `os_type="Linux"` | `type == "unix-server"` | Matches | PASS |
+| TC-AXON-12 | Missing or unrecognized `os_type` defaults to `unknown` | Normalize a device with an unrecognized `os_type` and one with no `os_type` at all | Both yield `type == "unknown"` (negative test — never guesses a specific platform) | Matches | PASS |
+| TC-AXON-13 | No IPs or MACs (empty lists) yields `None` for both, not a crash | Normalize a device with `ips=[]`, `macs=[]` | `ip is None`, `mac is None` | Matches | PASS |
+| TC-AXON-14 | A missing `adapters` key defaults to an empty list | Normalize a device with no `adapters` key | `extra["adapters"] == []` | Matches | PASS |
+| TC-AXON-15 | Orchestration returns a fully normalized list | Mock POST returns two devices (one Linux, one with no OS info); call `fetch_and_normalize_devices()` | 2 assets returned; first `type == "unix-server"`, second `type == "unknown"`; both `source == "axonius"` | Matches | PASS |
+| TC-AXON-16 | Orchestration handles an empty `assets` array | Mock POST returns `{"assets": []}` | `fetch_and_normalize_devices()` returns `[]` | Matches | PASS |
+| TC-AXON-17 | Orchestration handles a response missing the `assets` key entirely | Mock POST returns `{}` | `fetch_and_normalize_devices()` returns `[]`, not a crash (documented envelope-key uncertainty handled defensively) | Matches | PASS |
+
+---
+
+## Suite 31: Pattern-matched asset owner/team/type suggestions (`remediation/inventory/pattern_recognition.py`)
+
+**Purpose:** prove the transparent, weighted pattern-matching heuristic behind the
+Asset Inventory's "suggested owner" feature is correct - and, just as importantly,
+that it stays honestly scoped as a heuristic rather than drifting into an implicit
+claim of machine learning. The module answers the ask for the tool to "learn from the
+data and predict patterns for assets, hosts, IPs, MAC address, owners, or teams," but
+deliberately implements it as three inspectable, explainable signals (hostname
+naming-convention prefix, IP `/24` subnet locality, and asset-type match, plus MAC
+vendor OUI matching for the type-suggestion case) combined via a small integer-weighted
+vote - never a trained model. Real ML on this repo's ~13-asset demo dataset would be
+overfitting theater, not a real capability - see the module's own docstring. Every
+suggestion returns its confidence and the exact reasons it fired, so a human can verify
+or reject it; nothing is ever auto-applied (`annotate_unowned_assets()` is a pure
+read-side helper, and the dashboard's `/api/assets` route - see TC-DASH-101–103 - only
+ever attaches a `suggestion` key, never writes one). **Preconditions (all TC-PATTERN):**
+`remediation/inventory/pattern_recognition.py` importable; no file I/O, no network, no
+mutation of any kind - every test is a pure function call against in-memory dicts.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-PATTERN-01 | Hostname prefix strips a trailing number with a separator | `hostname_prefix("WIN-APP07")` | `"WIN-APP"` | Matches | PASS |
+| TC-PATTERN-02 | Hostname prefix strips a trailing number with no separator | `hostname_prefix("LNXDB03")` | `"LNXDB"` | Matches | PASS |
+| TC-PATTERN-03 | No trailing number leaves the name unchanged but uppercased | `hostname_prefix("web-portal")` | `"WEB-PORTAL"` | Matches | PASS |
+| TC-PATTERN-04 | Empty or `None` name returns an empty string, not a crash | `hostname_prefix("")`, `hostname_prefix(None)` | Both return `""` | Matches | PASS |
+| TC-PATTERN-05 | A valid IPv4 address returns its first three octets | `ip_subnet("10.20.30.41")` | `"10.20.30"` | Matches | PASS |
+| TC-PATTERN-06 | Two addresses differing only in the last octet share a subnet | `ip_subnet("10.20.30.99") == ip_subnet("10.20.30.1")` | `True` | Matches | PASS |
+| TC-PATTERN-07 | `None` or a malformed address returns `None`, not a crash | `ip_subnet(None)`, `ip_subnet("not-an-ip")`, `ip_subnet("10.20.30")`, `ip_subnet("10.20.30.999")` | All four return `None` | Matches | PASS |
+| TC-PATTERN-08 | A valid MAC address returns its uppercase vendor OUI | `mac_oui("aa:bb:cc:dd:ee:ff")` | `"AA:BB:CC"` | Matches | PASS |
+| TC-PATTERN-09 | A hyphen-separated MAC address is also recognized | `mac_oui("AA-BB-CC-11-22-33")` | `"AA:BB:CC"` | Matches | PASS |
+| TC-PATTERN-10 | `None` or a malformed MAC returns `None`, not a crash | `mac_oui(None)`, `mac_oui("not-a-mac")`, `mac_oui("aa:bb:cc")` | All three return `None` | Matches | PASS |
+| TC-PATTERN-11 | A hostname-prefix match suggests the shared owner | `suggest_owner_team({"name": "WIN-APP09", ...}, [{"name": "WIN-APP07", "owner": "Web Ops", ...}])` | `owner == "Web Ops"`; a reason mentions `"Hostname pattern"` | Matches | PASS |
+| TC-PATTERN-12 | A subnet match suggests the shared owner | Asset on `10.20.30.99` vs. a known asset on `10.20.30.41` (`Priya Nair`) | `owner == "Priya Nair"`; a reason mentions `"subnet"` | Matches | PASS |
+| TC-PATTERN-13 | Asset-type alone (the weakest signal) still produces a match | Both assets `iot-ot-device`, no hostname/subnet overlap | `owner` equals the known asset's owner | Matches | PASS |
+| TC-PATTERN-14 | Multiple agreeing signals raise confidence over a single weak one | Compare a type-only match vs. a hostname+subnet-agreeing match for the same target asset | The stronger match's `confidence` is strictly greater | Matches | PASS |
+| TC-PATTERN-15 | No matching signal on any known asset returns `None` | Asset with an unrelated name/subnet/type vs. one known asset | `suggest_owner_team(...)` returns `None` | Matches | PASS |
+| TC-PATTERN-16 | An empty known-assets list returns `None` | `suggest_owner_team(asset, [])` | `None` | Matches | PASS |
+| TC-PATTERN-17 | A known asset with no owner is never a suggestion source | Known asset shares hostname prefix but `owner` is `None` | `suggest_owner_team(...)` returns `None` (negative test) | Matches | PASS |
+| TC-PATTERN-18 | Conflicting signals pick the higher-weighted owner | One known asset matches by hostname prefix (weight 3, different owner), another matches only by type (weight 1) | The hostname-prefix match's owner wins | Matches | PASS |
+| TC-PATTERN-19 | A hostname-prefix match suggests the shared type | `suggest_type({"name": "LNX-DB09", "type": "unknown"}, [{"name": "LNX-DB03", "type": "unix-server"}])` | `type == "unix-server"` | Matches | PASS |
+| TC-PATTERN-20 | A subnet match suggests the shared type | Unknown-type asset on the same `/24` as a typed known asset | `type` equals the known asset's type | Matches | PASS |
+| TC-PATTERN-21 | A MAC vendor OUI match suggests the shared type | Both assets share a MAC OUI, one is a known `iot-ot-device` | `type == "iot-ot-device"`; a reason mentions `"MAC vendor"` | Matches | PASS |
+| TC-PATTERN-22 | A known asset with `type == "unknown"` is never a suggestion source | Known asset shares hostname prefix but its own type is `"unknown"` | `suggest_type(...)` returns `None` (negative test) | Matches | PASS |
+| TC-PATTERN-23 | No matching signal on any known asset returns `None` | Asset with an unrelated name/subnet/MAC vs. one typed known asset | `suggest_type(...)` returns `None` | Matches | PASS |
+| TC-PATTERN-24 | Only unowned rows are returned | `annotate_unowned_assets([owned_row, unowned_row])` | Result has exactly 1 row, matching the unowned one | Matches | PASS |
+| TC-PATTERN-25 | Each unowned row gets a `suggestion` key | Same input as above, one owned row shares its type with the unowned one | `result[0]["suggestion"]["owner"]` equals the owned row's owner | Matches | PASS |
+| TC-PATTERN-26 | No match still yields an explicit `None`, not a missing key | An unowned row with nothing in common with the owned row | `result[0]["suggestion"] is None` | Matches | PASS |
+| TC-PATTERN-27 | Input rows are never mutated | Call `annotate_unowned_assets(rows)`, then inspect `rows[0]` | The original row dict has no `suggestion` key added to it | Matches | PASS |
+| TC-PATTERN-28 | All-owned input returns an empty list | `annotate_unowned_assets([owned_row])` | `[]` | Matches | PASS |
 
 ---
 

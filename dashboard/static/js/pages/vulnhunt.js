@@ -1,7 +1,18 @@
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
+import { exportButtonsHtml, wireExportButtons } from "../export.js";
 
 export const title = "/vulnhunt — Code Scan Results";
+
+const EXPORT_COLUMNS = [
+  { label: "ID", value: (f) => f.ID },
+  { label: "Title", value: (f) => f.Title },
+  { label: "Severity", value: (f) => f.Severity },
+  { label: "Category", value: (f) => f._category },
+  { label: "CWE", value: (f) => f.CWE },
+  { label: "File", value: (f) => f.File },
+  { label: "Auto-fixable?", value: (f) => f["Auto-fixable?"] },
+];
 
 // A coarse, honest categorization by CWE - matches .claude/agents/vuln-scanner.md's own
 // "What to look for" taxonomy (Injection / Secrets / Auth-Crypto / Insecure Config).
@@ -15,7 +26,7 @@ const CWE_CATEGORY = {
   "CWE-489": "Insecure Config", "CWE-1321": "Insecure Config", "CWE-276": "Insecure Config",
 };
 
-function categoryFor(cwe) {
+export function categoryFor(cwe) {
   if (!cwe) return "Other";
   const key = cwe.split(/[,\s]/)[0];
   return CWE_CATEGORY[key] || "Other";
@@ -23,7 +34,7 @@ function categoryFor(cwe) {
 
 function rowHtml(f) {
   return `
-    <tr>
+    <tr data-finding-id="${escapeHtml(f.ID)}">
       <td>${escapeHtml(f.ID)}</td>
       <td>${escapeHtml(f.Title)}</td>
       <td><span class="badge badge-${(f.Severity || "").toLowerCase()}">${escapeHtml(f.Severity)}</span></td>
@@ -49,10 +60,18 @@ export async function render(container) {
 
   const findings = vh.findings.map((f) => ({ ...f, _category: categoryFor(f.CWE) }));
   const categories = [...new Set(findings.map((f) => f._category))].sort();
-  const filters = { severity: "all", category: "all" };
+  // A nav deep-link (e.g. /vulnhunt?category=Secrets from the Security Domains menu) can
+  // preselect the category filter on load.
+  const requestedCategory = new URLSearchParams(window.location.search).get("category");
+  const filters = { severity: "all", category: categories.includes(requestedCategory) ? requestedCategory : "all" };
+  // A global-search result (search.js) deep-links here with ?highlight=<id> - the
+  // matching row gets scrolled into view and visually marked once on load.
+  const highlightId = new URLSearchParams(window.location.search).get("highlight");
 
   container.innerHTML = `
     <p class="subtitle">${escapeHtml(vh.title)} &middot; branch <code>${escapeHtml(vh.branch)}</code></p>
+
+    <div id="highlight-note"></div>
 
     <div class="filter-bar">
       <label>Severity
@@ -66,12 +85,14 @@ export async function render(container) {
       </label>
       <label>Category
         <select id="f-category">
-          <option value="all">All</option>
-          ${categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+          <option value="all" ${filters.category === "all" ? "selected" : ""}>All</option>
+          ${categories.map((c) => `<option value="${escapeHtml(c)}" ${c === filters.category ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
         </select>
       </label>
       <span class="filter-count" id="scan-count"></span>
     </div>
+
+    ${exportButtonsHtml("scan")}
 
     <div class="table-scroll">
       <table class="data-table">
@@ -82,15 +103,45 @@ export async function render(container) {
 
   const tbody = container.querySelector("#scan-body");
   const countEl = container.querySelector("#scan-count");
+  let currentFiltered = findings;
 
   function renderRows() {
     const filtered = findings.filter((f) =>
       (filters.severity === "all" || f.Severity === filters.severity) &&
       (filters.category === "all" || f._category === filters.category));
+    currentFiltered = filtered;
     tbody.innerHTML = filtered.length
       ? filtered.map(rowHtml).join("")
       : `<tr><td colspan="7" class="empty-state">No findings match the current filters.</td></tr>`;
     countEl.textContent = `${filtered.length} of ${findings.length} finding(s)`;
+
+    if (highlightId) applyHighlight(filtered);
+  }
+
+  wireExportButtons(container, "scan", {
+    getRows: () => currentFiltered,
+    columns: EXPORT_COLUMNS,
+    filenameBase: "vulnhunter-code-scan",
+  });
+
+  // Scrolls to and marks the finding a global-search result linked to (?highlight=<id>).
+  // If the finding exists but the current severity/category filter hides it, says so
+  // instead of silently showing nothing.
+  function applyHighlight(filtered) {
+    const noteEl = container.querySelector("#highlight-note");
+    const row = container.querySelector(`[data-finding-id="${CSS.escape(highlightId)}"]`);
+    if (row) {
+      row.classList.add("row-highlight");
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (noteEl) noteEl.innerHTML = "";
+      return;
+    }
+    if (!noteEl) return;
+    const existsAtAll = findings.some((f) => f.ID === highlightId);
+    noteEl.innerHTML = existsAtAll
+      ? `<div class="callout callout-warn">Finding <code>${escapeHtml(highlightId)}</code> exists but is hidden by ` +
+        `the current filter selection above - clear filters to see it.</div>`
+      : `<div class="callout callout-warn">Finding <code>${escapeHtml(highlightId)}</code> was not found.</div>`;
   }
 
   container.querySelector("#f-severity").addEventListener("change", (e) => { filters.severity = e.target.value; renderRows(); });

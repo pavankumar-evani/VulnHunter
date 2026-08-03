@@ -1,7 +1,21 @@
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
+import { exportButtonsHtml, wireExportButtons } from "../export.js";
 
 export const title = "/remediate — Remediation Plan (snapshot)";
+
+const EXPORT_COLUMNS = [
+  { label: "ID", value: (r) => r.ID },
+  { label: "Asset", value: (r) => r.Asset },
+  { label: "Title", value: (r) => r.Title },
+  { label: "CVE", value: (r) => r.CVE },
+  { label: "Severity", value: (r) => r.Severity },
+  { label: "Action Type", value: (r) => r["Action Type"] },
+  { label: "Automation Target", value: (r) => r["Automation Target"] },
+  { label: "Risk Tier", value: (r) => r["Risk Tier"] },
+  { label: "KEV", value: (r) => r.KEV },
+  { label: "EPSS", value: (r) => r.EPSS },
+];
 
 const INTRO = `
   <div class="callout">
@@ -67,6 +81,8 @@ export async function render(container) {
       <span class="filter-count" id="plan-count"></span>
     </div>
 
+    ${exportButtonsHtml("plan")}
+
     <div class="table-scroll">
       <table class="data-table">
         <thead>
@@ -82,16 +98,24 @@ export async function render(container) {
 
   const tbody = container.querySelector("#plan-body");
   const countEl = container.querySelector("#plan-count");
+  let currentFiltered = plan.queue;
 
   function renderRows() {
     const filtered = plan.queue.filter((row) =>
       (filters.riskTier === "all" || row["Risk Tier"] === filters.riskTier) &&
       (filters.target === "all" || row["Automation Target"] === filters.target));
+    currentFiltered = filtered;
     tbody.innerHTML = filtered.length
       ? filtered.map((row) => rowHtml(row, data.playbooks_by_finding[row.ID])).join("")
       : `<tr><td colspan="11" class="empty-state">No findings match the current filters.</td></tr>`;
     countEl.textContent = `${filtered.length} of ${plan.queue.length} finding(s)`;
   }
+
+  wireExportButtons(container, "plan", {
+    getRows: () => currentFiltered,
+    columns: EXPORT_COLUMNS,
+    filenameBase: "vulnhunter-remediation-plan",
+  });
 
   container.querySelector("#f-risk-tier").addEventListener("change", (e) => { filters.riskTier = e.target.value; renderRows(); });
   container.querySelector("#f-target").addEventListener("change", (e) => { filters.target = e.target.value; renderRows(); });

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-288%2F288%20passing-brightgreen.svg)](TEST_CASES.md)
+[![Tests](https://img.shields.io/badge/tests-456%2F456%20passing-brightgreen.svg)](TEST_CASES.md)
 
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
@@ -19,7 +19,7 @@ Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
 statement, the idea and why it's built this way, product/solution details for both
 pipelines, step-by-step instructions to actually run everything, test evidence, and a
 troubleshooting log of what broke and how it was fixed. For the detailed test case log
-(288 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
+(456 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
 For task-oriented usage docs, FAQs, AI commands, integrations, and remediation
 workflows, see the [docs/](docs/README.md) folder.
 
@@ -289,11 +289,13 @@ reason no fixer exists yet for that asset class.
 ├── docs/                        # USER_GUIDE, FAQ, AI_COMMANDS, INTEGRATIONS,
 │                                #   REMEDIATION_WORKFLOWS, COMPLIANCE_MAPPING (non-
 │                                #   certifying), SUPPORT - see docs/README.md
-├── tests/                       # 288 tests (pipeline artifacts, CLI, dashboard, connectors,
+├── tests/                       # 456 tests (pipeline artifacts, CLI, dashboard, connectors,
 │                                #   enrichment, priority engine, ATT&CK, ServiceNow,
 │                                #   multi-language scanner patterns, AI-assist, reports,
 │                                #   exceptions, asset inventory, generic ingestion,
-│                                #   scan-type taxonomy), see TEST_CASES.md
+│                                #   scan-type taxonomy, local auth, compensating controls,
+│                                #   Jira/Splunk/CrowdStrike connectors, CMDB CSV import),
+│                                #   see TEST_CASES.md
 ├── .github/                     # CI workflow, issue/PR templates, CODEOWNERS
 ├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md

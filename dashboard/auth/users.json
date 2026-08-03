@@ -1,0 +1,12 @@
+{
+  "admin@vulnhunter.local": {
+    "name": "Demo Admin",
+    "password_hash": "pbkdf2_sha256$600000$5e57956e1752dd388af89c0753dedc65$5dc70e09b07f0d34ba275e23afc703b6ee7c140c535093e0a60dbf3cf091ff9d",
+    "role": "admin"
+  },
+  "analyst@vulnhunter.local": {
+    "name": "Demo Analyst",
+    "password_hash": "pbkdf2_sha256$600000$18f9ff5c2f00c9fa3229a88ddcf8a8dd$f245c05993b445cfcde5495ba34a0595655b692d324f800513297e7cb055349b",
+    "role": "user"
+  }
+}

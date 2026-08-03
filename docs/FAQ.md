@@ -119,6 +119,73 @@ severity, KEV exposure) and lets you attach an owner/team, stored in
 sync from a real CMDB/asset-management system - see the module docstring for what a
 production version would need instead.
 
+### Is the owner suggestion on `/assets` real machine learning?
+
+No, and calling it that would be dishonest. `/assets` can suggest an owner/team for an
+unowned asset (`remediation/inventory/pattern_recognition.py`) using three transparent,
+explainable pattern-matching signals against assets that already have an owner:
+hostname naming-convention prefix (e.g. `WIN-APP07`/`WIN-APP09` sharing `WIN-APP`), IP
+`/24` subnet locality, and asset-type match — plus MAC vendor OUI matching for the
+separate asset-**type** suggestion (useful for connector-sourced assets like Infoblox's,
+which don't carry a type at all). Each is a plain weighted vote with the reasoning
+returned alongside the suggestion (hover it to see exactly why), not a trained model —
+this demo's asset inventory has roughly a dozen entries, nowhere near enough to
+train or validate a real ML model on without overfitting theater. Suggestions are never
+auto-applied; a "Use" button lets you accept one with one click, same
+suggestion-not-determination posture as the MITRE ATT&CK tagging and compensating-control
+suggestions elsewhere in this app.
+
+### Is there a login now? What are the demo credentials?
+
+Yes — a real local login MVP (`dashboard/auth/`), not a placeholder. `/login` checks
+email/password against `dashboard/auth/users.json` (PBKDF2-HMAC-SHA256 hashing,
+HMAC-signed session cookie), and `/profile` shows the logged-in user's name/email/role
+with a change-password form and logout. Two demo accounts ship in the seed file, and
+they're intentionally public since it's a demo seed file, not a real secret:
+`admin@vulnhunter.local` / `ChangeMe123!` (role: admin) and `analyst@vulnhunter.local` /
+`ChangeMe123!` (role: user). Change or remove them before any real deployment. There's
+also real, working OpenID Connect (OIDC) Authorization Code + PKCE client code
+(`dashboard/auth/oidc.py`) for real single sign-on — but it stays **inert** (the
+"Sign in with SSO" button doesn't even appear on `/login`) unless a real identity
+provider's `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET`/`OIDC_REDIRECT_URI` are
+all configured as real environment variables, same "built vs. verified" honesty as every
+connector in this repo — this code has not been exercised against a real identity
+provider. See [dashboard/README.md](../dashboard/README.md#authentication) for the full
+design, including exactly which routes require login (only sensitive mutations — every
+read/GET route stays open server-side, a scope decision stated plainly there).
+
+### Does an exception's suggested compensating control mean it's approved/certified?
+
+No. The `/exceptions` request form suggests candidate compensating controls
+(`remediation/enrichment/compensating_controls.py`) based on keywords in the finding's
+title/description — the same keyword-heuristic, explicitly-non-authoritative pattern as
+the MITRE ATT&CK tagging on `/queue`. It's a drafting aid you can insert into the reason
+field with one click, not a determination that a control is actually in place, adequate,
+or certified by anyone. Whether a suggested (or any other) compensating control is real,
+sufficient, and actually implemented is a judgment call for the requester and approver
+to make and document themselves.
+
+### Is the Inbox real messaging between users?
+
+No. `/inbox` (and the bell icon/dropdown on every page) is a feed of **system-generated
+notifications only** — SLA breaches, CISA KEV-listed findings not yet SLA-breached,
+exceptions expiring within 14 days, and pending generic-ingested findings
+(`dashboard_data.build_notifications()`) — never a message written by one person to
+another. There's no person-to-person messaging anywhere in this product, which would
+need the auth/user system this wave added plus a real persistence layer to store
+messages against. Read/dismissed state is tracked client-side (`localStorage`) rather
+than server-side, since there's no per-user server-side state to track it against yet.
+
+### Is the internal/external-facing classification on the Risk dashboard from a real network scan?
+
+No. The internal/external-facing tag you can set per asset on `/risk` is **manually
+set only**, exactly like asset ownership on `/assets` — there's no network scan,
+firewall-rule analysis, or exposure-scanning tool behind it. It's stored in the same
+editable local ownership file (`remediation/inventory/asset_inventory.py`'s
+`set_facing()`) as the owner/team fields, and defaults to "Unknown" until someone sets
+it. Treat it as a place to record what your team already knows, not as a
+network-derived exposure assessment.
+
 ### What happens to my data / where does it live?
 
 Everything is local files in this repository — git history, JSON, YAML, Markdown. There

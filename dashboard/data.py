@@ -6,6 +6,7 @@ Deliberately has no pipeline logic of its own - it only parses what vuln-triage-
 and remediation-planner already produced. If a number shown here disagrees with the
 source file, the source file is right and this parser has a bug.
 """
+import datetime
 import json
 import re
 import subprocess
@@ -18,6 +19,7 @@ FIX_BRANCH_PREFIX = "vulnhunter/auto-fixes-"
 sys.path.insert(0, str(REPO_ROOT))
 from remediation.config import priority_engine  # noqa: E402
 from remediation.enrichment.attack_mapping import tag_findings  # noqa: E402
+from remediation.enrichment.compensating_controls import tag_compensating_controls  # noqa: E402
 from remediation.enrichment.scan_type_mapping import tag_scan_types  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 
@@ -146,10 +148,101 @@ def load_live_queue():
     findings = load_remediation_findings()
     findings = tag_findings(findings)
     findings = tag_scan_types(findings)
+    findings = tag_compensating_controls(findings)
     active_exceptions = exceptions_store.active_exceptions_by_finding()
     findings = [{**f, "exception": active_exceptions.get(f["id"])} for f in findings]
     rules = priority_engine.load_rules()
     return priority_engine.score_findings(findings, rules=rules)
+
+
+GENERIC_INGESTED_PATH = REPO_ROOT / "remediation" / "live-data" / "generic-ingested.json"
+EXCEPTION_EXPIRY_WARNING_DAYS = 14
+MAX_SLA_BREACH_NOTIFICATIONS = 10
+
+
+def build_notifications(scored_findings):
+    """Real, system-generated notifications derived entirely from live data already
+    computed elsewhere on this page (the live queue, the exceptions store, the generic
+    ingestion adapter's output file) - deliberately NOT person-to-person messaging
+    (there's no user/auth system yet for that to mean anything - see
+    KNOWLEDGE_TRANSFER.md). Every notification here is a fact about current state, not
+    a message someone typed. Read/dismissed tracking is client-side only (localStorage),
+    since there's no per-user server-side state to track it against."""
+    notifications = []
+    today = datetime.date.today()
+
+    breached = [f for f in scored_findings if (f.get("sla") or {}).get("breached")]
+    for f in breached[:MAX_SLA_BREACH_NOTIFICATIONS]:
+        asset_name = (f.get("asset") or {}).get("name", "?")
+        due_date = (f.get("sla") or {}).get("due_date", "?")
+        notifications.append({
+            "id": f"sla-{f['id']}",
+            "severity": "danger",
+            "category": "SLA",
+            "message": f"SLA breached: {f['id']} on {asset_name} — was due {due_date}.",
+            "date": due_date,
+            "link": f"/queue?highlight={f['id']}",
+        })
+    if len(breached) > MAX_SLA_BREACH_NOTIFICATIONS:
+        notifications.append({
+            "id": f"sla-overflow-{len(breached)}",
+            "severity": "danger",
+            "category": "SLA",
+            "message": f"...and {len(breached) - MAX_SLA_BREACH_NOTIFICATIONS} more SLA-breached finding(s) - see the Remediation Queue.",
+            "date": None,
+            "link": "/queue",
+        })
+
+    # KEV-listed findings that haven't already breached SLA - avoids repeating the same
+    # finding twice when it's both breached AND KEV-listed (the SLA notification above
+    # already flags it as urgent).
+    for f in scored_findings:
+        if (f.get("kev") or {}).get("listed") and not (f.get("sla") or {}).get("breached"):
+            asset_name = (f.get("asset") or {}).get("name", "?")
+            notifications.append({
+                "id": f"kev-{f['id']}",
+                "severity": "warn",
+                "category": "Threat intel",
+                "message": f"{f['id']} on {asset_name} is CISA KEV-listed (actively exploited) - not yet SLA-breached.",
+                "date": (f.get("kev") or {}).get("date_added"),
+                "link": f"/queue?highlight={f['id']}",
+            })
+
+    for e in exceptions_store.list_exceptions_with_status():
+        if e["computed_status"] != "active":
+            continue
+        days_left = (datetime.date.fromisoformat(e["expires_on"]) - today).days
+        if days_left <= EXCEPTION_EXPIRY_WARNING_DAYS:
+            notifications.append({
+                "id": f"exc-{e['id']}",
+                "severity": "danger" if days_left < 0 else "warn",
+                "category": "Exception",
+                "message": f"Exception {e['id']} for {e['finding_id']} "
+                           f"{'expired' if days_left < 0 else 'expires'} on {e['expires_on']}.",
+                "date": e["expires_on"],
+                "link": "/exceptions",
+            })
+
+    if GENERIC_INGESTED_PATH.exists():
+        try:
+            ingested = json.loads(GENERIC_INGESTED_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            ingested = []
+        if ingested:
+            mtime = GENERIC_INGESTED_PATH.stat().st_mtime_ns
+            notifications.append({
+                "id": f"ingest-{mtime}",
+                "severity": "info",
+                "category": "Ingestion",
+                "message": f"{len(ingested)} finding(s) ingested via the generic webhook adapter are "
+                           f"pending review (not yet merged into the live queue - see docs/INTEGRATIONS.md).",
+                "date": None,
+                "link": None,
+            })
+
+    severity_rank = {"danger": 0, "warn": 1, "info": 2}
+    notifications.sort(key=lambda n: severity_rank.get(n["severity"], 3))
+    return notifications
 
 
 def sla_summary(scored_findings):

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vulnhunter-dashboard",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["dashboard/app.py"],
+      "port": 5050
+    }
+  ]
+}

@@ -80,6 +80,26 @@ class BuildAssetInventory(unittest.TestCase):
         self.assertIsNone(rows[0]["owner"])
         self.assertIsNone(rows[0]["team"])
 
+    def test_critical_count_only_counts_critical_severity(self):
+        findings = [
+            _finding("FIND-1", "WIN-DC01", "windows-server", "Critical"),
+            _finding("FIND-2", "WIN-DC01", "windows-server", "Critical"),
+            _finding("FIND-3", "WIN-DC01", "windows-server", "High"),
+        ]
+        rows = asset_inventory.build_asset_inventory(findings, ownership={})
+        self.assertEqual(rows[0]["critical_count"], 2)
+
+    def test_facing_defaults_to_unknown_when_not_set(self):
+        findings = [_finding("FIND-1", "UNCLASSIFIED-01", "windows-server", "Low")]
+        rows = asset_inventory.build_asset_inventory(findings, ownership={})
+        self.assertEqual(rows[0]["facing"], "unknown")
+
+    def test_facing_is_attached_from_ownership_map(self):
+        findings = [_finding("FIND-1", "WEB-PORTAL01", "certificate", "Medium")]
+        ownership = {"WEB-PORTAL01": {"facing": "external"}}
+        rows = asset_inventory.build_asset_inventory(findings, ownership=ownership)
+        self.assertEqual(rows[0]["facing"], "external")
+
 
 class OwnershipStore(unittest.TestCase):
     def setUp(self):
@@ -106,6 +126,28 @@ class OwnershipStore(unittest.TestCase):
     def test_set_owner_requires_an_asset_name(self):
         with self.assertRaises(ValueError):
             asset_inventory.set_owner("", "Someone", "Some Team", path=self.path)
+
+    def test_set_owner_does_not_clobber_an_existing_facing_classification(self):
+        asset_inventory.set_facing("WIN-DC01", "external", path=self.path)
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["facing"], "external")
+        self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
+
+    def test_set_facing_does_not_clobber_existing_owner_team(self):
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
+        asset_inventory.set_facing("WIN-DC01", "internal", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
+        self.assertEqual(loaded["WIN-DC01"]["facing"], "internal")
+
+    def test_set_facing_rejects_an_invalid_value(self):
+        with self.assertRaises(ValueError):
+            asset_inventory.set_facing("WIN-DC01", "space-station", path=self.path)
+
+    def test_set_facing_requires_an_asset_name(self):
+        with self.assertRaises(ValueError):
+            asset_inventory.set_facing("", "external", path=self.path)
 
 
 class RealSeedFileIsValid(unittest.TestCase):
