@@ -12,14 +12,15 @@ Planted vulnerabilities (for scoring / demo reference):
   6. Weak/no password hashing (plaintext)   -> CWE-256
 """
 
+import os
 import sqlite3
 import subprocess
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# VULN 1: Hardcoded secret (CWE-798) — should come from environment variable
-STRIPE_API_KEY = "sk_live_DEMO_FAKE_NOT_A_REAL_KEY_1234567890"
+# FIXED (VULN-1, CWE-798): secret now comes from the environment, never hardcoded.
+STRIPE_API_KEY = os.environ["STRIPE_API_KEY"]
 DB_PATH = "vulnshop.db"
 
 
@@ -30,12 +31,11 @@ def get_db():
 
 @app.route("/user")
 def get_user():
-    """VULN 2: SQL Injection (CWE-89) — string concatenation into query."""
+    """FIXED (VULN-2, CWE-89): parameterized query instead of string concatenation."""
     user_id = request.args.get("id")
     conn = get_db()
     cursor = conn.cursor()
-    query = "SELECT id, username, email FROM users WHERE id = " + user_id
-    cursor.execute(query)
+    cursor.execute("SELECT id, username, email FROM users WHERE id = ?", (user_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -53,9 +53,9 @@ def calc():
 
 @app.route("/ping")
 def ping():
-    """VULN 4: Command injection (CWE-78) — user input passed to shell."""
+    """FIXED (VULN-4, CWE-78): argument list with shell=False, no shell interpolation."""
     host = request.args.get("host", "127.0.0.1")
-    output = subprocess.check_output(f"ping -c 1 {host}", shell=True)
+    output = subprocess.check_output(["ping", "-c", "1", host])
     return jsonify({"output": output.decode(errors="ignore")})
 
 
@@ -86,5 +86,6 @@ def charge():
 
 
 if __name__ == "__main__":
-    # VULN 5: debug=True in what looks like a production entrypoint (CWE-489)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # FIXED (VULN-5, CWE-489): debug mode now gated behind an env var, off by default.
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)

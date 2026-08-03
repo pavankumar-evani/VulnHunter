@@ -8,16 +8,20 @@ FROM python:3.9
 
 WORKDIR /app
 
-# VULN: secret baked directly into the image layer
-ENV STRIPE_API_KEY="sk_live_DEMO_FAKE_NOT_A_REAL_KEY_1234567890"
-ENV FLASK_DEBUG=1
+# FIXED (VULN-8, CWE-798): no secret baked into the image. Pass STRIPE_API_KEY at
+# `docker run -e STRIPE_API_KEY=...` time instead, or via a secrets manager.
+# FIXED (VULN-5, CWE-489): debug now off by default; app.py reads this at runtime.
+ENV FLASK_DEBUG=0
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY . .
 
-# VULN: no USER instruction -> container runs as root by default
+# FIXED (VULN-7, CWE-250): drop root privileges before running the app.
+RUN useradd --create-home appuser
+USER appuser
+
 EXPOSE 5000
 
 CMD ["python", "app.py"]
