@@ -18,6 +18,8 @@ FIX_BRANCH_PREFIX = "vulnhunter/auto-fixes-"
 sys.path.insert(0, str(REPO_ROOT))
 from remediation.config import priority_engine  # noqa: E402
 from remediation.enrichment.attack_mapping import tag_findings  # noqa: E402
+from remediation.enrichment.scan_type_mapping import tag_scan_types  # noqa: E402
+from remediation.exceptions import store as exceptions_store  # noqa: E402
 
 
 def _git_show(ref, path):
@@ -143,6 +145,9 @@ def load_live_queue():
     priority rules form actually sees change."""
     findings = load_remediation_findings()
     findings = tag_findings(findings)
+    findings = tag_scan_types(findings)
+    active_exceptions = exceptions_store.active_exceptions_by_finding()
+    findings = [{**f, "exception": active_exceptions.get(f["id"])} for f in findings]
     rules = priority_engine.load_rules()
     return priority_engine.score_findings(findings, rules=rules)
 

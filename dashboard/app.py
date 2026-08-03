@@ -7,6 +7,7 @@ what a production version would add on top of this.
 Run with: python dashboard/app.py
 Then open http://127.0.0.1:5050
 """
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -26,9 +27,14 @@ import ai_assist  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import reports  # noqa: E402
 import vulnhunter as cli  # noqa: E402
+from remediation.connectors.generic_connector import (  # noqa: E402
+    normalize_generic_finding, validate_generic_payload,
+)
 from remediation.connectors.servicenow_connector import (  # noqa: E402
     ServiceNowConnector, build_incident_body,
 )
+from remediation.exceptions import store as exceptions_store  # noqa: E402
+from remediation.inventory import asset_inventory  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -302,6 +308,98 @@ def api_generate_report_html(period: str = "weekly", download: bool = False):
     return HTMLResponse(content=html_body, headers=headers)
 
 
+@app.get("/api/exceptions")
+def api_list_exceptions():
+    return {"exceptions": exceptions_store.list_exceptions_with_status()}
+
+
+class ExceptionCreateBody(BaseModel):
+    finding_id: str
+    reason: str
+    requested_by: str
+    approved_by: str
+    expires_on: str
+
+
+@app.post("/api/exceptions")
+def api_create_exception(body: ExceptionCreateBody):
+    try:
+        record = exceptions_store.create_exception(
+            body.finding_id, body.reason, body.requested_by, body.approved_by, body.expires_on,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return record
+
+
+@app.post("/api/exceptions/{exception_id}/revoke")
+def api_revoke_exception(exception_id: str):
+    try:
+        return exceptions_store.revoke_exception(exception_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/assets")
+def api_list_assets():
+    findings = dashboard_data.load_remediation_findings()
+    return {"assets": asset_inventory.build_asset_inventory(findings)}
+
+
+class AssetOwnerBody(BaseModel):
+    owner: str = ""
+    team: str = ""
+
+
+@app.post("/api/assets/{asset_name}/owner")
+def api_set_asset_owner(asset_name: str, body: AssetOwnerBody):
+    return asset_inventory.set_owner(asset_name, body.owner, body.team)
+
+
+class GenericIngestBody(BaseModel):
+    findings: list[dict]
+
+
+@app.post("/api/ingest/generic")
+def api_ingest_generic(body: GenericIngestBody):
+    """The vendor-agnostic 'bring your own XDR/EDR/SIEM' webhook receiver - see
+    remediation/connectors/generic_connector.py's module docstring for why this is a
+    generic validated-payload adapter rather than N bespoke vendor connectors.
+    Deliberately does NOT merge into remediation/output/normalized-findings.json or
+    the live queue - consistent with how live Tenable/Armis connector output also
+    isn't auto-merged (see KNOWLEDGE_TRANSFER.md); it writes to
+    remediation/live-data/, gitignored, same as those."""
+    live_data_dir = dashboard_data.REPO_ROOT / "remediation" / "live-data"
+    live_data_path = live_data_dir / "generic-ingested.json"
+
+    existing = []
+    if live_data_path.exists():
+        existing = json.loads(live_data_path.read_text(encoding="utf-8"))
+
+    # IDs continue from the real pipeline's FIND-N sequence (not just this file's own),
+    # even though this data isn't merged into the queue - so a ingested finding's ID
+    # never collides with a real one if this ever does get merged later.
+    real_findings = dashboard_data.load_remediation_findings()
+
+    accepted = []
+    rejected = []
+    for i, payload in enumerate(body.findings):
+        errors = validate_generic_payload(payload)
+        if errors:
+            rejected.append({"index": i, "errors": errors})
+            continue
+        finding = normalize_generic_finding(payload, real_findings + existing + accepted)
+        accepted.append(finding)
+
+    if accepted:
+        live_data_dir.mkdir(parents=True, exist_ok=True)
+        live_data_path.write_text(
+            json.dumps(existing + accepted, indent=2) + "\n", encoding="utf-8",
+        )
+
+    return {"accepted": len(accepted), "rejected": rejected, "findings": accepted}
+
+
 @app.get("/api/status")
 def api_status():
     """A trivial machine-readable health/status endpoint."""
@@ -331,7 +429,7 @@ def _serve_shell():
 
 for _route in (
     "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
-    "/ai-assist", "/reports", "/support", "/faq",
+    "/ai-assist", "/reports", "/support", "/faq", "/exceptions", "/assets",
 ):
     app.api_route(_route, methods=["GET", "HEAD"], include_in_schema=False)(_serve_shell)
 

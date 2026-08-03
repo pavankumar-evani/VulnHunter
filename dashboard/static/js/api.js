@@ -39,4 +39,9 @@ export const api = {
   status: () => request("GET", "/api/status"),
   aiAssist: (body) => request("POST", "/api/ai-assist", body),
   reportGenerate: (period) => request("GET", `/api/reports/generate?period=${encodeURIComponent(period)}`),
+  exceptionsList: () => request("GET", "/api/exceptions"),
+  exceptionCreate: (body) => request("POST", "/api/exceptions", body),
+  exceptionRevoke: (id) => request("POST", `/api/exceptions/${encodeURIComponent(id)}/revoke`),
+  assetsList: () => request("GET", "/api/assets"),
+  assetSetOwner: (name, body) => request("POST", `/api/assets/${encodeURIComponent(name)}/owner`, body),
 };

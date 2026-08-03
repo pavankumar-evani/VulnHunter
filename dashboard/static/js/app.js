@@ -16,6 +16,8 @@ const routes = [
   { pattern: /^\/reports\/?$/, load: () => import("./pages/reports.js") },
   { pattern: /^\/support\/?$/, load: () => import("./pages/support.js") },
   { pattern: /^\/faq\/?$/, load: () => import("./pages/faq.js") },
+  { pattern: /^\/exceptions\/?$/, load: () => import("./pages/exceptions.js") },
+  { pattern: /^\/assets\/?$/, load: () => import("./pages/assets.js") },
   { pattern: /^\/playbooks\/([^/]+)$/, load: () => import("./pages/playbookDetail.js") },
 ];
 

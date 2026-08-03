@@ -7,6 +7,55 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Vulnerability exception/waiver management** (`/exceptions`, `/api/exceptions*`,
+  `remediation/exceptions/store.py`) — a documented, time-boxed risk-acceptance
+  workflow: request an exception with a reason/compensating control, requester, and
+  approver, with an expiry date after which it auto-expires (computed on read, never
+  silently left "active" forever) unless explicitly revoked first. Surfaced on the
+  Remediation Queue as a "Risk-accepted until <date>" tag. Honest scope limit: an
+  active exception does not yet pause SLA-breach counting in the priority engine - see
+  the module docstring.
+- **Asset inventory + ownership** (`/assets`, `/api/assets*`,
+  `remediation/inventory/asset_inventory.py`) — aggregates the asset data already
+  scattered across individual findings into one row per asset (finding count, highest
+  severity, KEV exposure), with an editable owner/team field persisted locally (same
+  real-editable-config pattern as `priority_rules.yaml`, not a CMDB sync).
+- **Finding-category taxonomy** (`remediation/enrichment/scan_type_mapping.py`) —
+  classifies each remediation finding as Infrastructure Vulnerability Management,
+  Software Composition Analysis (SCA), or Certificate/TLS Lifecycle Management, based
+  on asset type; surfaced as a "Category" column + filter on the Remediation Queue.
+  Dynamic Application Security Testing (DAST) is a documented category with no sample
+  finding yet, rather than a fabricated one - see the module docstring. Static
+  Application Security Testing (SAST) is `/vulnhunt`'s own findings by definition,
+  handled separately.
+- **Generic XDR/EDR/SIEM ingestion adapter** (`/api/ingest/generic`,
+  `remediation/connectors/generic_connector.py`) — a vendor-agnostic "bring your own
+  tool" webhook receiver: validates and normalizes an inbound JSON payload from any
+  tool that can send a custom outbound webhook (most modern SIEM/XDR/EDR/SOAR products
+  support this) into VulnHunter's normalized Finding schema, instead of building
+  bespoke per-vendor connectors for products with no real API access to verify
+  against. IDs continue the real pipeline's FIND-N sequence (never collide with a
+  real finding's ID); writes to `remediation/live-data/` (gitignored), not
+  auto-merged into the live queue - consistent with how live Tenable/Armis connector
+  output is also not auto-merged.
+- 69 new tests (`test_exceptions_store.py`, `test_asset_inventory.py`,
+  `test_generic_connector.py`, `test_scan_type_mapping.py`, plus new
+  `ApiExceptions`/`ApiAssets`/`ApiIngestGeneric` classes in `test_dashboard.py`) —
+  full suite now 288/288 across 15 files.
+
+### Fixed
+- A real bug in `remediation/exceptions/store.py` and
+  `remediation/inventory/asset_inventory.py`: their functions used bound default
+  parameters (e.g. `def load_exceptions(path=DEFAULT_STORE_PATH):`), so
+  `unittest.mock.patch.object(module, "DEFAULT_STORE_PATH", tmp_path)` in tests
+  silently failed to redirect I/O to a temp file — Python binds a default parameter
+  value once at function-definition time, so patching the module attribute afterward
+  doesn't affect it (the same class of bug as `priority_engine.load_rules`'s
+  documented gotcha). Tests were actually reading/writing the real shipped
+  `exceptions.json`/`asset_ownership.json` files until this was caught (by the real
+  seed files unexpectedly changing) and fixed by resolving the default path inside
+  the function body instead.
+
 - **AI Assist** (`/ai-assist`, `/api/ai-assist`, `dashboard/ai_assist.py`) — ask Claude to
   explain a finding, draft remediation steps, or write an executive summary, grounded in
   that finding's real data. Same dry-run-preview-by-default / explicit-confirm-to-spend

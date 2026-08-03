@@ -450,10 +450,16 @@ for network devices or IoT/OT. To add one:
 │   ├── schema/            normalized Finding schema documentation (now includes kev/epss)
 │   ├── connectors/        live Tenable/Armis/ServiceNow API clients - built, unit-tested
 │   │                      against mocked HTTP, unverified against a real tenant (see README)
+│   │                      + generic_connector.py, a vendor-agnostic webhook adapter for
+│   │                      any tool that can send a custom outbound webhook
 │   ├── enrichment/        live CISA KEV + EPSS client (verified against real public
-│   │                      endpoints) + MITRE ATT&CK keyword-tagging heuristic
+│   │                      endpoints) + MITRE ATT&CK keyword-tagging heuristic +
+│   │                      scan_type_mapping.py (SAST/DAST/SCA/Infra-VM/Cert-Mgmt taxonomy)
 │   ├── config/            configurable priority/SLA rules engine (YAML + Python),
 │   │                      editable live from the dashboard's /priority-rules page
+│   ├── exceptions/        vulnerability exception/waiver workflow (request, approve,
+│   │                      auto-expire, revoke) - see /exceptions
+│   ├── inventory/         asset inventory aggregation + editable ownership - see /assets
 │   └── output/            normalized findings + generated playbooks (generated, not hand-written)
 ├── vulnerable-demo-app/   intentionally vulnerable Flask app — /vulnhunt's scan target
 ├── vulnerable-demo-multilang/  intentionally vulnerable Java/JS/Go/PHP/Perl fixtures -
@@ -463,9 +469,10 @@ for network devices or IoT/OT. To add one:
 ├── tests/
 │   ├── test_pipeline_artifacts.py   35 automated tests, stdlib only
 │   ├── test_cli.py                  13 tests for the headless CLI (no real API calls)
-│   ├── test_dashboard.py            42 tests for the dashboard (FastAPI TestClient - JSON
+│   ├── test_dashboard.py            56 tests for the dashboard (FastAPI TestClient - JSON
 │   │                                API contract + SPA shell routes, no real server;
-│   │                                incl. AI-assist and reports endpoint safety tests)
+│   │                                incl. AI-assist, reports, exceptions, assets, and
+│   │                                generic-ingestion endpoint safety tests)
 │   ├── test_connectors.py           18 tests for the Tenable/Armis connectors (mocked HTTP)
 │   ├── test_enrichment.py           13 tests for KEV/EPSS enrichment (mostly mocked, 1 live)
 │   ├── test_priority_engine.py      14 tests for the configurable priority/SLA engine
@@ -478,7 +485,13 @@ for network devices or IoT/OT. To add one:
 │   │                                construction (no subprocess/network)
 │   ├── test_reports.py              14 tests for dashboard/reports.py's report generator
 │   │                                (stub-data + real-artifact integration tests)
-│   └── test_results.txt             a captured passing run (219/219)
+│   ├── test_exceptions_store.py     15 tests for the exception/waiver workflow lifecycle
+│   ├── test_asset_inventory.py      12 tests for asset aggregation + ownership storage
+│   ├── test_generic_connector.py    17 tests for the generic ingestion adapter's
+│   │                                validation + normalization logic
+│   ├── test_scan_type_mapping.py    11 tests for the SAST/DAST/SCA/Infra-VM/Cert-Mgmt
+│   │                                finding-category taxonomy
+│   └── test_results.txt             a captured passing run (288/288)
 ├── deliverables/
 │   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
 │   └── VulnHunter_Project_Report.docx     full project & test report
@@ -497,7 +510,7 @@ for network devices or IoT/OT. To add one:
 
 ## 8. Test Evidence & Results
 
-219 tests, 0 failures, across eleven suites (exact counts below are from each file's own
+288 tests, 0 failures, across fifteen suites (exact counts below are from each file's own
 `python -m unittest` run, not hand-counted — this project got bitten once already by a
 hand-counting error, see the "Fixed" entries in CHANGELOG.md). None of it calls the real
 Claude API (see each file's docstring for why that's a hard rule, not an oversight) — the
@@ -509,7 +522,7 @@ failing if network is unavailable).
 |---|---|---|
 | `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 35 |
 | `tests/test_cli.py` | Headless CLI command construction, binary discovery, one real dry-run subprocess call | 13 |
-| `tests/test_dashboard.py` | Dashboard JSON API contract + SPA shell routes (FastAPI TestClient, incl. live queue, priority-rules editor, ServiceNow preview, AI-assist, reports) | 42 |
+| `tests/test_dashboard.py` | Dashboard JSON API contract + SPA shell routes (FastAPI TestClient, incl. live queue, priority-rules editor, ServiceNow preview, AI-assist, reports, exceptions, assets, generic ingestion) | 56 |
 | `tests/test_connectors.py` | Live Tenable/Armis connector auth/pagination/mapping logic against mocked HTTP | 18 |
 | `tests/test_enrichment.py` | CISA KEV + EPSS enrichment logic, mostly mocked plus one real live-API smoke test | 13 |
 | `tests/test_priority_engine.py` | Configurable priority scoring + SLA computation against the real rules file | 14 |
@@ -518,6 +531,10 @@ failing if network is unavailable).
 | `tests/test_multilang_scanner_patterns.py` | Static consistency between vuln-scanner.md's per-language guidance and the Java/JS/Go/PHP/Perl fixture files (no runtime execution - see §11.1) | 31 |
 | `tests/test_ai_assist.py` | Pure prompt-construction for the AI-assist feature, no subprocess/network | 12 |
 | `tests/test_reports.py` | Report-generation logic (real KPI data, stub + real-artifact tests), HTML rendering incl. XSS-escaping | 14 |
+| `tests/test_exceptions_store.py` | Exception/waiver lifecycle - create, auto-expire, revoke, active-by-finding lookup | 15 |
+| `tests/test_asset_inventory.py` | Asset aggregation (finding count, highest severity, KEV exposure) + ownership storage | 12 |
+| `tests/test_generic_connector.py` | Generic ingestion adapter's payload validation + normalization into the Finding schema | 17 |
+| `tests/test_scan_type_mapping.py` | SAST/DAST/SCA/Infra-VM/Cert-Mgmt classification from asset type | 11 |
 
 `test_pipeline_artifacts.py` breakdown:
 
@@ -671,6 +688,18 @@ What a real buyer's security architect will actually ask for. Some of this is no
   `INTEGRATIONS.md`, `REMEDIATION_WORKFLOWS.md`, `COMPLIANCE_MAPPING.md`, `SUPPORT.md`) —
   `COMPLIANCE_MAPPING.md` is explicitly an informational NIST CSF/SOC2 control-mapping
   reference, not a certification claim.
+- **Vulnerability exception/waiver management** (`remediation/exceptions/store.py`,
+  `/exceptions`) — request/approve/auto-expire/revoke, surfaced on the Remediation
+  Queue. Doesn't yet feed back into SLA-breach computation - see the module docstring.
+- **Asset inventory + ownership** (`remediation/inventory/asset_inventory.py`,
+  `/assets`) — aggregates real findings per asset with an editable owner/team field.
+- **Finding-category taxonomy** (`remediation/enrichment/scan_type_mapping.py`) —
+  Infra-VM / SCA / Cert-Mgmt derived from asset type, surfaced as a Queue filter; DAST
+  documented as a supported-but-unpopulated category rather than faked.
+- **Generic XDR/EDR/SIEM ingestion adapter** (`remediation/connectors/
+  generic_connector.py`, `/api/ingest/generic`) — a vendor-agnostic inbound webhook
+  receiver instead of bespoke per-vendor connectors for products with no real API
+  access to verify against; not auto-merged into the live queue, same as Tenable/Armis.
 
 **Not started, needs a business/architecture decision first:**
 - **Auth, RBAC, SSO, multi-tenancy** — the current dashboard has zero authentication and
@@ -820,6 +849,21 @@ to hit too:
   instead of the more commonly available JS `docx`/`pptx` tooling, and visual QA relied
   on the Deloitte template's own structural validator script rather than rendered
   page images.
+- **A bound-default-parameter gotcha bit this project twice.** `def load_exceptions(path=
+  DEFAULT_STORE_PATH):` binds `DEFAULT_STORE_PATH`'s value once, at function-definition
+  time — `unittest.mock.patch.object(module, "DEFAULT_STORE_PATH", tmp_path)` in a test
+  patches the module attribute, but every function that already captured the old value
+  as its own default keeps using it. This silently redirected `remediation/exceptions/
+  store.py` and `remediation/inventory/asset_inventory.py` tests into reading/writing the
+  *real* shipped `exceptions.json`/`asset_ownership.json` files — caught only because
+  those real files unexpectedly changed after a test run. Fix: resolve the default
+  **inside the function body** instead (`def load_exceptions(path=None): path = path or
+  DEFAULT_STORE_PATH`), which re-reads the module attribute at call time and so respects
+  patching. `remediation/config/priority_engine.py`'s `load_rules()` has the same
+  underlying gotcha (documented earlier in this file) but never bit a test in practice,
+  because nothing calls it via a patched default the way these two modules' callers did -
+  worth checking any *new* module with a similar "configurable file path" pattern against
+  this specifically, rather than assuming it's fine because the last one was.
 
 ---
 

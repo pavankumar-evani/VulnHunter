@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-219%2F219%20passing-brightgreen.svg)](TEST_CASES.md)
+[![Tests](https://img.shields.io/badge/tests-288%2F288%20passing-brightgreen.svg)](TEST_CASES.md)
 
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
@@ -19,7 +19,7 @@ Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
 statement, the idea and why it's built this way, product/solution details for both
 pipelines, step-by-step instructions to actually run everything, test evidence, and a
 troubleshooting log of what broke and how it was fixed. For the detailed test case log
-(219 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
+(288 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
 For task-oriented usage docs, FAQs, AI commands, integrations, and remediation
 workflows, see the [docs/](docs/README.md) folder.
 
@@ -190,6 +190,11 @@ with a sidebar-navigation dashboard:
 - **AI Assist** (`/ai-assist`) — ask Claude to explain a finding, draft remediation
   steps, or write an executive summary; same dry-run-preview-first safety pattern.
 - **Reports** (`/reports`) — generate a real, downloadable KPI/SLA/coverage snapshot.
+- **Exceptions** (`/exceptions`) — a documented, time-boxed risk-acceptance workflow:
+  request, approve, auto-expire, or revoke a waiver for a finding that can't be
+  remediated on schedule.
+- **Asset Inventory** (`/assets`) — every asset with findings against it, aggregated,
+  with an editable owner/team.
 - **Filtering** on Code Scan/Queue/Remediation Plan (severity, category, asset type,
   risk tier, KEV-only), and an illustrative (demo, not real) MSSP tenant switcher.
 
@@ -265,8 +270,14 @@ reason no fixer exists yet for that asset class.
 │   ├── schema/                 # normalized Finding schema doc
 │   ├── connectors/             # live Tenable/Armis/ServiceNow API clients (unit-tested,
 │   │                           #   not yet verified against a real tenant - see its README)
+│   │                           #   + generic_connector.py, the vendor-agnostic
+│   │                           #   "bring your own XDR/EDR/SIEM" webhook adapter
 │   ├── enrichment/              # live CISA KEV + EPSS client (verified against the
 │   │                           #   real public endpoints - see its module docstring)
+│   │                           #   + scan_type_mapping.py (SAST/DAST/SCA/Infra-VM/Cert-Mgmt)
+│   ├── exceptions/             # vulnerability exception/waiver workflow (request,
+│   │                           #   approve, auto-expire, revoke)
+│   ├── inventory/               # asset inventory aggregation + editable ownership
 │   └── output/                 # normalized findings + generated playbooks land here
 ├── vulnerable-demo-app/        # intentionally vulnerable Flask app for the /vulnhunt demo
 │   ├── app.py
@@ -278,10 +289,11 @@ reason no fixer exists yet for that asset class.
 ├── docs/                        # USER_GUIDE, FAQ, AI_COMMANDS, INTEGRATIONS,
 │                                #   REMEDIATION_WORKFLOWS, COMPLIANCE_MAPPING (non-
 │                                #   certifying), SUPPORT - see docs/README.md
-├── tests/                       # 219 tests (pipeline artifacts, CLI, dashboard, connectors,
+├── tests/                       # 288 tests (pipeline artifacts, CLI, dashboard, connectors,
 │                                #   enrichment, priority engine, ATT&CK, ServiceNow,
-│                                #   multi-language scanner patterns, AI-assist, reports),
-│                                #   see TEST_CASES.md
+│                                #   multi-language scanner patterns, AI-assist, reports,
+│                                #   exceptions, asset inventory, generic ingestion,
+│                                #   scan-type taxonomy), see TEST_CASES.md
 ├── .github/                     # CI workflow, issue/PR templates, CODEOWNERS
 ├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md

@@ -11,6 +11,18 @@ test_same_inputs_produce_the_same_prompt (test_ai_assist.PromptConstruction.test
 Pure function: no hidden state, no timestamps baked into the prompt itself. ... ok
 test_summarize_action_asks_for_executive_summary (test_ai_assist.PromptConstruction.test_summarize_action_asks_for_executive_summary) ... ok
 test_unknown_action_raises_value_error (test_ai_assist.PromptConstruction.test_unknown_action_raises_value_error) ... ok
+test_findings_without_an_asset_name_are_skipped_not_crashed_on (test_asset_inventory.BuildAssetInventory.test_findings_without_an_asset_name_are_skipped_not_crashed_on) ... ok
+test_groups_findings_by_asset_name (test_asset_inventory.BuildAssetInventory.test_groups_findings_by_asset_name) ... ok
+test_highest_severity_picks_the_max_across_an_assets_findings (test_asset_inventory.BuildAssetInventory.test_highest_severity_picks_the_max_across_an_assets_findings) ... ok
+test_kev_count_only_counts_actually_listed_findings (test_asset_inventory.BuildAssetInventory.test_kev_count_only_counts_actually_listed_findings) ... ok
+test_owner_and_team_are_attached_from_ownership_map (test_asset_inventory.BuildAssetInventory.test_owner_and_team_are_attached_from_ownership_map) ... ok
+test_sorted_by_finding_count_descending_then_name (test_asset_inventory.BuildAssetInventory.test_sorted_by_finding_count_descending_then_name) ... ok
+test_unowned_asset_has_none_owner_and_team (test_asset_inventory.BuildAssetInventory.test_unowned_asset_has_none_owner_and_team) ... ok
+test_load_from_missing_file_returns_empty_dict (test_asset_inventory.OwnershipStore.test_load_from_missing_file_returns_empty_dict) ... ok
+test_set_owner_overwrites_a_previous_entry_for_the_same_asset (test_asset_inventory.OwnershipStore.test_set_owner_overwrites_a_previous_entry_for_the_same_asset) ... ok
+test_set_owner_persists_and_is_readable_back (test_asset_inventory.OwnershipStore.test_set_owner_persists_and_is_readable_back) ... ok
+test_set_owner_requires_an_asset_name (test_asset_inventory.OwnershipStore.test_set_owner_requires_an_asset_name) ... ok
+test_shipped_ownership_file_is_well_formed (test_asset_inventory.RealSeedFileIsValid.test_shipped_ownership_file_is_well_formed) ... ok
 test_all_matches_can_return_more_than_one_technique (test_attack_mapping.KeywordMatching.test_all_matches_can_return_more_than_one_technique) ... ok
 test_certificate_expiry_is_deliberately_unmapped (test_attack_mapping.KeywordMatching.test_certificate_expiry_is_deliberately_unmapped)
 A cert nearing expiry isn't an attack technique - it's a lifecycle finding. ... ok
@@ -66,6 +78,21 @@ The critical safety test, same pattern as /api/run and /api/servicenow/send: ...
 test_unknown_action_returns_400 (test_dashboard.ApiAiAssist.test_unknown_action_returns_400) ... ok
 test_unknown_finding_returns_404 (test_dashboard.ApiAiAssist.test_unknown_finding_returns_404) ... ok
 test_works_for_a_code_scan_finding_too (test_dashboard.ApiAiAssist.test_works_for_a_code_scan_finding_too) ... ok
+test_list_assets_aggregates_the_real_findings (test_dashboard.ApiAssets.test_list_assets_aggregates_the_real_findings) ... ok
+test_set_owner_then_list_shows_the_new_owner (test_dashboard.ApiAssets.test_set_owner_then_list_shows_the_new_owner) ... ok
+test_create_then_list_shows_the_new_exception_with_computed_status (test_dashboard.ApiExceptions.test_create_then_list_shows_the_new_exception_with_computed_status) ... ok
+test_create_with_blank_reason_is_rejected (test_dashboard.ApiExceptions.test_create_with_blank_reason_is_rejected) ... ok
+test_create_with_past_expiry_is_rejected (test_dashboard.ApiExceptions.test_create_with_past_expiry_is_rejected) ... ok
+test_list_on_empty_store_returns_empty_list (test_dashboard.ApiExceptions.test_list_on_empty_store_returns_empty_list) ... ok
+test_queue_reflects_an_active_exception_on_its_finding (test_dashboard.ApiExceptions.test_queue_reflects_an_active_exception_on_its_finding) ... ok
+test_revoke_an_existing_exception (test_dashboard.ApiExceptions.test_revoke_an_existing_exception) ... ok
+test_revoke_unknown_id_returns_404 (test_dashboard.ApiExceptions.test_revoke_unknown_id_returns_404) ... ok
+test_accepted_findings_are_written_to_live_data (test_dashboard.ApiIngestGeneric.test_accepted_findings_are_written_to_live_data) ... ok
+test_ingested_id_never_collides_with_a_real_finding_id (test_dashboard.ApiIngestGeneric.test_ingested_id_never_collides_with_a_real_finding_id)
+The real pipeline has FIND-1..FIND-14 - a naively-implemented adapter that ... ok
+test_invalid_payload_is_rejected_with_specific_errors (test_dashboard.ApiIngestGeneric.test_invalid_payload_is_rejected_with_specific_errors) ... ok
+test_mixed_batch_accepts_valid_and_rejects_invalid_independently (test_dashboard.ApiIngestGeneric.test_mixed_batch_accepts_valid_and_rejects_invalid_independently) ... ok
+test_valid_payload_is_accepted_and_normalized (test_dashboard.ApiIngestGeneric.test_valid_payload_is_accepted_and_normalized) ... ok
 test_queue_lists_all_findings_sorted_by_priority (test_dashboard.ApiLiveQueue.test_queue_lists_all_findings_sorted_by_priority) ... ok
 test_queue_shows_sla_and_attack_tags (test_dashboard.ApiLiveQueue.test_queue_shows_sla_and_attack_tags) ... ok
 test_overview_returns_expected_shape_and_counts (test_dashboard.ApiOverview.test_overview_returns_expected_shape_and_counts) ... ok
@@ -119,6 +146,40 @@ test_fetch_epss_scores_maps_documented_shape (test_enrichment.EpssFetching.test_
 test_fetch_cisa_kev_maps_documented_shape (test_enrichment.KevFetching.test_fetch_cisa_kev_maps_documented_shape) ... ok
 test_fetch_cisa_kev_skips_entries_with_no_cve_id (test_enrichment.KevFetching.test_fetch_cisa_kev_skips_entries_with_no_cve_id) ... ok
 test_printnightmare_is_kev_listed_and_high_epss_live (test_enrichment.LiveSmokeTest.test_printnightmare_is_kev_listed_and_high_epss_live) ... ok
+test_active_exceptions_by_finding_excludes_expired_and_revoked (test_exceptions_store.ExceptionLifecycle.test_active_exceptions_by_finding_excludes_expired_and_revoked) ... ok
+test_blank_reason_is_rejected (test_exceptions_store.ExceptionLifecycle.test_blank_reason_is_rejected) ... ok
+test_compute_status_active_before_expiry (test_exceptions_store.ExceptionLifecycle.test_compute_status_active_before_expiry) ... ok
+test_compute_status_expired_after_expiry_without_any_action (test_exceptions_store.ExceptionLifecycle.test_compute_status_expired_after_expiry_without_any_action)
+An exception nobody remembered to revoke still stops counting as active once ... ok
+test_create_exception_persists_and_returns_a_full_record (test_exceptions_store.ExceptionLifecycle.test_create_exception_persists_and_returns_a_full_record) ... ok
+test_expiry_date_in_the_past_is_rejected (test_exceptions_store.ExceptionLifecycle.test_expiry_date_in_the_past_is_rejected) ... ok
+test_ids_increment_across_multiple_exceptions (test_exceptions_store.ExceptionLifecycle.test_ids_increment_across_multiple_exceptions) ... ok
+test_list_with_status_attaches_computed_status_without_mutating_file (test_exceptions_store.ExceptionLifecycle.test_list_with_status_attaches_computed_status_without_mutating_file) ... ok
+test_load_from_missing_file_returns_empty_list (test_exceptions_store.ExceptionLifecycle.test_load_from_missing_file_returns_empty_list) ... ok
+test_malformed_expiry_date_is_rejected (test_exceptions_store.ExceptionLifecycle.test_malformed_expiry_date_is_rejected) ... ok
+test_missing_finding_id_is_rejected (test_exceptions_store.ExceptionLifecycle.test_missing_finding_id_is_rejected) ... ok
+test_missing_requester_or_approver_is_rejected (test_exceptions_store.ExceptionLifecycle.test_missing_requester_or_approver_is_rejected) ... ok
+test_revoke_marks_revoked_and_stays_revoked_even_before_expiry (test_exceptions_store.ExceptionLifecycle.test_revoke_marks_revoked_and_stays_revoked_even_before_expiry) ... ok
+test_revoke_unknown_id_raises_key_error (test_exceptions_store.ExceptionLifecycle.test_revoke_unknown_id_raises_key_error) ... ok
+test_shipped_exceptions_file_is_well_formed (test_exceptions_store.RealSeedFileIsValid.test_shipped_exceptions_file_is_well_formed) ... ok
+test_assigns_next_sequential_id_after_existing_findings (test_generic_connector.NormalizeGenericFinding.test_assigns_next_sequential_id_after_existing_findings) ... ok
+test_explicit_first_seen_is_respected (test_generic_connector.NormalizeGenericFinding.test_explicit_first_seen_is_respected) ... ok
+test_first_seen_defaults_to_as_of_when_not_provided (test_generic_connector.NormalizeGenericFinding.test_first_seen_defaults_to_as_of_when_not_provided) ... ok
+test_ignores_non_find_prefixed_ids_when_computing_the_next_id (test_generic_connector.NormalizeGenericFinding.test_ignores_non_find_prefixed_ids_when_computing_the_next_id) ... ok
+test_kev_and_epss_are_always_null_for_generic_findings (test_generic_connector.NormalizeGenericFinding.test_kev_and_epss_are_always_null_for_generic_findings)
+Threat-intel enrichment is a separate pipeline stage (threat-intel-enricher) ... ok
+test_maps_required_fields_into_the_normalized_schema (test_generic_connector.NormalizeGenericFinding.test_maps_required_fields_into_the_normalized_schema) ... ok
+test_source_defaults_to_generic (test_generic_connector.NormalizeGenericFinding.test_source_defaults_to_generic) ... ok
+test_source_name_override_is_respected (test_generic_connector.NormalizeGenericFinding.test_source_name_override_is_respected) ... ok
+test_starts_at_find_1_with_no_existing_findings (test_generic_connector.NormalizeGenericFinding.test_starts_at_find_1_with_no_existing_findings) ... ok
+test_invalid_asset_type_is_rejected (test_generic_connector.ValidateGenericPayload.test_invalid_asset_type_is_rejected) ... ok
+test_invalid_severity_is_rejected (test_generic_connector.ValidateGenericPayload.test_invalid_severity_is_rejected) ... ok
+test_malformed_cve_is_rejected (test_generic_connector.ValidateGenericPayload.test_malformed_cve_is_rejected) ... ok
+test_missing_required_fields_are_each_reported (test_generic_connector.ValidateGenericPayload.test_missing_required_fields_are_each_reported) ... ok
+test_non_dict_payload_is_rejected (test_generic_connector.ValidateGenericPayload.test_non_dict_payload_is_rejected) ... ok
+test_null_cve_is_allowed (test_generic_connector.ValidateGenericPayload.test_null_cve_is_allowed) ... ok
+test_valid_minimal_payload_has_no_errors (test_generic_connector.ValidateGenericPayload.test_valid_minimal_payload_has_no_errors) ... ok
+test_well_formed_cve_passes (test_generic_connector.ValidateGenericPayload.test_well_formed_cve_passes) ... ok
 test_all_five_language_fixtures_present (test_multilang_scanner_patterns.FixtureDirectoryIsSeparateFromDemoApp.test_all_five_language_fixtures_present) ... ok
 test_demo_app_py_untouched_planted_vulns_header_intact (test_multilang_scanner_patterns.FixtureDirectoryIsSeparateFromDemoApp.test_demo_app_py_untouched_planted_vulns_header_intact) ... ok
 test_multilang_dir_exists_alongside_not_inside_demo_app (test_multilang_scanner_patterns.FixtureDirectoryIsSeparateFromDemoApp.test_multilang_dir_exists_alongside_not_inside_demo_app) ... ok
@@ -222,6 +283,18 @@ test_includes_kpi_numbers (test_reports.RenderReportHtml.test_includes_kpi_numbe
 test_includes_the_no_persistence_caveat (test_reports.RenderReportHtml.test_includes_the_no_persistence_caveat) ... ok
 test_includes_the_period_in_the_title (test_reports.RenderReportHtml.test_includes_the_period_in_the_title) ... ok
 test_renders_valid_looking_html_document (test_reports.RenderReportHtml.test_renders_valid_looking_html_document) ... ok
+test_application_asset_is_sca (test_scan_type_mapping.ClassifyFinding.test_application_asset_is_sca) ... ok
+test_certificate_asset_is_cert_mgmt (test_scan_type_mapping.ClassifyFinding.test_certificate_asset_is_cert_mgmt) ... ok
+test_missing_asset_defaults_to_infra_vm_rather_than_crashing (test_scan_type_mapping.ClassifyFinding.test_missing_asset_defaults_to_infra_vm_rather_than_crashing) ... ok
+test_network_and_iot_assets_are_infra_vm (test_scan_type_mapping.ClassifyFinding.test_network_and_iot_assets_are_infra_vm) ... ok
+test_unix_server_asset_is_infra_vm (test_scan_type_mapping.ClassifyFinding.test_unix_server_asset_is_infra_vm) ... ok
+test_unknown_asset_type_defaults_to_infra_vm (test_scan_type_mapping.ClassifyFinding.test_unknown_asset_type_defaults_to_infra_vm) ... ok
+test_windows_server_asset_is_infra_vm (test_scan_type_mapping.ClassifyFinding.test_windows_server_asset_is_infra_vm) ... ok
+test_adds_scan_type_and_label_without_mutating_input (test_scan_type_mapping.TagScanTypes.test_adds_scan_type_and_label_without_mutating_input) ... ok
+test_tags_a_mixed_batch_correctly (test_scan_type_mapping.TagScanTypes.test_tags_a_mixed_batch_correctly) ... ok
+test_dast_is_a_documented_scan_type_with_a_label (test_scan_type_mapping.Taxonomy.test_dast_is_a_documented_scan_type_with_a_label)
+DAST has no sample finding in this repo's demo data (see the module ... ok
+test_every_scan_type_has_a_label (test_scan_type_mapping.Taxonomy.test_every_scan_type_has_a_label) ... ok
 test_base_url_built_from_instance_name (test_servicenow_connector.AuthAndConstruction.test_base_url_built_from_instance_name) ... ok
 test_can_target_a_different_table (test_servicenow_connector.AuthAndConstruction.test_can_target_a_different_table) ... ok
 test_default_table_is_incident (test_servicenow_connector.AuthAndConstruction.test_default_table_is_incident) ... ok
@@ -242,7 +315,7 @@ test_finds_existing_incident_by_correlation_id (test_servicenow_connector.FindEx
 test_returns_none_when_nothing_found (test_servicenow_connector.FindExistingIncident.test_returns_none_when_nothing_found) ... ok
 
 ----------------------------------------------------------------------
-Ran 219 tests in 7.376s
+Ran 288 tests in 7.836s
 
 OK
 Would run: C:\Users\pavane\AppData\Roaming\Claude\claude-code\2.1.219\claude.exe -p /vulnhunt vulnerable-demo-app --output-format json --permission-mode acceptEdits --allowedTools Read Grep Glob Bash Edit Write --max-budget-usd 2.00

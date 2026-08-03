@@ -16,6 +16,12 @@ const NAV = [
     { path: "/remediate", label: "Remediation Plan", icon: "plan",
       tip: "The static plan snapshot from the last /remediate run, linked to generated playbooks." },
   ] },
+  { group: "Risk Management", items: [
+    { path: "/exceptions", label: "Exceptions", icon: "exception",
+      tip: "Request, approve, and track time-boxed risk-acceptance waivers per finding." },
+    { path: "/assets", label: "Asset Inventory", icon: "assets",
+      tip: "Every asset with findings against it, aggregated, with an editable owner/team." },
+  ] },
   { group: "Intelligence", items: [
     { path: "/ai-assist", label: "AI Assist", icon: "ai",
       tip: "Ask Claude to explain a finding or draft remediation guidance - preview free, confirm to spend." },

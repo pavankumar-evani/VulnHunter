@@ -34,6 +34,16 @@ const FAQS = [
     "It is NOT real per-tenant authentication or data isolation; that needs a " +
     "database + auth architecture decision that hasn't been made yet (see " +
     "KNOWLEDGE_TRANSFER.md §11.1)."],
+  ["Can I formally accept risk on a finding instead of remediating it?",
+    "Yes - the Exceptions page is a real, documented risk-acceptance workflow: " +
+    "request an exception with a reason/compensating control, a requester, and an " +
+    "approver, with an expiry date it auto-expires against unless revoked first. One " +
+    "honest scope limit: an active exception doesn't yet pause SLA-breach counting in " +
+    "the priority engine."],
+  ["Does it track who owns each asset?",
+    "Yes - the Asset Inventory page aggregates every asset with findings against it " +
+    "and lets you attach an owner/team, stored in a real, editable local file - not a " +
+    "sync from a real CMDB/asset-management system."],
   ["Where does my data go?",
     "Nowhere - everything is local files in this repo (git history, JSON, YAML). " +
     "There's no cloud service and no telemetry."],

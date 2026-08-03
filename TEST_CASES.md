@@ -1,19 +1,25 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all eleven test files: `tests/test_pipeline_artifacts.py` (both
+Formal test case log for all fifteen test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
 `tests/test_dashboard.py` (the web dashboard's FastAPI JSON API and SPA shell routes,
 including the live queue, priority-rules editor, ServiceNow preview, AI-assist endpoint,
-and on-demand reports), `tests/test_ai_assist.py` (pure prompt-construction logic for the
-dashboard's AI-assist feature), `tests/test_reports.py` (the dashboard's on-demand
-report-generation logic, both stub-data and real-artifact),
+on-demand reports, the exceptions/risk-acceptance workflow, the asset inventory, and
+generic-connector ingestion), `tests/test_ai_assist.py` (pure prompt-construction logic
+for the dashboard's AI-assist feature), `tests/test_reports.py` (the dashboard's
+on-demand report-generation logic, both stub-data and real-artifact),
 `tests/test_multilang_scanner_patterns.py` (static consistency checks between the
 scanner's per-language detection guidance and the Java/JS/Go/PHP/Perl fixture files),
 `tests/test_connectors.py` (live Tenable/Armis connectors), `tests/test_enrichment.py`
 (live CISA KEV + EPSS enrichment), `tests/test_priority_engine.py` (the configurable
-priority/SLA engine), `tests/test_attack_mapping.py` (MITRE ATT&CK keyword tagging), and
-`tests/test_servicenow_connector.py` (the ServiceNow adapter). Every row below maps 1:1
-to one `test_*` method in one of those files — there is no test case here without a
+priority/SLA engine), `tests/test_attack_mapping.py` (MITRE ATT&CK keyword tagging),
+`tests/test_servicenow_connector.py` (the ServiceNow adapter),
+`tests/test_exceptions_store.py` (the vulnerability exception / risk-acceptance
+workflow), `tests/test_asset_inventory.py` (the per-asset inventory view and editable
+ownership store), `tests/test_generic_connector.py` (the vendor-agnostic "bring your own
+XDR/EDR/SIEM" webhook ingestion adapter), and `tests/test_scan_type_mapping.py` (the
+finding-category taxonomy derived from asset type). Every row below maps 1:1 to one
+`test_*` method in one of those files — there is no test case here without a
 corresponding, runnable assertion, and no assertion in any suite that isn't documented
 here.
 
@@ -26,7 +32,7 @@ pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 219 / 219 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 288 / 288 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -69,10 +75,23 @@ evidence rather than a mocked demo.
 | Dashboard SPA shell routes | `HtmlShellRoutesServeTheSpaShell` | TC-DASH-26 – 31 | 6/6 PASS |
 | Dashboard `/api/ai-assist` | `ApiAiAssist` | TC-DASH-32 – 38 | 7/7 PASS |
 | Dashboard `/api/reports/*` | `ApiReports` | TC-DASH-39 – 42 | 4/4 PASS |
+| Dashboard `/api/exceptions` (risk-acceptance workflow) | `ApiExceptions` | TC-DASH-43 – 49 | 7/7 PASS |
+| Dashboard `/api/assets` (asset inventory + ownership) | `ApiAssets` | TC-DASH-50 – 51 | 2/2 PASS |
+| Dashboard `/api/ingest/generic` (generic webhook ingestion) | `ApiIngestGeneric` | TC-DASH-52 – 56 | 5/5 PASS |
 | Dashboard AI-assist prompt construction | `PromptConstruction` | TC-AI-01 – 12 | 12/12 PASS |
 | Dashboard report data generation | `GenerateReportData` | TC-REPORTGEN-01 – 07 | 7/7 PASS |
 | Dashboard report HTML rendering | `RenderReportHtml` | TC-REPORTGEN-08 – 12 | 5/5 PASS |
 | Dashboard report generation against real artifacts | `RealArtifactIntegration` | TC-REPORTGEN-13 – 14 | 2/2 PASS |
+| Vulnerability exception lifecycle (request/approve/expire/revoke) | `ExceptionLifecycle` | TC-EXC-01 – 14 | 14/14 PASS |
+| Vulnerability exception real seed-file validation | `RealSeedFileIsValid` | TC-EXC-15 | 1/1 PASS |
+| Asset inventory aggregation | `BuildAssetInventory` | TC-INV-01 – 07 | 7/7 PASS |
+| Asset ownership store | `OwnershipStore` | TC-INV-08 – 11 | 4/4 PASS |
+| Asset ownership real seed-file validation | `RealSeedFileIsValid` | TC-INV-12 | 1/1 PASS |
+| Generic connector payload validation | `ValidateGenericPayload` | TC-GENC-01 – 08 | 8/8 PASS |
+| Generic connector finding normalization | `NormalizeGenericFinding` | TC-GENC-09 – 17 | 9/9 PASS |
+| Scan-type classification | `ClassifyFinding` | TC-CAT-01 – 07 | 7/7 PASS |
+| Scan-type batch tagging | `TagScanTypes` | TC-CAT-08 – 09 | 2/2 PASS |
+| Scan-type taxonomy completeness | `Taxonomy` | TC-CAT-10 – 11 | 2/2 PASS |
 | Multi-language fixture directory sanity | `FixtureDirectoryIsSeparateFromDemoApp` | TC-LANG-01 – 03 | 3/3 PASS |
 | Multi-language Java fixture | `JavaFixture` | TC-LANG-04 – 07 | 4/4 PASS |
 | Multi-language JavaScript fixture | `JavaScriptFixture` | TC-LANG-08 – 11 | 4/4 PASS |
@@ -93,7 +112,7 @@ evidence rather than a mocked demo.
 | ServiceNow construction + auth | `AuthAndConstruction`, `BuildIncidentBodyPureFunction` | TC-SNOW-01 – 06 | 6/6 PASS |
 | ServiceNow incident creation | `FindExistingIncident`, `CreateIncident` | TC-SNOW-07 – 14 | 8/8 PASS |
 | ServiceNow batch handling | `CreateIncidentsForFindingsBatch` | TC-SNOW-15 – 16 | 2/2 PASS |
-| **Total** | | **219** | **219/219 PASS** |
+| **Total** | | **288** | **288/288 PASS** |
 
 ---
 
@@ -240,7 +259,14 @@ JSON endpoint returns the correct shape and status code, the single-page fronten
 route while `/api/*` and `/static/*` still 404 correctly, and the three routes that could
 have a real-world side effect or spend real API usage (`/api/run`,
 `/api/servicenow/send`, and `/api/ai-assist`) never trigger it in a test unless the
-underlying `subprocess.run`/binary-discovery call is explicitly mocked. As of this
+underlying `subprocess.run`/binary-discovery call is explicitly mocked. A fourth route
+with a real (but safe) side effect, `/api/ingest/generic`, is exercised directly rather
+than mocked, since writing its accepted findings to the real, gitignored
+`remediation/live-data/generic-ingested.json` is exactly the behavior under test; those
+test cases clean the file up afterward. This suite's coverage also grew to include the
+exceptions/risk-acceptance workflow (`/api/exceptions`) and the asset inventory
+(`/api/assets`), each backed by a small editable JSON store the same way
+`/api/priority-rules` already was. As of this
 suite's rewrite, the dashboard backend migrated from Flask + Jinja2
 server-rendered HTML to a FastAPI JSON API with a vanilla-JS single-page frontend — these
 tests validate the JSON contract and the served SPA shell rather than grepping rendered
@@ -256,7 +282,17 @@ additionally patch `priority_engine.DEFAULT_RULES_PATH` to a temp copy so the su
 mutates the real, shipped rules file. TC-DASH-37 and TC-DASH-38 additionally patch
 `app.subprocess.run` and `app.cli.find_claude_binary` so the two `/api/ai-assist`
 test cases that exercise the `confirm=True` path never spawn a real process or spend
-real API usage/credits.
+real API usage/credits. TC-DASH-43–49 (`ApiExceptions`) additionally patch
+`exceptions_store.DEFAULT_STORE_PATH` to a temp file so the suite never mutates the
+real, shipped `remediation/exceptions/exceptions.json` — this patch only works because
+`store.py`'s functions resolve a `path=None` parameter to `DEFAULT_STORE_PATH` inside the
+function body rather than as a bound default (see Suite 12's Preconditions note for the
+bug this fixes). TC-DASH-50–51 (`ApiAssets`) likewise patch
+`asset_inventory.DEFAULT_OWNERSHIP_PATH` to a temp file for the same reason (see Suite
+13's note). TC-DASH-52–56 (`ApiIngestGeneric`) write to, and each clean up afterward, the
+real, gitignored `remediation/live-data/generic-ingested.json` path — the same path the
+live Tenable/Armis connectors write to — rather than a temp file, since exercising that
+real write is the point of TC-DASH-56.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -285,7 +321,7 @@ real API usage/credits.
 | TC-DASH-23 | ServiceNow preview lists every finding without needing credentials | `GET /api/servicenow/preview` | HTTP 200; preview `finding_id`s equal exactly `FIND-1`...`FIND-14` | Matches | PASS |
 | TC-DASH-24 | Sending without confirm never touches the network (critical safety test) | `POST /api/servicenow/send` with real-looking `instance`/`username`/`password`/`table` but `confirm` omitted | HTTP 200; `preview_only` true; `results` is `null` | Matches | PASS |
 | TC-DASH-25 | Sending with confirm but missing credentials is rejected | `POST /api/servicenow/send` with empty `instance`/`username`/`password`, `table="incident"`, `confirm=true` | HTTP 400; `detail` contains `"required"` | Matches | PASS |
-| TC-DASH-26 | Every known page route serves the identical SPA shell | `GET` each of `/`, `/vulnhunt`, `/remediate`, `/run`, `/queue`, `/priority-rules`, `/servicenow` | All return HTTP 200 with `text/html`, each containing `<script type="module" src="/static/js/app.js">`; all 7 responses are byte-identical | Matches | PASS |
+| TC-DASH-26 | Every known page route serves the identical SPA shell | `GET` each of `/`, `/vulnhunt`, `/remediate`, `/run`, `/queue`, `/priority-rules`, `/servicenow`, `/ai-assist`, `/reports`, `/support`, `/faq`, `/exceptions`, `/assets` (`SHELL_ROUTES`; the last two added alongside this round's new `/api/exceptions` and `/api/assets` pages) | All return HTTP 200 with `text/html`, each containing `<script type="module" src="/static/js/app.js">`; all 13 responses are byte-identical | Matches | PASS |
 | TC-DASH-27 | Playbook detail route also serves the SPA shell | `GET /playbooks/FIND-4-sudo-baron-samedit-patch.yml` | HTTP 200; body contains `id="app"` | Matches | PASS |
 | TC-DASH-28 | Unknown page route still serves the shell (client-side-routing fallback) | `GET /this-route-does-not-exist` | HTTP 200; body still contains `<script type="module" src="/static/js/app.js">` so `app.js`'s router can render a styled "not found" page | Matches | PASS |
 | TC-DASH-29 | Unknown `/api/*` route returns a real 404 (not the SPA shell) | `GET /api/this-does-not-exist` | HTTP 404 (negative test) | 404 | PASS |
@@ -302,6 +338,20 @@ real API usage/credits.
 | TC-DASH-40 | Invalid report period is rejected | `GET /api/reports/generate?period=fortnightly` | HTTP 400 (negative test) | 400 | PASS |
 | TC-DASH-41 | HTML report is served inline by default | `GET /api/reports/generate.html?period=daily` | HTTP 200; `content-type` contains `text/html`; no `content-disposition` header; body contains `"Daily Security Report"` | Matches | PASS |
 | TC-DASH-42 | HTML report download sets `Content-Disposition` | `GET /api/reports/generate.html?period=monthly&download=true` | `content-disposition` contains `"attachment"` and `"vulnhunter-monthly-report.html"` | Matches | PASS |
+| TC-DASH-43 | Listing exceptions against an empty store returns an empty list | `GET /api/exceptions` (against a temp exceptions store) | HTTP 200; `exceptions == []` | Matches | PASS |
+| TC-DASH-44 | Creating then listing shows the new exception with its computed status | `POST /api/exceptions` with `finding_id="FIND-7"`, a reason, `requested_by`/`approved_by`, `expires_on="2099-01-01"`; then `GET /api/exceptions` | Create returns HTTP 200 with `finding_id=="FIND-7"`; list has exactly 1 entry with `computed_status=="active"` | Matches | PASS |
+| TC-DASH-45 | Creating with a past expiry date is rejected | `POST /api/exceptions` with `expires_on="2020-01-01"` | HTTP 400 (negative test) | 400 | PASS |
+| TC-DASH-46 | Creating with a blank reason is rejected | `POST /api/exceptions` with `reason="   "` | HTTP 400 (negative test) | 400 | PASS |
+| TC-DASH-47 | Revoking an existing exception | Create an exception, then `POST /api/exceptions/{id}/revoke` | HTTP 200; `status=="revoked"` | Matches | PASS |
+| TC-DASH-48 | Revoking an unknown ID returns 404 | `POST /api/exceptions/EXC-999/revoke` | HTTP 404 (negative test) | 404 | PASS |
+| TC-DASH-49 | The live queue reflects an active exception on its finding | Create an exception (reason `"Isolated OT VLAN"`) against `FIND-7`; `GET /api/queue` | `FIND-7`'s `exception` is not `null` and its `reason` equals `"Isolated OT VLAN"`; `FIND-1` (no exception requested) shows `exception: null`, not an error | Matches | PASS |
+| TC-DASH-50 | `/api/assets` aggregates the real findings | `GET /api/assets` (against a temp ownership file) | HTTP 200; `WEB-PORTAL01` row has `finding_count==2` (its 2 real findings, FIND-13/FIND-14) and `owner` is `null` | Matches | PASS |
+| TC-DASH-51 | Setting an owner then listing shows the new owner | `POST /api/assets/WEB-PORTAL01/owner` with `owner="Web Ops"`, `team="Platform"`; then `GET /api/assets` | Set returns HTTP 200; list shows `WEB-PORTAL01`'s `owner=="Web Ops"`, `team=="Platform"` | Matches | PASS |
+| TC-DASH-52 | A valid generic-ingest payload is accepted and normalized | `POST /api/ingest/generic` with one valid finding (`asset_type="application"`) | HTTP 200; `accepted==1`, `rejected==[]`; the returned finding's `source=="generic"` | Matches | PASS |
+| TC-DASH-53 | An ingested ID never collides with a real finding ID | Ingest one valid finding | Its assigned `id` is not among the real pipeline's `FIND-1`..`FIND-14` IDs (from `load_remediation_findings()`) | Matches | PASS |
+| TC-DASH-54 | An invalid payload is rejected with specific per-item errors | `POST /api/ingest/generic` with one finding that has only `title` set | HTTP 200 (batch endpoint — per-item errors, not a 4xx); `accepted==0`; exactly 1 rejected entry with `index==0` | Matches | PASS |
+| TC-DASH-55 | A mixed batch accepts valid and rejects invalid entries independently | Batch of one valid finding plus one with `severity="Nonsense"` | `accepted==1`; exactly 1 rejected entry | Matches | PASS |
+| TC-DASH-56 | Accepted findings are written to `remediation/live-data/generic-ingested.json` | Ingest one valid finding | The live-data file now exists on disk (removed again in the test's `tearDown`) | Matches | PASS |
 
 ---
 
@@ -370,7 +420,137 @@ follows.
 
 ---
 
-## Suite 12: Multi-language scanner pattern consistency (`tests/test_multilang_scanner_patterns.py`)
+## Suite 12: Vulnerability exception / risk-acceptance workflow (`remediation/exceptions/store.py`)
+
+**Purpose:** prove the exception (risk-acceptance/waiver) lifecycle — request, validate,
+auto-expire-on-read, revoke — is correct against a temporary store file, and that the
+real, shipped seed file is well-formed.
+**Preconditions (all TC-EXC):** `remediation/exceptions/store.py` importable.
+TC-EXC-01–14 (`ExceptionLifecycle`) each use a fresh temporary store file passed
+explicitly via `path=...`, never the real, shipped `exceptions.json`. A real bug was
+caught and fixed while writing these tests: every function in this module originally
+took a bound default parameter (e.g. `def load_exceptions(path=DEFAULT_STORE_PATH):`),
+which meant `unittest.mock.patch.object(store, "DEFAULT_STORE_PATH", tmp_path)` silently
+failed to redirect any caller that omitted `path` — Python binds a default parameter
+value once at function-definition time, so patching the module attribute afterward has
+no effect on it. Fixed by changing every such function to `path=None`, resolved inside
+the function body (`path = Path(path) if path is not None else DEFAULT_STORE_PATH`)
+instead. TC-EXC-15 (`RealSeedFileIsValid`) instead calls `load_exceptions()` with no
+`path` override, against the real, shipped `remediation/exceptions/exceptions.json`.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-EXC-01 | Loading from a missing store file returns an empty list | `store.load_exceptions(path)` where `path` doesn't exist yet | `[]` | Matches | PASS |
+| TC-EXC-02 | Creating an exception persists it and returns a full record | `store.create_exception("FIND-7", "Compensating control in place", "eng@example.com", "secops@example.com", "2026-12-01", path=path, as_of=2026-08-01)` | `id=="EXC-1"`, `finding_id=="FIND-7"`, `status=="active"`, `created_on=="2026-08-01"`; `load_exceptions(path)` returns exactly `[record]` | Matches | PASS |
+| TC-EXC-03 | IDs increment across multiple exceptions | Create two exceptions in sequence against the same store | Second record's `id=="EXC-2"` | Matches | PASS |
+| TC-EXC-04 | Missing `finding_id` is rejected | Call `create_exception("", ...)` | `ValueError` raised | Raised | PASS |
+| TC-EXC-05 | Blank reason is rejected | Call with `reason="   "` | `ValueError` raised | Raised | PASS |
+| TC-EXC-06 | Missing requester or approver is rejected | Call with `requested_by=""`, then separately with `approved_by=""` | `ValueError` raised both times | Raised | PASS |
+| TC-EXC-07 | Malformed expiry date is rejected | Call with `expires_on="not-a-date"` | `ValueError` raised | Raised | PASS |
+| TC-EXC-08 | Expiry date in the past is rejected | Call with `expires_on="2026-01-01"`, `as_of=2026-08-01` | `ValueError` raised | Raised | PASS |
+| TC-EXC-09 | `compute_status` returns "active" before expiry | Create an exception expiring `2026-12-01`; check status with `as_of=2026-08-15` | `"active"` | Matches | PASS |
+| TC-EXC-10 | `compute_status` returns "expired" after expiry with no action taken | Create an exception expiring `2026-08-10`; check status with `as_of=2026-09-01` | `"expired"` (status is derived on read, never stored) | Matches | PASS |
+| TC-EXC-11 | Revoking marks an exception revoked, and it stays revoked even before its expiry | `revoke_exception(record["id"], path=path)`; reload and recheck `compute_status` | Stored `status=="revoked"`; `compute_status(...)` also returns `"revoked"` even with `as_of` before `expires_on` | Matches | PASS |
+| TC-EXC-12 | Revoking an unknown ID raises `KeyError` | `revoke_exception("EXC-999", path=path)` | `KeyError` raised | Raised | PASS |
+| TC-EXC-13 | `list_exceptions_with_status` attaches computed status without mutating the file | Create an exception that's since expired; call `list_exceptions_with_status(path=path, as_of=2026-09-01)` | Returned item's `computed_status=="expired"`; the file on disk (`load_exceptions`) still says `status=="active"` | Matches | PASS |
+| TC-EXC-14 | `active_exceptions_by_finding` excludes expired and revoked exceptions | Create one active, one expired, and one (explicitly) revoked exception across 3 findings | Result keys equal exactly `{"FIND-1"}`; `FIND-2` (expired) and `FIND-3` (revoked) are both absent | Matches | PASS |
+| TC-EXC-15 | Real, shipped `exceptions.json` is well-formed | `store.load_exceptions()` (no `path` override) | Returns a list; every record has `id`/`finding_id`/`reason`/`requested_by`/`approved_by`/`created_on`/`expires_on`/`status`; `expires_on` parses as an ISO date | Matches | PASS |
+
+---
+
+## Suite 13: Asset inventory + ownership (`remediation/inventory/asset_inventory.py`)
+
+**Purpose:** prove the per-asset inventory view correctly aggregates findings (count,
+highest severity, KEV exposure) grouped by asset name, that ownership can be
+set/persisted/read back via a small editable store, and that the real shipped ownership
+file is well-formed.
+**Preconditions (all TC-INV):** `remediation/inventory/asset_inventory.py` importable.
+TC-INV-08–11 (`OwnershipStore`) each use a fresh temporary ownership file passed
+explicitly via `path=...`, never the real, shipped `asset_ownership.json` — this module
+had the exact same bound-default-parameter bug (and the same fix) as
+`remediation/exceptions/store.py`, documented in Suite 12's Preconditions note.
+TC-INV-01–07 (`BuildAssetInventory`) pass an in-memory `ownership` dict directly and
+touch no file at all. TC-INV-12 (`RealSeedFileIsValid`) calls `load_ownership()` with no
+`path` override, against the real, shipped `asset_ownership.json`.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-INV-01 | Findings are grouped by `asset.name` | Two findings against `WEB-PORTAL01`, one against `WIN-DC01` | `WEB-PORTAL01` row has `finding_count==2`; `WIN-DC01` row has `finding_count==1` | Matches | PASS |
+| TC-INV-02 | Highest severity picks the max across an asset's findings | One asset with Medium, Critical, and Low findings | Row's `highest_severity=="Critical"` | Matches | PASS |
+| TC-INV-03 | KEV count only counts actually-listed findings | One asset with `kev.listed=True`, `kev.listed=False`, and `kev=None` findings | Row's `kev_count==1` | Matches | PASS |
+| TC-INV-04 | Findings with no asset name are skipped, not crashed on | A finding with `asset: {}` | Returns `[]`, no `KeyError` | Matches | PASS |
+| TC-INV-05 | Rows are sorted by finding count descending, then name | Assets `A-HOST` (1 finding) and `B-HOST` (2 findings) | Row order is `["B-HOST", "A-HOST"]` | Matches | PASS |
+| TC-INV-06 | Owner and team are attached from the ownership map | `ownership={"WIN-DC01": {"owner": "Priya Nair", "team": "Identity"}}` | Row's `owner=="Priya Nair"`, `team=="Identity"` | Matches | PASS |
+| TC-INV-07 | An unowned asset has `owner`/`team` both `None` | No matching entry in `ownership` | `owner is None`, `team is None` | Matches | PASS |
+| TC-INV-08 | Loading ownership from a missing file returns an empty dict | `load_ownership(path)` where `path` doesn't exist | `{}` | Matches | PASS |
+| TC-INV-09 | `set_owner` persists and is readable back | `set_owner("WIN-DC01", "Priya Nair", "Identity", path=path)`; reload | `loaded["WIN-DC01"] == {"owner": "Priya Nair", "team": "Identity"}` | Matches | PASS |
+| TC-INV-10 | `set_owner` overwrites a previous entry for the same asset | Set once, then set again with different values | Reloaded entry reflects only the second call's values | Matches | PASS |
+| TC-INV-11 | `set_owner` requires an asset name | Call with `asset_name=""` | `ValueError` raised | Raised | PASS |
+| TC-INV-12 | Real, shipped `asset_ownership.json` is well-formed | `load_ownership()` (no `path` override) | Returns a dict; every key is a string; every value has `owner`/`team` keys | Matches | PASS |
+
+---
+
+## Suite 14: Generic "bring your own" connector (`remediation/connectors/generic_connector.py`)
+
+**Purpose:** prove the vendor-agnostic ingestion adapter — for any XDR/EDR/SIEM that can
+send a custom outbound webhook, rather than one bespoke connector per named product —
+correctly validates an inbound JSON payload against its documented minimal shape, and
+normalizes an accepted payload into VulnHunter's normalized Finding schema with a
+collision-safe ID.
+**Preconditions (all TC-GENC):** `remediation/connectors/generic_connector.py`
+importable; pure functions only — no network, no file I/O (the actual write to
+`remediation/live-data/` is dashboard/app.py's concern, covered separately by Suite 9's
+`ApiIngestGeneric`).
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-GENC-01 | A valid minimal payload has no errors | `validate_generic_payload({"title": "Reflected XSS", "severity": "High", "asset_name": "APP-ORDERS01", "asset_type": "application"})` | `[]` | Matches | PASS |
+| TC-GENC-02 | A non-dict payload is rejected | Call with a list, then separately with `None` | Both return a non-empty (truthy) error list | Matches | PASS |
+| TC-GENC-03 | Missing required fields are each reported | `validate_generic_payload({})` | Exactly 4 errors (`title`/`severity`/`asset_name`/`asset_type`) | Matches | PASS |
+| TC-GENC-04 | Invalid severity is rejected | `severity="Extreme"` | An error mentioning `"severity"` | Matches | PASS |
+| TC-GENC-05 | Invalid asset_type is rejected | `asset_type="toaster"` | An error mentioning `"asset_type"` | Matches | PASS |
+| TC-GENC-06 | Malformed CVE is rejected | `cve="not-a-cve"` | An error mentioning `"cve"` | Matches | PASS |
+| TC-GENC-07 | Well-formed CVE passes | `cve="CVE-2021-44228"` | `[]` | Matches | PASS |
+| TC-GENC-08 | A null CVE is allowed | `cve=None` | `[]` (CVE is optional) | Matches | PASS |
+| TC-GENC-09 | Required fields map into the normalized schema | `normalize_generic_finding(payload, [], as_of=2026-08-04)` | `title`/`severity` copied through unchanged; `asset == {"name": "APP-ORDERS01", "ip": None, "type": "application", "os": None}` | Matches | PASS |
+| TC-GENC-10 | Source defaults to `"generic"` | Normalize with no `source_name` passed | `finding["source"] == "generic"` | Matches | PASS |
+| TC-GENC-11 | A `source_name` override is respected | `source_name="splunk-es"` | `finding["source"] == "splunk-es"` | Matches | PASS |
+| TC-GENC-12 | KEV/EPSS are always `null` for generic findings | Normalize any valid payload | `finding["kev"] is None`, `finding["epss"] is None` (enrichment is a separate pipeline stage that never ran here) | Matches | PASS |
+| TC-GENC-13 | `first_seen` defaults to `as_of` when not provided | `as_of=2026-08-04`, no `first_seen` in payload | `finding["first_seen"] == "2026-08-04"` | Matches | PASS |
+| TC-GENC-14 | An explicit `first_seen` is respected | `first_seen="2026-01-15"` in payload | `finding["first_seen"] == "2026-01-15"` | Matches | PASS |
+| TC-GENC-15 | Assigns the next sequential ID after existing findings | `existing=[{"id": "FIND-1"}, {"id": "FIND-14"}, {"id": "FIND-7"}]` | `finding["id"] == "FIND-15"` | Matches | PASS |
+| TC-GENC-16 | Starts at `FIND-1` with no existing findings | `existing=[]` | `finding["id"] == "FIND-1"` | Matches | PASS |
+| TC-GENC-17 | Ignores non-`FIND-`-prefixed IDs when computing the next ID | `existing=[{"id": "EXC-99"}, {"id": "FIND-3"}]` | `finding["id"] == "FIND-4"` | Matches | PASS |
+
+---
+
+## Suite 15: Finding-category (scan-type) taxonomy (`remediation/enrichment/scan_type_mapping.py`)
+
+**Purpose:** prove the finding-category taxonomy (Infrastructure VM / SCA / Certificate
+Mgmt / SAST / DAST) correctly classifies each `/remediate`-pipeline finding from its
+`asset.type` alone, that batch tagging doesn't mutate its input, and that DAST remains a
+documented, labeled category even though this repo's demo data has no DAST sample
+finding yet.
+**Preconditions (all TC-CAT):** `remediation/enrichment/scan_type_mapping.py`
+importable; pure, in-memory functions only, no fixture files or network required.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-CAT-01 | A `certificate` asset classifies as cert-mgmt | `classify_finding({"asset": {"type": "certificate"}})` | `"cert-mgmt"` | Matches | PASS |
+| TC-CAT-02 | An `application` asset classifies as SCA | `classify_finding({"asset": {"type": "application"}})` | `"sca"` | Matches | PASS |
+| TC-CAT-03 | A `windows-server` asset classifies as infra-vm | `classify_finding({"asset": {"type": "windows-server"}})` | `"infra-vm"` | Matches | PASS |
+| TC-CAT-04 | A `unix-server` asset classifies as infra-vm | `classify_finding({"asset": {"type": "unix-server"}})` | `"infra-vm"` | Matches | PASS |
+| TC-CAT-05 | Network and IoT/OT assets classify as infra-vm | Loop over `network-routing-switching`/`network-security-device`/`iot-ot-device` | All three return `"infra-vm"` | Matches | PASS |
+| TC-CAT-06 | A missing `asset` key defaults to infra-vm rather than crashing | `classify_finding({})` | `"infra-vm"`, no `KeyError` | Matches | PASS |
+| TC-CAT-07 | An unknown/future asset type defaults to infra-vm | `classify_finding({"asset": {"type": "some-future-asset-type"}})` | `"infra-vm"` | Matches | PASS |
+| TC-CAT-08 | `tag_scan_types` adds fields without mutating input | Tag a one-finding list (`asset.type=="certificate"`) | Original dict has no `scan_type` key; tagged copy has `scan_type=="cert-mgmt"` and the matching `scan_type_label` | Matches | PASS |
+| TC-CAT-09 | Tags a mixed batch correctly | Tag 3 findings of types certificate/application/windows-server | `scan_type` list equals `["cert-mgmt", "sca", "infra-vm"]` | Matches | PASS |
+| TC-CAT-10 | DAST is a documented scan type with a label, even with no sample finding | Check `SCAN_TYPES`/`SCAN_TYPE_LABELS` | `"dast"` present in both (regression guard against silently dropping an unpopulated category) | Matches | PASS |
+| TC-CAT-11 | Every scan type has a non-empty label | Loop over `SCAN_TYPES` | Each has a truthy entry in `SCAN_TYPE_LABELS` | Matches | PASS |
+
+---
+
+## Suite 16: Multi-language scanner pattern consistency (`tests/test_multilang_scanner_patterns.py`)
 
 **Purpose:** these are static text-consistency checks, not live scanner-invocation
 results — this environment has no Java, Go, PHP, or Node/npm runtime available, so
@@ -426,7 +606,7 @@ the documentation are internally consistent with each other.
 
 ---
 
-## Suite 13: Live Tenable connector (`remediation/connectors/tenable_connector.py`)
+## Suite 17: Live Tenable connector (`remediation/connectors/tenable_connector.py`)
 
 **Purpose:** prove the connector's auth, export-polling, and record-mapping logic is
 correct against Tenable.io's documented API shapes, entirely via mocked HTTP — see
@@ -447,9 +627,9 @@ does and does not prove (it has never called the real Tenable API).
 | TC-CONN-10 | `to_csv_row` handles a missing CVE gracefully | Feed a record with no `cve` list | `CVE` field is `""`, no `IndexError` | No error | PASS |
 | TC-CONN-11 | `fetch_and_write_csv` writes a sample-compatible file | Full mocked export -> poll -> chunk flow, write to a temp file | Output CSV's header exactly matches `CSV_FIELDNAMES`; row values correct | Matches | PASS |
 
-## Suite 14: Live Armis connector (`remediation/connectors/armis_connector.py`)
+## Suite 18: Live Armis connector (`remediation/connectors/armis_connector.py`)
 
-**Purpose:** same goal as Suite 13, for Armis's token-auth + paginated AQL search flow.
+**Purpose:** same goal as Suite 17, for Armis's token-auth + paginated AQL search flow.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -463,7 +643,7 @@ does and does not prove (it has never called the real Tenable API).
 
 ---
 
-## Suite 15: CISA KEV + EPSS enrichment (`remediation/enrichment/kev_epss.py`)
+## Suite 19: CISA KEV + EPSS enrichment (`remediation/enrichment/kev_epss.py`)
 
 **Purpose:** prove the enrichment logic correctly parses both real APIs' documented
 response shapes and assembles them onto findings correctly — and, uniquely in this test
@@ -487,7 +667,7 @@ suite, prove it actually works against the real live endpoints (see TC-ENR-13).
 
 ---
 
-## Suite 16: Configurable priority + SLA engine (`remediation/config/priority_engine.py`)
+## Suite 20: Configurable priority + SLA engine (`remediation/config/priority_engine.py`)
 
 **Purpose:** prove the scoring/SLA math is correct against an in-memory rules dict (so
 tests don't break if someone reasonably retunes the real rules file), plus validate the
@@ -510,7 +690,7 @@ real shipped rules file is well-formed and produces a sane result on real sample
 | TC-PRIO-13 | Real `priority_rules.yaml` loads with all expected keys | Load the real shipped file | All 7 top-level keys present | Matches | PASS |
 | TC-PRIO-14 | Real rules file scores a known real finding correctly | Score PrintNightmare (FIND-1) from real sample data against the real rules file | `priority == "Critical"` | Matches | PASS |
 
-## Suite 17: MITRE ATT&CK keyword tagging (`remediation/enrichment/attack_mapping.py`)
+## Suite 21: MITRE ATT&CK keyword tagging (`remediation/enrichment/attack_mapping.py`)
 
 **Purpose:** prove the heuristic fires on realistic finding text, and — just as
 importantly — proves it does NOT guess when there's no real signal (empty list, not a
@@ -530,7 +710,7 @@ fabricated technique).
 | TC-ATTACK-10 | Batch tagging adds field without mutating input | Tag a findings list | Original dicts unchanged; tagged copies have `attack_techniques` | Matches | PASS |
 | TC-ATTACK-11 | Batch tagging against real sample data | Tag all 14 real findings | PrintNightmare (FIND-1) gets ≥1 technique; SSL cert expiry (FIND-13) gets none | Matches | PASS |
 
-## Suite 18: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
+## Suite 22: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
 
 **Purpose:** prove the Table API request construction, idempotency check, and batch
 error handling are correct against mocked HTTP shaped like ServiceNow's documentation —

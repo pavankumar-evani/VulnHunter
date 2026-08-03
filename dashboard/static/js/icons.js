@@ -16,6 +16,8 @@ const ICONS = {
   faq: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 014.9.6c0 1.7-2.4 1.9-2.4 3.5"/><circle cx="12" cy="16.6" r="0.6" fill="currentColor" stroke="none"/>',
   tenant: '<path d="M4 21V6l6-3 6 3v15"/><path d="M16 21v-9l4 2v7"/><line x1="8" y1="9" x2="8" y2="9.01"/><line x1="8" y1="13" x2="8" y2="13.01"/><line x1="8" y1="17" x2="8" y2="17.01"/>',
   clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/>',
+  exception: '<path d="M12 3l8 4v5c0 5-3.4 7.8-8 9-4.6-1.2-8-4-8-9V7z"/><line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="16" r="0.6" fill="currentColor" stroke="none"/>',
+  assets: '<rect x="3" y="4" width="18" height="5" rx="1.2"/><rect x="3" y="10.5" width="18" height="5" rx="1.2"/><rect x="3" y="17" width="18" height="3.5" rx="1.2"/><line x1="6.5" y1="6.5" x2="6.5" y2="6.5"/><line x1="6.5" y1="13" x2="6.5" y2="13"/>',
 };
 
 export function icon(name, size = 18) {

@@ -102,6 +102,23 @@ and its subsection
 [§11.1](../KNOWLEDGE_TRANSFER.md#111-the-commercial-grade-polyglot-ask--what-actually-happened)
 for the full reasoning on what's real here and what isn't.
 
+### Can I formally accept risk on a finding instead of remediating it?
+
+Yes — the `/exceptions` page (backed by `remediation/exceptions/store.py`) is a real,
+documented risk-acceptance workflow: request an exception with a reason/compensating
+control, a requester, and an approver, with an expiry date it auto-expires against
+unless someone explicitly revokes it first. One honest scope limit: an active exception
+doesn't yet pause SLA-breach counting in the priority engine, so an accepted-risk finding
+can still show as "SLA breached" today - see the module docstring.
+
+### Does it track who owns each asset?
+
+Yes — `/assets` aggregates every asset with findings against it (finding count, highest
+severity, KEV exposure) and lets you attach an owner/team, stored in
+`remediation/inventory/asset_ownership.json`. That's a real, editable local file, not a
+sync from a real CMDB/asset-management system - see the module docstring for what a
+production version would need instead.
+
 ### What happens to my data / where does it live?
 
 Everything is local files in this repository — git history, JSON, YAML, Markdown. There

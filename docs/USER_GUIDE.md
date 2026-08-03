@@ -125,6 +125,8 @@ database and no historical trend view across runs — see
 | Reports | `/reports` | Generate a shareable KPI/SLA/coverage snapshot report (daily/weekly/monthly/quarterly/half-yearly/yearly framing), downloadable as standalone HTML. Every number is real; see the page's own caveat about period aggregation not existing yet (no persistence layer). `[SCREENSHOT: Reports]` |
 | Support | `/support` | How to get help, known limitations, before-you-file-a-bug checklist. |
 | FAQ | `/faq` | Direct answers to common questions — mirrors [FAQ.md](FAQ.md). |
+| Exceptions | `/exceptions` | Request/approve/auto-expire/revoke a time-boxed risk-acceptance waiver per finding. Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
+| Asset Inventory | `/assets` | Every asset with findings against it, aggregated, with an editable owner/team field (local file, not a CMDB sync). `[SCREENSHOT: Asset Inventory]` |
 | `/api/status` | — | Machine-readable health/status JSON, not a UI page. |
 
 The sidebar also has a **tenant switcher** ("All Tenants (MSSP view)" / "Acme Financial

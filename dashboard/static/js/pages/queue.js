@@ -24,9 +24,17 @@ function rowHtml(f) {
       slaCell = `<span class="sla-ok">${escapeHtml(f.sla.due_date)} (${f.sla.days_remaining}d)</span>`;
     }
   }
+  if (f.exception) {
+    slaCell += `<br><span class="exception-tag" data-tooltip="${escapeHtml(f.exception.reason)}">` +
+      `Risk-accepted until ${escapeHtml(f.exception.expires_on)}</span>`;
+  }
 
   const attackTags = (f.attack_techniques && f.attack_techniques.length)
     ? f.attack_techniques.map((t) => `<span class="attack-tag" title="${escapeHtml(t.tactic)}">${escapeHtml(t.technique_id)}</span>`).join("")
+    : `<span class="muted">—</span>`;
+
+  const category = f.scan_type
+    ? `<span class="category-tag" data-tooltip="${escapeHtml(f.scan_type_label || "")}">${escapeHtml(f.scan_type)}</span>`
     : `<span class="muted">—</span>`;
 
   return `
@@ -35,6 +43,7 @@ function rowHtml(f) {
       <td>${escapeHtml(f.id)}</td>
       <td>${escapeHtml(f.asset && f.asset.name)}</td>
       <td class="asset-type-cell">${escapeHtml(f.asset && f.asset.type)}</td>
+      <td>${category}</td>
       <td>${escapeHtml(f.title)}</td>
       <td><code>${escapeHtml(f.cve || "—")}</code></td>
       <td>${kev}</td>
@@ -70,6 +79,7 @@ function applyFilters(findings, filters) {
   return findings.filter((f) => {
     if (filters.priority !== "all" && f.priority !== filters.priority) return false;
     if (filters.assetType !== "all" && (f.asset && f.asset.type) !== filters.assetType) return false;
+    if (filters.category !== "all" && f.scan_type !== filters.category) return false;
     if (filters.kevOnly && !(f.kev && f.kev.listed)) return false;
     return true;
   });
@@ -96,7 +106,7 @@ export async function render(container) {
   let allFindings = [];
   let lastFetched = null;
   let sort = { key: "priority", dir: "desc" };
-  let filters = { priority: "all", assetType: "all", kevOnly: false };
+  let filters = { priority: "all", assetType: "all", category: "all", kevOnly: false };
 
   function renderLiveBadge() {
     if (!topbarExtra) return;
@@ -116,7 +126,7 @@ export async function render(container) {
     if (!tbody) return;
     tbody.innerHTML = sorted.length
       ? sorted.map(rowHtml).join("")
-      : `<tr><td colspan="11" class="empty-state">No findings match the current filters.</td></tr>`;
+      : `<tr><td colspan="12" class="empty-state">No findings match the current filters.</td></tr>`;
     container.querySelectorAll("th.sortable").forEach((th) => {
       const indicator = th.querySelector(".sort-indicator");
       indicator.textContent = th.dataset.sort === sort.key ? (sort.dir === "asc" ? "▲" : "▼") : "";
@@ -139,6 +149,14 @@ export async function render(container) {
     return types.map((t) => `<option value="${t}">${t}</option>`).join("");
   }
 
+  function categoryOptions() {
+    const seen = new Map();
+    for (const f of allFindings) {
+      if (f.scan_type) seen.set(f.scan_type, f.scan_type_label || f.scan_type);
+    }
+    return [...seen.entries()].sort().map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join("");
+  }
+
   function wireControls() {
     container.querySelectorAll("th.sortable").forEach((th) => {
       th.addEventListener("click", () => {
@@ -149,6 +167,7 @@ export async function render(container) {
     });
     container.querySelector("#f-priority").addEventListener("change", (e) => { filters.priority = e.target.value; renderRows(); });
     container.querySelector("#f-asset-type").addEventListener("change", (e) => { filters.assetType = e.target.value; renderRows(); });
+    container.querySelector("#f-category").addEventListener("change", (e) => { filters.category = e.target.value; renderRows(); });
     container.querySelector("#f-kev-only").addEventListener("change", (e) => { filters.kevOnly = e.target.checked; renderRows(); });
   }
 
@@ -187,6 +206,9 @@ export async function render(container) {
         <label>Asset type
           <select id="f-asset-type"><option value="all">All</option>${assetTypeOptions()}</select>
         </label>
+        <label>Category
+          <select id="f-category"><option value="all">All</option>${categoryOptions()}</select>
+        </label>
         <label class="checkbox-label"><input type="checkbox" id="f-kev-only"> CISA KEV-listed only</label>
         <span class="filter-count" id="queue-count"></span>
       </div>
@@ -196,7 +218,7 @@ export async function render(container) {
           <thead>
             <tr>
               <th class="sortable" data-sort="priority">Priority <span class="sort-indicator"></span></th>
-              <th>ID</th><th>Asset</th><th>Asset Type</th><th>Title</th><th>CVE</th>
+              <th>ID</th><th>Asset</th><th>Asset Type</th><th>Category</th><th>Title</th><th>CVE</th>
               <th>KEV</th><th>EPSS</th>
               <th class="sortable" data-sort="sla">SLA Due <span class="sort-indicator"></span></th>
               <th>ATT&amp;CK</th><th>AI</th>
@@ -210,7 +232,10 @@ export async function render(container) {
         Priority reasoning for each finding (why it landed where it did) is in the plan detail
         at <a href="/remediate" data-link>/remediate</a>. MITRE ATT&amp;CK tags are a
         keyword heuristic, not authoritative technique attribution — see
-        <code>remediation/enrichment/attack_mapping.py</code>'s docstring.
+        <code>remediation/enrichment/attack_mapping.py</code>'s docstring. "Category" is a
+        methodology taxonomy (Infrastructure VM / SCA / Cert-Mgmt) inferred from asset
+        type — see <code>remediation/enrichment/scan_type_mapping.py</code>'s docstring
+        for what it does and doesn't claim (and why DAST has no sample data yet).
       </div>`;
     wireControls();
     renderRows();

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "EXC-1",
+    "finding_id": "FIND-7",
+    "reason": "AXIS-CAM-LOBBY-03 is isolated on a dedicated OT VLAN with no route to the internet or the corporate network; the vendor has not released a firmware update disabling Telnet for this camera model. Compensating control: network segmentation + quarterly OT firewall rule review.",
+    "requested_by": "ot-engineering@example.com",
+    "approved_by": "jane.secops@example.com",
+    "created_on": "2026-07-01",
+    "expires_on": "2026-10-01",
+    "status": "active"
+  }
+]

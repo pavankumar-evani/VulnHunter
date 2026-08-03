@@ -1,0 +1,22 @@
+{
+  "APP-ORDERS01": {
+    "owner": "Order Platform Squad",
+    "team": "Application Engineering"
+  },
+  "AXIS-CAM-LOBBY-03": {
+    "owner": "Facilities Security Team",
+    "team": "Physical Security & OT"
+  },
+  "LNX-DB03": {
+    "owner": "Marcus Webb",
+    "team": "Database Platform"
+  },
+  "WEB-PORTAL01": {
+    "owner": "Web Ops",
+    "team": "Platform"
+  },
+  "WIN-DC01": {
+    "owner": "Priya Nair",
+    "team": "Identity & Domain Services"
+  }
+}

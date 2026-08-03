@@ -50,6 +50,10 @@ empty state with instructions instead of erroring.
 - **`dashboard/static/js/tenant.js`** — the illustrative MSSP tenant-switcher demo
   (client-side only, partitions findings by asset category - not real per-tenant
   auth/data isolation, see the FAQ page).
+- **`remediation/exceptions/store.py`** and **`remediation/inventory/asset_inventory.py`**
+  — the exception/waiver workflow and asset ownership storage the `/exceptions` and
+  `/assets` routes wrap. Both live under `remediation/` (not `dashboard/`) since they're
+  domain logic, same reasoning as `priority_engine.py`.
 
 ## Pages
 
@@ -67,6 +71,8 @@ empty state with instructions instead of erroring.
 | `/reports` | Generate a real, downloadable KPI/SLA/coverage snapshot report (daily through yearly framing) |
 | `/support` | How to get help, known limitations, before-you-file-a-bug checklist |
 | `/faq` | Direct answers about what this product does and doesn't do |
+| `/exceptions` | Request/approve/revoke time-boxed risk-acceptance waivers per finding |
+| `/assets` | Every asset with findings against it, aggregated, with an editable owner/team |
 | `/api/status` | JSON health/status endpoint |
 
 ## The `/run` and `/servicenow` safety design

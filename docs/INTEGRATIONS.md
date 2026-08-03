@@ -140,18 +140,50 @@ grouping aid, not a certified technique attribution.
 
 ---
 
+## Generic XDR/EDR/SIEM ingestion adapter (vendor-agnostic, live-verifiable today)
+
+**File:** [`remediation/connectors/generic_connector.py`](../remediation/connectors/generic_connector.py)
+**Endpoint:** `POST /api/ingest/generic`
+
+Tenable/Armis/ServiceNow each got a bespoke connector because each has a real,
+documented, vendor-specific API contract to build against. Building one more bespoke
+connector per additional named product (Qualys, Splunk, Sentinel, QRadar, CrowdStrike,
+Defender, ...) without real API access to any of them would mean shipping code that
+looks plausible but was never verified against anything real.
+
+Instead: almost every modern SIEM/XDR/EDR/SOAR tool supports sending a **custom outbound
+webhook** with a JSON body you control. This adapter is the receiving side of that -
+validate an inbound payload against a documented minimal shape (`title`, `severity`,
+`asset_name`, `asset_type` required; `cve`, `description`, `source_ref`, etc. optional),
+normalize it into VulnHunter's normalized Finding schema, and write it to
+`remediation/live-data/generic-ingested.json` (gitignored, same convention as live
+Tenable/Armis output). IDs continue the real pipeline's `FIND-N` sequence so an ingested
+finding's ID never collides with a real one. **Deliberately not auto-merged** into the
+live queue - consistent with how live Tenable/Armis connector output also isn't
+auto-merged; a batch response reports exactly what was accepted vs. rejected (with
+per-item validation errors) so a calling tool's automation can react to partial failures.
+
+This is the one real, generic, testable answer to "integrate with any XDR/EDR/SIEM,"
+rather than a promise to build N vendor-specific ones with no way to verify them.
+
+---
+
 ## Not yet built
 
 The connector *pattern* — vendor auth flow, paginated fetch, mapping into a stable
 internal schema, mocked-HTTP unit tests, an explicit "built vs. verified" caveat — is now
-proven three times over (Tenable, Armis, ServiceNow). Adding SIEM/XDR adapters is the
-same pattern again:
+proven three times over (Tenable, Armis, ServiceNow), plus the generic webhook adapter
+above for anything that can push data to VulnHunter rather than needing VulnHunter to
+pull from it. A **bespoke, vendor-specific pull connector** (matching a particular
+product's own auth/pagination/query language, the way Tenable's and Armis's do) is the
+same pattern again for:
 
 - **Splunk**
 - **Microsoft Sentinel**
 - **IBM QRadar**
 - **CrowdStrike**
 - **Microsoft Defender**
+- **Qualys**
 
 None of these are built. Each is gated on picking a specific vendor and having real API
 docs (or, better, sandbox/tenant access to verify against) — not a technical blocker, a

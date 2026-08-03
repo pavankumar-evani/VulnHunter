@@ -32,6 +32,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 import data as dashboard_data  # noqa: E402
 from app import app as fastapi_app  # noqa: E402
 from remediation.config import priority_engine  # noqa: E402
+from remediation.exceptions import store as exceptions_store  # noqa: E402
+from remediation.inventory import asset_inventory  # noqa: E402
 
 client = TestClient(fastapi_app)
 
@@ -353,6 +355,175 @@ class ApiReports(unittest.TestCase):
         self.assertIn("vulnhunter-monthly-report.html", resp.headers["content-disposition"])
 
 
+class ApiExceptions(unittest.TestCase):
+    """Every test here uses a temporary store file (via patching DEFAULT_STORE_PATH) so
+    the suite never mutates the real, shipped exceptions.json."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self.tmpdir.name) / "exceptions.json"
+        self.patcher = patch.object(exceptions_store, "DEFAULT_STORE_PATH", self.tmp_path)
+        self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_list_on_empty_store_returns_empty_list(self):
+        resp = client.get("/api/exceptions")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["exceptions"], [])
+
+    def test_create_then_list_shows_the_new_exception_with_computed_status(self):
+        create_resp = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "Compensating control in place",
+            "requested_by": "eng@example.com", "approved_by": "secops@example.com",
+            "expires_on": "2099-01-01",
+        })
+        self.assertEqual(create_resp.status_code, 200)
+        self.assertEqual(create_resp.json()["finding_id"], "FIND-7")
+
+        list_resp = client.get("/api/exceptions")
+        exceptions = list_resp.json()["exceptions"]
+        self.assertEqual(len(exceptions), 1)
+        self.assertEqual(exceptions[0]["computed_status"], "active")
+
+    def test_create_with_past_expiry_is_rejected(self):
+        resp = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "r",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2020-01-01",
+        })
+        self.assertEqual(resp.status_code, 400)
+
+    def test_create_with_blank_reason_is_rejected(self):
+        resp = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "   ",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2099-01-01",
+        })
+        self.assertEqual(resp.status_code, 400)
+
+    def test_revoke_an_existing_exception(self):
+        created = client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "r",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2099-01-01",
+        }).json()
+
+        revoke_resp = client.post(f"/api/exceptions/{created['id']}/revoke")
+        self.assertEqual(revoke_resp.status_code, 200)
+        self.assertEqual(revoke_resp.json()["status"], "revoked")
+
+    def test_revoke_unknown_id_returns_404(self):
+        resp = client.post("/api/exceptions/EXC-999/revoke")
+        self.assertEqual(resp.status_code, 404)
+
+    def test_queue_reflects_an_active_exception_on_its_finding(self):
+        client.post("/api/exceptions", json={
+            "finding_id": "FIND-7", "reason": "Isolated OT VLAN",
+            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "expires_on": "2099-01-01",
+        })
+        resp = client.get("/api/queue")
+        findings_by_id = {f["id"]: f for f in resp.json()["findings"]}
+        self.assertIsNotNone(findings_by_id["FIND-7"]["exception"])
+        self.assertEqual(findings_by_id["FIND-7"]["exception"]["reason"], "Isolated OT VLAN")
+        # A finding with no exception requested against it must show None, not error.
+        self.assertIsNone(findings_by_id["FIND-1"]["exception"])
+
+
+class ApiAssets(unittest.TestCase):
+    """Every test here uses a temporary ownership file so the suite never mutates the
+    real, shipped asset_ownership.json."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self.tmpdir.name) / "asset_ownership.json"
+        self.patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_path)
+        self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_list_assets_aggregates_the_real_findings(self):
+        resp = client.get("/api/assets")
+        self.assertEqual(resp.status_code, 200)
+        assets = resp.json()["assets"]
+        by_name = {a["name"]: a for a in assets}
+        # WEB-PORTAL01 has two real findings against it (FIND-13, FIND-14).
+        self.assertEqual(by_name["WEB-PORTAL01"]["finding_count"], 2)
+        self.assertIsNone(by_name["WEB-PORTAL01"]["owner"])
+
+    def test_set_owner_then_list_shows_the_new_owner(self):
+        set_resp = client.post("/api/assets/WEB-PORTAL01/owner", json={
+            "owner": "Web Ops", "team": "Platform",
+        })
+        self.assertEqual(set_resp.status_code, 200)
+
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["owner"], "Web Ops")
+        self.assertEqual(by_name["WEB-PORTAL01"]["team"], "Platform")
+
+
+class ApiIngestGeneric(unittest.TestCase):
+    """The vendor-agnostic ingestion webhook. Writes to remediation/live-data/ (real,
+    gitignored path, same as the live Tenable/Armis connectors) - cleaned up in
+    tearDown so no test artifact lingers."""
+
+    LIVE_DATA_PATH = REPO_ROOT / "remediation" / "live-data" / "generic-ingested.json"
+
+    def tearDown(self):
+        if self.LIVE_DATA_PATH.exists():
+            self.LIVE_DATA_PATH.unlink()
+
+    def test_valid_payload_is_accepted_and_normalized(self):
+        resp = client.post("/api/ingest/generic", json={"findings": [{
+            "title": "Reflected XSS", "severity": "High",
+            "asset_name": "APP-ORDERS01", "asset_type": "application",
+        }]})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["accepted"], 1)
+        self.assertEqual(payload["rejected"], [])
+        self.assertEqual(payload["findings"][0]["source"], "generic")
+
+    def test_ingested_id_never_collides_with_a_real_finding_id(self):
+        """The real pipeline has FIND-1..FIND-14 - a naively-implemented adapter that
+        only looked at its own (empty) live-data file would assign FIND-1 again."""
+        resp = client.post("/api/ingest/generic", json={"findings": [{
+            "title": "t", "severity": "Low", "asset_name": "a", "asset_type": "application",
+        }]})
+        new_id = resp.json()["findings"][0]["id"]
+        real_ids = {f["id"] for f in dashboard_data.load_remediation_findings()}
+        self.assertNotIn(new_id, real_ids)
+
+    def test_invalid_payload_is_rejected_with_specific_errors(self):
+        resp = client.post("/api/ingest/generic", json={"findings": [{"title": "t"}]})
+        self.assertEqual(resp.status_code, 200)  # batch endpoint - per-item errors, not a 4xx
+        payload = resp.json()
+        self.assertEqual(payload["accepted"], 0)
+        self.assertEqual(len(payload["rejected"]), 1)
+        self.assertEqual(payload["rejected"][0]["index"], 0)
+
+    def test_mixed_batch_accepts_valid_and_rejects_invalid_independently(self):
+        resp = client.post("/api/ingest/generic", json={"findings": [
+            {"title": "good", "severity": "High", "asset_name": "a", "asset_type": "application"},
+            {"title": "bad", "severity": "Nonsense"},
+        ]})
+        payload = resp.json()
+        self.assertEqual(payload["accepted"], 1)
+        self.assertEqual(len(payload["rejected"]), 1)
+
+    def test_accepted_findings_are_written_to_live_data(self):
+        client.post("/api/ingest/generic", json={"findings": [{
+            "title": "t", "severity": "Low", "asset_name": "a", "asset_type": "application",
+        }]})
+        self.assertTrue(self.LIVE_DATA_PATH.exists())
+
+
 class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
     """The frontend is a single static/index.html shell served for every page route;
     static/js/app.js reads window.location.pathname client-side and calls the JSON
@@ -361,7 +532,7 @@ class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
 
     SHELL_ROUTES = [
         "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
-        "/ai-assist", "/reports", "/support", "/faq",
+        "/ai-assist", "/reports", "/support", "/faq", "/exceptions", "/assets",
     ]
 
     def test_every_known_route_serves_the_same_spa_shell(self):
