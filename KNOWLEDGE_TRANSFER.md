@@ -167,11 +167,14 @@ Critical, 2 High, 2 Medium, 1 Low), 6 auto-fixed on branch
 /remediate [--generate]
         │
         ▼
-  vuln-ingest-normalizer   Read, Glob, Write   → normalizes Tenable CSV / Armis JSON /
-        │                                        threat-intel JSON into one Finding schema
+  vuln-ingest-normalizer     Read, Glob, Write   → normalizes Tenable CSV / Armis JSON /
+        │                                          threat-intel JSON into one Finding schema
         ▼
-  remediation-planner      Read, Write         → REMEDIATION_PLAN.md: action type,
-        │                                        risk tier, rollback plan, priority
+  threat-intel-enricher      Read, Write, Bash   → adds live CISA KEV + EPSS data to
+        │                                          every finding with a CVE
+        ▼
+  remediation-planner        Read, Write         → REMEDIATION_PLAN.md: action type,
+        │                                          risk tier, priority (KEV/EPSS-aware), rollback
         ▼
   ┌─────────────────────┴─────────────────────┐
   ▼                                            ▼
@@ -185,16 +188,37 @@ Read, Write (no Bash/network)      Read, Write (no Bash/network)
 device-risk JSON, and manually-curated threat-intel JSON, and maps every record into one
 common schema (documented in
 [`remediation/schema/normalized-finding-schema.md`](remediation/schema/normalized-finding-schema.md)).
-It also classifies each finding's `asset.type` (windows-server, unix-server,
-network-routing-switching, network-security-device, iot-ot-device) — this classification
-is what routes a finding to a fixer, or correctly to "no fixer yet."
+It also classifies each finding's `asset.type` — **six classes today, spanning OS,
+infrastructure, application, and certificate layers, not just code**: `windows-server`,
+`unix-server` (OS-level), `network-routing-switching`, `network-security-device`,
+`iot-ot-device` (infrastructure-level), `application` (library/framework CVEs like
+Log4Shell, where the fix is a code/dependency upgrade, not an OS patch), and
+`certificate` (TLS/SSL lifecycle findings — expiry, deprecated protocols — which usually
+have no CVE at all). This classification is what routes a finding to a fixer, or
+correctly to "no fixer yet."
+
+**Enrichment:** `threat-intel-enricher` calls two real, free, public, no-auth-required
+APIs — verified against the live endpoints during development, not mocked like the
+Tenable/Armis connectors:
+- **[CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)** — is this
+  CVE confirmed being actively exploited in the wild?
+- **[EPSS](https://www.first.org/epss/)** (FIRST.org) — a probabilistic 0–1 score of
+  exploitation likelihood in the next 30 days.
+
+Both get added to every finding with a CVE (`null` for the many findings that don't have
+one — certificate and device-policy findings especially). See
+[remediation/enrichment/kev_epss.py](remediation/enrichment/kev_epss.py).
 
 **Planning:** `remediation-planner` assigns every finding an `action_type` (patch,
 config-change, service-disable, network-restriction, credential-rotation,
 firmware-update, or manual-investigation), an `automation_target`, a `risk_tier`
 (`auto-approvable` / `needs-change-approval` / `manual-only`), a `rollback_plan`, and a
-`priority`. It defaults to the more conservative risk tier whenever uncertain — this is a
-deliberate design choice, not caution to relax later.
+`priority`. Priority is now threat-intel-aware: a KEV-listed finding is escalated to top
+priority regardless of asset type; a high-EPSS (≥50%) finding is elevated even without
+KEV listing. **Crucially, KEV/EPSS affect priority, never `risk_tier`** — an
+actively-exploited CVE on a domain controller is still `needs-change-approval`, just more
+urgent to get approved. The planner defaults to the more conservative risk tier whenever
+uncertain — a deliberate design choice, not caution to relax later.
 
 **Fix generation:** `remediation-fixer-windows` and `remediation-fixer-unix` generate
 Ansible playbooks for findings already routed to their domain. They never execute
@@ -202,11 +226,14 @@ anything — every generated playbook is a `.yml` file under `remediation/output
 comment header naming the finding it addresses, the risk tier, and a rollback instruction,
 ready for human (or your org's Ansible Tower/AWX-style approved pipeline) review.
 
-**Validated result** (against the included mock Tenable/Armis/threat-intel exports): 11
-findings normalized across all 3 sources and 4 asset classes; 7 (4 Windows Server, 3 Unix
-Server) got a generated playbook; 4 (1 core network switch, 3 IoT/OT/mobile devices) are
-fully planned but correctly left `manual-only`, since no fixer exists yet for those asset
-classes — see [`REMEDIATION_PLAN.md`](REMEDIATION_PLAN.md) for the full generated report.
+**Validated result** (against the included mock Tenable/Armis/threat-intel exports,
+enriched with real live KEV/EPSS data): 14 findings normalized across all 3 sources and
+6 asset classes; 6 are KEV-listed (confirmed actively exploited — including Log4Shell and
+PrintNightmare) and 7 have EPSS ≥ 50%; 7 (4 Windows Server, 3 Unix Server) got a generated
+playbook; 7 (1 core network switch, IoT/OT/mobile devices, 1 Log4Shell application
+finding, 2 certificate/TLS findings) are fully planned but correctly left `manual-only`,
+since no fixer exists yet for those asset classes — see
+[`REMEDIATION_PLAN.md`](REMEDIATION_PLAN.md) for the full generated report.
 
 ### 4.3 The Safety Model (the single most important design decision)
 
@@ -392,7 +419,8 @@ for network devices or IoT/OT. To add one:
 │   │   ├── vuln-triage-reporter.md       /vulnhunt: write-only report generator
 │   │   ├── vuln-fixer.md                 /vulnhunt: fixes + branch/push
 │   │   ├── vuln-ingest-normalizer.md     /remediate: multi-source ingestion
-│   │   ├── remediation-planner.md        /remediate: risk-tiered planning
+│   │   ├── threat-intel-enricher.md      /remediate: live CISA KEV + EPSS enrichment
+│   │   ├── remediation-planner.md        /remediate: risk-tiered, threat-intel-aware planning
 │   │   ├── remediation-fixer-windows.md  /remediate: Windows Ansible playbooks
 │   │   └── remediation-fixer-unix.md     /remediate: Unix Ansible playbooks
 │   └── commands/
@@ -412,17 +440,22 @@ for network devices or IoT/OT. To add one:
 │   ├── requirements.txt        flask (only new runtime dependency in the whole repo)
 │   └── README.md                scope, safety design, and explicit "not yet" list
 ├── remediation/
-│   ├── sample-data/       mock Tenable/Armis/threat-intel exports
-│   ├── schema/            normalized Finding schema documentation
+│   ├── sample-data/       mock Tenable/Armis/threat-intel exports (14 findings: OS,
+│   │                      infra, IoT/OT, application, and certificate categories)
+│   ├── schema/            normalized Finding schema documentation (now includes kev/epss)
 │   ├── connectors/        live Tenable/Armis API clients - built, unit-tested against
 │   │                      mocked HTTP, but unverified against a real tenant (see its README)
+│   ├── enrichment/        live CISA KEV + EPSS client - verified against the real public
+│   │                      endpoints during development (see its module docstring)
 │   └── output/            normalized findings + generated playbooks (generated, not hand-written)
 ├── vulnerable-demo-app/   intentionally vulnerable Flask app — /vulnhunt's scan target
 ├── tests/
-│   ├── test_pipeline_artifacts.py   33 automated tests, stdlib only
+│   ├── test_pipeline_artifacts.py   35 automated tests, stdlib only
 │   ├── test_cli.py                  13 tests for the headless CLI (no real API calls)
-│   ├── test_dashboard.py            14 tests for the dashboard (Flask test client, no real server)
-│   └── test_results.txt             a captured passing run (60/60)
+│   ├── test_dashboard.py            17 tests for the dashboard (Flask test client, no real server)
+│   ├── test_connectors.py           18 tests for the Tenable/Armis connectors (mocked HTTP)
+│   ├── test_enrichment.py           13 tests for KEV/EPSS enrichment (mostly mocked, 1 live)
+│   └── test_results.txt             a captured passing run (96/96)
 ├── deliverables/
 │   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
 │   └── VulnHunter_Project_Report.docx     full project & test report
@@ -438,16 +471,19 @@ for network devices or IoT/OT. To add one:
 
 ## 8. Test Evidence & Results
 
-78 tests, 0 failures, across four suites — the original pipeline-artifact tests plus the
-CLI and dashboard added in the commercialization build-out. None of it calls the real
-Claude API (see each file's docstring for why that's a hard rule, not an oversight).
+96 tests, 0 failures, across five suites. None of it calls the real Claude API (see each
+file's docstring for why that's a hard rule, not an oversight) — the one deliberate
+exception is `test_enrichment.py`'s live smoke test, which calls the real, free, public
+CISA KEV/EPSS APIs (safe: no auth, no cost, and it skips itself rather than failing if
+network is unavailable).
 
 | Test file | What it checks | Count |
 |---|---|---|
-| `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 33 |
+| `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 35 |
 | `tests/test_cli.py` | Headless CLI command construction, binary discovery, one real dry-run subprocess call | 13 |
-| `tests/test_dashboard.py` | Dashboard data parsing + every route (Flask test client, in-process, no server) | 14 |
-| `tests/test_connectors.py` | Live connector auth/pagination/mapping logic against mocked HTTP (no real API calls) | 18 |
+| `tests/test_dashboard.py` | Dashboard data parsing + every route, including KEV/EPSS KPIs and asset-type breakdown | 17 |
+| `tests/test_connectors.py` | Live Tenable/Armis connector auth/pagination/mapping logic against mocked HTTP | 18 |
+| `tests/test_enrichment.py` | CISA KEV + EPSS enrichment logic, mostly mocked plus one real live-API smoke test | 13 |
 
 `test_pipeline_artifacts.py` breakdown:
 
@@ -510,16 +546,38 @@ Usable by someone who isn't running Claude Code interactively:
    live Tenable/Armis tenant. See [remediation/connectors/README.md](remediation/connectors/README.md)
    for exactly what "tested" does and doesn't mean here, and what to verify before
    pointing it at a real account.
-4. **Persistence + audit log** — a database of runs, findings, and who approved what,
+4. **CISA KEV + EPSS threat-intel enrichment (`remediation/enrichment/`)** ✅ Done, ✅
+   verified against the real live public APIs — unlike the Tenable/Armis connectors,
+   both CISA's KEV feed and FIRST.org's EPSS API are free and require no credentials, so
+   this was built AND tested against production endpoints during development. Moves
+   prioritization beyond raw CVSS: a KEV-listed finding (confirmed actively exploited)
+   or high-EPSS finding (≥50% near-term exploitation probability) is escalated to top
+   priority regardless of asset type — though never auto-approved purely because of
+   that; risk tier still gates what's safe to automate. See
+   [remediation/enrichment/kev_epss.py](remediation/enrichment/kev_epss.py).
+5. **Application and certificate asset classes** ✅ Done — `asset.type` now spans
+   `application` (library/framework CVEs like Log4Shell, fixed via the app's own
+   build/release pipeline, not an OS patch) and `certificate` (TLS/SSL lifecycle
+   findings — expiry, deprecated protocols — which usually carry no CVE at all). Both
+   route to `manual-only` today, same honest-gap treatment as network/IoT, since no
+   fixer exists yet for either.
+6. **Persistence + audit log** — a database of runs, findings, and who approved what,
    replacing the flat JSON audit files the CLI writes today and the dashboard reads.
 
-Also planned in this tier, lower priority than the four above:
+Also planned in this tier, lower priority than the items above:
 - **`remediation-fixer-network`** — vendor CLI config diffs (Cisco IOS/IOS XE, Junos) via
   Ansible's network collections, same `Read`/`Write`-only tool scoping as the existing
   fixers.
 - **`remediation-fixer-iot`** — realistically a per-vendor integration effort given how
   fragmented IoT/OT management APIs are; start with the highest-volume device types in a
   real fleet (Armis-visible cameras and building-automation controllers).
+- **`remediation-fixer-application`** — a library/dependency upgrade goes through the
+  app's own build/release pipeline (Maven/Gradle, npm, pip, ...) — a fundamentally
+  different mechanism per language/package manager, unlike the OS-level fixers' shared
+  Ansible approach.
+- **Certificate/TLS fixer** — mechanically simple (renew via ACME, disable a deprecated
+  protocol in a config file) but organization-specific enough (which CA, which ACME
+  client, which web server) that no generic fixer exists yet.
 - **Mobile/endpoint remediation via MDM** — findings like "outdated iOS version" route
   through an MDM platform's compliance policies (Intune/Jamf API), a different
   integration entirely from infra automation.

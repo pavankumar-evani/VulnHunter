@@ -97,6 +97,25 @@ def load_remediation_findings():
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def count_kev_listed(findings):
+    return sum(1 for f in findings if f.get("kev") and f["kev"].get("listed"))
+
+
+def count_high_epss(findings, threshold=0.5):
+    return sum(1 for f in findings if f.get("epss") and f["epss"].get("score", 0) >= threshold)
+
+
+def asset_type_breakdown(findings):
+    """Returns {asset_type: count}, ordered by count descending - used to show the
+    breadth of coverage (OS/infra/network/IoT/application/certificate), not just a
+    single 'code scan' story."""
+    counts = {}
+    for f in findings:
+        t = f.get("asset", {}).get("type", "unknown")
+        counts[t] = counts.get(t, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: kv[1], reverse=True))
+
+
 def load_remediation_plan():
     path = REPO_ROOT / "REMEDIATION_PLAN.md"
     if not path.exists():

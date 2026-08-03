@@ -3,7 +3,12 @@
     "id": "FIND-1",
     "source": "tenable",
     "source_ref": "57608",
-    "asset": { "name": "WIN-DC01", "ip": "10.20.30.41", "type": "windows-server", "os": "Microsoft Windows Server 2019 Datacenter" },
+    "asset": {
+      "name": "WIN-DC01",
+      "ip": "10.20.30.41",
+      "type": "windows-server",
+      "os": "Microsoft Windows Server 2019 Datacenter"
+    },
     "title": "MS Windows Print Spooler Remote Code Execution (PrintNightmare)",
     "cve": "CVE-2021-34527",
     "cvss": 8.8,
@@ -12,13 +17,29 @@
     "recommended_fix": "Apply the security update referenced in Microsoft KB5004945 or disable the Print Spooler service on servers that do not require printing.",
     "remediation_domain": "windows-server",
     "first_seen": "2026-07-28",
-    "last_seen": "2026-08-02"
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": true,
+      "date_added": "2021-11-03",
+      "vulnerability_name": "Microsoft Windows Print Spooler Remote Code Execution Vulnerability",
+      "known_ransomware_campaign_use": "Known",
+      "due_date": "2022-05-03"
+    },
+    "epss": {
+      "score": 0.99759,
+      "percentile": 0.99955
+    }
   },
   {
     "id": "FIND-2",
     "source": "tenable",
     "source_ref": "78862",
-    "asset": { "name": "WIN-FS02", "ip": "10.20.30.55", "type": "windows-server", "os": "Microsoft Windows Server 2016 Standard" },
+    "asset": {
+      "name": "WIN-FS02",
+      "ip": "10.20.30.55",
+      "type": "windows-server",
+      "os": "Microsoft Windows Server 2016 Standard"
+    },
     "title": "MS17-010: SMBv1 Remote Code Execution (EternalBlue)",
     "cve": "CVE-2017-0144",
     "cvss": 8.1,
@@ -27,13 +48,29 @@
     "recommended_fix": "Apply the MS17-010 patch and/or disable SMBv1 entirely; use SMBv2/v3 instead.",
     "remediation_domain": "windows-server",
     "first_seen": "2026-07-15",
-    "last_seen": "2026-08-02"
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": true,
+      "date_added": "2022-02-10",
+      "vulnerability_name": "Microsoft SMBv1 Remote Code Execution Vulnerability",
+      "known_ransomware_campaign_use": "Known",
+      "due_date": "2022-08-10"
+    },
+    "epss": {
+      "score": 0.9923,
+      "percentile": 0.99932
+    }
   },
   {
     "id": "FIND-3",
     "source": "tenable",
     "source_ref": "99999",
-    "asset": { "name": "WIN-APP07", "ip": "10.20.31.12", "type": "windows-server", "os": "Microsoft Windows Server 2022 Standard" },
+    "asset": {
+      "name": "WIN-APP07",
+      "ip": "10.20.31.12",
+      "type": "windows-server",
+      "os": "Microsoft Windows Server 2022 Standard"
+    },
     "title": "Windows MSHTML Platform Security Feature Bypass",
     "cve": "CVE-2024-30040",
     "cvss": 7.0,
@@ -42,13 +79,29 @@
     "recommended_fix": "Install the applicable Windows Update to address CVE-2024-30040.",
     "remediation_domain": "windows-server",
     "first_seen": "2026-08-01",
-    "last_seen": "2026-08-02"
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": true,
+      "date_added": "2024-05-14",
+      "vulnerability_name": "Microsoft Windows MSHTML Platform Security Feature Bypass Vulnerability",
+      "known_ransomware_campaign_use": "Unknown",
+      "due_date": "2024-06-04"
+    },
+    "epss": {
+      "score": 0.03939,
+      "percentile": 0.8935
+    }
   },
   {
     "id": "FIND-4",
     "source": "tenable",
     "source_ref": "88101",
-    "asset": { "name": "LNX-DB03", "ip": "10.20.32.20", "type": "unix-server", "os": "Ubuntu Linux 20.04" },
+    "asset": {
+      "name": "LNX-DB03",
+      "ip": "10.20.32.20",
+      "type": "unix-server",
+      "os": "Ubuntu Linux 20.04"
+    },
     "title": "Sudo Heap-Based Buffer Overflow (Baron Samedit)",
     "cve": "CVE-2021-3156",
     "cvss": 7.8,
@@ -57,13 +110,29 @@
     "recommended_fix": "Upgrade sudo to version 1.9.5p2 or later via the distribution package manager.",
     "remediation_domain": "unix-server",
     "first_seen": "2026-07-20",
-    "last_seen": "2026-08-02"
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": true,
+      "date_added": "2022-04-06",
+      "vulnerability_name": "Sudo Heap-Based Buffer Overflow Vulnerability",
+      "known_ransomware_campaign_use": "Unknown",
+      "due_date": "2022-04-27"
+    },
+    "epss": {
+      "score": 0.99295,
+      "percentile": 0.99935
+    }
   },
   {
     "id": "FIND-5",
     "source": "tenable",
     "source_ref": "101202",
-    "asset": { "name": "LNX-WEB05", "ip": "10.20.32.44", "type": "unix-server", "os": "Red Hat Enterprise Linux 8" },
+    "asset": {
+      "name": "LNX-WEB05",
+      "ip": "10.20.32.44",
+      "type": "unix-server",
+      "os": "Red Hat Enterprise Linux 8"
+    },
     "title": "OpenSSL Infinite Loop Denial of Service (BN_mod_sqrt)",
     "cve": "CVE-2022-0778",
     "cvss": 7.5,
@@ -72,13 +141,25 @@
     "recommended_fix": "Upgrade OpenSSL to the patched version provided by the distribution's package manager.",
     "remediation_domain": "unix-server",
     "first_seen": "2026-07-25",
-    "last_seen": "2026-08-02"
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": false
+    },
+    "epss": {
+      "score": 0.70561,
+      "percentile": 0.99327
+    }
   },
   {
     "id": "FIND-6",
     "source": "tenable",
     "source_ref": "64127",
-    "asset": { "name": "CSW-CORE01", "ip": "10.20.10.1", "type": "network-routing-switching", "os": "Cisco IOS XE 17.x" },
+    "asset": {
+      "name": "CSW-CORE01",
+      "ip": "10.20.10.1",
+      "type": "network-routing-switching",
+      "os": "Cisco IOS XE 17.x"
+    },
     "title": "Cisco IOS XE Web UI Privilege Escalation",
     "cve": "CVE-2023-20198",
     "cvss": 10.0,
@@ -87,13 +168,29 @@
     "recommended_fix": "Disable the HTTP/HTTPS server feature on internet-facing devices or apply the vendor-provided fix per Cisco's advisory.",
     "remediation_domain": null,
     "first_seen": "2026-07-30",
-    "last_seen": "2026-08-02"
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": true,
+      "date_added": "2023-10-16",
+      "vulnerability_name": "Cisco IOS XE Web UI Privilege Escalation Vulnerability",
+      "known_ransomware_campaign_use": "Unknown",
+      "due_date": "2023-10-20"
+    },
+    "epss": {
+      "score": 0.99571,
+      "percentile": 0.99944
+    }
   },
   {
     "id": "FIND-7",
     "source": "armis",
     "source_ref": "481203",
-    "asset": { "name": "AXIS-CAM-LOBBY-03", "ip": "10.20.50.12", "type": "iot-ot-device", "os": "Axis Communications M3046-V" },
+    "asset": {
+      "name": "AXIS-CAM-LOBBY-03",
+      "ip": "10.20.50.12",
+      "type": "iot-ot-device",
+      "os": "Axis Communications M3046-V"
+    },
     "title": "Device Exposes Telnet Service",
     "cve": null,
     "cvss": null,
@@ -102,13 +199,20 @@
     "recommended_fix": "Disable Telnet and use the device's encrypted management protocol (SSH/HTTPS) instead.",
     "remediation_domain": null,
     "first_seen": "2026-07-10",
-    "last_seen": "2026-08-01"
+    "last_seen": "2026-08-01",
+    "kev": null,
+    "epss": null
   },
   {
     "id": "FIND-8",
     "source": "armis",
     "source_ref": "481990",
-    "asset": { "name": "HVAC-CTRL-B2", "ip": "10.20.51.44", "type": "iot-ot-device", "os": "Johnson Controls FX-PCG" },
+    "asset": {
+      "name": "HVAC-CTRL-B2",
+      "ip": "10.20.51.44",
+      "type": "iot-ot-device",
+      "os": "Johnson Controls FX-PCG"
+    },
     "title": "Unauthenticated Access to Management Interface",
     "cve": "CVE-2019-7592",
     "cvss": null,
@@ -117,13 +221,22 @@
     "recommended_fix": "Enable authentication on the management interface and restrict access to an OT management VLAN.",
     "remediation_domain": null,
     "first_seen": "2026-06-28",
-    "last_seen": "2026-08-01"
+    "last_seen": "2026-08-01",
+    "kev": {
+      "listed": false
+    },
+    "epss": null
   },
   {
     "id": "FIND-9",
     "source": "armis",
     "source_ref": "482055",
-    "asset": { "name": "MDM-IPHONE-J-SMITH", "ip": "10.20.60.201", "type": "iot-ot-device", "os": "iOS (3 releases behind)" },
+    "asset": {
+      "name": "MDM-IPHONE-J-SMITH",
+      "ip": "10.20.60.201",
+      "type": "iot-ot-device",
+      "os": "iOS (3 releases behind)"
+    },
     "title": "Outdated OS Version",
     "cve": null,
     "cvss": null,
@@ -132,13 +245,20 @@
     "recommended_fix": "Prompt user / enforce MDM compliance policy to update iOS to the current release.",
     "remediation_domain": null,
     "first_seen": "2026-07-22",
-    "last_seen": "2026-08-01"
+    "last_seen": "2026-08-01",
+    "kev": null,
+    "epss": null
   },
   {
     "id": "FIND-10",
     "source": "threat-intel",
     "source_ref": "TI-2026-0142",
-    "asset": { "name": "WIN-BASTION02", "ip": "10.20.30.90", "type": "windows-server", "os": "Microsoft Windows Server 2019 Standard" },
+    "asset": {
+      "name": "WIN-BASTION02",
+      "ip": "10.20.30.90",
+      "type": "windows-server",
+      "os": "Microsoft Windows Server 2019 Standard"
+    },
     "title": "Internet-facing RDP discovered on Windows bastion host",
     "cve": null,
     "cvss": null,
@@ -147,13 +267,20 @@
     "recommended_fix": "Restrict RDP to the VPN/jump-host network range via host firewall/NSG rule, and enforce NLA + MFA for any remaining external RDP access.",
     "remediation_domain": "windows-server",
     "first_seen": "2026-07-29",
-    "last_seen": "2026-07-29"
+    "last_seen": "2026-07-29",
+    "kev": null,
+    "epss": null
   },
   {
     "id": "FIND-11",
     "source": "threat-intel",
     "source_ref": "TI-2026-0158",
-    "asset": { "name": "LNX-AUTH01", "ip": "10.20.32.61", "type": "unix-server", "os": "Red Hat Enterprise Linux 9" },
+    "asset": {
+      "name": "LNX-AUTH01",
+      "ip": "10.20.32.61",
+      "type": "unix-server",
+      "os": "Red Hat Enterprise Linux 9"
+    },
     "title": "OpenSSH regression allows authentication bypass under non-default config",
     "cve": "CVE-2024-6387",
     "cvss": null,
@@ -162,6 +289,88 @@
     "recommended_fix": "Upgrade OpenSSH to the vendor-patched version immediately; this host handles internal authentication traffic.",
     "remediation_domain": "unix-server",
     "first_seen": "2026-08-01",
-    "last_seen": "2026-08-01"
+    "last_seen": "2026-08-01",
+    "kev": {
+      "listed": false
+    },
+    "epss": {
+      "score": 0.99506,
+      "percentile": 0.9994
+    }
+  },
+  {
+    "id": "FIND-12",
+    "source": "tenable",
+    "source_ref": "156327",
+    "asset": {
+      "name": "APP-ORDERS01",
+      "ip": "10.20.40.15",
+      "type": "application",
+      "os": "Ubuntu Linux 22.04"
+    },
+    "title": "Apache Log4j2 Remote Code Execution (Log4Shell)",
+    "cve": "CVE-2021-44228",
+    "cvss": 10.0,
+    "severity": "Critical",
+    "description": "The order-processing application bundles a vulnerable version of Apache Log4j2. An unauthenticated attacker can trigger remote code execution by causing the application to log a crafted string (JNDI lookup injection).",
+    "recommended_fix": "Upgrade the bundled Log4j2 library to 2.17.1 or later; do not rely on mitigations like removing JndiLookup.class as a permanent fix.",
+    "remediation_domain": null,
+    "first_seen": "2026-08-01",
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": true,
+      "date_added": "2021-12-10",
+      "vulnerability_name": "Apache Log4j2 Remote Code Execution Vulnerability",
+      "known_ransomware_campaign_use": "Known",
+      "due_date": "2021-12-24"
+    },
+    "epss": {
+      "score": 0.99999,
+      "percentile": 1.0
+    }
+  },
+  {
+    "id": "FIND-13",
+    "source": "tenable",
+    "source_ref": "15901",
+    "asset": {
+      "name": "WEB-PORTAL01",
+      "ip": "10.20.41.20",
+      "type": "certificate",
+      "os": "Ubuntu Linux 22.04"
+    },
+    "title": "SSL Certificate Expiry",
+    "cve": null,
+    "cvss": null,
+    "severity": "Medium",
+    "description": "The SSL certificate for this service expires within 30 days. An expired certificate will cause browsers to show trust warnings and may break automated clients that validate certificate expiry.",
+    "recommended_fix": "Renew and replace the SSL certificate before its expiration date via your CA or ACME automation.",
+    "remediation_domain": null,
+    "first_seen": "2026-07-15",
+    "last_seen": "2026-08-02",
+    "kev": null,
+    "epss": null
+  },
+  {
+    "id": "FIND-14",
+    "source": "tenable",
+    "source_ref": "104743",
+    "asset": {
+      "name": "WEB-PORTAL01",
+      "ip": "10.20.41.20",
+      "type": "certificate",
+      "os": "Ubuntu Linux 22.04"
+    },
+    "title": "Deprecated TLSv1.0 and TLSv1.1 Protocol Detected",
+    "cve": null,
+    "cvss": null,
+    "severity": "Medium",
+    "description": "The remote service accepts connections encrypted using TLS 1.0 and TLS 1.1, both deprecated protocols with known cryptographic weaknesses.",
+    "recommended_fix": "Disable TLSv1.0 and TLSv1.1 in the web server's TLS configuration; support TLSv1.2 or later only.",
+    "remediation_domain": null,
+    "first_seen": "2026-07-15",
+    "last_seen": "2026-08-02",
+    "kev": null,
+    "epss": null
   }
 ]

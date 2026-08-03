@@ -15,7 +15,8 @@
   <thead>
     <tr>
       <th>ID</th><th>Asset</th><th>Title</th><th>CVE</th><th>Severity</th>
-      <th>Action Type</th><th>Automation Target</th><th>Risk Tier</th><th>Playbook</th>
+      <th>Action Type</th><th>Automation Target</th><th>Risk Tier</th>
+      <th>KEV</th><th>EPSS</th><th>Playbook</th>
     </tr>
   </thead>
   <tbody>
@@ -29,6 +30,14 @@
       <td>{{ row['Action Type'] }}</td>
       <td>{{ row['Automation Target'] }}</td>
       <td><span class="badge badge-{{ row['Risk Tier']|replace('-', '_') }}">{{ row['Risk Tier'] }}</span></td>
+      <td>
+        {% if row.KEV == 'Yes' %}
+          <span class="badge badge-critical">KEV</span>
+        {% else %}
+          <span class="muted">{{ row.KEV }}</span>
+        {% endif %}
+      </td>
+      <td>{{ row.EPSS }}</td>
       <td>
         {% set pb = playbooks_by_finding.get(row.ID) %}
         {% if pb %}

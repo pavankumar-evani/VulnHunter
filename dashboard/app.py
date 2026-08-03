@@ -39,6 +39,9 @@ def overview():
         remediation_manual_only=len(manual_only),
         playbook_count=len(playbooks),
         plan=plan,
+        kev_count=dashboard_data.count_kev_listed(findings),
+        high_epss_count=dashboard_data.count_high_epss(findings),
+        asset_type_breakdown=dashboard_data.asset_type_breakdown(findings),
     )
 
 

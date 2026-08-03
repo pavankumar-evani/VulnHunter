@@ -35,11 +35,14 @@ test_api_status_endpoint (test_dashboard.DashboardRoutesRender.test_api_status_e
 test_dry_run_post_never_calls_real_api (test_dashboard.DashboardRoutesRender.test_dry_run_post_never_calls_real_api)
 The critical safety test: submitting the run form WITHOUT the confirm ... ok
 test_overview_page_loads (test_dashboard.DashboardRoutesRender.test_overview_page_loads) ... ok
+test_overview_page_shows_kev_and_epss_kpis (test_dashboard.DashboardRoutesRender.test_overview_page_shows_kev_and_epss_kpis) ... ok
 test_playbook_detail_page_loads (test_dashboard.DashboardRoutesRender.test_playbook_detail_page_loads) ... ok
 test_remediate_page_lists_all_findings (test_dashboard.DashboardRoutesRender.test_remediate_page_lists_all_findings) ... ok
 test_run_page_loads (test_dashboard.DashboardRoutesRender.test_run_page_loads) ... ok
 test_unknown_playbook_returns_404 (test_dashboard.DashboardRoutesRender.test_unknown_playbook_returns_404) ... ok
 test_vulnhunt_page_lists_all_findings (test_dashboard.DashboardRoutesRender.test_vulnhunt_page_lists_all_findings) ... ok
+test_asset_type_breakdown_covers_all_categories (test_dashboard.DataLayerReadsRealArtifacts.test_asset_type_breakdown_covers_all_categories) ... ok
+test_kev_and_high_epss_counts (test_dashboard.DataLayerReadsRealArtifacts.test_kev_and_high_epss_counts) ... ok
 test_no_mojibake_in_parsed_text (test_dashboard.DataLayerReadsRealArtifacts.test_no_mojibake_in_parsed_text)
 Regression guard for the subprocess-encoding bug: git output must be decoded ... ok
 test_playbooks_match_known_count (test_dashboard.DataLayerReadsRealArtifacts.test_playbooks_match_known_count) ... ok
@@ -47,11 +50,29 @@ test_remediation_findings_match_known_total (test_dashboard.DataLayerReadsRealAr
 test_remediation_plan_queue_matches_findings_count (test_dashboard.DataLayerReadsRealArtifacts.test_remediation_plan_queue_matches_findings_count) ... ok
 test_risk_tier_counts_match_known_split (test_dashboard.DataLayerReadsRealArtifacts.test_risk_tier_counts_match_known_split) ... ok
 test_vulnhunt_data_matches_known_totals (test_dashboard.DataLayerReadsRealArtifacts.test_vulnhunt_data_matches_known_totals) ... ok
+test_enrich_file_defaults_to_overwriting_input (test_enrichment.EnrichFileIO.test_enrich_file_defaults_to_overwriting_input) ... ok
+test_enrich_file_writes_enriched_json (test_enrichment.EnrichFileIO.test_enrich_file_writes_enriched_json)
+Exercises enrich_file() end-to-end, including its own internal calls to ... ok
+test_epss_missing_for_a_cve_is_none_not_a_crash (test_enrichment.EnrichmentAssembly.test_epss_missing_for_a_cve_is_none_not_a_crash) ... ok
+test_findings_without_cve_get_null_enrichment (test_enrichment.EnrichmentAssembly.test_findings_without_cve_get_null_enrichment) ... ok
+test_kev_listed_finding_gets_full_kev_record (test_enrichment.EnrichmentAssembly.test_kev_listed_finding_gets_full_kev_record) ... ok
+test_non_kev_listed_finding_gets_listed_false (test_enrichment.EnrichmentAssembly.test_non_kev_listed_finding_gets_listed_false) ... ok
+test_original_finding_fields_are_preserved (test_enrichment.EnrichmentAssembly.test_original_finding_fields_are_preserved) ... ok
+test_fetch_epss_scores_batches_large_cve_lists (test_enrichment.EpssFetching.test_fetch_epss_scores_batches_large_cve_lists) ... ok
+test_fetch_epss_scores_deduplicates_input (test_enrichment.EpssFetching.test_fetch_epss_scores_deduplicates_input) ... ok
+test_fetch_epss_scores_maps_documented_shape (test_enrichment.EpssFetching.test_fetch_epss_scores_maps_documented_shape) ... ok
+test_fetch_cisa_kev_maps_documented_shape (test_enrichment.KevFetching.test_fetch_cisa_kev_maps_documented_shape) ... ok
+test_fetch_cisa_kev_skips_entries_with_no_cve_id (test_enrichment.KevFetching.test_fetch_cisa_kev_skips_entries_with_no_cve_id) ... ok
+test_printnightmare_is_kev_listed_and_high_epss_live (test_enrichment.LiveSmokeTest.test_printnightmare_is_kev_listed_and_high_epss_live) ... ok
 test_no_real_looking_secrets_in_tracked_files (test_pipeline_artifacts.NoRealSecretsLeakedAnywhere.test_no_real_looking_secrets_in_tracked_files) ... ok
 test_all_three_sources_represented (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_all_three_sources_represented) ... ok
 test_asset_type_classification_spot_checks (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_asset_type_classification_spot_checks) ... ok
-test_eleven_findings_total (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_eleven_findings_total) ... ok
 test_every_finding_has_required_fields (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_every_finding_has_required_fields) ... ok
+test_fourteen_findings_total (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_fourteen_findings_total) ... ok
+test_kev_and_epss_fields_present_and_consistent (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_kev_and_epss_fields_present_and_consistent)
+Every finding must have kev/epss keys (added by threat-intel-enricher). ... ok
+test_known_kev_listed_findings_match_real_cisa_catalog (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_known_kev_listed_findings_match_real_cisa_catalog)
+Spot-checks against real, verified CISA KEV status as of this data's ... ok
 test_no_fabricated_cve_ids (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_no_fabricated_cve_ids)
 Every non-null CVE must match the standard CVE-YYYY-NNNN(N...) format - ... ok
 test_remediation_domain_only_set_for_supported_domains (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_remediation_domain_only_set_for_supported_domains) ... ok
@@ -86,7 +107,7 @@ test_hardcoded_secret_present (test_pipeline_artifacts.VulnHuntScannerFindsRealV
 test_sql_injection_string_concat_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_sql_injection_string_concat_present) ... ok
 
 ----------------------------------------------------------------------
-Ran 78 tests in 6.298s
+Ran 96 tests in 10.503s
 
 OK
 Would run: C:\Users\pavane\AppData\Roaming\Claude\claude-code\2.1.219\claude.exe -p /vulnhunt vulnerable-demo-app --output-format json --permission-mode acceptEdits --allowedTools Read Grep Glob Bash Edit Write --max-budget-usd 2.00

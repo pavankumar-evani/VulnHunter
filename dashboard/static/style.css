@@ -65,6 +65,7 @@ h2 { font-size: 1.15rem; margin-top: 32px; }
 }
 .kpi-card.kpi-good { border-top: 3px solid var(--brand-accent); }
 .kpi-card.kpi-warn { border-top: 3px solid #d97706; }
+.kpi-card.kpi-danger { border-top: 3px solid var(--danger); }
 .kpi-value { font-size: 1.8rem; font-weight: 700; }
 .kpi-label { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
 

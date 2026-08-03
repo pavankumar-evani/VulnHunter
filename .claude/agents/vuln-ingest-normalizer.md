@@ -34,7 +34,15 @@ Map every record into the schema in `remediation/schema/normalized-finding-schem
 
 - Assign sequential `id`s (`FIND-1`, `FIND-2`, ...) across **all** input files combined,
   in the order you process files (Tenable, then Armis, then threat-intel, unless told
-  otherwise).
+  otherwise). **IDs are stable, not positional**: if
+  `remediation/output/normalized-findings.json` already exists from a prior run, keep
+  every existing finding's `id` exactly as it is (matched by `source` + `source_ref`,
+  not by position in the file) and only assign new `FIND-N` numbers, continuing from the
+  current highest, to genuinely new records. Re-numbering everything from scratch on
+  every run would silently break any generated playbook filename, test, or report that
+  references a specific finding ID — those references must stay valid across ingestion
+  runs, the same way a database primary key shouldn't change when a new row is inserted
+  elsewhere in the table.
 - `asset.type` classification (this is the most important judgment call you make):
   - OS string contains "Windows Server" → `windows-server`
   - OS string contains "Windows" but not "Server" → `windows-endpoint`
@@ -46,12 +54,20 @@ Map every record into the schema in `remediation/schema/normalized-finding-schem
     appliance → `network-security-device`
   - Armis `deviceType` is a camera, building-automation controller, phone, printer, or any
     device that isn't a general-purpose server/workstation → `iot-ot-device`
+  - Tenable `Name`/`Synopsis` names a specific application, framework, or library rather
+    than the host OS itself (e.g. "Apache Log4j2 Remote Code Execution", "Apache Struts",
+    a named CMS/web framework) — the underlying host OS is incidental to the fix, the fix
+    is a library/application upgrade → `application`
+  - Tenable `Name`/`Synopsis` is about the SSL/TLS layer rather than the host or an
+    installed application — "SSL Certificate Expiry", "SSL Certificate Cannot Be
+    Trusted", "Deprecated SSLv3/TLSv1.0 Protocol", "SSL Medium Strength Cipher", etc. →
+    `certificate`
   - If genuinely unclear, use `unknown` — do not guess and mislabel; a wrong asset type
     routes the finding to the wrong (or no) remediation fixer.
 - `remediation_domain`: copy from `asset.type` for `windows-server` and `unix-server`
-  (the two domains with a working fixer today); set to `null` for every other asset type,
-  since there is no automated fixer for them yet — they still get planned, just not
-  auto-remediated.
+  (the two domains with a working fixer today); set to `null` for every other asset type
+  (including `application` and `certificate`), since there is no automated fixer for them
+  yet — they still get planned, just not auto-remediated.
 - Severity normalization: Tenable's `Risk` column and CVSS score map directly
   (Critical/High/Medium/Low). Armis `riskLevel` maps directly. Threat-intel `severity` is
   already in this scale, used as-is.

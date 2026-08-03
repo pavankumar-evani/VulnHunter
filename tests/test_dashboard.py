@@ -30,22 +30,35 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
 
     def test_remediation_findings_match_known_total(self):
         findings = dashboard_data.load_remediation_findings()
-        self.assertEqual(len(findings), 11)
+        self.assertEqual(len(findings), 14)
 
     def test_remediation_plan_queue_matches_findings_count(self):
         plan = dashboard_data.load_remediation_plan()
         self.assertTrue(plan["available"])
-        self.assertEqual(len(plan["queue"]), 11)
+        self.assertEqual(len(plan["queue"]), 14)
 
     def test_risk_tier_counts_match_known_split(self):
         plan = dashboard_data.load_remediation_plan()
         self.assertEqual(plan["risk_tier_counts"].get("auto-approvable"), 2)
         self.assertEqual(plan["risk_tier_counts"].get("needs-change-approval"), 5)
-        self.assertEqual(plan["risk_tier_counts"].get("manual-only"), 4)
+        self.assertEqual(plan["risk_tier_counts"].get("manual-only"), 7)
 
     def test_playbooks_match_known_count(self):
         playbooks = dashboard_data.load_playbooks()
         self.assertEqual(len(playbooks), 7)
+
+    def test_kev_and_high_epss_counts(self):
+        findings = dashboard_data.load_remediation_findings()
+        self.assertEqual(dashboard_data.count_kev_listed(findings), 6)
+        self.assertEqual(dashboard_data.count_high_epss(findings), 7)
+
+    def test_asset_type_breakdown_covers_all_categories(self):
+        findings = dashboard_data.load_remediation_findings()
+        breakdown = dashboard_data.asset_type_breakdown(findings)
+        self.assertEqual(sum(breakdown.values()), 14)
+        for expected_type in ("windows-server", "unix-server", "network-routing-switching",
+                               "iot-ot-device", "application", "certificate"):
+            self.assertIn(expected_type, breakdown)
 
     def test_no_mojibake_in_parsed_text(self):
         """Regression guard for the subprocess-encoding bug: git output must be decoded
@@ -76,8 +89,16 @@ class DashboardRoutesRender(unittest.TestCase):
     def test_remediate_page_lists_all_findings(self):
         resp = self.client.get("/remediate")
         self.assertEqual(resp.status_code, 200)
-        for i in range(1, 12):
+        for i in range(1, 15):
             self.assertIn(f"FIND-{i}".encode(), resp.data)
+
+    def test_overview_page_shows_kev_and_epss_kpis(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"CISA KEV-listed", resp.data)
+        self.assertIn(b"High EPSS", resp.data)
+        self.assertIn(b"certificate", resp.data)
+        self.assertIn(b"application", resp.data)
 
     def test_playbook_detail_page_loads(self):
         resp = self.client.get("/playbooks/FIND-4-sudo-baron-samedit-patch.yml")
@@ -111,7 +132,7 @@ class DashboardRoutesRender(unittest.TestCase):
         payload = resp.get_json()
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["vulnhunt_findings"], 9)
-        self.assertEqual(payload["remediation_findings"], 11)
+        self.assertEqual(payload["remediation_findings"], 14)
 
 
 if __name__ == "__main__":

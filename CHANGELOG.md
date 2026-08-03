@@ -7,6 +7,31 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Live CISA KEV + EPSS threat-intel enrichment** (`remediation/enrichment/`,
+  `threat-intel-enricher` subagent) — real, free, public, no-auth APIs, verified against
+  the live endpoints during development (unlike the Tenable/Armis connectors). Moves
+  `/remediate`'s prioritization beyond raw CVSS: `remediation-planner` now escalates a
+  finding's priority when it's confirmed KEV-listed (actively exploited) or has EPSS ≥
+  50% (high near-term exploitation probability) — never overriding `risk_tier`, which
+  still gates what's safe to auto-apply. 13 new tests, including one deliberate live
+  smoke test against the real APIs.
+- **`application` and `certificate` asset classes** — `/remediate` now explicitly covers
+  more than OS/infra findings: a Log4Shell (CVE-2021-44228) sample finding demonstrates
+  application-layer library CVEs, and two new certificate/TLS sample findings (SSL
+  expiry, deprecated TLSv1.0/1.1) demonstrate findings with no CVE at all. Both route to
+  `manual-only` today, same honest-gap treatment as network/IoT.
+- Dashboard now shows KEV-listed / high-EPSS KPI counts and an asset-class coverage
+  table on the Overview page, and KEV/EPSS columns on the remediation queue.
+- Sample data grew to 14 findings (was 11); full test suite now 96/96 across 5 files.
+
+### Fixed
+- A hand-counting error in `REMEDIATION_PLAN.md`'s summary (claimed 7 KEV-listed
+  findings; the real, live-verified count is 6) — caught by cross-checking against the
+  dashboard's programmatically-computed KPI rather than trusting the hand count.
+
+## Tier 2 (headless CLI, dashboard, connectors)
+
+### Added
 - `cli/vulnhunter.py` — headless CLI wrapping `claude -p` so either pipeline runs from a
   script/CI/cron without an interactive session. Spend-capped, dry-run by default in
   spirit, with a JSON audit log per real invocation. 13 tests, no real API calls made in

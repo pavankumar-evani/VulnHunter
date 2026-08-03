@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-78%2F78%20passing-brightgreen.svg)](TEST_CASES.md)
+[![Tests](https://img.shields.io/badge/tests-96%2F96%20passing-brightgreen.svg)](TEST_CASES.md)
 
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
@@ -103,22 +103,26 @@ Source Control panel.
 
 ## Remediation Engine (`/remediate`)
 
-Vulnerability management in a real enterprise isn't one tool — it's Tenable scan results,
-Armis device-risk alerts (heavy on IoT/OT and unmanaged devices), and analyst-curated
-threat intel, landing on assets as different as domain controllers, Linux database
-servers, core switches, firewalls, and IP cameras. `/remediate` turns that firehose into a
-prioritized, safety-gated remediation plan — and, for the asset classes it supports today,
-into ready-to-review fix automation.
+Vulnerability management in a real enterprise isn't one tool, and it's not just code
+either. It's Tenable scan results, Armis device-risk alerts (heavy on IoT/OT and
+unmanaged devices), and analyst-curated threat intel, landing on assets as different as
+domain controllers, Linux database servers, core switches, an internal Java application,
+and an expiring TLS certificate. `/remediate` covers **OS-level, infrastructure-level,
+application-level, and certificate-level** findings — not just source code — and turns
+that firehose into a prioritized, threat-intel-aware, safety-gated remediation plan.
 
 ```
 /remediate [--generate]
         │
         ▼
-  vuln-ingest-normalizer   Read, Glob, Write   → normalizes Tenable CSV / Armis JSON /
-        │                                        threat-intel JSON into one Finding schema
+  vuln-ingest-normalizer     Read, Glob, Write   → normalizes Tenable CSV / Armis JSON /
+        │                                          threat-intel JSON into one Finding schema
         ▼
-  remediation-planner      Read, Write         → REMEDIATION_PLAN.md: action type,
-        │                                        risk tier, rollback plan, priority
+  threat-intel-enricher      Read, Write, Bash   → adds real CISA KEV + EPSS data to
+        │                                          every finding with a CVE (live public APIs)
+        ▼
+  remediation-planner        Read, Write         → REMEDIATION_PLAN.md: action type, risk
+        │                                          tier, priority (KEV/EPSS-aware), rollback
         ▼
   ┌─────────────────────┴─────────────────────┐
   ▼                                            ▼
@@ -127,21 +131,42 @@ Read, Write → Ansible playbooks    Read, Write → Ansible playbooks
 (windows-server findings only)     (unix-server findings only)
 ```
 
+### Threat-intel-aware prioritization, not just CVSS
+
+CVSS measures theoretical severity, not real-world risk. `threat-intel-enricher` calls two
+real, free, public APIs — no credentials, verified against the live endpoints during
+development — and `remediation-planner` uses them to override pure asset-criticality
+heuristics:
+
+- **[CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)** — is this
+  CVE *confirmed* being actively exploited in the wild right now? A KEV-listed finding is
+  escalated to top priority regardless of asset type.
+- **[EPSS](https://www.first.org/epss/)** (FIRST.org) — a 0–100% probability of
+  exploitation in the next 30 days. Catches high-risk CVEs KEV hasn't confirmed yet — in
+  our own sample data, an OpenSSL DoS (not KEV-listed) scores 70.6% EPSS, and an OpenSSH
+  regression (also not KEV-listed) scores 99.5%.
+
+KEV/EPSS affect **priority** (how urgently to act) — never `risk_tier` (how safe a fix is
+to auto-apply). An actively-exploited CVE on a domain controller is still
+`needs-change-approval`, just more urgent to get approved.
+
 ### Supported asset classes today
 
 | Asset class | Ingested & planned? | Automated fix generation? |
 |---|---|---|
-| Windows Server | Yes | Yes — `remediation-fixer-windows` |
-| Unix/Linux Server | Yes | Yes — `remediation-fixer-unix` |
-| Network routing/switching | Yes | Not yet — plan flags it, no fixer exists |
-| Network security devices (firewalls) | Yes | Not yet — plan flags it, no fixer exists |
+| Windows Server (OS-level) | Yes | Yes — `remediation-fixer-windows` |
+| Unix/Linux Server (OS-level) | Yes | Yes — `remediation-fixer-unix` |
+| Network routing/switching (infra) | Yes | Not yet — plan flags it, no fixer exists |
+| Network security devices/firewalls (infra) | Yes | Not yet — plan flags it, no fixer exists |
 | IoT/OT devices, mobile/endpoints | Yes | Not yet — plan flags it, no fixer exists |
+| Application (library/framework CVEs, e.g. Log4Shell) | Yes | Not yet — needs a per-language fixer |
+| Certificate/TLS (expiry, deprecated protocols) | Yes | Not yet — needs CA/ACME integration |
 
-Every asset class gets ingested, normalized, and included in the risk-tiered plan — the
-gap for network/firewall/IoT devices is fix-generation automation, not visibility. Adding
-`remediation-fixer-network` (vendor CLI config diffs via Ansible's network collections)
-and a per-vendor IoT/OT fixer is the natural next step; the schema and planner already
-account for them (see `remediation/schema/normalized-finding-schema.md`).
+Every asset class gets ingested, normalized, enriched with KEV/EPSS, and included in the
+risk-tiered plan — the gap for network/firewall/IoT/application/certificate findings is
+fix-generation automation, not visibility. See
+[KNOWLEDGE_TRANSFER.md's roadmap](KNOWLEDGE_TRANSFER.md#9-roadmap--path-to-commercial-grade)
+for what each remaining fixer needs.
 
 ### The safety model — no auto-execution, ever
 
@@ -171,12 +196,14 @@ claude
 /remediate --generate       # generates the Ansible playbooks for auto-remediable findings
 ```
 
-Expected result (against the included sample Tenable/Armis/threat-intel exports): 11
-findings normalized (6 Tenable, 3 Armis, 2 threat intel) across 4 asset classes; 7 are
-eligible for automated fix generation (4 Windows Server, 3 Unix Server) and land in
-`remediation/output/` as reviewable playbooks; the remaining 4 (a core Cisco switch, two
-IoT/OT devices, one mobile endpoint) are fully planned in `REMEDIATION_PLAN.md` with a
-clear reason no fixer exists yet.
+Expected result (against the included sample Tenable/Armis/threat-intel exports): 14
+findings normalized (9 Tenable, 3 Armis, 2 threat intel) across 6 asset classes,
+enriched with real CISA KEV/EPSS data (6 KEV-listed, 7 with EPSS ≥ 50%); 7 are eligible
+for automated fix generation (4 Windows Server, 3 Unix Server) and land in
+`remediation/output/` as reviewable playbooks; the remaining 7 (a core Cisco switch, an
+IoT camera and OT controller, a mobile endpoint, a Log4Shell-vulnerable application, and
+2 certificate/TLS findings) are fully planned in `REMEDIATION_PLAN.md` with a clear
+reason no fixer exists yet for that asset class.
 
 ## Project structure
 
@@ -188,6 +215,7 @@ clear reason no fixer exists yet.
 │   │   ├── vuln-triage-reporter.md
 │   │   ├── vuln-fixer.md
 │   │   ├── vuln-ingest-normalizer.md
+│   │   ├── threat-intel-enricher.md
 │   │   ├── remediation-planner.md
 │   │   ├── remediation-fixer-windows.md
 │   │   └── remediation-fixer-unix.md
@@ -207,13 +235,15 @@ clear reason no fixer exists yet.
 │   ├── schema/                 # normalized Finding schema doc
 │   ├── connectors/             # live Tenable/Armis API clients (unit-tested, not yet
 │   │                           #   verified against a real tenant - see its README)
+│   ├── enrichment/              # live CISA KEV + EPSS client (verified against the
+│   │                           #   real public endpoints - see its module docstring)
 │   └── output/                 # normalized findings + generated playbooks land here
 ├── vulnerable-demo-app/        # intentionally vulnerable Flask app for the /vulnhunt demo
 │   ├── app.py
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── init_db.py
-├── tests/                       # 78 tests (pipeline artifacts, CLI, dashboard, connectors), see TEST_CASES.md
+├── tests/                       # 96 tests (pipeline artifacts, CLI, dashboard, connectors, enrichment), see TEST_CASES.md
 ├── .github/                     # CI workflow, issue/PR templates, CODEOWNERS
 ├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md

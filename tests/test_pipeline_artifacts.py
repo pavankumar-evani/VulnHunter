@@ -136,8 +136,8 @@ class RemediationNormalizedFindingsAreWellFormed(unittest.TestCase):
         path = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
         cls.findings = json.loads(path.read_text(encoding="utf-8"))
 
-    def test_eleven_findings_total(self):
-        self.assertEqual(len(self.findings), 11)
+    def test_fourteen_findings_total(self):
+        self.assertEqual(len(self.findings), 14)
 
     def test_every_finding_has_required_fields(self):
         required = {"id", "source", "source_ref", "asset", "title", "severity", "remediation_domain"}
@@ -157,6 +157,9 @@ class RemediationNormalizedFindingsAreWellFormed(unittest.TestCase):
         self.assertEqual(by_id["FIND-4"]["asset"]["type"], "unix-server")      # LNX-DB03
         self.assertEqual(by_id["FIND-6"]["asset"]["type"], "network-routing-switching")  # CSW-CORE01
         self.assertEqual(by_id["FIND-7"]["asset"]["type"], "iot-ot-device")    # AXIS camera
+        self.assertEqual(by_id["FIND-12"]["asset"]["type"], "application")     # Log4Shell
+        self.assertEqual(by_id["FIND-13"]["asset"]["type"], "certificate")     # SSL cert expiry
+        self.assertEqual(by_id["FIND-14"]["asset"]["type"], "certificate")     # deprecated TLS
 
     def test_remediation_domain_only_set_for_supported_domains(self):
         supported = {"windows-server", "unix-server"}
@@ -176,6 +179,30 @@ class RemediationNormalizedFindingsAreWellFormed(unittest.TestCase):
         for f in self.findings:
             if f["cve"] is not None:
                 self.assertRegex(f["cve"], r"^CVE-\d{4}-\d{4,}$")
+
+    def test_kev_and_epss_fields_present_and_consistent(self):
+        """Every finding must have kev/epss keys (added by threat-intel-enricher).
+        A finding with no CVE must have both null; a finding with a CVE must have a
+        kev dict with at least a `listed` boolean."""
+        for f in self.findings:
+            self.assertIn("kev", f, f"{f['id']} missing kev field")
+            self.assertIn("epss", f, f"{f['id']} missing epss field")
+            if f["cve"] is None:
+                self.assertIsNone(f["kev"], f"{f['id']} has no CVE but kev is not null")
+                self.assertIsNone(f["epss"], f"{f['id']} has no CVE but epss is not null")
+            else:
+                self.assertIsInstance(f["kev"], dict)
+                self.assertIn("listed", f["kev"])
+
+    def test_known_kev_listed_findings_match_real_cisa_catalog(self):
+        """Spot-checks against real, verified CISA KEV status as of this data's
+        enrichment run (see remediation/enrichment/kev_epss.py) - these are well-known,
+        long-standing KEV entries (PrintNightmare, Log4Shell) unlikely to ever be
+        removed from the catalog, so this is a stable regression check, not a flaky one."""
+        by_id = {f["id"]: f for f in self.findings}
+        self.assertTrue(by_id["FIND-1"]["kev"]["listed"])   # PrintNightmare
+        self.assertTrue(by_id["FIND-12"]["kev"]["listed"])  # Log4Shell
+        self.assertFalse(by_id["FIND-5"]["kev"]["listed"])  # OpenSSL DoS - not KEV-listed
 
 
 class RemediationPlanIsConsistentWithFindings(unittest.TestCase):
@@ -214,7 +241,7 @@ class RemediationPlaybooksMatchThePlan(unittest.TestCase):
         self.assertTrue(playbook_ids.issubset(automatable_ids))
 
     def test_no_playbook_for_manual_only_findings(self):
-        manual_only_ids = {"FIND-6", "FIND-7", "FIND-8", "FIND-9"}
+        manual_only_ids = {"FIND-6", "FIND-7", "FIND-8", "FIND-9", "FIND-12", "FIND-13", "FIND-14"}
         playbook_ids = {p.name.split("-", 2)[0] + "-" + p.name.split("-", 2)[1] for p in self.playbooks}
         self.assertEqual(playbook_ids & manual_only_ids, set())
 

@@ -1,27 +1,32 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all three test files: `tests/test_pipeline_artifacts.py` (both
-pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI), and
-`tests/test_dashboard.py` (the web dashboard). Every row below maps 1:1 to one `test_*`
-method in one of those files — there is no test case here without a corresponding,
-runnable assertion, and no assertion in any suite that isn't documented here.
+Formal test case log for all five test files: `tests/test_pipeline_artifacts.py` (both
+pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
+`tests/test_dashboard.py` (the web dashboard), `tests/test_connectors.py` (live
+Tenable/Armis connectors), and `tests/test_enrichment.py` (live CISA KEV + EPSS
+enrichment). Every row below maps 1:1 to one `test_*` method in one of those files —
+there is no test case here without a corresponding, runnable assertion, and no assertion
+in any suite that isn't documented here.
 
 **How to reproduce these results yourself:**
 ```bash
-pip install -r dashboard/requirements.txt   # only needed for test_dashboard.py
+pip install -r dashboard/requirements.txt
+pip install -r remediation/connectors/requirements.txt
+pip install -r remediation/enrichment/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 78 / 78 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 96 / 96 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
 (subagents only run inside an interactive Claude Code session — see
 [KNOWLEDGE_TRANSFER.md §10](KNOWLEDGE_TRANSFER.md#10-troubleshooting--things-that-tripped-us-up)),
-and they never call the real Claude API (the CLI/dashboard tests use `--dry-run` and
-omit the dashboard's `confirm` field specifically so a test run can never spend real
-usage/credits). They validate the real artifacts those agents produced during the
-documented validation run — git history for `/vulnhunt`, generated files for
+and — with one deliberate exception — they never call a real external API. The
+exception: `test_enrichment.py`'s `LiveSmokeTest` calls the real, free, public CISA KEV
+feed and FIRST.org EPSS API (safe: no auth, no cost, and it skips itself rather than
+failing if the network is unavailable). Everything else validates the real artifacts
+those agents/scripts produced — git history for `/vulnhunt`, generated files for
 `/remediate` — which is what makes this both real regression coverage and honest test
 evidence rather than a mocked demo.
 
@@ -34,18 +39,21 @@ evidence rather than a mocked demo.
 | `/vulnhunt` scan | `VulnHuntScannerFindsRealVulnerabilities` | TC-SCAN-01 – 07 | 7/7 PASS |
 | `/vulnhunt` fix | `VulnHuntFixerAppliesOnlyApprovedFixes` | TC-FIX-01 – 08 | 8/8 PASS |
 | `/vulnhunt` report | `VulnHuntReportIsAccurate` | TC-RPT-01 – 03 | 3/3 PASS |
-| `/remediate` normalize | `RemediationNormalizedFindingsAreWellFormed` | TC-NORM-01 – 07 | 7/7 PASS |
+| `/remediate` normalize | `RemediationNormalizedFindingsAreWellFormed` | TC-NORM-01 – 09 | 9/9 PASS |
 | `/remediate` plan | `RemediationPlanIsConsistentWithFindings` | TC-PLAN-01 – 02 | 2/2 PASS |
 | `/remediate` playbooks | `RemediationPlaybooksMatchThePlan` | TC-PB-01 – 05 | 5/5 PASS |
 | Cross-cutting safety | `NoRealSecretsLeakedAnywhere` | TC-SEC-01 | 1/1 PASS |
 | CLI prompt/command construction | `PromptConstruction`, `CommandConstruction` | TC-CLI-01 – 10 | 10/10 PASS |
 | CLI binary discovery | `ClaudeBinaryDiscovery` | TC-CLI-11 | 1/1 PASS |
 | CLI end-to-end dry-run | `DryRunEndToEnd` | TC-CLI-12 – 13 | 2/2 PASS |
-| Dashboard data layer | `DataLayerReadsRealArtifacts` | TC-DASH-01 – 06 | 6/6 PASS |
-| Dashboard routes | `DashboardRoutesRender` | TC-DASH-07 – 14 | 8/8 PASS |
+| Dashboard data layer | `DataLayerReadsRealArtifacts` | TC-DASH-01 – 08 | 8/8 PASS |
+| Dashboard routes | `DashboardRoutesRender` | TC-DASH-09 – 17 | 9/9 PASS |
 | Tenable connector | `TenableAuthAndExportRequest`, `TenablePollAndDownload`, `TenableRecordMapping`, `TenableWritesSampleCompatibleCsv` | TC-CONN-01 – 11 | 11/11 PASS |
 | Armis connector | `ArmisAuthentication`, `ArmisPagination`, `ArmisDeviceAndAlertAssembly` | TC-CONN-12 – 18 | 7/7 PASS |
-| **Total** | | **78** | **78/78 PASS** |
+| KEV/EPSS fetching | `KevFetching`, `EpssFetching` | TC-ENR-01 – 05 | 5/5 PASS |
+| KEV/EPSS enrichment assembly | `EnrichmentAssembly`, `EnrichFileIO` | TC-ENR-06 – 12 | 7/7 PASS |
+| KEV/EPSS live smoke test | `LiveSmokeTest` | TC-ENR-13 | 1/1 PASS |
+| **Total** | | **96** | **96/96 PASS** |
 
 ---
 
@@ -109,13 +117,15 @@ a report that overstates or understates its own results is worse than no report.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
-| TC-NORM-01 | Exactly 11 findings total | Parse the JSON array; count elements | 11 | 11 | PASS |
+| TC-NORM-01 | Exactly 14 findings total | Parse the JSON array; count elements | 14 | 14 | PASS |
 | TC-NORM-02 | Every finding has required fields | For each finding, check `id/source/source_ref/asset/title/severity/remediation_domain` present, and `asset.name/ip/type` present | All findings compliant | All compliant | PASS |
 | TC-NORM-03 | All 3 sources represented | Collect distinct `source` values | `{tenable, armis, threat-intel}` | Matches exactly | PASS |
-| TC-NORM-04 | Asset-type classification spot checks | Check known assets: `WIN-DC01`→windows-server, `LNX-DB03`→unix-server, `CSW-CORE01`→network-routing-switching, Axis camera→iot-ot-device | All 4 spot checks correct | All correct | PASS |
-| TC-NORM-05 | `remediation_domain` only set for supported domains | For each finding: if `asset.type` is windows-server/unix-server, `remediation_domain` must equal it; otherwise must be `null` | Rule holds for all 11 | Holds | PASS |
+| TC-NORM-04 | Asset-type classification spot checks | Check known assets: `WIN-DC01`→windows-server, `LNX-DB03`→unix-server, `CSW-CORE01`→network-routing-switching, Axis camera→iot-ot-device, Log4Shell finding→application, both cert findings→certificate | All 7 spot checks correct | All correct | PASS |
+| TC-NORM-05 | `remediation_domain` only set for supported domains | For each finding: if `asset.type` is windows-server/unix-server, `remediation_domain` must equal it; otherwise must be `null` (now including `application`/`certificate`) | Rule holds for all 14 | Holds | PASS |
 | TC-NORM-06 | Exactly 7 findings eligible for automation | Count findings with non-null `remediation_domain` | 7 | 7 | PASS |
 | TC-NORM-07 | No fabricated CVE IDs | For each non-null `cve`, regex-match `CVE-\d{4}-\d{4,}` | All CVEs well-formed (catches agent hallucination of a plausible-but-fake ID) | All well-formed | PASS |
+| TC-NORM-08 | `kev`/`epss` fields present and null-consistent | For each finding, check both keys exist; if `cve` is null both must be null, else `kev` must be a dict with a `listed` key | Rule holds for all 14 | Holds | PASS |
+| TC-NORM-09 | Known KEV-listed findings match the real CISA catalog | Spot-check: PrintNightmare and Log4Shell are KEV-listed; OpenSSL DoS is not | All 3 spot checks correct against live-verified data | All correct | PASS |
 
 ---
 
@@ -190,19 +200,22 @@ and the one route that could spend real money never does so in a test.
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
 | TC-DASH-01 | `/vulnhunt` data matches known totals | Call `load_vulnhunt_data()` | `total == 9`, `auto_fixable == 6` | Matches | PASS |
-| TC-DASH-02 | Remediation findings count matches | Call `load_remediation_findings()` | `len(findings) == 11` | Matches | PASS |
-| TC-DASH-03 | Remediation plan queue count matches | Call `load_remediation_plan()` | `len(queue) == 11` | Matches | PASS |
-| TC-DASH-04 | Risk tier counts match the known split | Same as above | 2 auto-approvable, 5 needs-change-approval, 4 manual-only | Matches | PASS |
+| TC-DASH-02 | Remediation findings count matches | Call `load_remediation_findings()` | `len(findings) == 14` | Matches | PASS |
+| TC-DASH-03 | Remediation plan queue count matches | Call `load_remediation_plan()` | `len(queue) == 14` | Matches | PASS |
+| TC-DASH-04 | Risk tier counts match the known split | Same as above | 2 auto-approvable, 5 needs-change-approval, 7 manual-only | Matches | PASS |
 | TC-DASH-05 | Playbook count matches | Call `load_playbooks()` | `len(playbooks) == 7` | Matches | PASS |
-| TC-DASH-06 | No mojibake in parsed text (regression guard) | Check `vh["title"]` and `plan["title"]` for the mojibake pattern `â€"` | Pattern absent from both | Absent | PASS |
-| TC-DASH-07 | Overview page loads | `GET /` via Flask test client | HTTP 200; contains "Security Posture Overview" | Matches | PASS |
-| TC-DASH-08 | Code scan page lists all findings | `GET /vulnhunt` | HTTP 200; `VULN-1` through `VULN-9` all present | All present | PASS |
-| TC-DASH-09 | Remediation page lists all findings | `GET /remediate` | HTTP 200; `FIND-1` through `FIND-11` all present | All present | PASS |
-| TC-DASH-10 | Playbook detail page loads | `GET /playbooks/FIND-4-sudo-baron-samedit-patch.yml` | HTTP 200; contains "Auto-approvable" | Matches | PASS |
-| TC-DASH-11 | Unknown playbook returns 404 | `GET /playbooks/does-not-exist.yml` | HTTP 404 (negative test) | 404 | PASS |
-| TC-DASH-12 | Run page loads | `GET /run` | HTTP 200; contains "Run a Pipeline" | Matches | PASS |
-| TC-DASH-13 | Dry-run POST never calls the real API | `POST /run` with `confirm` field omitted | HTTP 200 after redirect; response contains "Dry run only"; no audit log written | Matches | PASS |
-| TC-DASH-14 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 9`, `remediation_findings: 11` | Matches | PASS |
+| TC-DASH-06 | KEV-listed / high-EPSS counts match live-verified data | Call `count_kev_listed()` / `count_high_epss()` | 6 KEV-listed, 7 with EPSS ≥ 50% | Matches | PASS |
+| TC-DASH-07 | Asset-type breakdown covers all 6 categories | Call `asset_type_breakdown()` | Counts sum to 14; all 6 asset types present (including `application`, `certificate`) | Matches | PASS |
+| TC-DASH-08 | No mojibake in parsed text (regression guard) | Check `vh["title"]` and `plan["title"]` for the mojibake pattern `â€"` | Pattern absent from both | Absent | PASS |
+| TC-DASH-09 | Overview page loads | `GET /` via Flask test client | HTTP 200; contains "Security Posture Overview" | Matches | PASS |
+| TC-DASH-10 | Overview page shows KEV/EPSS KPIs and asset-class coverage | Same request | Contains "CISA KEV-listed", "High EPSS", and the `certificate`/`application` asset types | Matches | PASS |
+| TC-DASH-11 | Code scan page lists all findings | `GET /vulnhunt` | HTTP 200; `VULN-1` through `VULN-9` all present | All present | PASS |
+| TC-DASH-12 | Remediation page lists all findings | `GET /remediate` | HTTP 200; `FIND-1` through `FIND-14` all present | All present | PASS |
+| TC-DASH-13 | Playbook detail page loads | `GET /playbooks/FIND-4-sudo-baron-samedit-patch.yml` | HTTP 200; contains "Auto-approvable" | Matches | PASS |
+| TC-DASH-14 | Unknown playbook returns 404 | `GET /playbooks/does-not-exist.yml` | HTTP 404 (negative test) | 404 | PASS |
+| TC-DASH-15 | Run page loads | `GET /run` | HTTP 200; contains "Run a Pipeline" | Matches | PASS |
+| TC-DASH-16 | Dry-run POST never calls the real API | `POST /run` with `confirm` field omitted | HTTP 200 after redirect; response contains "Dry run only"; no audit log written | Matches | PASS |
+| TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 9`, `remediation_findings: 14` | Matches | PASS |
 
 ---
 
@@ -240,6 +253,30 @@ does and does not prove (it has never called the real Tenable API).
 | TC-CONN-16 | `search_all_pages` respects `max_pages` (regression guard) | Mock GET always returns a non-null `next` | Loop stops at `max_pages`, doesn't run forever | Stops correctly | PASS |
 | TC-CONN-17 | `_alert_to_sample_shape` maps a raw alert correctly | Feed a raw alert dict | `alertType`/`title`/`cve` map correctly | Matches | PASS |
 | TC-CONN-18 | `fetch_and_write_json` assembles devices with their alerts | Mock one alert referencing one device; mock that device's detail lookup | Output JSON has 1 device with 1 alert, correct field mapping | Matches | PASS |
+
+---
+
+## Suite 12: CISA KEV + EPSS enrichment (`remediation/enrichment/kev_epss.py`)
+
+**Purpose:** prove the enrichment logic correctly parses both real APIs' documented
+response shapes and assembles them onto findings correctly — and, uniquely in this test
+suite, prove it actually works against the real live endpoints (see TC-ENR-13).
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-ENR-01 | `fetch_cisa_kev` maps the documented KEV feed shape | Mock GET returns one KEV entry | Returned dict keyed by CVE ID with `date_added`/`known_ransomware_campaign_use` etc. | Matches | PASS |
+| TC-ENR-02 | `fetch_cisa_kev` skips entries with no CVE ID | Mock GET returns an entry missing `cveID` | Entry excluded, no crash | Excluded | PASS |
+| TC-ENR-03 | `fetch_epss_scores` maps the documented EPSS response shape | Mock GET returns one EPSS row | Score/percentile parsed as floats | Matches | PASS |
+| TC-ENR-04 | `fetch_epss_scores` batches large CVE lists | Request scores for 150 CVEs (batch size is 100) | Exactly 2 GET calls (100 + 50) | 2 calls | PASS |
+| TC-ENR-05 | `fetch_epss_scores` deduplicates input | Request the same CVE twice | Sent to the API once, not comma-doubled | Deduplicated | PASS |
+| TC-ENR-06 | Findings without a CVE get null enrichment | Enrich a finding with `cve: null` | `kev` and `epss` both `null` | Both null | PASS |
+| TC-ENR-07 | KEV-listed finding gets the full KEV record | Enrich a finding whose CVE is in the (mocked) KEV data | `kev.listed == true` plus the KEV metadata fields | Matches | PASS |
+| TC-ENR-08 | Non-KEV-listed finding gets `{"listed": false}` | Enrich a finding whose CVE is NOT in the KEV data | `kev == {"listed": false}` (not null — "checked, not exploited" ≠ "not applicable") | Matches | PASS |
+| TC-ENR-09 | Missing EPSS score doesn't crash | Enrich a finding whose CVE has no EPSS data | `epss` is `null`, no `KeyError` | No error | PASS |
+| TC-ENR-10 | Original finding fields are preserved | Enrich a finding with extra fields like `title` | All original fields still present after enrichment | Preserved | PASS |
+| TC-ENR-11 | `enrich_file` writes a correctly enriched JSON file | Full mocked KEV+EPSS flow via an injected session, write to a temp file | Output file's finding has `kev.listed == true` and the correct EPSS score | Matches | PASS |
+| TC-ENR-12 | `enrich_file` defaults to overwriting the input, skips HTTP calls when no CVE present | Enrich a finding with `cve: null`, no `output_path` given | Returns the input path; session's `get` never called (no CVE = nothing to look up) | Matches | PASS |
+| TC-ENR-13 | **Live smoke test**: PrintNightmare is really KEV-listed with high EPSS | Call the real `fetch_cisa_kev()` and `fetch_epss_scores(["CVE-2021-34527"])` against the actual public APIs | CVE-2021-34527 present in KEV; EPSS score > 0.9 | Matches (skips itself if network unavailable, never fails the build) | PASS |
 
 ---
 
@@ -283,3 +320,12 @@ test suite that never catches anything is less convincing than one with a track 
    (`time.monotonic() + timeout_seconds`, checked each iteration) instead of an
    accumulator that a zero step size can get stuck on. TC-CONN-07 now specifically
    exercises the `timeout_seconds=0` case to guard against a regression.
+6. **A hand-counting error**, caught by cross-checking `REMEDIATION_PLAN.md`'s prose
+   summary against the dashboard's programmatically-computed KPI: the plan's summary
+   line originally claimed "7 are KEV-listed," but manually recounting the per-finding
+   table missed that `FIND-5` (OpenSSL DoS) is not KEV-listed despite its high EPSS
+   score — the real, live-verified count is 6. Fixed by recomputing the count in Python
+   directly from `normalized-findings.json` rather than hand-counting a markdown table,
+   and correcting the prose. A reminder that a number written by a human into a report
+   is exactly the kind of claim worth verifying against the underlying data before
+   trusting it, even when the human is the one who built the pipeline.

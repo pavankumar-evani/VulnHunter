@@ -41,23 +41,50 @@ never touch real infrastructure.
    restore the prior config file from backup").
 5. **`priority`** — combine severity + risk_tier + asset criticality (domain
    controllers/auth servers/core network devices are higher priority than a single
-   workstation) into a simple High/Medium/Low ranking for the remediation queue.
+   workstation) **and real-world exploitation signals** into a simple High/Medium/Low
+   ranking for the remediation queue:
+   - If `kev.listed == true`: this finding is confirmed being actively exploited in the
+     wild right now — set `priority` to `High` regardless of what asset-criticality
+     alone would suggest, and say so explicitly in the rationale ("actively exploited
+     per CISA KEV since <date_added>"). This is the single strongest signal available;
+     it overrides the asset-criticality heuristic, not the other way around.
+   - Else if `epss.score >= 0.5` (≥50% probability of exploitation in the next 30 days):
+     treat as elevated priority even without KEV listing — note the EPSS score/percentile
+     in the rationale.
+   - Otherwise, fall back to severity + asset-criticality as before.
+   - **Important:** KEV/EPSS affect `priority` (how urgently to act) — they do NOT
+     override `risk_tier` (how safe the fix is to auto-apply). An actively-exploited CVE
+     on a domain controller is still `needs-change-approval`, not `auto-approvable`;
+     being exploited makes it more urgent to get that approval fast, not safer to skip it.
+   - Findings with `kev == null` or `epss == null` (no CVE, or enrichment didn't run this
+     time) fall back to the severity + asset-criticality heuristic with no penalty —
+     absence of KEV/EPSS data is not itself a negative signal.
 
 ## Output
 
 Write `REMEDIATION_PLAN.md` to the project root with:
 
 1. **Title + summary**: total findings, how many are auto-remediable today (non-null
-   `automation_target`) vs. manual-only, broken down by `risk_tier`.
+   `automation_target`) vs. manual-only, broken down by `risk_tier`, and how many are
+   KEV-listed / have EPSS ≥ 0.5.
 2. **Remediation queue table**, sorted by `priority` then severity: ID, Asset, Title,
-   CVE, Severity, Action Type, Automation Target, Risk Tier.
+   CVE, Severity, Action Type, Automation Target, Risk Tier, KEV, EPSS. For the KEV
+   column use `Yes` / `No` / `—` (dash for no CVE); for EPSS show the score as a
+   percentage (e.g. `99.8%`) or `—` if unavailable.
 3. **Per-finding detail** (most severe/highest-priority first): the plan fields above plus
-   a one-line plain-English rationale for the risk tier assignment.
+   a one-line plain-English rationale for the risk tier assignment, and — when relevant —
+   the KEV/EPSS rationale for the priority assignment (e.g. "escalated to High priority:
+   actively exploited per CISA KEV since 2021-11-03").
 4. **A clearly separated section**: "Findings with no automated remediation path today" —
    list every finding whose `automation_target` is `manual-only` because the domain isn't
-   supported yet (network devices, IoT/OT, endpoints), with a note on what would be needed
-   to support it (e.g. "network-routing-switching needs a `remediation-fixer-network`
-   subagent generating vendor CLI config diffs").
+   supported yet (network devices, IoT/OT, endpoints, application-layer findings,
+   certificate/TLS findings), with a note on what would be needed to support it (e.g.
+   "network-routing-switching needs a `remediation-fixer-network` subagent generating
+   vendor CLI config diffs"; "application needs a `remediation-fixer-application`
+   subagent for library/dependency upgrades — a different mechanism per language/package
+   manager, unlike the OS-level fixers"; "certificate needs integration with the org's
+   CA/ACME tooling for renewal, and a TLS-config fixer for protocol/cipher hardening").
 
 When finished, output a short plain-text confirmation (not JSON): how many findings were
-planned, the auto-remediable/manual-only split, and the path to `REMEDIATION_PLAN.md`.
+planned, the auto-remediable/manual-only split, how many are KEV-listed, and the path to
+`REMEDIATION_PLAN.md`.

@@ -16,12 +16,17 @@ Steps:
 
 1. Delegate to **vuln-ingest-normalizer** with the input file path(s). Wait for
    `remediation/output/normalized-findings.json` to exist before proceeding.
-2. Delegate to **remediation-planner** with that normalized findings file. Wait for
-   `REMEDIATION_PLAN.md` to be written.
-3. Print a short chat summary: total findings, how many are auto-remediable today (have a
-   working fixer) vs. manual-only, and the breakdown by risk tier. Point the user at
-   `REMEDIATION_PLAN.md` for full detail.
-4. If `--generate` was passed (or the user confirms after seeing the plan): split the plan
+2. Delegate to **threat-intel-enricher** to add real CISA KEV + EPSS data to every
+   finding with a CVE. Wait for it to confirm the file was enriched before proceeding —
+   if enrichment fails (e.g. no network access), proceed to planning anyway but note in
+   the chat summary that KEV/EPSS data is unavailable for this run, rather than blocking
+   the whole pipeline on an external dependency.
+3. Delegate to **remediation-planner** with the (enriched, if available) normalized
+   findings file. Wait for `REMEDIATION_PLAN.md` to be written.
+4. Print a short chat summary: total findings, how many are auto-remediable today (have a
+   working fixer) vs. manual-only, the breakdown by risk tier, and how many findings are
+   KEV-listed / high-EPSS. Point the user at `REMEDIATION_PLAN.md` for full detail.
+5. If `--generate` was passed (or the user confirms after seeing the plan): split the plan
    into windows-server findings and unix-server findings, delegate the former to
    **remediation-fixer-windows** and the latter to **remediation-fixer-unix** (both can run
    independently of each other). Report back which playbooks were generated.
