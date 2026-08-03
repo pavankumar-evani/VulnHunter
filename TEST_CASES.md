@@ -1,27 +1,32 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all five test files: `tests/test_pipeline_artifacts.py` (both
+Formal test case log for all eight test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
-`tests/test_dashboard.py` (the web dashboard), `tests/test_connectors.py` (live
-Tenable/Armis connectors), and `tests/test_enrichment.py` (live CISA KEV + EPSS
-enrichment). Every row below maps 1:1 to one `test_*` method in one of those files —
-there is no test case here without a corresponding, runnable assertion, and no assertion
-in any suite that isn't documented here.
+`tests/test_dashboard.py` (the web dashboard, including the live queue, priority-rules
+editor, and ServiceNow preview), `tests/test_connectors.py` (live Tenable/Armis
+connectors), `tests/test_enrichment.py` (live CISA KEV + EPSS enrichment),
+`tests/test_priority_engine.py` (the configurable priority/SLA engine),
+`tests/test_attack_mapping.py` (MITRE ATT&CK keyword tagging), and
+`tests/test_servicenow_connector.py` (the ServiceNow adapter). Every row below maps 1:1
+to one `test_*` method in one of those files — there is no test case here without a
+corresponding, runnable assertion, and no assertion in any suite that isn't documented
+here.
 
 **How to reproduce these results yourself:**
 ```bash
 pip install -r dashboard/requirements.txt
 pip install -r remediation/connectors/requirements.txt
 pip install -r remediation/enrichment/requirements.txt
+pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 96 / 96 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 145 / 145 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
 (subagents only run inside an interactive Claude Code session — see
-[KNOWLEDGE_TRANSFER.md §10](KNOWLEDGE_TRANSFER.md#10-troubleshooting--things-that-tripped-us-up)),
+[KNOWLEDGE_TRANSFER.md §12](KNOWLEDGE_TRANSFER.md#12-troubleshooting--things-that-tripped-us-up)),
 and — with one deliberate exception — they never call a real external API. The
 exception: `test_enrichment.py`'s `LiveSmokeTest` calls the real, free, public CISA KEV
 feed and FIRST.org EPSS API (safe: no auth, no cost, and it skips itself rather than
@@ -48,12 +53,23 @@ evidence rather than a mocked demo.
 | CLI end-to-end dry-run | `DryRunEndToEnd` | TC-CLI-12 – 13 | 2/2 PASS |
 | Dashboard data layer | `DataLayerReadsRealArtifacts` | TC-DASH-01 – 08 | 8/8 PASS |
 | Dashboard routes | `DashboardRoutesRender` | TC-DASH-09 – 17 | 9/9 PASS |
+| Dashboard live queue | `LiveQueuePage` | TC-DASH-18 – 19 | 2/2 PASS |
+| Dashboard priority rules editor | `PriorityRulesPage` | TC-DASH-20 – 22 | 3/3 PASS |
+| Dashboard ServiceNow page | `ServiceNowPage` | TC-DASH-23 – 25 | 3/3 PASS |
 | Tenable connector | `TenableAuthAndExportRequest`, `TenablePollAndDownload`, `TenableRecordMapping`, `TenableWritesSampleCompatibleCsv` | TC-CONN-01 – 11 | 11/11 PASS |
 | Armis connector | `ArmisAuthentication`, `ArmisPagination`, `ArmisDeviceAndAlertAssembly` | TC-CONN-12 – 18 | 7/7 PASS |
 | KEV/EPSS fetching | `KevFetching`, `EpssFetching` | TC-ENR-01 – 05 | 5/5 PASS |
 | KEV/EPSS enrichment assembly | `EnrichmentAssembly`, `EnrichFileIO` | TC-ENR-06 – 12 | 7/7 PASS |
 | KEV/EPSS live smoke test | `LiveSmokeTest` | TC-ENR-13 | 1/1 PASS |
-| **Total** | | **96** | **96/96 PASS** |
+| Priority scoring | `PriorityScoring` | TC-PRIO-01 – 07 | 7/7 PASS |
+| SLA computation | `SlaComputation` | TC-PRIO-08 – 10 | 3/3 PASS |
+| Batch scoring + real rules file validation | `ScoreFindingsBatch`, `RealRulesFileIsValid` | TC-PRIO-11 – 14 | 4/4 PASS |
+| ATT&CK keyword matching | `KeywordMatching` | TC-ATTACK-01 – 09 | 9/9 PASS |
+| ATT&CK batch tagging | `TagFindingsBatch` | TC-ATTACK-10 – 11 | 2/2 PASS |
+| ServiceNow construction + auth | `AuthAndConstruction`, `BuildIncidentBodyPureFunction` | TC-SNOW-01 – 06 | 6/6 PASS |
+| ServiceNow incident creation | `FindExistingIncident`, `CreateIncident` | TC-SNOW-07 – 14 | 8/8 PASS |
+| ServiceNow batch handling | `CreateIncidentsForFindingsBatch` | TC-SNOW-15 – 16 | 2/2 PASS |
+| **Total** | | **145** | **145/145 PASS** |
 
 ---
 
@@ -277,6 +293,77 @@ suite, prove it actually works against the real live endpoints (see TC-ENR-13).
 | TC-ENR-11 | `enrich_file` writes a correctly enriched JSON file | Full mocked KEV+EPSS flow via an injected session, write to a temp file | Output file's finding has `kev.listed == true` and the correct EPSS score | Matches | PASS |
 | TC-ENR-12 | `enrich_file` defaults to overwriting the input, skips HTTP calls when no CVE present | Enrich a finding with `cve: null`, no `output_path` given | Returns the input path; session's `get` never called (no CVE = nothing to look up) | Matches | PASS |
 | TC-ENR-13 | **Live smoke test**: PrintNightmare is really KEV-listed with high EPSS | Call the real `fetch_cisa_kev()` and `fetch_epss_scores(["CVE-2021-34527"])` against the actual public APIs | CVE-2021-34527 present in KEV; EPSS score > 0.9 | Matches (skips itself if network unavailable, never fails the build) | PASS |
+
+---
+
+## Suite 13: Configurable priority + SLA engine (`remediation/config/priority_engine.py`)
+
+**Purpose:** prove the scoring/SLA math is correct against an in-memory rules dict (so
+tests don't break if someone reasonably retunes the real rules file), plus validate the
+real shipped rules file is well-formed and produces a sane result on real sample data.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-PRIO-01 | Low severity + generic asset → Low priority | Score a Low-severity finding on a non-critical asset | `priority == "Low"` | Matches | PASS |
+| TC-PRIO-02 | Critical severity + domain controller → Critical priority | Score a Critical finding on a `WIN-DC01`-named asset | `priority == "Critical"` | Matches | PASS |
+| TC-PRIO-03 | KEV-listed forces Critical regardless of score | Score a Low-severity, low-criticality finding with `kev.listed=true` | `priority == "Critical"`, reason mentions KEV | Matches | PASS |
+| TC-PRIO-04 | KEV override can be disabled | Same as above with `kev_override.enabled=false` | `priority` stays `"Low"` (no forcing) | Matches | PASS |
+| TC-PRIO-05 | High EPSS elevates to at least High | Score a Low finding with `epss.score=0.9` | `priority == "High"` | Matches | PASS |
+| TC-PRIO-06 | Low EPSS does not elevate | Score a Low finding with `epss.score=0.1` | `priority` stays `"Low"` | Matches | PASS |
+| TC-PRIO-07 | EPSS never downgrades an already-higher score | Score a Critical finding that also has `epss.score=0.6` | `priority` stays `"Critical"`, not pulled down to "High" | Matches | PASS |
+| TC-PRIO-08 | SLA due date computed correctly, not breached | `first_seen` 2 days ago, High priority (7-day SLA) | Correct due date; `days_remaining=5`; not breached | Matches | PASS |
+| TC-PRIO-09 | SLA breached when past due date | `first_seen` well before a 3-day Critical SLA window | `breached == true`, negative `days_remaining` | Matches | PASS |
+| TC-PRIO-10 | Missing `first_seen` handled gracefully | Finding with `first_seen=None` | `due_date`/`breached` both `None`, no exception | Matches | PASS |
+| TC-PRIO-11 | Batch scoring sorts highest priority first | Score a Low + a Critical finding together | Critical finding is first in the returned list | Matches | PASS |
+| TC-PRIO-12 | Batch scoring doesn't mutate input | Score a findings list | Original dicts have no new keys added | Matches | PASS |
+| TC-PRIO-13 | Real `priority_rules.yaml` loads with all expected keys | Load the real shipped file | All 7 top-level keys present | Matches | PASS |
+| TC-PRIO-14 | Real rules file scores a known real finding correctly | Score PrintNightmare (FIND-1) from real sample data against the real rules file | `priority == "Critical"` | Matches | PASS |
+
+## Suite 14: MITRE ATT&CK keyword tagging (`remediation/enrichment/attack_mapping.py`)
+
+**Purpose:** prove the heuristic fires on realistic finding text, and — just as
+importantly — proves it does NOT guess when there's no real signal (empty list, not a
+fabricated technique).
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-ATTACK-01 | SQL injection → T1190 | Tag a finding titled "SQL Injection..." | `technique_id == "T1190"` | Matches | PASS |
+| TC-ATTACK-02 | Command injection → T1059 | Tag a finding titled "Command injection via shell=True" | `technique_id == "T1059"` | Matches | PASS |
+| TC-ATTACK-03 | PrintNightmare-style RCE → T1210 | Tag a finding titled "...Print Spooler Remote Code Execution" | `technique_id == "T1210"` | Matches | PASS |
+| TC-ATTACK-04 | Sudo privilege escalation → T1068 | Tag a finding mentioning "privilege escalation to root" | `technique_id == "T1068"` | Matches | PASS |
+| TC-ATTACK-05 | Hardcoded secret → T1552 | Tag a finding titled "Hardcoded Stripe API key" | `technique_id == "T1552"` | Matches | PASS |
+| TC-ATTACK-06 | Telnet exposure → T1021 | Tag a finding titled "Device Exposes Telnet Service" | `technique_id == "T1021"` | Matches | PASS |
+| TC-ATTACK-07 | Certificate expiry is deliberately unmapped | Tag "SSL Certificate Expiry" | Empty list (not a forced/guessed technique) | Empty | PASS |
+| TC-ATTACK-08 | No keyword match returns empty, not a guess | Tag unrelated text | Empty list | Empty | PASS |
+| TC-ATTACK-09 | `all_matches=True` can return more than one technique | Tag "Command injection RCE via eval()" with `all_matches=True` | Result includes T1059 among possibly others | Matches | PASS |
+| TC-ATTACK-10 | Batch tagging adds field without mutating input | Tag a findings list | Original dicts unchanged; tagged copies have `attack_techniques` | Matches | PASS |
+| TC-ATTACK-11 | Batch tagging against real sample data | Tag all 14 real findings | PrintNightmare (FIND-1) gets ≥1 technique; SSL cert expiry (FIND-13) gets none | Matches | PASS |
+
+## Suite 15: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
+
+**Purpose:** prove the Table API request construction, idempotency check, and batch
+error handling are correct against mocked HTTP shaped like ServiceNow's documentation —
+see [remediation/connectors/README.md](remediation/connectors/README.md) for what this
+does and doesn't prove (never exercised against a real ServiceNow instance).
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-SNOW-01 | Session gets HTTP Basic auth configured | Construct `ServiceNowConnector("mycompany", "user1", "pass1")` | `session.auth == ("user1", "pass1")` | Matches | PASS |
+| TC-SNOW-02 | Base URL built from instance name | Same construction | `base_url == "https://mycompany.service-now.com"` | Matches | PASS |
+| TC-SNOW-03 | Default table is `incident` | Construct with no `table` argument | `table == "incident"` | Matches | PASS |
+| TC-SNOW-04 | Can target a different table | Construct with `table="sn_vul_vulnerable_item"` | `table` reflects the override | Matches | PASS |
+| TC-SNOW-05 | `build_incident_body` is a pure function, no network | Call directly with a sample finding | Correct body dict returned, no mock HTTP calls made | Matches | PASS |
+| TC-SNOW-06 | `create_incident` and `build_incident_body` produce the same shape | Compare the body actually POSTed vs. the pure-function output | Identical dicts (regression guard for the refactor) | Matches | PASS |
+| TC-SNOW-07 | Finds an existing incident by `correlation_id` | Mock a matching query result | Returns that incident record | Matches | PASS |
+| TC-SNOW-08 | Returns `None` when nothing found | Mock an empty query result | `None` returned | Matches | PASS |
+| TC-SNOW-09 | Creates a new incident when none exists | Mock empty lookup + successful POST | `_vulnhunter_status == "created"` | Matches | PASS |
+| TC-SNOW-10 | Skips creation when an incident already exists | Mock a matching lookup | `_vulnhunter_status == "already_existed"`, POST never called | Matches | PASS |
+| TC-SNOW-11 | `skip_if_exists=False` always creates, skips the lookup | Call with that flag | GET (lookup) never called, POST called once | Matches | PASS |
+| TC-SNOW-12 | Incident body includes KEV/EPSS context | Create an incident for a KEV-listed, high-EPSS finding | Description mentions "KEV-listed" and "EPSS score" | Matches | PASS |
+| TC-SNOW-13 | Severity maps to urgency/impact correctly | Create an incident for a Critical finding | `urgency == "1"`, `impact == "1"` | Matches | PASS |
+| TC-SNOW-14 | Raises on an unexpected response shape | Mock a POST response with no `result` key | `ServiceNowError` raised | Raised | PASS |
+| TC-SNOW-15 | Batch creates incidents for all findings | Run `create_incidents_for_findings` on a findings list | Correct count and status per finding | Matches | PASS |
+| TC-SNOW-16 | Batch continues past a single finding's failure | Include one malformed finding in the batch | Both findings get a result; the bad one reports `status="error"` with a message, the batch doesn't abort | Matches | PASS |
 
 ---
 

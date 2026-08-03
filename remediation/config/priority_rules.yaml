@@ -1,0 +1,72 @@
+# Configurable priority rules for VulnHunter's remediation queue.
+#
+# This is read by remediation/config/priority_engine.py, which the DASHBOARD uses to
+# live-recompute priority/SLA for every finding using whatever weights are configured
+# here - independent of whatever REMEDIATION_PLAN.md's static snapshot says. That's
+# deliberate: an admin can retune these weights and see the queue reorder immediately,
+# without re-running the full Claude Code pipeline. See
+# remediation/config/README.md for how this relates to remediation-planner's own
+# priority logic (they are two related but distinct things today).
+#
+# Edit this file directly, or use the dashboard's /priority-rules page (a form-based
+# editor that writes back to this same file).
+
+# How many days a finding has to be remediated, per priority tier, before it's
+# considered SLA-breached. Tune these to your org's actual policy.
+sla_days:
+  Critical: 3
+  High: 7
+  Medium: 30
+  Low: 90
+
+# A CISA KEV-listed finding (confirmed actively exploited) is escalated straight to
+# Critical priority, regardless of any other weight below. This mirrors
+# remediation-planner's own hardcoded rule - set enabled: false to disable the override
+# and fall back to the weighted score instead.
+kev_override:
+  enabled: true
+  forces_priority: "Critical"
+
+# A finding with an EPSS score at or above this threshold gets escalated to at least
+# High priority (never downgraded below what the weighted score alone would produce).
+epss_escalation:
+  enabled: true
+  threshold: 0.5
+  forces_priority_at_least: "High"
+
+# Points added to a finding's score based on the criticality of the asset it's on.
+# Matched against asset.name (case-insensitive substring) and asset.type - tune the
+# keyword list to your own naming convention (this one assumes hostnames like
+# WIN-DC01, LNX-AUTH01 encode role in the name, which is common but not universal).
+asset_criticality_keywords:
+  dc: 3        # domain controller
+  auth: 3      # authentication server
+  core: 3      # core network infrastructure
+  bastion: 2   # jump host / bastion
+  db: 2        # database server
+  web: 1       # web/application server
+  default: 0   # anything not matching a keyword above
+
+asset_type_weights:
+  windows-server: 1
+  unix-server: 1
+  network-routing-switching: 2
+  network-security-device: 2
+  iot-ot-device: 1
+  application: 1
+  certificate: 0
+
+severity_weights:
+  Critical: 3
+  High: 2
+  Medium: 1
+  Low: 0
+
+# Score thresholds that map a finding's total weighted score to a priority tier
+# (severity_weight + asset_criticality_keyword + asset_type_weight, before any
+# KEV/EPSS override is applied).
+priority_thresholds:
+  Critical: 6
+  High: 4
+  Medium: 2
+  Low: 0

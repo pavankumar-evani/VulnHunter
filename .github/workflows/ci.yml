@@ -40,5 +40,8 @@ jobs:
       - name: Install enrichment dependencies
         run: pip install -r remediation/enrichment/requirements.txt
 
+      - name: Install priority-rules engine dependencies
+        run: pip install -r remediation/config/requirements.txt
+
       - name: Run test suite
         run: python -m unittest discover -s tests -p "test_*.py" -v

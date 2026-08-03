@@ -7,6 +7,25 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Dashboard: SLA/priority engine, MITRE ATT&CK tagging, ServiceNow adapter, modern
+  sidebar nav.** In response to a broader ask for a more "industry tool"-grade
+  experience — built the realistic subset, deferred the rest with reasons (see
+  [KNOWLEDGE_TRANSFER.md §11](KNOWLEDGE_TRANSFER.md#11-the-enterprisemssp-platform-ask--scope-reality-check)):
+  - `remediation/config/priority_engine.py` + `priority_rules.yaml` — a configurable,
+    form-editable (`/priority-rules`) scoring engine computing priority + SLA due
+    dates/breach status per finding, independent of `remediation-planner`'s own static
+    snapshot. Edits take effect immediately on `/queue` and the Overview KPIs.
+  - `remediation/enrichment/attack_mapping.py` — MITRE ATT&CK technique tagging via
+    keyword heuristic (explicitly documented as non-authoritative), surfaced on `/queue`.
+  - `remediation/connectors/servicenow_connector.py` — creates ServiceNow Incidents per
+    finding via the Table API, idempotent, with a no-credentials-needed preview mode at
+    `/servicenow`. Same "built against docs, unverified against a live instance" caveat
+    as the Tenable/Armis connectors.
+  - New `/queue` (live, re-scored) page, distinct from `/remediate`'s static snapshot;
+    sidebar navigation replacing the top bar.
+  - 49 new tests (`test_priority_engine.py`, `test_attack_mapping.py`,
+    `test_servicenow_connector.py`, plus dashboard route tests) — full suite now
+    145/145 across 8 files.
 - **Live CISA KEV + EPSS threat-intel enrichment** (`remediation/enrichment/`,
   `threat-intel-enricher` subagent) — real, free, public, no-auth APIs, verified against
   the live endpoints during development (unlike the Tenable/Armis connectors). Moves

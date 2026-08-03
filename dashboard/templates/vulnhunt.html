@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Code Scan · VulnHunter{% endblock %}
+{% block page_title %}/vulnhunt — Code Scan Results{% endblock %}
 {% block content %}
-<h1>/vulnhunt — Code Scan Results</h1>
-
 {% if not vh.available %}
 <p class="empty-state">
   No scan results found yet. Run <code>/vulnhunt &lt;path&gt; --fix</code> in Claude Code,

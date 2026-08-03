@@ -13,9 +13,14 @@ from flask import Flask, render_template, abort, request, redirect, url_for, fla
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import data as dashboard_data  # noqa: E402
 import vulnhunter as cli  # noqa: E402
+import yaml  # noqa: E402
+from remediation.connectors.servicenow_connector import (  # noqa: E402
+    ServiceNowConnector, build_incident_body,
+)
 
 app = Flask(__name__)
 app.secret_key = "vulnhunter-dashboard-dev-only-not-for-production"
@@ -31,6 +36,9 @@ def overview():
     eligible = [f for f in findings if f.get("remediation_domain")]
     manual_only = [f for f in findings if not f.get("remediation_domain")]
 
+    live_queue = dashboard_data.load_live_queue()
+    sla = dashboard_data.sla_summary(live_queue)
+
     return render_template(
         "overview.html",
         vh=vh,
@@ -42,6 +50,7 @@ def overview():
         kev_count=dashboard_data.count_kev_listed(findings),
         high_epss_count=dashboard_data.count_high_epss(findings),
         asset_type_breakdown=dashboard_data.asset_type_breakdown(findings),
+        sla=sla,
     )
 
 
@@ -113,6 +122,67 @@ def run_pipeline():
         flash(f"{pipeline_name} run failed (exit code {exit_code}). Check the audit log for details.", "error")
 
     return redirect(url_for("run_pipeline"))
+
+
+@app.route("/queue")
+def queue_view():
+    """The LIVE remediation queue - re-scored on every request using whatever
+    priority_rules.yaml currently says, with MITRE ATT&CK tags. Distinct from
+    /remediate, which shows the static REMEDIATION_PLAN.md snapshot from the last
+    agent run."""
+    scored = dashboard_data.load_live_queue()
+    sla = dashboard_data.sla_summary(scored)
+    return render_template("queue.html", findings=scored, sla=sla)
+
+
+@app.route("/priority-rules", methods=["GET", "POST"])
+def priority_rules_view():
+    if request.method == "GET":
+        return render_template("priority_rules.html", rules_text=dashboard_data.load_priority_rules_text())
+
+    rules_text = request.form.get("rules_text", "")
+    try:
+        dashboard_data.save_priority_rules_text(rules_text)
+        flash("Priority rules saved. The live queue and SLA dashboard now reflect these weights.", "success")
+    except yaml.YAMLError as exc:
+        flash(f"Not saved - invalid YAML: {exc}", "error")
+    return redirect(url_for("priority_rules_view"))
+
+
+@app.route("/servicenow", methods=["GET", "POST"])
+def servicenow_view():
+    findings = dashboard_data.load_remediation_findings()
+
+    if request.method == "GET":
+        previews = [{"finding_id": f["id"], "body": build_incident_body(f)} for f in findings]
+        return render_template("servicenow.html", previews=previews, results=None)
+
+    instance = request.form.get("instance", "").strip()
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    table = request.form.get("table", "incident").strip() or "incident"
+    confirmed = request.form.get("confirm") == "on"
+
+    previews = [{"finding_id": f["id"], "body": build_incident_body(f)} for f in findings]
+
+    if not confirmed:
+        flash("Preview only (nothing was sent to ServiceNow). Check the confirm box "
+              "and provide real credentials to actually create incidents.", "info")
+        return render_template("servicenow.html", previews=previews, results=None)
+
+    if not instance or not username or not password:
+        flash("Instance, username, and password are all required to actually push to ServiceNow.", "error")
+        return render_template("servicenow.html", previews=previews, results=None)
+
+    conn = ServiceNowConnector(instance, username, password, table=table)
+    try:
+        results = conn.create_incidents_for_findings(findings)
+        flash(f"Attempted {len(results)} incident(s) against {instance}.service-now.com/{table}.", "success")
+    except Exception as exc:  # noqa: BLE001 - surface any connection failure to the user, not a 500 page
+        flash(f"ServiceNow request failed: {exc}", "error")
+        results = None
+
+    return render_template("servicenow.html", previews=previews, results=results)
 
 
 @app.route("/api/status")

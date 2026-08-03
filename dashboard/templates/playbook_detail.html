@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ playbook.filename }} · VulnHunter{% endblock %}
+{% block page_title %}{{ playbook.filename }}{% endblock %}
 {% block content %}
-<h1>{{ playbook.filename }}</h1>
 <p class="subtitle">
   Finding {{ playbook.finding_id }} &middot;
   {% if playbook.needs_approval %}

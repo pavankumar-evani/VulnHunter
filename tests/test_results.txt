@@ -1,3 +1,16 @@
+test_all_matches_can_return_more_than_one_technique (test_attack_mapping.KeywordMatching.test_all_matches_can_return_more_than_one_technique) ... ok
+test_certificate_expiry_is_deliberately_unmapped (test_attack_mapping.KeywordMatching.test_certificate_expiry_is_deliberately_unmapped)
+A cert nearing expiry isn't an attack technique - it's a lifecycle finding. ... ok
+test_command_injection_maps_to_command_and_scripting_interpreter (test_attack_mapping.KeywordMatching.test_command_injection_maps_to_command_and_scripting_interpreter) ... ok
+test_hardcoded_secret_maps_to_unsecured_credentials (test_attack_mapping.KeywordMatching.test_hardcoded_secret_maps_to_unsecured_credentials) ... ok
+test_no_keyword_match_returns_empty_list_not_a_guess (test_attack_mapping.KeywordMatching.test_no_keyword_match_returns_empty_list_not_a_guess) ... ok
+test_printnightmare_style_rce_maps_to_exploitation_of_remote_services (test_attack_mapping.KeywordMatching.test_printnightmare_style_rce_maps_to_exploitation_of_remote_services) ... ok
+test_sql_injection_maps_to_exploit_public_facing_application (test_attack_mapping.KeywordMatching.test_sql_injection_maps_to_exploit_public_facing_application) ... ok
+test_sudo_privilege_escalation_maps_correctly (test_attack_mapping.KeywordMatching.test_sudo_privilege_escalation_maps_correctly) ... ok
+test_telnet_exposure_maps_to_remote_services (test_attack_mapping.KeywordMatching.test_telnet_exposure_maps_to_remote_services) ... ok
+test_tag_findings_adds_field_without_mutating_input (test_attack_mapping.TagFindingsBatch.test_tag_findings_adds_field_without_mutating_input) ... ok
+test_tag_findings_against_real_sample_data (test_attack_mapping.TagFindingsBatch.test_tag_findings_against_real_sample_data)
+Sanity check against our own real normalized-findings.json - PrintNightmare ... ok
 test_explicit_env_var_takes_priority (test_cli.ClaudeBinaryDiscovery.test_explicit_env_var_takes_priority) ... ok
 test_build_command_defaults_to_json_output (test_cli.CommandConstruction.test_build_command_defaults_to_json_output) ... ok
 test_build_command_includes_max_budget (test_cli.CommandConstruction.test_build_command_includes_max_budget) ... ok
@@ -50,6 +63,15 @@ test_remediation_findings_match_known_total (test_dashboard.DataLayerReadsRealAr
 test_remediation_plan_queue_matches_findings_count (test_dashboard.DataLayerReadsRealArtifacts.test_remediation_plan_queue_matches_findings_count) ... ok
 test_risk_tier_counts_match_known_split (test_dashboard.DataLayerReadsRealArtifacts.test_risk_tier_counts_match_known_split) ... ok
 test_vulnhunt_data_matches_known_totals (test_dashboard.DataLayerReadsRealArtifacts.test_vulnhunt_data_matches_known_totals) ... ok
+test_queue_page_loads_and_lists_all_findings_sorted_by_priority (test_dashboard.LiveQueuePage.test_queue_page_loads_and_lists_all_findings_sorted_by_priority) ... ok
+test_queue_page_shows_sla_and_attack_tags (test_dashboard.LiveQueuePage.test_queue_page_shows_sla_and_attack_tags) ... ok
+test_get_shows_current_rules_text (test_dashboard.PriorityRulesPage.test_get_shows_current_rules_text) ... ok
+test_post_invalid_yaml_is_rejected_and_file_unchanged (test_dashboard.PriorityRulesPage.test_post_invalid_yaml_is_rejected_and_file_unchanged) ... ok
+test_post_valid_yaml_saves_and_flashes_success (test_dashboard.PriorityRulesPage.test_post_valid_yaml_saves_and_flashes_success) ... ok
+test_get_shows_preview_for_every_finding_with_no_credentials_needed (test_dashboard.ServiceNowPage.test_get_shows_preview_for_every_finding_with_no_credentials_needed) ... ok
+test_post_with_confirm_but_missing_credentials_is_rejected (test_dashboard.ServiceNowPage.test_post_with_confirm_but_missing_credentials_is_rejected) ... ok
+test_post_without_confirm_never_touches_the_network (test_dashboard.ServiceNowPage.test_post_without_confirm_never_touches_the_network)
+The critical safety test, mirroring /run's dry-run guarantee: submitting ... ok
 test_enrich_file_defaults_to_overwriting_input (test_enrichment.EnrichFileIO.test_enrich_file_defaults_to_overwriting_input) ... ok
 test_enrich_file_writes_enriched_json (test_enrichment.EnrichFileIO.test_enrich_file_writes_enriched_json)
 Exercises enrich_file() end-to-end, including its own internal calls to ... ok
@@ -105,9 +127,43 @@ test_dockerfile_secret_baked_in (test_pipeline_artifacts.VulnHuntScannerFindsRea
 test_eval_on_user_input_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_eval_on_user_input_present) ... ok
 test_hardcoded_secret_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_hardcoded_secret_present) ... ok
 test_sql_injection_string_concat_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_sql_injection_string_concat_present) ... ok
+test_critical_severity_on_domain_controller_is_critical (test_priority_engine.PriorityScoring.test_critical_severity_on_domain_controller_is_critical) ... ok
+test_epss_never_downgrades_a_higher_score (test_priority_engine.PriorityScoring.test_epss_never_downgrades_a_higher_score)
+A finding that already scores Critical from severity+asset must not be ... ok
+test_high_epss_elevates_to_at_least_high (test_priority_engine.PriorityScoring.test_high_epss_elevates_to_at_least_high) ... ok
+test_kev_listed_forces_critical_regardless_of_score (test_priority_engine.PriorityScoring.test_kev_listed_forces_critical_regardless_of_score) ... ok
+test_kev_override_disabled_does_not_force_priority (test_priority_engine.PriorityScoring.test_kev_override_disabled_does_not_force_priority) ... ok
+test_low_epss_does_not_elevate (test_priority_engine.PriorityScoring.test_low_epss_does_not_elevate) ... ok
+test_low_severity_generic_asset_is_low_priority (test_priority_engine.PriorityScoring.test_low_severity_generic_asset_is_low_priority) ... ok
+test_real_rules_file_loads_and_has_expected_top_level_keys (test_priority_engine.RealRulesFileIsValid.test_real_rules_file_loads_and_has_expected_top_level_keys) ... ok
+test_real_rules_file_scores_a_known_finding_as_expected (test_priority_engine.RealRulesFileIsValid.test_real_rules_file_scores_a_known_finding_as_expected)
+Regression guard using our own real sample data - PrintNightmare (KEV-listed, ... ok
+test_score_findings_does_not_mutate_input (test_priority_engine.ScoreFindingsBatch.test_score_findings_does_not_mutate_input) ... ok
+test_score_findings_sorts_highest_priority_first (test_priority_engine.ScoreFindingsBatch.test_score_findings_sorts_highest_priority_first) ... ok
+test_sla_breached_when_past_due_date (test_priority_engine.SlaComputation.test_sla_breached_when_past_due_date) ... ok
+test_sla_due_date_and_not_breached (test_priority_engine.SlaComputation.test_sla_due_date_and_not_breached) ... ok
+test_sla_handles_missing_first_seen_gracefully (test_priority_engine.SlaComputation.test_sla_handles_missing_first_seen_gracefully) ... ok
+test_base_url_built_from_instance_name (test_servicenow_connector.AuthAndConstruction.test_base_url_built_from_instance_name) ... ok
+test_can_target_a_different_table (test_servicenow_connector.AuthAndConstruction.test_can_target_a_different_table) ... ok
+test_default_table_is_incident (test_servicenow_connector.AuthAndConstruction.test_default_table_is_incident) ... ok
+test_session_gets_basic_auth_configured (test_servicenow_connector.AuthAndConstruction.test_session_gets_basic_auth_configured) ... ok
+test_builds_correct_body_with_no_network_calls (test_servicenow_connector.BuildIncidentBodyPureFunction.test_builds_correct_body_with_no_network_calls) ... ok
+test_create_incident_and_build_incident_body_produce_same_shape (test_servicenow_connector.BuildIncidentBodyPureFunction.test_create_incident_and_build_incident_body_produce_same_shape)
+Regression guard: the refactor that extracted build_incident_body must not ... ok
+test_creates_new_incident_when_none_exists (test_servicenow_connector.CreateIncident.test_creates_new_incident_when_none_exists) ... ok
+test_incident_body_includes_kev_and_epss_context (test_servicenow_connector.CreateIncident.test_incident_body_includes_kev_and_epss_context) ... ok
+test_raises_on_unexpected_response_shape (test_servicenow_connector.CreateIncident.test_raises_on_unexpected_response_shape) ... ok
+test_severity_maps_to_urgency_and_impact (test_servicenow_connector.CreateIncident.test_severity_maps_to_urgency_and_impact) ... ok
+test_skip_if_exists_false_always_creates (test_servicenow_connector.CreateIncident.test_skip_if_exists_false_always_creates) ... ok
+test_skips_creation_when_incident_already_exists (test_servicenow_connector.CreateIncident.test_skips_creation_when_incident_already_exists) ... ok
+test_batch_continues_past_a_single_finding_failure (test_servicenow_connector.CreateIncidentsForFindingsBatch.test_batch_continues_past_a_single_finding_failure)
+One malformed finding must not abort the whole batch. ... ok
+test_batch_creates_incidents_for_all_findings (test_servicenow_connector.CreateIncidentsForFindingsBatch.test_batch_creates_incidents_for_all_findings) ... ok
+test_finds_existing_incident_by_correlation_id (test_servicenow_connector.FindExistingIncident.test_finds_existing_incident_by_correlation_id) ... ok
+test_returns_none_when_nothing_found (test_servicenow_connector.FindExistingIncident.test_returns_none_when_nothing_found) ... ok
 
 ----------------------------------------------------------------------
-Ran 96 tests in 10.503s
+Ran 145 tests in 8.595s
 
 OK
 Would run: C:\Users\pavane\AppData\Roaming\Claude\claude-code\2.1.219\claude.exe -p /vulnhunt vulnerable-demo-app --output-format json --permission-mode acceptEdits --allowedTools Read Grep Glob Bash Edit Write --max-budget-usd 2.00

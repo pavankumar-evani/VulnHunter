@@ -9,10 +9,15 @@ source file, the source file is right and this parser has a bug.
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIX_BRANCH_PREFIX = "vulnhunter/auto-fixes-"
+
+sys.path.insert(0, str(REPO_ROOT))
+from remediation.config import priority_engine  # noqa: E402
+from remediation.enrichment.attack_mapping import tag_findings  # noqa: E402
 
 
 def _git_show(ref, path):
@@ -114,6 +119,47 @@ def asset_type_breakdown(findings):
         t = f.get("asset", {}).get("type", "unknown")
         counts[t] = counts.get(t, 0) + 1
     return dict(sorted(counts.items(), key=lambda kv: kv[1], reverse=True))
+
+
+def load_priority_rules_text():
+    """Raw YAML text for the config editor form - preserves comments/formatting,
+    unlike round-tripping through a parsed dict."""
+    return priority_engine.DEFAULT_RULES_PATH.read_text(encoding="utf-8")
+
+
+def save_priority_rules_text(text):
+    """Validates the YAML parses before writing - never save a broken config file
+    that would take down every page reading it on the next request."""
+    import yaml
+    yaml.safe_load(text)  # raises yaml.YAMLError if invalid; caller should catch it
+    priority_engine.DEFAULT_RULES_PATH.write_text(text, encoding="utf-8")
+
+
+def load_live_queue():
+    """The LIVE, re-scored, threat-intel-tagged remediation queue - computed fresh on
+    every request from normalized-findings.json + whatever priority_rules.yaml
+    currently says, unlike REMEDIATION_PLAN.md which is a point-in-time snapshot
+    written by the remediation-planner subagent. This is what an admin editing the
+    priority rules form actually sees change."""
+    findings = load_remediation_findings()
+    findings = tag_findings(findings)
+    rules = priority_engine.load_rules()
+    return priority_engine.score_findings(findings, rules=rules)
+
+
+def sla_summary(scored_findings):
+    """Returns {breached, at_risk, on_track} counts - at_risk means due within 3 days
+    but not yet breached."""
+    breached = at_risk = on_track = 0
+    for f in scored_findings:
+        sla = f.get("sla", {})
+        if sla.get("breached"):
+            breached += 1
+        elif sla.get("days_remaining") is not None and sla["days_remaining"] <= 3:
+            at_risk += 1
+        else:
+            on_track += 1
+    return {"breached": breached, "at_risk": at_risk, "on_track": on_track}
 
 
 def load_remediation_plan():

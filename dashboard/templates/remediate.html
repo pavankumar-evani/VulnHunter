@@ -1,7 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Remediation · VulnHunter{% endblock %}
+{% block title %}Remediation Plan · VulnHunter{% endblock %}
+{% block page_title %}/remediate — Remediation Plan (snapshot){% endblock %}
 {% block content %}
-<h1>/remediate — Infrastructure Remediation Queue</h1>
+<div class="callout">
+  This is the static plan from the last <code>/remediate</code> agent run. For a live,
+  re-scored view using the current priority rules and SLA windows, see the
+  <a href="{{ url_for('queue_view') }}">Remediation Queue</a> page instead.
+</div>
 
 {% if not plan.available %}
 <p class="empty-state">

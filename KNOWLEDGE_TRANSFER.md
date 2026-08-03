@@ -110,7 +110,7 @@ only the tools its job requires, and let that scoping *be* the safety mechanism.
 
 This was a deliberate alternative to the originally-suggested idea of running everything
 inside a Docker sandbox for safety. Docker wasn't available/working reliably in this
-environment (see [§10 Troubleshooting](#10-troubleshooting--things-that-tripped-us-up)),
+environment (see [§12 Troubleshooting](#12-troubleshooting--things-that-tripped-us-up)),
 and tool-scoping turned out to be a *better* safety story anyway: it doesn't depend on
 container escape resistance, it's auditable by reading three lines of YAML frontmatter,
 and it's enforced by Claude Code itself, not by infrastructure the project has to stand up.
@@ -262,7 +262,7 @@ by construction, not by policy:
 | **Security engineers / AppSec teams** | Point `/vulnhunt` at a real codebase to get a fast baseline scan + auto-fix PR for the mechanical findings, freeing review time for the ones that need judgment. |
 | **Vulnerability management / SOC teams** | Point `/remediate` at real Tenable/Armis exports (swap in live API pulls — see [§9 Roadmap](#9-roadmap)) to turn a raw finding backlog into a prioritized, risk-tiered remediation queue with ready-to-review fix automation. |
 | **Platform/DevOps teams** | Use the generated Ansible playbooks as a starting point for an existing Ansible Tower/AWX pipeline, rather than writing remediation playbooks from scratch for every CVE. |
-| **Hackathon judges / reviewers** | This document + [README.md](README.md) + [deliverables/](deliverables/) for the full pitch; [§10](#10-troubleshooting--things-that-tripped-us-up) for an honest account of what broke and how it was fixed. |
+| **Hackathon judges / reviewers** | This document + [README.md](README.md) + [deliverables/](deliverables/) for the full pitch; [§12](#12-troubleshooting--things-that-tripped-us-up) for an honest account of what broke and how it was fixed. |
 | **Anyone extending this project** | [§9 Roadmap](#9-roadmap) and [§6 Step 8](#step-8-extend-it) for exactly what a new fixer subagent needs. |
 
 ---
@@ -275,7 +275,7 @@ by construction, not by policy:
   there's nothing to run without it).
 - **git** — that's it. No `gh` CLI, no Docker, no other tooling is required to run either
   pipeline (both were deliberately designed to drop these dependencies — see
-  [§10](#10-troubleshooting--things-that-tripped-us-up)).
+  [§12](#12-troubleshooting--things-that-tripped-us-up)).
 - Python 3.x only if you want to run the test suite or the demo app standalone.
 
 ### Step 1: Open the project
@@ -434,28 +434,34 @@ for network devices or IoT/OT. To add one:
 │   │                          from the prompt logic itself - see cli/README.md)
 │   └── README.md              usage, cost warning, binary discovery order
 ├── dashboard/
-│   ├── app.py                 Flask MVP dashboard - findings, queue, playbooks, run form
-│   ├── data.py                 parses the same real artifacts, no pipeline logic of its own
-│   ├── templates/, static/     Jinja2 templates + CSS
-│   ├── requirements.txt        flask (only new runtime dependency in the whole repo)
+│   ├── app.py                 Flask dashboard - Overview/Queue/Plan/Priority Rules/
+│   │                          ServiceNow/Code Scan/Run Pipeline, sidebar nav
+│   ├── data.py                 parses real artifacts + wraps priority_engine/attack_mapping
+│   ├── templates/, static/     Jinja2 templates + CSS (sidebar layout, SLA/priority badges)
+│   ├── requirements.txt        flask, pyyaml, requests
 │   └── README.md                scope, safety design, and explicit "not yet" list
 ├── remediation/
 │   ├── sample-data/       mock Tenable/Armis/threat-intel exports (14 findings: OS,
 │   │                      infra, IoT/OT, application, and certificate categories)
 │   ├── schema/            normalized Finding schema documentation (now includes kev/epss)
-│   ├── connectors/        live Tenable/Armis API clients - built, unit-tested against
-│   │                      mocked HTTP, but unverified against a real tenant (see its README)
-│   ├── enrichment/        live CISA KEV + EPSS client - verified against the real public
-│   │                      endpoints during development (see its module docstring)
+│   ├── connectors/        live Tenable/Armis/ServiceNow API clients - built, unit-tested
+│   │                      against mocked HTTP, unverified against a real tenant (see README)
+│   ├── enrichment/        live CISA KEV + EPSS client (verified against real public
+│   │                      endpoints) + MITRE ATT&CK keyword-tagging heuristic
+│   ├── config/            configurable priority/SLA rules engine (YAML + Python),
+│   │                      editable live from the dashboard's /priority-rules page
 │   └── output/            normalized findings + generated playbooks (generated, not hand-written)
 ├── vulnerable-demo-app/   intentionally vulnerable Flask app — /vulnhunt's scan target
 ├── tests/
 │   ├── test_pipeline_artifacts.py   35 automated tests, stdlib only
 │   ├── test_cli.py                  13 tests for the headless CLI (no real API calls)
-│   ├── test_dashboard.py            17 tests for the dashboard (Flask test client, no real server)
+│   ├── test_dashboard.py            25 tests for the dashboard (Flask test client, no real server)
 │   ├── test_connectors.py           18 tests for the Tenable/Armis connectors (mocked HTTP)
 │   ├── test_enrichment.py           13 tests for KEV/EPSS enrichment (mostly mocked, 1 live)
-│   └── test_results.txt             a captured passing run (96/96)
+│   ├── test_priority_engine.py      14 tests for the configurable priority/SLA engine
+│   ├── test_attack_mapping.py       11 tests for the MITRE ATT&CK keyword heuristic
+│   ├── test_servicenow_connector.py 16 tests for the ServiceNow adapter (mocked HTTP)
+│   └── test_results.txt             a captured passing run (145/145)
 ├── deliverables/
 │   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
 │   └── VulnHunter_Project_Report.docx     full project & test report
@@ -471,8 +477,8 @@ for network devices or IoT/OT. To add one:
 
 ## 8. Test Evidence & Results
 
-96 tests, 0 failures, across five suites. None of it calls the real Claude API (see each
-file's docstring for why that's a hard rule, not an oversight) — the one deliberate
+145 tests, 0 failures, across eight suites. None of it calls the real Claude API (see
+each file's docstring for why that's a hard rule, not an oversight) — the one deliberate
 exception is `test_enrichment.py`'s live smoke test, which calls the real, free, public
 CISA KEV/EPSS APIs (safe: no auth, no cost, and it skips itself rather than failing if
 network is unavailable).
@@ -481,9 +487,12 @@ network is unavailable).
 |---|---|---|
 | `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 35 |
 | `tests/test_cli.py` | Headless CLI command construction, binary discovery, one real dry-run subprocess call | 13 |
-| `tests/test_dashboard.py` | Dashboard data parsing + every route, including KEV/EPSS KPIs and asset-type breakdown | 17 |
+| `tests/test_dashboard.py` | Dashboard data parsing + every route (incl. live queue, priority-rules editor, ServiceNow preview) | 25 |
 | `tests/test_connectors.py` | Live Tenable/Armis connector auth/pagination/mapping logic against mocked HTTP | 18 |
 | `tests/test_enrichment.py` | CISA KEV + EPSS enrichment logic, mostly mocked plus one real live-API smoke test | 13 |
+| `tests/test_priority_engine.py` | Configurable priority scoring + SLA computation against the real rules file | 14 |
+| `tests/test_attack_mapping.py` | MITRE ATT&CK keyword heuristic, including deliberate non-matches | 11 |
+| `tests/test_servicenow_connector.py` | ServiceNow Table API adapter — idempotency, body construction, batch error handling | 16 |
 
 `test_pipeline_artifacts.py` breakdown:
 
@@ -582,21 +591,93 @@ Also planned in this tier, lower priority than the items above:
   through an MDM platform's compliance policies (Intune/Jamf API), a different
   integration entirely from infra automation.
 
-### Tier 3 — Enterprise / Commercial Ready (not started)
+### Tier 3 — Enterprise / Commercial Ready (partially started)
 
-What a real buyer's security architect will actually ask for, requiring business
-decisions this document can't make unilaterally:
+What a real buyer's security architect will actually ask for. Some of this is now real
+(see below); the rest needs business decisions this document can't make unilaterally.
 
-- **Auth, RBAC, SSO** — who is allowed to approve a domain-controller change?
-- **Ticketing integration** — ServiceNow/Jira sync, Slack/Teams notifications.
-- **Compliance story** — data handling and residency for vulnerability data sent to an
-  LLM, a SOC2-style audit trail of every AI recommendation and human approval.
+**Done:**
+- **ServiceNow ticketing integration** (`remediation/connectors/servicenow_connector.py`)
+  — creates an Incident per finding via the Table API, idempotent (checks
+  `correlation_id` before creating a duplicate), with a preview mode in the dashboard's
+  `/servicenow` page that shows exactly what would be sent without needing real
+  credentials. Same "built against docs, unverified against a live instance" caveat as
+  the Tenable/Armis connectors.
+- **Configurable priority rules + SLA tracking**
+  (`remediation/config/priority_engine.py`, editable at `/priority-rules`) — an admin
+  can retune severity/asset-criticality/KEV/EPSS weights and SLA windows per priority
+  tier, and see the `/queue` page and Overview KPIs update immediately, with no pipeline
+  re-run. This is deliberately a *separate* live-scoring layer from
+  `remediation-planner`'s own baked-in prompt logic — see
+  [remediation/config/README.md](remediation/config/README.md) if one exists, or the
+  module docstring, for that distinction.
+- **MITRE ATT&CK tagging** (`remediation/enrichment/attack_mapping.py`) — a keyword
+  heuristic, explicitly documented as such (not authoritative technique attribution),
+  surfaced on the `/queue` page.
+- **Modernized dashboard nav** — a sidebar layout (Overview / Code Scan / Remediation
+  Queue / Remediation Plan / Priority Rules / ServiceNow / Run Pipeline), still Flask/
+  Jinja2 (Node.js unavailable in the build environment at time of writing — see §12).
+
+**Not started, needs a business/architecture decision first:**
+- **Auth, RBAC, SSO, multi-tenancy** — the current dashboard has zero authentication and
+  zero persistence; every request re-reads local files. "One tenant = one client" MSSP
+  architecture needs a real database and auth layer *before* it needs more features —
+  see §11 below for why this can't be bolted on incrementally.
+- **Compliance certification (SOC2, NIST, etc.)** — not a coding task. SOC2 is an audit
+  by a licensed CPA firm over months of operational evidence; NIST CSF alignment is a
+  self-attestation or third-party assessment. This repo can build toward the *controls*
+  (audit logging, RBAC, encryption) but cannot claim "compliant" — doing so, especially
+  when pitching to banks, is a legal/regulatory risk, not a feature gap.
 - **Deployment + pricing model** — SaaS vs. self-hosted, and a real answer to "what does
   this cost per customer given Claude API usage at scale."
 
 ---
 
-## 10. Troubleshooting / Things That Tripped Us Up
+## 11. The Enterprise/MSSP Platform Ask — Scope Reality Check
+
+Partway through this project, the ask expanded to: modern intuitive dashboards with
+KPIs/SLAs, a full "industry tool"-grade menu, dark-web monitoring, SIEM/XDR/pentest-tool
+integration, NIST/SOC2 compliance, a configurable priority engine, ServiceNow, built-in
+AI, MITRE ATT&CK-style detection, scheduled reporting (daily through yearly), and
+multi-tenant MSSP architecture — explicitly framed as needing to out-compete "industry
+tools." Worth being explicit about what that actually describes and what came of it,
+since it's a different category of ask than everything before it in this document.
+
+**What that ask describes:** a platform comparable to Qualys VMDR + Tenable.io +
+ServiceNow SecOps + a threat-intel platform (Recorded Future/Flashpoint-class) combined.
+That's a multi-year, multi-team product category — not a feature list a coding session
+finishes.
+
+**What was actually built from it** (real, tested, described above): the ServiceNow
+adapter, the configurable priority/SLA engine, MITRE ATT&CK tagging, and a modernized
+dashboard nav.
+
+**What was deliberately NOT built, and why:**
+- **Dark-web monitoring** — real providers (Recorded Future, Flashpoint, DarkOwl, KELA)
+  maintain that access through years of specialized, legally-vetted infrastructure.
+  Building a crawler to access dark-web marketplaces/forums ourselves is a different risk
+  category than everything else in this repo. The right architecture is a **vendor API
+  adapter** (same connector pattern as Tenable/Armis/ServiceNow) once a specific vendor
+  and contract exists — not a scraper.
+- **SIEM/XDR/pentest-tool adapters (beyond ServiceNow)** — the connector *pattern* is
+  proven three times over now (Tenable, Armis, ServiceNow); adding Splunk, Sentinel,
+  QRadar, CrowdStrike, or Defender adapters is the same pattern again, gated on picking
+  one and having its API docs (or better, a real sandbox) to build against.
+- **"AI-based anomaly/behavioral detection"** — a distinct, open-ended ML engineering
+  effort (model selection, training data, false-positive tuning), not something to bolt
+  on alongside everything else here without its own dedicated scope discussion.
+- **Multi-tenant MSSP architecture** — requires the database + auth foundation from Tier
+  3 above *first*. Building tenant isolation on top of a filesystem-reading Flask MVP
+  would mean rebuilding it twice.
+- **NIST/SOC2/"any relevant compliance"** — see Tier 3 above. Not a code deliverable.
+
+None of this is a "no" — it's each of these being its own real scope of work, most of
+which need a decision (which vendor, which cloud, which compliance framework actually
+matters for this business) before code is the bottleneck.
+
+---
+
+## 12. Troubleshooting / Things That Tripped Us Up
 
 Documented honestly, since these are exactly the things a judge or a teammate is likely
 to hit too:
@@ -635,7 +716,7 @@ to hit too:
 
 ---
 
-## 11. Appendix
+## 13. Appendix
 
 - **Repository:** https://github.com/Deloitte-US-Consulting/VulnHunter
 - **Branches:** `master` (code pipeline scaffold), `vulnhunter/auto-fixes-20260803`

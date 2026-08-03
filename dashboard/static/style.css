@@ -1,10 +1,11 @@
 :root {
-  --bg: #f7f8fa;
+  --bg: #f5f6f8;
   --surface: #ffffff;
-  --border: #e0e2e6;
-  --text: #1a1d21;
+  --border: #e2e4e8;
+  --text: #14171a;
   --text-muted: #6b7280;
   --brand: #0f5132;
+  --brand-dark: #0a3a24;
   --brand-accent: #16a34a;
   --danger: #b91c1c;
   --danger-bg: #fee2e2;
@@ -12,6 +13,7 @@
   --warn-bg: #fef3c7;
   --info-bg: #e0f2fe;
   --info-text: #075985;
+  --sidebar-w: 232px;
 }
 
 * { box-sizing: border-box; }
@@ -24,28 +26,80 @@ body {
   line-height: 1.5;
 }
 
-.topbar {
-  background: var(--brand);
-  color: white;
+.app-shell { display: flex; min-height: 100vh; }
+
+/* --- Sidebar --- */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--brand-dark);
+  color: #e8ece9;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
-.topbar-inner {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 14px 24px;
+.sidebar .brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-.brand { color: white; text-decoration: none; font-weight: 700; font-size: 1.1rem; }
-.topbar nav a {
-  color: rgba(255,255,255,0.85);
+  gap: 10px;
+  padding: 20px 18px;
+  color: white;
   text-decoration: none;
-  margin-left: 20px;
-  font-size: 0.92rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
-.topbar nav a:hover { color: white; }
+.brand-mark { font-size: 1.2rem; }
 
-.content { max-width: 1100px; margin: 0 auto; padding: 28px 24px 60px; }
+.side-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
+.nav-group { margin-bottom: 18px; }
+.nav-group-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.45);
+  padding: 4px 18px;
+  margin-bottom: 2px;
+}
+.side-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  color: rgba(255,255,255,0.75);
+  text-decoration: none;
+  font-size: 0.88rem;
+  border-left: 3px solid transparent;
+}
+.side-nav a:hover { background: rgba(255,255,255,0.06); color: white; }
+.side-nav a.active {
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border-left-color: var(--brand-accent);
+  font-weight: 600;
+}
+.nav-icon { width: 16px; text-align: center; opacity: 0.85; }
+
+.sidebar-footer {
+  padding: 14px 18px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.75rem;
+}
+.sidebar-footer a { color: rgba(255,255,255,0.5); }
+
+/* --- Main column --- */
+.main-column { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 32px;
+}
+.page-title { margin: 0; font-size: 1.3rem; }
+
+.content { padding: 24px 32px 60px; max-width: 1200px; }
 
 h1 { font-size: 1.5rem; margin-bottom: 4px; }
 h2 { font-size: 1.15rem; margin-top: 32px; }
@@ -169,6 +223,58 @@ code {
 .flash-success { background: #dcfce7; color: #166534; }
 .flash-error { background: var(--danger-bg); color: var(--danger); }
 
-.footer { border-top: 1px solid var(--border); margin-top: 40px; }
-.footer-inner { max-width: 1100px; margin: 0 auto; padding: 16px 24px; color: var(--text-muted); font-size: 0.8rem; }
-.footer a { color: var(--text-muted); }
+/* --- SLA / priority badges --- */
+.badge-priority-critical { background: #7f1d1d; color: white; }
+.badge-priority-high { background: #fee2e2; color: #991b1b; }
+.badge-priority-medium { background: #fef3c7; color: #92400e; }
+.badge-priority-low { background: #f1f3f5; color: #4b5563; }
+
+.sla-ok { color: var(--brand-accent); font-weight: 600; }
+.sla-warn { color: #d97706; font-weight: 600; }
+.sla-breached { color: var(--danger); font-weight: 700; }
+
+.attack-tag {
+  display: inline-block;
+  background: #ede9fe;
+  color: #5b21b6;
+  border-radius: 5px;
+  padding: 1px 7px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin: 1px 2px 1px 0;
+}
+
+/* --- Config form (priority rules editor) --- */
+.config-form textarea {
+  width: 100%;
+  min-height: 480px;
+  font-family: Consolas, Menlo, Monaco, monospace;
+  font-size: 0.85rem;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.config-form button {
+  margin-top: 12px;
+  background: var(--brand);
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.config-form button:hover { background: #0b3d26; }
+
+/* --- Progress / trend bar (for KPI cards) --- */
+.progress-track {
+  background: #eef0f2;
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.progress-fill { height: 100%; background: var(--brand-accent); border-radius: 999px; }
+.progress-fill.progress-danger { background: var(--danger); }
+.progress-fill.progress-warn { background: #d97706; }

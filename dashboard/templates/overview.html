@@ -1,8 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Overview · VulnHunter{% endblock %}
+{% block page_title %}Security Posture Overview{% endblock %}
 {% block content %}
-<h1>Security Posture Overview</h1>
-<p class="subtitle">Real results from the last validated run of both pipelines.</p>
+<p class="subtitle">Real results from the last validated run of both pipelines — not simulated.</p>
+
+<div class="kpi-grid">
+  <div class="kpi-card kpi-danger">
+    <div class="kpi-value">{{ sla.breached }}</div>
+    <div class="kpi-label">SLA breached</div>
+  </div>
+  <div class="kpi-card kpi-warn">
+    <div class="kpi-value">{{ sla.at_risk }}</div>
+    <div class="kpi-label">SLA at risk (≤3 days)</div>
+  </div>
+  <div class="kpi-card kpi-good">
+    <div class="kpi-value">{{ sla.on_track }}</div>
+    <div class="kpi-label">SLA on track</div>
+  </div>
+  <div class="kpi-card kpi-danger">
+    <div class="kpi-value">{{ kev_count }}</div>
+    <div class="kpi-label">CISA KEV-listed (actively exploited)</div>
+  </div>
+  <div class="kpi-card kpi-warn">
+    <div class="kpi-value">{{ high_epss_count }}</div>
+    <div class="kpi-label">High EPSS (≥50% exploit probability)</div>
+  </div>
+</div>
 
 <div class="kpi-grid">
   <div class="kpi-card">
@@ -29,22 +52,16 @@
     <div class="kpi-value">{{ playbook_count }}</div>
     <div class="kpi-label">Playbooks generated</div>
   </div>
-  <div class="kpi-card kpi-danger">
-    <div class="kpi-value">{{ kev_count }}</div>
-    <div class="kpi-label">CISA KEV-listed (actively exploited)</div>
-  </div>
-  <div class="kpi-card kpi-warn">
-    <div class="kpi-value">{{ high_epss_count }}</div>
-    <div class="kpi-label">High EPSS (≥50% exploit probability)</div>
-  </div>
 </div>
 
 <div class="callout">
-  Priority in the remediation queue is threat-intel-aware, not just severity-based: a
-  finding confirmed in <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA's KEV catalog</a>
+  Priority in the <a href="{{ url_for('queue_view') }}">live remediation queue</a> is
+  threat-intel-aware, not just severity-based: a finding confirmed in
+  <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog">CISA's KEV catalog</a>
   is escalated to top priority regardless of asset type, and EPSS (exploit-probability
-  scoring from FIRST.org) catches high-risk CVEs KEV hasn't confirmed yet. Both are live,
-  real data — not simulated.
+  scoring from FIRST.org) catches high-risk CVEs KEV hasn't confirmed yet. SLA windows,
+  asset-criticality weights, and these overrides are all editable on the
+  <a href="{{ url_for('priority_rules_view') }}">Priority Rules</a> page.
 </div>
 
 {% if plan.available %}
