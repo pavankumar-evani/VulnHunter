@@ -4,25 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-VulnHunter is not a conventional application — it's a Claude Code **extension**: a slash
-command plus three scoped subagents that together form an autonomous security-scanning
-pipeline. There is no build system, package manifest, or test suite for VulnHunter itself;
-the "code" is markdown prompt/config files under `.claude/`. The only runnable code is the
-intentionally-vulnerable demo Flask app in `vulnerable-demo-app/`, which exists purely as a
-scan target.
+VulnHunter is not a conventional application — it's a Claude Code **extension**: two slash
+commands plus seven scoped subagents forming two pipelines:
 
-## Running the pipeline
+- `/vulnhunt` — scans source code, reports findings, auto-fixes the safe ones (3 subagents).
+- `/remediate` — ingests Tenable/Armis/threat-intel vulnerability data, normalizes it,
+  plans remediation by risk tier, and generates reviewable fix automation for supported
+  asset classes (4 subagents).
+
+There is no build system, package manifest, or test suite for VulnHunter itself; the
+"code" is markdown prompt/config files under `.claude/`. The only runnable code is the
+intentionally-vulnerable demo Flask app in `vulnerable-demo-app/`, which exists purely as a
+`/vulnhunt` scan target. `/remediate` has no runnable target app — it consumes the sample
+data files in `remediation/sample-data/`.
+
+## Running the pipelines
 
 ```bash
 claude
 /vulnhunt <path-to-target-repo> [--fix]
 /vulnhunt vulnerable-demo-app        # scan+report only
-/vulnhunt vulnerable-demo-app --fix  # scan+report, then auto-fix and open a PR
+/vulnhunt vulnerable-demo-app --fix  # scan+report, then auto-fix and push a branch
+
+/remediate                           # ingests remediation/sample-data/* by default
+/remediate --generate                # also generates Ansible playbooks for auto-remediable findings
 ```
 
 There is no other tooling to build, lint, or test — modifying this project means editing
-the command/agent markdown files directly and re-running `/vulnhunt` against
-`vulnerable-demo-app/` to see the effect.
+the command/agent markdown files directly and re-running the relevant slash command
+against `vulnerable-demo-app/` (for `/vulnhunt`) or `remediation/sample-data/` (for
+`/remediate`) to see the effect.
 
 To run the demo app standalone (for manual verification, never deployed anywhere reachable):
 
@@ -83,11 +94,46 @@ the only agent allowed to touch git/`gh`. When editing any of the three agent fi
 - Docker running as root → add a non-root `USER` instruction after deps are installed.
 - Debug mode in a prod entrypoint → gate behind an env var defaulting to `False`.
 
+## Architecture: the remediation engine (`/remediate`)
+
+`/remediate` (`.claude/commands/remediate.md`) orchestrates four subagents, same
+scoped-tool-access philosophy as `/vulnhunt`:
+
+1. **`vuln-ingest-normalizer`** (tools: `Read, Glob, Write`) parses Tenable CSV, Armis
+   JSON, and threat-intel JSON exports into one common schema — see
+   `remediation/schema/normalized-finding-schema.md`. Writes
+   `remediation/output/normalized-findings.json`. Assigns `asset.type` (the routing key
+   for everything downstream) and `remediation_domain` (non-null only for
+   `windows-server`/`unix-server` today, since those are the only domains with a working
+   fixer).
+2. **`remediation-planner`** (tools: `Read, Write`) assigns each finding an `action_type`,
+   `automation_target`, `risk_tier` (`auto-approvable` / `needs-change-approval` /
+   `manual-only`), `rollback_plan`, and `priority`. Writes `REMEDIATION_PLAN.md` to the
+   project root. Defaults to the more conservative risk tier when uncertain — this is a
+   deliberate design choice, not caution to relax later.
+3. **`remediation-fixer-windows`** / **`remediation-fixer-unix`** (tools: `Read, Write`
+   only — no `Bash`, deliberately) generate Ansible playbooks per finding into
+   `remediation/output/<finding-id>-<slug>.yml`, only for findings already routed to their
+   domain by the planner. They never execute anything — that's the whole safety model of
+   this pipeline (see README's "Remediation Engine" section for the full rationale).
+
+### Why network/firewall/IoT findings stay manual-only
+
+`vuln-ingest-normalizer` and `remediation-planner` handle all five asset classes
+(windows-server, unix-server, network-routing-switching, network-security-device,
+iot-ot-device) — ingestion and planning are asset-agnostic by design. Only fix-generation
+is incomplete: there's no `remediation-fixer-network` or `remediation-fixer-iot` yet.
+Adding one means adding a new subagent with `tools: Read, Write` (same restricted pattern)
+that generates vendor-appropriate config (e.g. Ansible's `cisco.ios`/`junipernetworks.junos`
+collections for network gear), plus updating `remediation-planner`'s `automation_target`
+assignment to route to it. Don't add real execution capability (`Bash`, SSH, API calls) to
+any fixer subagent — every fixer in this project stays artifact-generation-only.
+
 ## The demo app (`vulnerable-demo-app/`)
 
-Six labeled, intentional vulnerabilities used as the scoring/demo baseline — if you modify
-this app, keep the vuln count and CWE labels in its docstring/comments accurate, since the
-README's "expected result" (~6 findings, 3-4 auto-fixed) depends on them:
+Six labeled, intentional vulnerabilities used as the `/vulnhunt` scoring/demo baseline — if
+you modify this app, keep the vuln count and CWE labels in its docstring/comments
+accurate, since the README's "expected result" (9 findings, 6 auto-fixed) depends on them:
 
 1. Hardcoded Stripe key (`app.py`, `Dockerfile` `ENV`) — CWE-798
 2. SQL injection via string concatenation in `/user` — CWE-89

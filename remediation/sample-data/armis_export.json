@@ -1,0 +1,68 @@
+{
+  "exportedAt": "2026-08-02T09:15:00Z",
+  "devices": [
+    {
+      "deviceId": 481203,
+      "deviceName": "AXIS-CAM-LOBBY-03",
+      "deviceType": "IP Camera",
+      "manufacturer": "Axis Communications",
+      "model": "M3046-V",
+      "ipAddress": "10.20.50.12",
+      "macAddress": "AC:CC:8E:11:9F:02",
+      "site": "HQ-Floor1",
+      "riskLevel": "High",
+      "alerts": [
+        {
+          "alertType": "Policy Violation",
+          "title": "Device Exposes Telnet Service",
+          "description": "Device has an open Telnet (port 23) service, which transmits credentials in cleartext and is disabled-by-default on hardened builds.",
+          "cve": null,
+          "firstSeen": "2026-07-10T00:00:00Z",
+          "lastSeen": "2026-08-01T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "deviceId": 481990,
+      "deviceName": "HVAC-CTRL-B2",
+      "deviceType": "Building Automation Controller",
+      "manufacturer": "Johnson Controls",
+      "model": "FX-PCG",
+      "ipAddress": "10.20.51.44",
+      "macAddress": "00:1D:A1:22:3C:9B",
+      "site": "HQ-Basement",
+      "riskLevel": "Critical",
+      "alerts": [
+        {
+          "alertType": "Known Vulnerability",
+          "title": "Unauthenticated Access to Management Interface",
+          "description": "The device's web management interface is reachable without authentication, allowing configuration changes by any network-adjacent host.",
+          "cve": "CVE-2019-7592",
+          "firstSeen": "2026-06-28T00:00:00Z",
+          "lastSeen": "2026-08-01T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "deviceId": 482055,
+      "deviceName": "MDM-IPHONE-J-SMITH",
+      "deviceType": "Mobile Phone",
+      "manufacturer": "Apple",
+      "model": "iPhone 13",
+      "ipAddress": "10.20.60.201",
+      "macAddress": "3C:15:C2:AA:10:5E",
+      "site": "HQ-WiFi",
+      "riskLevel": "Medium",
+      "alerts": [
+        {
+          "alertType": "Policy Violation",
+          "title": "Outdated OS Version",
+          "description": "Device is running an iOS version 3 major releases behind current, missing several security patches.",
+          "cve": null,
+          "firstSeen": "2026-07-22T00:00:00Z",
+          "lastSeen": "2026-08-01T00:00:00Z"
+        }
+      ]
+    }
+  ]
+}

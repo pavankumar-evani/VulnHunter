@@ -1,0 +1,48 @@
+# Finding: FIND-5 - OpenSSL Infinite Loop DoS / BN_mod_sqrt (CVE-2022-0778) on LNX-WEB05
+# Risk tier: needs-change-approval - LNX-WEB05 is a live web server and this
+# upgrade requires restarting the web service, risking brief downtime.
+# CHANGE APPROVAL REQUIRED before running - see REMEDIATION_PLAN.md for why.
+# Rollback: downgrade the OpenSSL package and restart the web service if the
+# new version causes compatibility issues.
+#
+# LNX-WEB05 is RHEL 8 per the Tenable export. Verify the exact patched OpenSSL
+# build number for RHEL 8 against Red Hat's advisory for CVE-2022-0778 before
+# running - this playbook upgrades to whatever "latest" resolves to in your
+# configured repos, which should already be the patched build once your repo
+# mirrors reflect the vendor advisory.
+---
+- name: "FIND-5: Patch OpenSSL DoS vulnerability (CVE-2022-0778) on LNX-WEB05"
+  hosts: "{{ target_host | default('LNX-WEB05') }}"
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Report currently installed openssl version (pre-change baseline)
+      ansible.builtin.command: rpm -q openssl
+      register: openssl_version_before
+      changed_when: false
+
+    - name: Show pre-change openssl version
+      ansible.builtin.debug:
+        msg: "openssl version before upgrade: {{ openssl_version_before.stdout }}"
+
+    - name: Upgrade openssl to the patched version - RHEL/CentOS
+      ansible.builtin.dnf:
+        name: openssl
+        state: latest
+      when: ansible_facts['os_family'] == "RedHat"
+      notify: restart web service
+
+    - name: Upgrade openssl to the patched version - Debian/Ubuntu
+      ansible.builtin.apt:
+        name: openssl
+        state: latest
+        update_cache: true
+      when: ansible_facts['os_family'] == "Debian"
+      notify: restart web service
+
+  handlers:
+    - name: restart web service
+      ansible.builtin.service:
+        name: httpd
+        state: restarted

@@ -1,0 +1,38 @@
+# Finding: FIND-4 - Sudo Heap-Based Buffer Overflow / Baron Samedit (CVE-2021-3156) on LNX-DB03
+# Risk tier: auto-approvable - single-package upgrade, no service restart
+# required, widely-deployed and well-tested vendor fix.
+# Rollback: downgrade the `sudo` package via the distro's package cache/repo
+# if unexpected issues arise (extremely unlikely for this fix).
+#
+# LNX-DB03 is Ubuntu 20.04 per the Tenable export - this playbook targets the
+# Debian/Ubuntu family. Verify 1.9.5p2 is still the minimum patched version
+# for your distro's advisory before running (patched-version numbers can
+# differ slightly by distro/point release).
+---
+- name: "FIND-4: Patch sudo Baron Samedit vulnerability (CVE-2021-3156) on LNX-DB03"
+  hosts: "{{ target_host | default('LNX-DB03') }}"
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Report currently installed sudo version (pre-change baseline)
+      ansible.builtin.command: dpkg-query -W -f='${Version}' sudo
+      register: sudo_version_before
+      changed_when: false
+
+    - name: Show pre-change sudo version
+      ansible.builtin.debug:
+        msg: "sudo version before upgrade: {{ sudo_version_before.stdout }}"
+
+    - name: Upgrade sudo to the patched version (>= 1.9.5p2) - Debian/Ubuntu
+      ansible.builtin.apt:
+        name: sudo
+        state: latest
+        update_cache: true
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Upgrade sudo to the patched version - RHEL/CentOS
+      ansible.builtin.dnf:
+        name: sudo
+        state: latest
+      when: ansible_facts['os_family'] == "RedHat"

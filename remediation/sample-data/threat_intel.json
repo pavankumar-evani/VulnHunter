@@ -1,0 +1,36 @@
+{
+  "entries": [
+    {
+      "intelId": "TI-2026-0142",
+      "source": "internal-threat-hunting",
+      "analyst": "SOC Tier 2",
+      "dateAdded": "2026-07-29",
+      "title": "Internet-facing RDP discovered on Windows bastion host",
+      "description": "Weekly external attack-surface sweep found TCP/3389 (RDP) reachable from the internet on a Windows Server bastion host, outside of the approved jump-host allowlist. RDP exposure is a top initial-access vector for ransomware affiliates per current threat reporting.",
+      "affectedAsset": {
+        "name": "WIN-BASTION02",
+        "ip": "10.20.30.90",
+        "os": "Microsoft Windows Server 2019 Standard"
+      },
+      "cve": null,
+      "severity": "High",
+      "recommendedAction": "Restrict RDP to the VPN/jump-host network range via host firewall/NSG rule, and enforce NLA + MFA for any remaining external RDP access."
+    },
+    {
+      "intelId": "TI-2026-0158",
+      "source": "vendor-advisory",
+      "analyst": "N/A (Red Hat security advisory)",
+      "dateAdded": "2026-08-01",
+      "title": "OpenSSH regression allows authentication bypass under non-default config",
+      "description": "Vendor advisory flags a regression in OpenSSH server affecting hosts with a specific PAM configuration, potentially allowing authentication to be bypassed. Confirmed present on one internal Linux host during config audit.",
+      "affectedAsset": {
+        "name": "LNX-AUTH01",
+        "ip": "10.20.32.61",
+        "os": "Red Hat Enterprise Linux 9"
+      },
+      "cve": "CVE-2024-6387",
+      "severity": "Critical",
+      "recommendedAction": "Upgrade OpenSSH to the vendor-patched version immediately; this host handles internal authentication traffic."
+    }
+  ]
+}

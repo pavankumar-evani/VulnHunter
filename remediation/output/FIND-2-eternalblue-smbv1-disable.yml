@@ -1,0 +1,37 @@
+# Finding: FIND-2 - EternalBlue / SMBv1 RCE (CVE-2017-0144) on WIN-FS02
+# Risk tier: needs-change-approval - WIN-FS02 is a file server; legacy clients
+# may still depend on SMBv1.
+# CHANGE APPROVAL REQUIRED before running - see REMEDIATION_PLAN.md for why.
+# Rollback: re-enable the SMB1Protocol Windows feature if legacy clients break:
+#   Enable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol
+---
+- name: "FIND-2: Disable SMBv1 to remediate EternalBlue (CVE-2017-0144) on WIN-FS02"
+  hosts: "{{ target_host | default('WIN-FS02') }}"
+  gather_facts: false
+
+  tasks:
+    - name: Check current SMBv1 feature state (pre-change baseline)
+      ansible.windows.win_optional_feature:
+        name: SMB1Protocol
+        state: absent
+        check_mode: true
+      register: smb1_check
+
+    - name: Report pre-change SMBv1 state
+      ansible.builtin.debug:
+        msg: "SMB1Protocol currently present: {{ smb1_check.changed }}"
+
+    # Before disabling: confirm via file server access logs/audit that no
+    # legacy (pre-Windows 8 / pre-Server 2012) clients have connected recently.
+    # This playbook does not perform that check automatically - it requires a
+    # human decision, which is why this finding is needs-change-approval, not
+    # auto-approvable.
+    - name: Disable SMBv1 protocol
+      ansible.windows.win_optional_feature:
+        name: SMB1Protocol
+        state: absent
+      register: disable_result
+
+    - name: Reboot if disabling SMBv1 requires it
+      ansible.windows.win_reboot:
+      when: disable_result.reboot_required | default(false)

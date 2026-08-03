@@ -1,0 +1,43 @@
+# Finding: FIND-10 - Internet-facing RDP on WIN-BASTION02 (internal threat-hunting finding TI-2026-0142)
+# Risk tier: needs-change-approval - WIN-BASTION02 is a critical remote-access
+# entry point; a misconfigured rule risks locking out legitimate admin access.
+# CHANGE APPROVAL REQUIRED before running - see REMEDIATION_PLAN.md for why.
+# Rollback: revert the firewall rule to its prior remote-address scope
+# (`Any`) if legitimate admin access is blocked after this change.
+#
+# `approved_admin_cidr` MUST be set to the real VPN/jump-host network range
+# before running - the placeholder below is illustrative only and will lock
+# out ALL remote access if left as-is.
+---
+- name: "FIND-10: Restrict internet-facing RDP to the approved admin network on WIN-BASTION02"
+  hosts: "{{ target_host | default('WIN-BASTION02') }}"
+  gather_facts: false
+
+  vars:
+    approved_admin_cidr: "REPLACE_ME_WITH_VPN_OR_JUMPHOST_CIDR"
+
+  tasks:
+    - name: Fail loudly if the placeholder CIDR was never set
+      ansible.builtin.fail:
+        msg: >
+          approved_admin_cidr is still the placeholder value - set it to the
+          real VPN/jump-host network range before running this playbook.
+      when: approved_admin_cidr == "REPLACE_ME_WITH_VPN_OR_JUMPHOST_CIDR"
+
+    - name: Restrict the RDP firewall rule to the approved admin network
+      ansible.windows.win_firewall_rule:
+        name: "Remote Desktop - User Mode (TCP-In)"
+        enable: true
+        action: allow
+        direction: in
+        protocol: tcp
+        localport: 3389
+        remoteip: "{{ approved_admin_cidr }}"
+        state: present
+
+    - name: Enforce Network Level Authentication (NLA) for RDP
+      ansible.windows.win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp
+        name: UserAuthentication
+        data: 1
+        type: dword

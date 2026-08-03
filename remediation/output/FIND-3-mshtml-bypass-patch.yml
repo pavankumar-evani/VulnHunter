@@ -1,0 +1,31 @@
+# Finding: FIND-3 - Windows MSHTML Security Feature Bypass (CVE-2024-30040) on WIN-APP07
+# Risk tier: auto-approvable - routine monthly-cycle Windows Update on a
+# non-domain-controller application server.
+# Rollback: uninstall the applicable update via `wusa /uninstall` if it causes
+# an application regression, then re-open a ticket for manual investigation.
+#
+# NOTE: Tenable's export doesn't name a specific KB for this finding - this
+# playbook installs the current SecurityUpdates category rather than a named
+# KB. Verify the specific KB that resolves CVE-2024-30040 against Microsoft's
+# advisory if you need to confirm this exact CVE is what gets patched, rather
+# than relying on "some security update installed this month."
+---
+- name: "FIND-3: Patch MSHTML security feature bypass (CVE-2024-30040) on WIN-APP07"
+  hosts: "{{ target_host | default('WIN-APP07') }}"
+  gather_facts: false
+
+  tasks:
+    - name: Install current security updates
+      ansible.windows.win_updates:
+        category_names:
+          - SecurityUpdates
+        server_selection: default
+      register: update_result
+
+    - name: Report installed updates
+      ansible.builtin.debug:
+        msg: "Updates installed: {{ update_result.updates }}"
+
+    - name: Reboot if the update requires it
+      ansible.windows.win_reboot:
+      when: update_result.reboot_required | default(false)

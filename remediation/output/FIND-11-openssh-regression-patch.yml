@@ -1,0 +1,50 @@
+# Finding: FIND-11 - OpenSSH auth bypass regression (CVE-2024-6387) on LNX-AUTH01
+# Risk tier: needs-change-approval - LNX-AUTH01 handles internal authentication
+# traffic; an SSH-related change here needs approval even though the fix
+# itself is narrow.
+# CHANGE APPROVAL REQUIRED before running - see REMEDIATION_PLAN.md for why.
+# Rollback: downgrade `openssh-server` to the previous version via the distro
+# package cache/repo if the upgrade causes issues.
+#
+# LNX-AUTH01 is RHEL 9 per the threat-intel entry. Verify the vendor-patched
+# build number against Red Hat's advisory for CVE-2024-6387 before running.
+---
+- name: "FIND-11: Patch OpenSSH auth bypass regression (CVE-2024-6387) on LNX-AUTH01"
+  hosts: "{{ target_host | default('LNX-AUTH01') }}"
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Report currently installed openssh-server version (pre-change baseline)
+      ansible.builtin.command: rpm -q openssh-server
+      register: openssh_version_before
+      changed_when: false
+
+    - name: Show pre-change openssh-server version
+      ansible.builtin.debug:
+        msg: "openssh-server version before upgrade: {{ openssh_version_before.stdout }}"
+
+    - name: Validate current sshd config before touching the service (safety check)
+      ansible.builtin.command: sshd -t
+      changed_when: false
+
+    - name: Upgrade openssh-server to the patched version - RHEL/CentOS
+      ansible.builtin.dnf:
+        name: openssh-server
+        state: latest
+      when: ansible_facts['os_family'] == "RedHat"
+      notify: restart sshd
+
+    - name: Upgrade openssh-server to the patched version - Debian/Ubuntu
+      ansible.builtin.apt:
+        name: openssh-server
+        state: latest
+        update_cache: true
+      when: ansible_facts['os_family'] == "Debian"
+      notify: restart sshd
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
