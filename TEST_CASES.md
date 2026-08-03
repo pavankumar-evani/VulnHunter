@@ -1,12 +1,14 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all eight test files: `tests/test_pipeline_artifacts.py` (both
+Formal test case log for all nine test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
-`tests/test_dashboard.py` (the web dashboard, including the live queue, priority-rules
-editor, and ServiceNow preview), `tests/test_connectors.py` (live Tenable/Armis
-connectors), `tests/test_enrichment.py` (live CISA KEV + EPSS enrichment),
-`tests/test_priority_engine.py` (the configurable priority/SLA engine),
-`tests/test_attack_mapping.py` (MITRE ATT&CK keyword tagging), and
+`tests/test_dashboard.py` (the web dashboard's FastAPI JSON API and SPA shell routes,
+including the live queue, priority-rules editor, and ServiceNow preview),
+`tests/test_multilang_scanner_patterns.py` (static consistency checks between the
+scanner's per-language detection guidance and the Java/JS/Go/PHP/Perl fixture files),
+`tests/test_connectors.py` (live Tenable/Armis connectors), `tests/test_enrichment.py`
+(live CISA KEV + EPSS enrichment), `tests/test_priority_engine.py` (the configurable
+priority/SLA engine), `tests/test_attack_mapping.py` (MITRE ATT&CK keyword tagging), and
 `tests/test_servicenow_connector.py` (the ServiceNow adapter). Every row below maps 1:1
 to one `test_*` method in one of those files — there is no test case here without a
 corresponding, runnable assertion, and no assertion in any suite that isn't documented
@@ -21,7 +23,7 @@ pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 145 / 145 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 182 / 182 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -52,10 +54,23 @@ evidence rather than a mocked demo.
 | CLI binary discovery | `ClaudeBinaryDiscovery` | TC-CLI-11 | 1/1 PASS |
 | CLI end-to-end dry-run | `DryRunEndToEnd` | TC-CLI-12 – 13 | 2/2 PASS |
 | Dashboard data layer | `DataLayerReadsRealArtifacts` | TC-DASH-01 – 08 | 8/8 PASS |
-| Dashboard routes | `DashboardRoutesRender` | TC-DASH-09 – 17 | 9/9 PASS |
-| Dashboard live queue | `LiveQueuePage` | TC-DASH-18 – 19 | 2/2 PASS |
-| Dashboard priority rules editor | `PriorityRulesPage` | TC-DASH-20 – 22 | 3/3 PASS |
-| Dashboard ServiceNow page | `ServiceNowPage` | TC-DASH-23 – 25 | 3/3 PASS |
+| Dashboard `/api/overview` | `ApiOverview` | TC-DASH-09 | 1/1 PASS |
+| Dashboard `/api/vulnhunt` | `ApiVulnhunt` | TC-DASH-10 | 1/1 PASS |
+| Dashboard `/api/remediate` | `ApiRemediate` | TC-DASH-11 | 1/1 PASS |
+| Dashboard `/api/playbooks/{filename}` | `ApiPlaybookDetail` | TC-DASH-12 – 13 | 2/2 PASS |
+| Dashboard `/api/run` | `ApiRunPipeline` | TC-DASH-14 – 16 | 3/3 PASS |
+| Dashboard `/api/status` | `ApiStatus` | TC-DASH-17 | 1/1 PASS |
+| Dashboard `/api/queue` (live queue) | `ApiLiveQueue` | TC-DASH-18 – 19 | 2/2 PASS |
+| Dashboard `/api/priority-rules` editor | `ApiPriorityRules` | TC-DASH-20 – 22 | 3/3 PASS |
+| Dashboard `/api/servicenow/*` | `ApiServiceNow` | TC-DASH-23 – 25 | 3/3 PASS |
+| Dashboard SPA shell routes | `HtmlShellRoutesServeTheSpaShell` | TC-DASH-26 – 31 | 6/6 PASS |
+| Multi-language fixture directory sanity | `FixtureDirectoryIsSeparateFromDemoApp` | TC-LANG-01 – 03 | 3/3 PASS |
+| Multi-language Java fixture | `JavaFixture` | TC-LANG-04 – 07 | 4/4 PASS |
+| Multi-language JavaScript fixture | `JavaScriptFixture` | TC-LANG-08 – 11 | 4/4 PASS |
+| Multi-language Go fixture | `GoFixture` | TC-LANG-12 – 15 | 4/4 PASS |
+| Multi-language PHP fixture | `PhpFixture` | TC-LANG-16 – 19 | 4/4 PASS |
+| Multi-language Perl fixture | `PerlFixture` | TC-LANG-20 – 23 | 4/4 PASS |
+| Multi-language scanner doc consistency | `ScannerDocumentationCoversEachLanguage` | TC-LANG-24 – 31 | 8/8 PASS |
 | Tenable connector | `TenableAuthAndExportRequest`, `TenablePollAndDownload`, `TenableRecordMapping`, `TenableWritesSampleCompatibleCsv` | TC-CONN-01 – 11 | 11/11 PASS |
 | Armis connector | `ArmisAuthentication`, `ArmisPagination`, `ArmisDeviceAndAlertAssembly` | TC-CONN-12 – 18 | 7/7 PASS |
 | KEV/EPSS fetching | `KevFetching`, `EpssFetching` | TC-ENR-01 – 05 | 5/5 PASS |
@@ -69,7 +84,7 @@ evidence rather than a mocked demo.
 | ServiceNow construction + auth | `AuthAndConstruction`, `BuildIncidentBodyPureFunction` | TC-SNOW-01 – 06 | 6/6 PASS |
 | ServiceNow incident creation | `FindExistingIncident`, `CreateIncident` | TC-SNOW-07 – 14 | 8/8 PASS |
 | ServiceNow batch handling | `CreateIncidentsForFindingsBatch` | TC-SNOW-15 – 16 | 2/2 PASS |
-| **Total** | | **145** | **145/145 PASS** |
+| **Total** | | **182** | **182/182 PASS** |
 
 ---
 
@@ -209,9 +224,25 @@ without ever calling the real Claude API in a test.
 
 ## Suite 9: Web Dashboard (`dashboard/`)
 
-**Purpose:** prove the dashboard's parser agrees with the pipeline test suite about what
-the artifacts say (no silent drift between the two), every route renders without error,
-and the one route that could spend real money never does so in a test.
+**Purpose:** prove the dashboard's JSON API (FastAPI, `dashboard/app.py`) agrees with the
+pipeline test suite about what the artifacts say (no silent drift between the two), every
+JSON endpoint returns the correct shape and status code, the single-page frontend shell
+(`dashboard/static/index.html` + `static/js/app.js`) is served identically for every page
+route while `/api/*` and `/static/*` still 404 correctly, and the two routes that could
+have a real-world side effect (`/api/run` and `/api/servicenow/send`) never trigger it in
+a test. As of this suite's rewrite, the dashboard backend migrated from Flask + Jinja2
+server-rendered HTML to a FastAPI JSON API with a vanilla-JS single-page frontend — these
+tests validate the JSON contract and the served SPA shell rather than grepping rendered
+HTML for substrings; the actual client-side rendering (sidebar nav, tables, KPI cards,
+client-side sort, forms) was verified live in a browser during development (see
+KNOWLEDGE_TRANSFER.md), not by this Python suite, which cannot execute JavaScript.
+**Preconditions (all TC-DASH):** `dashboard/app.py`'s FastAPI app and `dashboard/data.py`
+importable; the real pipeline artifacts (vulnhunt findings, remediation findings/plan,
+playbooks) present on disk; `remediation/config/priority_rules.yaml` present. All
+requests go through FastAPI's `TestClient` (Starlette's in-process ASGI test client) — no
+real HTTP server, no network, no Claude API or ServiceNow calls. TC-DASH-20–22
+additionally patch `priority_engine.DEFAULT_RULES_PATH` to a temp copy so the suite never
+mutates the real, shipped rules file.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -223,19 +254,89 @@ and the one route that could spend real money never does so in a test.
 | TC-DASH-06 | KEV-listed / high-EPSS counts match live-verified data | Call `count_kev_listed()` / `count_high_epss()` | 6 KEV-listed, 7 with EPSS ≥ 50% | Matches | PASS |
 | TC-DASH-07 | Asset-type breakdown covers all 6 categories | Call `asset_type_breakdown()` | Counts sum to 14; all 6 asset types present (including `application`, `certificate`) | Matches | PASS |
 | TC-DASH-08 | No mojibake in parsed text (regression guard) | Check `vh["title"]` and `plan["title"]` for the mojibake pattern `â€"` | Pattern absent from both | Absent | PASS |
-| TC-DASH-09 | Overview page loads | `GET /` via Flask test client | HTTP 200; contains "Security Posture Overview" | Matches | PASS |
-| TC-DASH-10 | Overview page shows KEV/EPSS KPIs and asset-class coverage | Same request | Contains "CISA KEV-listed", "High EPSS", and the `certificate`/`application` asset types | Matches | PASS |
-| TC-DASH-11 | Code scan page lists all findings | `GET /vulnhunt` | HTTP 200; `VULN-1` through `VULN-9` all present | All present | PASS |
-| TC-DASH-12 | Remediation page lists all findings | `GET /remediate` | HTTP 200; `FIND-1` through `FIND-14` all present | All present | PASS |
-| TC-DASH-13 | Playbook detail page loads | `GET /playbooks/FIND-4-sudo-baron-samedit-patch.yml` | HTTP 200; contains "Auto-approvable" | Matches | PASS |
-| TC-DASH-14 | Unknown playbook returns 404 | `GET /playbooks/does-not-exist.yml` | HTTP 404 (negative test) | 404 | PASS |
-| TC-DASH-15 | Run page loads | `GET /run` | HTTP 200; contains "Run a Pipeline" | Matches | PASS |
-| TC-DASH-16 | Dry-run POST never calls the real API | `POST /run` with `confirm` field omitted | HTTP 200 after redirect; response contains "Dry run only"; no audit log written | Matches | PASS |
+| TC-DASH-09 | `/api/overview` returns combined dashboard shape and known counts | `GET /api/overview` | HTTP 200; `vulnhunt.total==9`, `vulnhunt.auto_fixable==6`, `remediation.total==14`, `playbook_count==7`, `kev_count==6`, `high_epss_count==7`; `sla` has `breached`/`at_risk`/`on_track`; `asset_type_breakdown` includes `windows-server`/`unix-server`/`application`/`certificate` | Matches | PASS |
+| TC-DASH-10 | `/api/vulnhunt` lists all 9 findings | `GET /api/vulnhunt` | HTTP 200; `available` true; finding IDs equal exactly `VULN-1`...`VULN-9` | Matches | PASS |
+| TC-DASH-11 | `/api/remediate` lists all 14 findings, the full plan queue, and playbook links | `GET /api/remediate` | HTTP 200; `findings` has 14 entries; plan queue IDs equal exactly `FIND-1`...`FIND-14`; `playbooks_by_finding` has 7 entries | Matches | PASS |
+| TC-DASH-12 | `/api/playbooks/{filename}` matches the real playbook file's contents | `GET /api/playbooks/FIND-4-sudo-baron-samedit-patch.yml`; independently read the same file from disk and check for `"CHANGE APPROVAL REQUIRED"` | HTTP 200; `finding_id=="FIND-4"`; `needs_approval` equals whatever the raw file actually contains | Matches | PASS |
+| TC-DASH-13 | Unknown playbook returns 404 | `GET /api/playbooks/does-not-exist.yml` | HTTP 404 (negative test) | 404 | PASS |
+| TC-DASH-14 | `GET /api/run` returns default budget and audit-log shape | `GET /api/run` | HTTP 200; response includes `default_budget`; `audit_log` is a list | Matches | PASS |
+| TC-DASH-15 | Dry-run POST never calls the real API (critical safety test) | `POST /api/run` with `pipeline=scan`, `path=vulnerable-demo-app`, `max_budget_usd=2.00`, `confirm` omitted | HTTP 200; `dry_run` true; `message` contains `"Dry run only"` | Matches | PASS |
+| TC-DASH-16 | Unknown pipeline name is rejected | `POST /api/run` with `pipeline="not-a-real-pipeline"` | HTTP 400 (negative test) | 400 | PASS |
 | TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 9`, `remediation_findings: 14` | Matches | PASS |
+| TC-DASH-18 | Live queue lists all 14 findings sorted by priority | `GET /api/queue` | HTTP 200; finding IDs equal exactly `FIND-1`...`FIND-14`; priorities sorted highest-first (Critical > High > Medium > Low) | Matches | PASS |
+| TC-DASH-19 | Live queue shows SLA breach status and ATT&CK tags | `GET /api/queue` | At least one finding has `sla.breached` true; `T1210` (PrintNightmare/Log4Shell-style RCE) appears among the findings' `attack_techniques` | Matches | PASS |
+| TC-DASH-20 | `GET /api/priority-rules` returns the current rules YAML text | `GET /api/priority-rules` (against a temp copy of the real rules file, so the shipped file is never mutated) | HTTP 200; `rules_text` contains `sla_days` | Matches | PASS |
+| TC-DASH-21 | Valid YAML POST saves the new rules | `POST /api/priority-rules` with `rules_text` edited to change `Medium: 30` to `Medium: 5` | HTTP 200; response message contains `"saved"`; the (temp) rules file on disk now contains `Medium: 5` | Matches | PASS |
+| TC-DASH-22 | Invalid YAML POST is rejected and the file is left unchanged | `POST /api/priority-rules` with `rules_text="not: valid: yaml: ["` | HTTP 400; `detail` contains `"invalid YAML"`; rules file content identical to before the request | Matches | PASS |
+| TC-DASH-23 | ServiceNow preview lists every finding without needing credentials | `GET /api/servicenow/preview` | HTTP 200; preview `finding_id`s equal exactly `FIND-1`...`FIND-14` | Matches | PASS |
+| TC-DASH-24 | Sending without confirm never touches the network (critical safety test) | `POST /api/servicenow/send` with real-looking `instance`/`username`/`password`/`table` but `confirm` omitted | HTTP 200; `preview_only` true; `results` is `null` | Matches | PASS |
+| TC-DASH-25 | Sending with confirm but missing credentials is rejected | `POST /api/servicenow/send` with empty `instance`/`username`/`password`, `table="incident"`, `confirm=true` | HTTP 400; `detail` contains `"required"` | Matches | PASS |
+| TC-DASH-26 | Every known page route serves the identical SPA shell | `GET` each of `/`, `/vulnhunt`, `/remediate`, `/run`, `/queue`, `/priority-rules`, `/servicenow` | All return HTTP 200 with `text/html`, each containing `<script type="module" src="/static/js/app.js">`; all 7 responses are byte-identical | Matches | PASS |
+| TC-DASH-27 | Playbook detail route also serves the SPA shell | `GET /playbooks/FIND-4-sudo-baron-samedit-patch.yml` | HTTP 200; body contains `id="app"` | Matches | PASS |
+| TC-DASH-28 | Unknown page route still serves the shell (client-side-routing fallback) | `GET /this-route-does-not-exist` | HTTP 200; body still contains `<script type="module" src="/static/js/app.js">` so `app.js`'s router can render a styled "not found" page | Matches | PASS |
+| TC-DASH-29 | Unknown `/api/*` route returns a real 404 (not the SPA shell) | `GET /api/this-does-not-exist` | HTTP 404 (negative test) | 404 | PASS |
+| TC-DASH-30 | Unknown `/static/*` asset returns a real 404 | `GET /static/this-does-not-exist.js` | HTTP 404 (negative test) | 404 | PASS |
+| TC-DASH-31 | Static assets (CSS/JS) are actually served | `GET /static/style.css` and `GET /static/js/app.js` | Both HTTP 200; `app.js` response contains `renderRoute` | Matches | PASS |
 
 ---
 
-## Suite 10: Live Tenable connector (`remediation/connectors/tenable_connector.py`)
+## Suite 10: Multi-language scanner pattern consistency (`tests/test_multilang_scanner_patterns.py`)
+
+**Purpose:** these are static text-consistency checks, not live scanner-invocation
+results — this environment has no Java, Go, PHP, or Node/npm runtime available, so
+nothing in this suite compiles, executes, or lints the sample vulnerable code, and
+nothing here claims the `vuln-scanner` subagent was actually invoked against these
+fixtures (doing that requires a live Claude Code session running the `/vulnhunt`
+pipeline, the same caveat documented for the Tenable/Armis connectors being built against
+vendor docs rather than a live tenant). Instead, the suite proves two things stay in
+sync: (1) each new fixture file under `vulnerable-demo-multilang/` genuinely contains the
+specific vulnerable code pattern its own top-of-file "Planted vulnerabilities" comment
+claims to plant (matching the numbering/CWE convention used by
+`vulnerable-demo-app/app.py`), and (2) `.claude/agents/vuln-scanner.md`'s per-language
+guidance documents a matching technique keyword for each language — so the fixtures and
+the documentation are internally consistent with each other.
+**Preconditions (all TC-LANG):** `vulnerable-demo-multilang/` directory exists alongside
+(not inside) `vulnerable-demo-app/`, with all five fixture files present
+(`VulnService.java`, `vuln-app.js`, `vulnapp.go`, `vuln-app.php`, `vuln-app.pl`);
+`.claude/agents/vuln-scanner.md` exists.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-LANG-01 | Multilang fixture directory exists separately from the demo app | Check `vulnerable-demo-multilang/` and `vulnerable-demo-app/` both exist as directories | Both exist; the two paths are not equal (siblings, not nested) | Matches | PASS |
+| TC-LANG-02 | `vulnerable-demo-app/app.py`'s planted-vulnerabilities header is untouched (regression guard) | Read `vulnerable-demo-app/app.py`; check for the literal header `"Planted vulnerabilities (for scoring / demo reference):"` | Header still present (this suite must never alter the original demo app or the finding count other suites depend on) | Present | PASS |
+| TC-LANG-03 | All five language fixture files are present | List files directly in `vulnerable-demo-multilang/`; check for `VulnService.java`, `vuln-app.js`, `vulnapp.go`, `vuln-app.php`, `vuln-app.pl` | All 5 filenames present | All present | PASS |
+| TC-LANG-04 | `VulnService.java` has the vulnerable banner and 3 numbered planted vulns | Read `VulnService.java`; check for `"deliberately vulnerable"`, `"DO NOT deploy"`, and the 3 numbered headers `"1. SQL Injection via Statement"`, `"2. Insecure deserialization"`, `"3. Hardcoded credential"` | All 5 strings present | All present | PASS |
+| TC-LANG-05 | Java fixture plants SQL injection via `Statement`, not `PreparedStatement` | Check for `Statement stmt = conn.createStatement();` and the concatenated query string; check `"new PreparedStatement"` and `"PreparedStatement stmt"` are ABSENT; check `CWE-89` present | Vulnerable construction present; no `PreparedStatement` usage anywhere except the explanatory doc-comment; CWE tagged | Matches | PASS |
+| TC-LANG-06 | Java fixture plants insecure deserialization | Check for `ObjectInputStream(rawIn)`, `ois.readObject()`, and `CWE-502` | All 3 present | All present | PASS |
+| TC-LANG-07 | Java fixture plants a hardcoded credential | Check for `DB_PASSWORD = "SuperSecretP@ss123"` and `CWE-798` | Both present | Both present | PASS |
+| TC-LANG-08 | `vuln-app.js` has the vulnerable banner and 3 numbered planted vulns | Read `vuln-app.js`; check for the banner strings and the 3 numbered headers (`Command injection via child_process.exec`, `Reflected XSS via unsanitized template string`, `Hardcoded API key`) | All present | All present | PASS |
+| TC-LANG-09 | JS fixture plants command injection via `child_process.exec` | Check for `` exec(`ping -c 1 ${host}` `` and `CWE-78` | Both present | Both present | PASS |
+| TC-LANG-10 | JS fixture plants reflected XSS via an unsanitized template string | Check for `<h1>Welcome back, ${name}!</h1>` and `CWE-79` | Both present | Both present | PASS |
+| TC-LANG-11 | JS fixture plants a hardcoded (fake) API key | Check for `STRIPE_API_KEY = "sk_live_DEMO_FAKE_NOT_A_REAL_KEY...` and `CWE-798` | Both present | Both present | PASS |
+| TC-LANG-12 | `vulnapp.go` has the vulnerable banner and 3 numbered planted vulns | Read `vulnapp.go`; check for the banner strings and the 3 numbered headers (`Command injection via exec.Command`, `SQL Injection via string-concatenated query`, `World-writable file permissions (0777)`) | All present | All present | PASS |
+| TC-LANG-13 | Go fixture plants command injection via `exec.Command` | Check for `exec.Command("sh", "-c", "ping -c 1 "+host)` and `CWE-78` | Both present | Both present | PASS |
+| TC-LANG-14 | Go fixture plants SQL injection via string-concatenated query | Check for `fmt.Sprintf("SELECT id, username, email FROM users WHERE id = %s", userID)` and `CWE-89` | Both present | Both present | PASS |
+| TC-LANG-15 | Go fixture plants world-writable file permissions | Check for `os.WriteFile("/tmp/vulnapp-export.csv", data, 0777)` and `CWE-276` | Both present | Both present | PASS |
+| TC-LANG-16 | `vuln-app.php` has the vulnerable banner and 3 numbered planted vulns | Read `vuln-app.php`; check for the banner strings and the 3 numbered headers (`SQL Injection via mysqli_query string concat`, `Local File Inclusion via include($_GET[...])`, `unserialize() on untrusted input`) | All present | All present | PASS |
+| TC-LANG-17 | PHP fixture plants SQL injection via `mysqli_query` string concatenation | Check for `"SELECT id, username, email FROM users WHERE id = " . $user_id`, `mysqli_query($conn, $query)`, and `CWE-89` | All 3 present | All present | PASS |
+| TC-LANG-18 | PHP fixture plants Local File Inclusion via `include($_GET[...])` | Check for `$page = $_GET['page'];`, `include($page . '.php');`, and `CWE-98` | All 3 present | All present | PASS |
+| TC-LANG-19 | PHP fixture plants `unserialize()` on untrusted input | Check for `unserialize($raw)`, `$_COOKIE['session_data']`, and `CWE-502` | All 3 present | All present | PASS |
+| TC-LANG-20 | `vuln-app.pl` has the vulnerable banner and 3 numbered planted vulns | Read `vuln-app.pl`; check for the banner strings and the 3 numbered headers (`Command injection via backticks with interpolated var`, `eval() on untrusted input`, `Hardcoded credential`) | All present | All present | PASS |
+| TC-LANG-21 | Perl fixture plants command injection via backticks | Check for `` my $output = `ping -c 1 $host`; `` and `CWE-78` | Both present | Both present | PASS |
+| TC-LANG-22 | Perl fixture plants `eval()` on untrusted input | Check for `my $result = eval "$expr";` and `CWE-95` | Both present | Both present | PASS |
+| TC-LANG-23 | Perl fixture plants a hardcoded credential | Check for `$DB_PASSWORD = "SuperSecretP@ss123";` and `CWE-798` | Both present | Both present | PASS |
+| TC-LANG-24 | `vuln-scanner.md` documents JavaScript with a specific technique keyword | Read `.claude/agents/vuln-scanner.md`; check for `"JavaScript"` and `"child_process.exec"` | Both present | Both present | PASS |
+| TC-LANG-25 | `vuln-scanner.md` documents Java with a specific technique keyword | Check for `"Java"` and `"PreparedStatement"` | Both present | Both present | PASS |
+| TC-LANG-26 | `vuln-scanner.md` documents Go with a specific technique keyword | Check for `"Go"` and `"html/template"` | Both present | Both present | PASS |
+| TC-LANG-27 | `vuln-scanner.md` documents PHP and mentions `unserialize` | Check for `"PHP"` and `"unserialize"` | Both present | Both present | PASS |
+| TC-LANG-28 | `vuln-scanner.md` documents Perl and mentions `Storable::thaw` | Check for `"Perl"` and `"Storable::thaw"` | Both present | Both present | PASS |
+| TC-LANG-29 | `## Process` section mentions checking file extensions | Check the (lowercased) document text for `"extension"` | Present | Present | PASS |
+| TC-LANG-30 | Pre-existing generic/Python/Docker/dependency-risk sections still present (regression guard) | Check for `"### Generic (all languages)"`, `"### Python"`, `"Container/Docker issues"`, and `"Dependency risk"` | All 4 present (the per-language rewrite must not have deleted the original guidance) | All present | PASS |
+| TC-LANG-31 | `## Process` and `## Output format` sections still present, in order | Check both headings are present, and `## Process` appears before `## Output format` | Both present, in the expected order | Matches | PASS |
+
+---
+
+## Suite 11: Live Tenable connector (`remediation/connectors/tenable_connector.py`)
 
 **Purpose:** prove the connector's auth, export-polling, and record-mapping logic is
 correct against Tenable.io's documented API shapes, entirely via mocked HTTP — see
@@ -256,9 +357,9 @@ does and does not prove (it has never called the real Tenable API).
 | TC-CONN-10 | `to_csv_row` handles a missing CVE gracefully | Feed a record with no `cve` list | `CVE` field is `""`, no `IndexError` | No error | PASS |
 | TC-CONN-11 | `fetch_and_write_csv` writes a sample-compatible file | Full mocked export -> poll -> chunk flow, write to a temp file | Output CSV's header exactly matches `CSV_FIELDNAMES`; row values correct | Matches | PASS |
 
-## Suite 11: Live Armis connector (`remediation/connectors/armis_connector.py`)
+## Suite 12: Live Armis connector (`remediation/connectors/armis_connector.py`)
 
-**Purpose:** same goal as Suite 10, for Armis's token-auth + paginated AQL search flow.
+**Purpose:** same goal as Suite 11, for Armis's token-auth + paginated AQL search flow.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -272,7 +373,7 @@ does and does not prove (it has never called the real Tenable API).
 
 ---
 
-## Suite 12: CISA KEV + EPSS enrichment (`remediation/enrichment/kev_epss.py`)
+## Suite 13: CISA KEV + EPSS enrichment (`remediation/enrichment/kev_epss.py`)
 
 **Purpose:** prove the enrichment logic correctly parses both real APIs' documented
 response shapes and assembles them onto findings correctly — and, uniquely in this test
@@ -296,7 +397,7 @@ suite, prove it actually works against the real live endpoints (see TC-ENR-13).
 
 ---
 
-## Suite 13: Configurable priority + SLA engine (`remediation/config/priority_engine.py`)
+## Suite 14: Configurable priority + SLA engine (`remediation/config/priority_engine.py`)
 
 **Purpose:** prove the scoring/SLA math is correct against an in-memory rules dict (so
 tests don't break if someone reasonably retunes the real rules file), plus validate the
@@ -319,7 +420,7 @@ real shipped rules file is well-formed and produces a sane result on real sample
 | TC-PRIO-13 | Real `priority_rules.yaml` loads with all expected keys | Load the real shipped file | All 7 top-level keys present | Matches | PASS |
 | TC-PRIO-14 | Real rules file scores a known real finding correctly | Score PrintNightmare (FIND-1) from real sample data against the real rules file | `priority == "Critical"` | Matches | PASS |
 
-## Suite 14: MITRE ATT&CK keyword tagging (`remediation/enrichment/attack_mapping.py`)
+## Suite 15: MITRE ATT&CK keyword tagging (`remediation/enrichment/attack_mapping.py`)
 
 **Purpose:** prove the heuristic fires on realistic finding text, and — just as
 importantly — proves it does NOT guess when there's no real signal (empty list, not a
@@ -339,7 +440,7 @@ fabricated technique).
 | TC-ATTACK-10 | Batch tagging adds field without mutating input | Tag a findings list | Original dicts unchanged; tagged copies have `attack_techniques` | Matches | PASS |
 | TC-ATTACK-11 | Batch tagging against real sample data | Tag all 14 real findings | PrintNightmare (FIND-1) gets ≥1 technique; SSL cert expiry (FIND-13) gets none | Matches | PASS |
 
-## Suite 15: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
+## Suite 16: ServiceNow adapter (`remediation/connectors/servicenow_connector.py`)
 
 **Purpose:** prove the Table API request construction, idempotency check, and batch
 error handling are correct against mocked HTTP shaped like ServiceNow's documentation —

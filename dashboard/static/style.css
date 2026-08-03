@@ -123,6 +123,12 @@ h2 { font-size: 1.15rem; margin-top: 32px; }
 .kpi-value { font-size: 1.8rem; font-weight: 700; }
 .kpi-label { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
 
+.table-scroll {
+  overflow-x: auto;
+  border-radius: 8px;
+  /* Wide tables (9-11 columns on the queue/remediate pages) scroll inside this
+     box instead of forcing the whole page to scroll horizontally. */
+}
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -135,6 +141,7 @@ h2 { font-size: 1.15rem; margin-top: 32px; }
 .data-table th, .data-table td {
   text-align: left;
   padding: 10px 12px;
+  white-space: nowrap;
   border-bottom: 1px solid var(--border);
 }
 .data-table th { background: #fafbfc; font-weight: 600; color: var(--text-muted); }
@@ -197,11 +204,13 @@ code {
   padding: 20px;
 }
 .run-form label { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: var(--text-muted); }
-.run-form input[type=text], .run-form select {
+.run-form input[type=text], .run-form input[type=password], .run-form select {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
 }
 .checkbox-label { flex-direction: row !important; align-items: center; gap: 8px !important; }
 .checkbox-danger { color: var(--danger); font-weight: 600; }
@@ -278,3 +287,33 @@ code {
 .progress-fill { height: 100%; background: var(--brand-accent); border-radius: 999px; }
 .progress-fill.progress-danger { background: var(--danger); }
 .progress-fill.progress-warn { background: #d97706; }
+
+/* --- Interactive touches (client-rendered SPA) --- */
+.kpi-card { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+.kpi-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); transform: translateY(-1px); }
+
+.data-table tr { transition: background 0.1s ease; }
+.data-table tbody tr:hover { background: #fafbfc; }
+
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+.sort-indicator { display: inline-block; width: 10px; font-size: 0.7em; opacity: 0.8; }
+
+/* --- Dark theme (prefers-color-scheme) --- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1214;
+    --surface: #171b1e;
+    --border: #2a2f33;
+    --text: #e6e9ea;
+    --text-muted: #9aa3a8;
+    --info-bg: #0d2a3d;
+    --info-text: #7dd3fc;
+    --danger-bg: #3a1414;
+    --warn-bg: #3a2a0d;
+  }
+  .data-table th { background: #1c2124; }
+  .data-table tbody tr:hover { background: #1c2124; }
+  code { background: #22272b; }
+  .config-form textarea { background: var(--surface); color: var(--text); }
+}

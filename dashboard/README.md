@@ -1,8 +1,10 @@
 # VulnHunter Dashboard (MVP)
 
 A read-only-by-default web UI over both pipelines' real generated artifacts, plus a form
-to trigger a run via the [headless CLI](../cli/README.md). Server-rendered Flask +
-Jinja2, not a React single-page app — see "Why Flask, not React" below.
+to trigger a run via the [headless CLI](../cli/README.md). A FastAPI JSON API
+(`dashboard/app.py`) behind a hand-rolled vanilla-JS single-page frontend
+(`dashboard/static/`) — no Node/npm/build step. See "Why FastAPI + vanilla JS" below for
+the reasoning.
 
 ## Running it
 
@@ -18,42 +20,74 @@ It reads directly from the repo it's run in: git history (for `/vulnhunt`'s
 generated playbooks). If those artifacts don't exist yet, the relevant pages show an
 empty state with instructions instead of erroring.
 
+## Architecture
+
+- **`dashboard/app.py`** — a FastAPI app with two kinds of routes:
+  - `/api/*` — the JSON API. This is the only thing the frontend talks to, and the only
+    thing worth testing from Python (see Testing below).
+  - Everything else (`/`, `/vulnhunt`, `/remediate`, `/queue`, `/priority-rules`,
+    `/servicenow`, `/run`, `/playbooks/{filename}`, and any unrecognized path) serves the
+    exact same file: `dashboard/static/index.html`. This is what makes it a single-page
+    app — there's no server-side templating left at all.
+- **`dashboard/static/js/app.js`** — the client-side router. It reads
+  `window.location.pathname`, dynamically `import()`s the matching page module from
+  `static/js/pages/`, and re-renders `#app` in place (no full page reload). Clicking any
+  in-app link uses `history.pushState` instead of a real navigation; the browser's
+  back/forward buttons still work via `popstate`.
+- **`dashboard/static/js/pages/*.js`** — one module per page. Each calls the JSON API
+  (via `static/js/api.js`), builds HTML from the response, and wires up any forms
+  (priority-rules editor, ServiceNow send, run-pipeline trigger). All dynamic text goes
+  through `escapeHtml()` in `static/js/dom.js` before hitting `innerHTML`.
+- **`dashboard/data.py`** — unchanged by the rewrite. It has no Flask/FastAPI-specific
+  code at all; it just parses real artifacts into plain dicts, and both the old Flask
+  routes and the new FastAPI routes called it the same way.
+
 ## Pages
 
 | Route | Shows |
 |---|---|
-| `/` | KPI overview across both pipelines, risk-tier breakdown |
+| `/` | KPI overview across both pipelines, SLA/KEV/EPSS summary, risk-tier + asset-class breakdown |
 | `/vulnhunt` | Code scan findings table (from `SECURITY_REPORT.md`) |
-| `/remediate` | Remediation queue (from `REMEDIATION_PLAN.md`), linked to generated playbooks |
+| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable client-side |
+| `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks |
 | `/playbooks/<filename>` | Full content of one generated Ansible playbook |
+| `/priority-rules` | Live YAML editor for `remediation/config/priority_rules.yaml` |
+| `/servicenow` | ServiceNow Incident preview (no credentials needed) and send form |
 | `/run` | Form to trigger a pipeline run (dry-run by default), plus recent-run audit log |
 | `/api/status` | JSON health/status endpoint |
 
-## The `/run` page's safety design
+## The `/run` and `/servicenow` safety design
 
-Submitting the form **defaults to a dry-run preview** — it shows the exact command that
-would execute and spends nothing. Actually executing requires explicitly checking "I
-understand this spends real API usage/credits." This mirrors the CLI's own default
-posture (see [cli/README.md](../cli/README.md)) rather than adding a different, looser
-rule just because there's now a button instead of a terminal command.
+Both forms **default to a dry-run/preview** — `/run` shows the exact command that would
+execute and spends nothing; `/servicenow`'s send form shows exactly what payload would be
+posted to each finding's Incident, with zero network calls. Actually executing either
+requires explicitly checking a confirm box. This mirrors the CLI's own default posture
+(see [cli/README.md](../cli/README.md)) rather than adding a different, looser rule just
+because there's now a button instead of a terminal command.
 
-## Why Flask, not React
+## Why FastAPI + vanilla JS, not Node/React (or staying on Flask/Jinja2)
 
-A modern dashboard would typically be a React/TypeScript SPA talking to a JSON API. This
-machine didn't have Node.js/npm available when this was built, so a from-scratch
-frontend build wasn't something that could be written *and verified running* here.
-Flask + server-rendered Jinja2 templates:
+The ask behind this rewrite was a genuinely modern, commercial-grade interface. A
+from-scratch React/TypeScript build was the obvious first thought — but this machine has
+no Node.js/npm installed, so a React build couldn't be *written and verified running*
+here; shipping an untested frontend isn't "modern," it's just unverified. Two real
+options remained:
 
-- needed no new tooling beyond `pip install flask` (already proven available in this repo)
-- could be started and its actual rendered output verified page-by-page in this same
-  environment (see the commit history / KNOWLEDGE_TRANSFER.md for that verification)
-- is a legitimate, if less flashy, architecture for an internal security tool — plenty of
-  real products ship exactly this
+1. **Stay on Flask + server-rendered Jinja2** (the original MVP's choice) — safe, but not
+   what "modern JS interface" actually means, and doesn't showcase real client-side
+   interactivity (sorting, live re-render, no full-page reloads).
+2. **FastAPI (JSON API) + a hand-rolled vanilla-JS SPA** — real client-side routing,
+   `fetch()`-based data loading, dynamic `import()` per page, live in-browser table
+   sorting - everything a React app would give you for this scope, using only what
+   ships in every modern browser. No bundler, no `node_modules`, no build step to get
+   wrong. Every page was clicked through and verified live in a browser during
+   development (not just unit-tested) - see KNOWLEDGE_TRANSFER.md §11.1.
 
-If Node.js becomes available in the target environment, `/api/status`-style JSON
-endpoints are the natural seam to build a React frontend against later, without
-throwing away `dashboard/data.py`'s parsing logic (which the frontend framework choice
-shouldn't affect either way).
+That's what this dashboard now is. If Node.js becomes available in the target
+environment, `/api/*`'s JSON contract is the exact seam a React (or any other) frontend
+would build against - `dashboard/data.py`'s parsing logic underneath doesn't change
+either way, and neither would the FastAPI routes, which are already framework-appropriate
+JSON endpoints rather than Flask's `render_template` calls.
 
 ## What this is NOT (yet)
 
@@ -64,9 +98,9 @@ This is a single-process, no-auth, no-persistence MVP:
   network as-is.
 - **No database** — findings/plans are re-read from disk on every request; there's no
   historical trend view across multiple runs.
-- **Synchronous pipeline execution** — a real (non-dry-run) `/run` submission blocks the
-  request until the pipeline finishes, which can be slow. A production version needs a
-  job queue.
+- **Synchronous pipeline execution** — a real (non-dry-run) `/api/run` submission blocks
+  the request until the pipeline finishes, which can be slow. A production version needs
+  a job queue.
 - **Single-tenant** — one repo's worth of findings, not a multi-customer SaaS view.
 
 These are exactly the gaps [KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md)'s
@@ -75,10 +109,13 @@ data layer and interaction model, not to be deployed as-is.
 
 ## Testing
 
-`tests/test_dashboard.py` uses Flask's test client (in-process WSGI calls, no real HTTP
-server or network) to verify every route renders and that the data layer's numbers match
-the pipeline test suite's own expectations. The one test touching `/run`'s POST handler
-only ever omits the `confirm` field, so it can never trigger a real, paid API call.
+`tests/test_dashboard.py` uses `fastapi.testclient.TestClient` (in-process ASGI calls, no
+real HTTP server or network) to verify the JSON API's contract precisely and that every
+route serves the SPA shell correctly. Because the frontend renders client-side, these
+tests validate JSON payloads rather than rendered HTML - the actual DOM rendering was
+verified live in a browser during development (see KNOWLEDGE_TRANSFER.md). The one test
+touching `/api/run`'s POST handler only ever omits `confirm`, so it can never trigger a
+real, paid API call; same rule for `/api/servicenow/send`.
 
 ```bash
 python -m unittest tests.test_dashboard -v

@@ -1,0 +1,40 @@
+// Thin fetch() wrapper over the FastAPI JSON API in dashboard/app.py. Every page
+// module goes through this - no page ever calls fetch() directly.
+
+async function request(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    const detail = (data && data.detail) || res.statusText || `HTTP ${res.status}`;
+    const err = new Error(detail);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+export const api = {
+  overview: () => request("GET", "/api/overview"),
+  vulnhunt: () => request("GET", "/api/vulnhunt"),
+  remediate: () => request("GET", "/api/remediate"),
+  playbook: (filename) => request("GET", `/api/playbooks/${encodeURIComponent(filename)}`),
+  queue: () => request("GET", "/api/queue"),
+  getPriorityRules: () => request("GET", "/api/priority-rules"),
+  savePriorityRules: (rulesText) => request("POST", "/api/priority-rules", { rules_text: rulesText }),
+  servicenowPreview: () => request("GET", "/api/servicenow/preview"),
+  servicenowSend: (body) => request("POST", "/api/servicenow/send", body),
+  runGet: () => request("GET", "/api/run"),
+  runPost: (body) => request("POST", "/api/run", body),
+  status: () => request("GET", "/api/status"),
+};

@@ -1,3 +1,5 @@
-flask>=3.0
+fastapi>=0.115
+uvicorn>=0.32
+httpx2>=2.0  # not used at runtime - only by fastapi.testclient.TestClient in tests/test_dashboard.py
 pyyaml>=6.0
 requests>=2.31

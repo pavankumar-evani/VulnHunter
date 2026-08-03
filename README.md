@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-145%2F145%20passing-brightgreen.svg)](TEST_CASES.md)
+[![Tests](https://img.shields.io/badge/tests-182%2F182%20passing-brightgreen.svg)](TEST_CASES.md)
 
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
@@ -19,7 +19,7 @@ Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
 statement, the idea and why it's built this way, product/solution details for both
 pipelines, step-by-step instructions to actually run everything, test evidence, and a
 troubleshooting log of what broke and how it was fixed. For the detailed test case log
-(33 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
+(182 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
 
 ## The problem
 
@@ -170,7 +170,10 @@ for what each remaining fixer needs.
 
 ### Live dashboard: SLA tracking, configurable priorities, ATT&CK, ServiceNow
 
-`python dashboard/app.py` runs a sidebar-navigation dashboard with:
+`python dashboard/app.py` runs a FastAPI JSON API behind a vanilla-JS single-page
+frontend (client-side routing, no Node/npm build step - see
+[dashboard/README.md](dashboard/README.md#why-fastapi--vanilla-js-not-nodereact-or-staying-on-flaskjinja2))
+with a sidebar-navigation dashboard:
 - **Live Remediation Queue** (`/queue`) — every finding re-scored on each page load from
   whatever `remediation/config/priority_rules.yaml` currently says, with SLA due dates/
   breach status and MITRE ATT&CK technique tags (a keyword heuristic, not authoritative
@@ -246,14 +249,15 @@ reason no fixer exists yet for that asset class.
 │   │                            #   interactive session (see cli/README.md)
 │   └── README.md
 ├── dashboard/
-│   ├── app.py                  # Flask MVP dashboard reading real artifacts (see below)
+│   ├── app.py                  # FastAPI JSON API + SPA shell routes (see below)
 │   ├── data.py                 # parses SECURITY_REPORT.md / REMEDIATION_PLAN.md / etc.
+│   ├── static/                 # vanilla-JS SPA (client router, page modules) + CSS
 │   └── README.md
 ├── remediation/
 │   ├── sample-data/            # mock Tenable/Armis/threat-intel exports
 │   ├── schema/                 # normalized Finding schema doc
-│   ├── connectors/             # live Tenable/Armis API clients (unit-tested, not yet
-│   │                           #   verified against a real tenant - see its README)
+│   ├── connectors/             # live Tenable/Armis/ServiceNow API clients (unit-tested,
+│   │                           #   not yet verified against a real tenant - see its README)
 │   ├── enrichment/              # live CISA KEV + EPSS client (verified against the
 │   │                           #   real public endpoints - see its module docstring)
 │   └── output/                 # normalized findings + generated playbooks land here
@@ -262,8 +266,11 @@ reason no fixer exists yet for that asset class.
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── init_db.py
-├── tests/                       # 145 tests (pipeline artifacts, CLI, dashboard, connectors,
-│                                #   enrichment, priority engine, ATT&CK, ServiceNow), see TEST_CASES.md
+├── vulnerable-demo-multilang/   # intentionally vulnerable Java/JS/Go/PHP/Perl fixtures
+│                                #   proving vuln-scanner.md's per-language coverage
+├── tests/                       # 182 tests (pipeline artifacts, CLI, dashboard, connectors,
+│                                #   enrichment, priority engine, ATT&CK, ServiceNow,
+│                                #   multi-language scanner patterns), see TEST_CASES.md
 ├── .github/                     # CI workflow, issue/PR templates, CODEOWNERS
 ├── LICENSE, SECURITY.md, CHANGELOG.md
 ├── REMEDIATION_PLAN.md

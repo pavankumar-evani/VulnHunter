@@ -6,7 +6,34 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Changed
+- **Dashboard: Flask + Jinja2 → FastAPI + a hand-rolled vanilla-JS single-page app.**
+  Reframed from a hackathon entry toward a commercial-grade product, the ask included
+  "modern JS interface" and using whichever of Java/JavaScript/Go/Python/Perl/PHP fit
+  best. This machine has Python and Perl available but no Node/npm, Java, Go, or PHP
+  runtime, and Docker's daemon was unreachable - so anything written in those other
+  languages couldn't be compiled, run, or verified here. Rather than ship unverified
+  code, the platform itself stayed on what's genuinely buildable-and-testable
+  (`dashboard/app.py` is now FastAPI serving a JSON API at `/api/*`; the frontend is a
+  real SPA - client-side routing, `fetch()`-based rendering, dynamic `import()` per
+  page, live client-side table sorting - with zero build step). Every page was verified
+  live in a browser during development, not just unit-tested. Full reasoning in
+  [KNOWLEDGE_TRANSFER.md §11.1](KNOWLEDGE_TRANSFER.md#111-the-commercial-grade-polyglot-ask--what-actually-happened).
+  `tests/test_dashboard.py` now uses `fastapi.testclient.TestClient` against the JSON
+  API (31 tests, up from 25) rather than grepping rendered HTML, since there's no
+  server-side HTML left to grep.
+
 ### Added
+- **Multi-language code-scanning coverage.** `.claude/agents/vuln-scanner.md`'s
+  detection guidance now explicitly covers JavaScript/TypeScript, Java, Go, PHP, and
+  Perl (previously Python-only patterns plus generic/Docker/dependency checks) - real
+  commercial scanners (Semgrep, Snyk, CodeQL) differentiate on breadth of *target*
+  languages, not implementation language. New `vulnerable-demo-multilang/` fixtures (one
+  small, realistic, intentionally-vulnerable file per language) and 31 new tests in
+  `tests/test_multilang_scanner_patterns.py` verify the fixtures and the scanner's
+  documented patterns stay consistent with each other via static text inspection - no
+  Java/Go/PHP/Node runtime was available to actually execute the fixtures or run a live
+  scan against them, so that's exactly what these tests do and don't claim.
 - **Dashboard: SLA/priority engine, MITRE ATT&CK tagging, ServiceNow adapter, modern
   sidebar nav.** In response to a broader ask for a more "industry tool"-grade
   experience — built the realistic subset, deferred the rest with reasons (see
@@ -23,9 +50,10 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
     as the Tenable/Armis connectors.
   - New `/queue` (live, re-scored) page, distinct from `/remediate`'s static snapshot;
     sidebar navigation replacing the top bar.
-  - 49 new tests (`test_priority_engine.py`, `test_attack_mapping.py`,
-    `test_servicenow_connector.py`, plus dashboard route tests) — full suite now
-    145/145 across 8 files.
+  - 49 new tests at the time (`test_priority_engine.py`, `test_attack_mapping.py`,
+    `test_servicenow_connector.py`, plus dashboard route tests) — full suite was
+    145/145 across 8 files before the dashboard/scanner-coverage work above landed on
+    top of it (now 182/182 across 9 files - see the entries above).
 - **Live CISA KEV + EPSS threat-intel enrichment** (`remediation/enrichment/`,
   `threat-intel-enricher` subagent) — real, free, public, no-auth APIs, verified against
   the live endpoints during development (unlike the Tenable/Armis connectors). Moves

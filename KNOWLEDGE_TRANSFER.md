@@ -434,11 +434,15 @@ for network devices or IoT/OT. To add one:
 │   │                          from the prompt logic itself - see cli/README.md)
 │   └── README.md              usage, cost warning, binary discovery order
 ├── dashboard/
-│   ├── app.py                 Flask dashboard - Overview/Queue/Plan/Priority Rules/
-│   │                          ServiceNow/Code Scan/Run Pipeline, sidebar nav
+│   ├── app.py                 FastAPI JSON API (/api/*) + SPA shell routes -
+│   │                          Overview/Queue/Plan/Priority Rules/ServiceNow/Code Scan/
+│   │                          Run Pipeline
 │   ├── data.py                 parses real artifacts + wraps priority_engine/attack_mapping
-│   ├── templates/, static/     Jinja2 templates + CSS (sidebar layout, SLA/priority badges)
-│   ├── requirements.txt        flask, pyyaml, requests
+│   ├── static/index.html       the one SPA shell served for every page route
+│   ├── static/js/              vanilla-JS client router + page modules (no build step,
+│   │                          no Node/npm - native <script type="module"> + import())
+│   ├── static/style.css        sidebar layout, SLA/priority badges, dark-theme support
+│   ├── requirements.txt        fastapi, uvicorn, httpx2 (tests only), pyyaml, requests
 │   └── README.md                scope, safety design, and explicit "not yet" list
 ├── remediation/
 │   ├── sample-data/       mock Tenable/Armis/threat-intel exports (14 findings: OS,
@@ -452,16 +456,24 @@ for network devices or IoT/OT. To add one:
 │   │                      editable live from the dashboard's /priority-rules page
 │   └── output/            normalized findings + generated playbooks (generated, not hand-written)
 ├── vulnerable-demo-app/   intentionally vulnerable Flask app — /vulnhunt's scan target
+├── vulnerable-demo-multilang/  intentionally vulnerable Java/JS/Go/PHP/Perl fixtures -
+│                          prove vuln-scanner.md's per-language detection guidance (static
+│                          text-consistency only, see §11.1 - no Java/Go/PHP/Node runtime
+│                          available here to actually execute them)
 ├── tests/
 │   ├── test_pipeline_artifacts.py   35 automated tests, stdlib only
 │   ├── test_cli.py                  13 tests for the headless CLI (no real API calls)
-│   ├── test_dashboard.py            25 tests for the dashboard (Flask test client, no real server)
+│   ├── test_dashboard.py            31 tests for the dashboard (FastAPI TestClient - JSON
+│   │                                API contract + SPA shell routes, no real server)
 │   ├── test_connectors.py           18 tests for the Tenable/Armis connectors (mocked HTTP)
 │   ├── test_enrichment.py           13 tests for KEV/EPSS enrichment (mostly mocked, 1 live)
 │   ├── test_priority_engine.py      14 tests for the configurable priority/SLA engine
 │   ├── test_attack_mapping.py       11 tests for the MITRE ATT&CK keyword heuristic
 │   ├── test_servicenow_connector.py 16 tests for the ServiceNow adapter (mocked HTTP)
-│   └── test_results.txt             a captured passing run (145/145)
+│   ├── test_multilang_scanner_patterns.py  31 tests: static consistency checks between
+│   │                                vuln-scanner.md's per-language detection guidance and
+│   │                                the vulnerable-demo-multilang/ fixture files
+│   └── test_results.txt             a captured passing run (182/182)
 ├── deliverables/
 │   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
 │   └── VulnHunter_Project_Report.docx     full project & test report
@@ -477,22 +489,25 @@ for network devices or IoT/OT. To add one:
 
 ## 8. Test Evidence & Results
 
-145 tests, 0 failures, across eight suites. None of it calls the real Claude API (see
-each file's docstring for why that's a hard rule, not an oversight) — the one deliberate
-exception is `test_enrichment.py`'s live smoke test, which calls the real, free, public
-CISA KEV/EPSS APIs (safe: no auth, no cost, and it skips itself rather than failing if
-network is unavailable).
+182 tests, 0 failures, across nine suites (exact counts below are from each file's own
+`python -m unittest` run, not hand-counted — this project got bitten once already by a
+hand-counting error, see the "Fixed" entries in CHANGELOG.md). None of it calls the real
+Claude API (see each file's docstring for why that's a hard rule, not an oversight) — the
+one deliberate exception is `test_enrichment.py`'s live smoke test, which calls the real,
+free, public CISA KEV/EPSS APIs (safe: no auth, no cost, and it skips itself rather than
+failing if network is unavailable).
 
 | Test file | What it checks | Count |
 |---|---|---|
 | `tests/test_pipeline_artifacts.py` | Both pipelines' real output artifacts — see breakdown below | 35 |
 | `tests/test_cli.py` | Headless CLI command construction, binary discovery, one real dry-run subprocess call | 13 |
-| `tests/test_dashboard.py` | Dashboard data parsing + every route (incl. live queue, priority-rules editor, ServiceNow preview) | 25 |
+| `tests/test_dashboard.py` | Dashboard JSON API contract + SPA shell routes (FastAPI TestClient, incl. live queue, priority-rules editor, ServiceNow preview) | 31 |
 | `tests/test_connectors.py` | Live Tenable/Armis connector auth/pagination/mapping logic against mocked HTTP | 18 |
 | `tests/test_enrichment.py` | CISA KEV + EPSS enrichment logic, mostly mocked plus one real live-API smoke test | 13 |
 | `tests/test_priority_engine.py` | Configurable priority scoring + SLA computation against the real rules file | 14 |
 | `tests/test_attack_mapping.py` | MITRE ATT&CK keyword heuristic, including deliberate non-matches | 11 |
 | `tests/test_servicenow_connector.py` | ServiceNow Table API adapter — idempotency, body construction, batch error handling | 16 |
+| `tests/test_multilang_scanner_patterns.py` | Static consistency between vuln-scanner.md's per-language guidance and the Java/JS/Go/PHP/Perl fixture files (no runtime execution - see §11.1) | 31 |
 
 `test_pipeline_artifacts.py` breakdown:
 
@@ -539,12 +554,14 @@ Usable by someone who isn't running Claude Code interactively:
    runs from a script/CI/cron without a human in an interactive session, without
    duplicating any prompt logic. Every real invocation spends API usage/credits — see
    [cli/README.md](cli/README.md).
-2. **Web dashboard (`dashboard/`)** ✅ MVP done — findings, remediation queue, generated
-   playbooks, and a run-trigger page, reading off the same real artifacts. Built with
-   Flask/Jinja2 rather than React because Node.js wasn't available in the build
-   environment; see [dashboard/README.md](dashboard/README.md) for that tradeoff and,
-   more importantly, what this MVP still lacks (auth/RBAC, persistence, a job queue,
-   multi-tenancy) before it's more than a local/trusted-network tool.
+2. **Web dashboard (`dashboard/`)** ✅ MVP done, ✅ rewritten as a FastAPI JSON API + a
+   hand-rolled vanilla-JS single-page frontend (client-side routing, no full-page
+   reloads, no Node/npm build step) — findings, remediation queue, generated playbooks,
+   and a run-trigger page, reading off the same real artifacts. See
+   [dashboard/README.md](dashboard/README.md) for why this architecture rather than a
+   Node/React build (§11.1 has the fuller environment-constraint reasoning), and what
+   this MVP still lacks (auth/RBAC, persistence, a job queue, multi-tenancy) before it's
+   more than a local/trusted-network tool.
 3. **Live Tenable/Armis connectors (`remediation/connectors/`)** ✅ Built, ⚠️ unverified
    against a real tenant — implements each vendor's publicly documented API contract
    (Tenable's async vulnerability export workflow; Armis's token auth + paginated AQL
@@ -614,9 +631,17 @@ What a real buyer's security architect will actually ask for. Some of this is no
 - **MITRE ATT&CK tagging** (`remediation/enrichment/attack_mapping.py`) — a keyword
   heuristic, explicitly documented as such (not authoritative technique attribution),
   surfaced on the `/queue` page.
-- **Modernized dashboard nav** — a sidebar layout (Overview / Code Scan / Remediation
-  Queue / Remediation Plan / Priority Rules / ServiceNow / Run Pipeline), still Flask/
-  Jinja2 (Node.js unavailable in the build environment at time of writing — see §12).
+- **Modernized dashboard nav + platform rewrite** — a sidebar layout (Overview / Code
+  Scan / Remediation Queue / Remediation Plan / Priority Rules / ServiceNow / Run
+  Pipeline), now served by a FastAPI JSON API and a hand-rolled vanilla-JS SPA (client
+  routing, live client-side table sort, dark-theme support) instead of Flask/Jinja2 - see
+  §11.1 for the environment constraints that shaped this and why Java/Go/PHP/Node
+  weren't used for the platform itself.
+- **Multi-language code-scanning coverage** (`.claude/agents/vuln-scanner.md`) — the
+  `/vulnhunt` scanner's detection guidance now explicitly covers JavaScript/TypeScript,
+  Java, Go, PHP, and Perl idioms (not just Python), each with real fixture files under
+  `vulnerable-demo-multilang/`. See §11.1 for why this — not rewriting the platform
+  itself in each language — is where "polyglot" actually adds product value.
 
 **Not started, needs a business/architecture decision first:**
 - **Auth, RBAC, SSO, multi-tenancy** — the current dashboard has zero authentication and
@@ -667,13 +692,66 @@ dashboard nav.
   effort (model selection, training data, false-positive tuning), not something to bolt
   on alongside everything else here without its own dedicated scope discussion.
 - **Multi-tenant MSSP architecture** — requires the database + auth foundation from Tier
-  3 above *first*. Building tenant isolation on top of a filesystem-reading Flask MVP
-  would mean rebuilding it twice.
+  3 above *first*. Building tenant isolation on top of a filesystem-reading MVP (FastAPI
+  or not) would mean rebuilding it twice.
 - **NIST/SOC2/"any relevant compliance"** — see Tier 3 above. Not a code deliverable.
 
 None of this is a "no" — it's each of these being its own real scope of work, most of
 which need a decision (which vendor, which cloud, which compliance framework actually
 matters for this business) before code is the bottleneck.
+
+### 11.1 The "commercial-grade, polyglot" ask — what actually happened
+
+Later still, the framing shifted again: this is now positioned as a startup/commercial
+product (not a hackathon entry), built with "precision and perfection," using whichever
+of Java, JavaScript, Go, Python, Perl, and PHP fit best — explicitly asked to be decided
+by whoever was building it, not prescribed layer-by-layer.
+
+**The environment reality, checked directly rather than assumed:** at the time this was
+built, this machine had Python 3.14 and Perl (git-bash's) available. No Node/npm, no
+Java, no Go, no PHP runtime — and Docker's CLI was present but its daemon was unreachable
+(a `docker info` call failed with a 500 error). That means Java/Go/PHP/Node code could be
+*written* here but never *compiled, run, or verified* here. Shipping code no one can
+execute isn't "precision" — it's exactly the kind of unverified claim this document has
+tried hard to avoid everywhere else (see the connector "built vs. verified" caveats
+throughout §9-10).
+
+**Where "polyglot" actually became real work, instead of runtime sprawl:**
+- **Scanner language coverage** (`.claude/agents/vuln-scanner.md`,
+  `vulnerable-demo-multilang/`, `tests/test_multilang_scanner_patterns.py`) — a real
+  commercial vulnerability scanner (Semgrep, Snyk, CodeQL) differentiates on how many
+  *target* languages it can find vulnerabilities in, not what language it's written in.
+  `/vulnhunt`'s detection guidance now explicitly covers idiomatic vulnerable patterns in
+  JavaScript/TypeScript, Java, Go, PHP, and Perl (SQL injection via string-concatenated
+  queries, insecure deserialization, LFI/RFI, command injection via `exec`/backticks,
+  etc.), each backed by a small, realistic, intentionally-vulnerable fixture file. This
+  needed no compiler for the target languages (static pattern detection), so it's
+  genuinely buildable and testable here — 31 tests statically verify the fixtures and the
+  scanner's documented patterns stay consistent with each other. **What this is NOT**: a
+  claim that the scanner was actually run against these fixtures inside a live Claude Code
+  session (that requires an interactive run, same as `/vulnhunt`'s original Python
+  results) — the tests check text/pattern consistency, not live detection output.
+- **Dashboard rewrite: Flask+Jinja2 → FastAPI + vanilla-JS SPA** — this is the "modern
+  JS interface" part of the ask, done honestly: a real single-page app (client-side
+  routing via the History API, `fetch()`-based JSON calls, dynamic `import()` per page
+  module, live client-side table sorting) built with zero Node/npm/webpack, because none
+  were available to verify a build with. Every page was clicked through and verified
+  live in a browser during development (KPIs, the live queue's priority-rules
+  round-trip, ServiceNow preview/send, the run-pipeline dry-run guarantee, a styled
+  client-rendered 404) — not just unit-tested. The backend itself is still Python
+  (FastAPI, not Flask) since it already owned all the business logic
+  (`dashboard/data.py`, `priority_engine`, `attack_mapping`, the ServiceNow connector) and
+  rewriting *that* in another language would have meant re-verifying logic that was
+  already correct, for no product benefit.
+
+**What was deliberately not done, and why:** rewriting the platform's own backend/services
+in Java, Go, or PHP. With no runtime available to compile, run, or test any of the three,
+doing so would have produced files that look plausible but were never proven to work —
+the opposite of "precision." If a genuine reason emerges later (e.g., a specific
+high-throughput ingestion service where Go's concurrency model is the right tool, or a
+Java-based enterprise integration with a client SDK that only ships for the JVM), that's
+a real, scoped follow-up once the target environment actually has the runtime to build
+and verify it against.
 
 ---
 
