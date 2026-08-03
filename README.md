@@ -1,5 +1,9 @@
 # VulnHunter 🔍🛡️
 
+[![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
+[![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-33%2F33%20passing-brightgreen.svg)](TEST_CASES.md)
+
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
 

@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Run pipeline artifact test suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history, all branches)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create local tracking branches for all remotes
+        # The test suite reads git history via `git show <ref>:<path>` and
+        # `git branch --list` for both `master` and the `vulnhunter/auto-fixes-*`
+        # branch. actions/checkout only checks out the current ref locally, so
+        # every other branch needs a local tracking branch created from the
+        # fetched remote refs before the tests can find it.
+        run: |
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+          for b in $(git branch -r | grep -v '\->' | sed 's#origin/##'); do
+            git branch --track "$b" "origin/$b" 2>/dev/null || true
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -p "test_*.py" -v

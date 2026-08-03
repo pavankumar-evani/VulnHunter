@@ -1,0 +1,9 @@
+# Code owners for VulnHunter.
+# TODO: replace with real GitHub usernames/teams once this has more than one
+# contributor - a single-owner CODEOWNERS file is a placeholder, not a policy.
+
+*                              @pavane-deloitte-placeholder
+
+# Safety-critical files deserve a second look before the tool-scoping model
+# (see KNOWLEDGE_TRANSFER.md §4.3) is ever loosened.
+/.claude/agents/               @pavane-deloitte-placeholder
