@@ -1,6 +1,6 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all twenty-four test files: `tests/test_pipeline_artifacts.py` (both
+Formal test case log for all twenty-five test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
 `tests/test_dashboard.py` (the web dashboard's FastAPI JSON API and SPA shell routes,
 including the live queue, priority-rules editor, ServiceNow/Jira/Splunk preview, the
@@ -31,7 +31,10 @@ CMDB-export CSV import for the asset inventory's owner/team fields), and
 NIOS and Axonius asset-inventory pull connectors — unlike every connector before them,
 these normalize into asset records, not vulnerability findings), and
 `tests/test_pattern_recognition.py` (the pattern-matched, explicitly-not-machine-learning
-owner/team/type suggestion heuristic for the asset inventory). Every row below
+owner/team/type suggestion heuristic for the asset inventory), and
+`tests/test_ai_vuln_taxonomy.py` (the AI/ML vulnerability taxonomy and its
+illustrative MITRE ATLAS cross-reference, same keyword-heuristic honesty pattern as
+`test_attack_mapping.py`). Every row below
 maps 1:1 to one `test_*` method in one of those files — there is no test case here
 without a corresponding, runnable assertion, and no assertion in any suite that isn't
 documented here.
@@ -45,7 +48,7 @@ pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 522 / 522 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 545 / 545 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -95,6 +98,7 @@ evidence rather than a mocked demo.
 | Dashboard auth-gating on existing mutation routes | `ApiRunPipeline`, `ApiPriorityRules`, `ApiServiceNow`, `ApiAiAssist`, `ApiExceptions`, `ApiAssets` (additional cases) | TC-DASH-67 – 81 | 15/15 PASS |
 | Dashboard notification feed | `ApiNotifications` | TC-DASH-82 – 87 | 6/6 PASS |
 | Dashboard `/api/risk/attack-heatmap` | `ApiRiskAttackHeatmap` | TC-DASH-88 – 89 | 2/2 PASS |
+| Dashboard `/api/ai-vulnerabilities` | `ApiAiVulnerabilities` | TC-DASH-104 – 105 | 2/2 PASS |
 | Dashboard `/api/jira/*` | `ApiJira` | TC-DASH-90 – 93 | 4/4 PASS |
 | Dashboard `/api/splunk/*` | `ApiSplunk` | TC-DASH-94 – 97 | 4/4 PASS |
 | Dashboard `/api/assets/cmdb-import/*` | `ApiAssets` (additional cases) | TC-DASH-98 – 100 | 3/3 PASS |
@@ -153,7 +157,11 @@ evidence rather than a mocked demo.
 | Pattern-recognition owner/team suggestion | `SuggestOwnerTeam` | TC-PATTERN-11 – 18 | 8/8 PASS |
 | Pattern-recognition type suggestion | `SuggestType` | TC-PATTERN-19 – 23 | 5/5 PASS |
 | Pattern-recognition batch annotation | `AnnotateUnownedAssets` | TC-PATTERN-24 – 28 | 5/5 PASS |
-| **Total** | | **522** | **522/522 PASS** |
+| AI vulnerability taxonomy structure | `Taxonomy` | TC-AIVULN-01 – 04 | 4/4 PASS |
+| AI vulnerability keyword matching (incl. honest-scope check) | `KeywordMatching` | TC-AIVULN-05 – 14 | 10/10 PASS |
+| AI vulnerability batch tagging | `TagFindingsBatch` | TC-AIVULN-15 – 17 | 3/3 PASS |
+| AI vulnerability / MITRE ATLAS heat map | `AiAtlasHeatmap` | TC-AIVULN-18 – 21 | 4/4 PASS |
+| **Total** | | **545** | **545/545 PASS** |
 
 ---
 
@@ -445,6 +453,8 @@ test-for-test.
 | TC-DASH-87 | Danger notifications sort before warn and info | `GET /api/notifications` | Sorting by severity (danger/warn/info) yields an already non-decreasing sequence (danger-first ordering) | Matches | PASS |
 | TC-DASH-88 | ATT&CK heat map covers the full known taxonomy | `GET /api/risk/attack-heatmap` | HTTP 200; `heatmap` includes every known tactic/technique pair, including zero-count ones; every row has both a `tactic` and a `count` key | Matches | PASS |
 | TC-DASH-89 | PrintNightmare finding shows up under its technique on the heat map | `GET /api/risk/attack-heatmap` | The row keyed `T1210` has `count > 0` (FIND-1/PrintNightmare-style RCE) | Matches | PASS |
+| TC-DASH-104 | AI Vulnerabilities returns the full taxonomy and a matching heat map | `GET /api/ai-vulnerabilities` | HTTP 200; `vulnerabilities` has ≥8 entries each with `summary`/`remediation`; `heatmap` has one row per vulnerability | Matches | PASS |
+| TC-DASH-105 | AI Vulnerabilities heat map is honestly all-zero against real demo data | `GET /api/ai-vulnerabilities` | Every `heatmap` row has `count == 0` - this repo's demo app has no AI/ML component | Matches | PASS |
 | TC-DASH-90 | Jira preview lists every finding with no credentials needed | `GET /api/jira/preview` | HTTP 200; preview `finding_id`s equal exactly `FIND-1`...`FIND-14` | Matches | PASS |
 | TC-DASH-91 | Jira send without confirm never touches the network | `POST /api/jira/send` with real-looking `base_url`/`email`/`api_token`/`project_key`, `confirm` omitted | HTTP 200; `preview_only` true; `results` is `null` | Matches | PASS |
 | TC-DASH-92 | Jira send with confirm but missing credentials is rejected | Log in as admin; `POST /api/jira/send` with blank credentials, `confirm=true` | HTTP 400; `detail` contains `"required"` | Matches | PASS |
@@ -1272,6 +1282,48 @@ mutation of any kind - every test is a pure function call against in-memory dict
 | TC-PATTERN-26 | No match still yields an explicit `None`, not a missing key | An unowned row with nothing in common with the owned row | `result[0]["suggestion"] is None` | Matches | PASS |
 | TC-PATTERN-27 | Input rows are never mutated | Call `annotate_unowned_assets(rows)`, then inspect `rows[0]` | The original row dict has no `suggestion` key added to it | Matches | PASS |
 | TC-PATTERN-28 | All-owned input returns an empty list | `annotate_unowned_assets([owned_row])` | `[]` | Matches | PASS |
+
+---
+
+## Suite 32: AI vulnerability taxonomy / illustrative MITRE ATLAS cross-reference (`remediation/enrichment/ai_vuln_taxonomy.py`)
+
+**Purpose:** prove the ten-category AI/ML vulnerability taxonomy is internally
+well-formed, its keyword heuristic correctly tags (or correctly declines to tag)
+realistic finding text, and its heat-map builder aggregates real tagged findings
+against the full known taxonomy - the exact same verification shape as
+`test_attack_mapping.py` uses for MITRE ATT&CK tagging, since this module
+deliberately mirrors that one's design and honesty posture (see the module
+docstring: the `atlas_tactic`/`atlas_technique_id` fields are an illustrative
+cross-reference built from this module's own reading of published ATLAS
+documentation, not a verified mapping - confirm any specific ID against
+atlas.mitre.org before citing it formally). **Preconditions (all TC-AIVULN):**
+`remediation/enrichment/ai_vuln_taxonomy.py` importable; no file I/O beyond reading
+this repo's own real `normalized-findings.json` for the honest-scope check below (no
+mutation).
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-AIVULN-01 | Every taxonomy entry has all required fields | Iterate `AI_VULNERABILITIES` | Every entry has `id`, `name`, `summary`, `remediation`, `atlas_tactic`, `atlas_technique_id`, `atlas_technique_name` | Matches | PASS |
+| TC-AIVULN-02 | Every entry's `id` is unique | Collect all `id`s from `AI_VULNERABILITIES` | `len(ids) == len(set(ids))` | Matches | PASS |
+| TC-AIVULN-03 | `get_vulnerability` returns the matching entry | `get_vulnerability("prompt-injection")` | Returned entry's `name == "Prompt Injection"` | Matches | PASS |
+| TC-AIVULN-04 | `get_vulnerability` returns `None` for an unknown id | `get_vulnerability("not-a-real-id")` | `None` | Matches | PASS |
+| TC-AIVULN-05 | "Prompt injection" keyword matches the Prompt Injection category | `map_finding_to_ai_vuln({"title": "Prompt injection via unsanitized user message"})` | `result["id"] == "prompt-injection"` | Matches | PASS |
+| TC-AIVULN-06 | "Jailbreak" also matches Prompt Injection | `map_finding_to_ai_vuln({"title": "Chatbot jailbreak bypasses content policy"})` | `result["id"] == "prompt-injection"` | Matches | PASS |
+| TC-AIVULN-07 | "System prompt leak" matches Sensitive Information Disclosure | `map_finding_to_ai_vuln({"title": "System prompt leak via crafted query"})` | `result["id"] == "sensitive-info-disclosure"` | Matches | PASS |
+| TC-AIVULN-08 | "Training data poisoning" matches Training Data / Model Poisoning | `map_finding_to_ai_vuln({"title": "Training data poisoning in fine-tuning pipeline"})` | `result["id"] == "training-data-model-poisoning"` | Matches | PASS |
+| TC-AIVULN-09 | "Backdoored model" also matches Training Data / Model Poisoning | `map_finding_to_ai_vuln({"title": "Backdoored model returns malicious output on trigger phrase"})` | `result["id"] == "training-data-model-poisoning"` | Matches | PASS |
+| TC-AIVULN-10 | "Unsafe pickle deserialization" matches AI Supply Chain Compromise | `map_finding_to_ai_vuln({"title": "Model checkpoint loaded via unsafe pickle deserialization"})` | `result["id"] == "supply-chain"` | Matches | PASS |
+| TC-AIVULN-11 | "Model denial of service" matches Unbounded Consumption | `map_finding_to_ai_vuln({"title": "Model denial of service via oversized context"})` | `result["id"] == "unbounded-consumption"` | Matches | PASS |
+| TC-AIVULN-12 | "Model extraction" matches Model Theft / IP Extraction | `map_finding_to_ai_vuln({"title": "Model extraction attack via systematic API querying"})` | `result["id"] == "model-theft"` | Matches | PASS |
+| TC-AIVULN-13 | No keyword match returns `None`, not a guess | `map_finding_to_ai_vuln({"title": "SQL Injection via string concatenation"})` | `None` (negative test) | Matches | PASS |
+| TC-AIVULN-14 | Honest scope: this repo's own real demo findings never match this taxonomy | Run `map_finding_to_ai_vuln` against every finding in the real, committed `normalized-findings.json` | Every finding returns `None` - this repo's demo app has no AI/ML component, so this is expected, not a bug | Matches | PASS |
+| TC-AIVULN-15 | `tag_findings` adds the field without mutating input | `tag_findings([{"id": "FIND-1", "title": "Prompt injection", ...}])` | Input dict's key set unchanged; tagged output has an `ai_vulnerability` key | Matches | PASS |
+| TC-AIVULN-16 | `tag_findings` sets `None` for a non-matching finding | `tag_findings([{"title": "Unrelated finding"}])` | `tagged[0]["ai_vulnerability"] is None` | Matches | PASS |
+| TC-AIVULN-17 | `tag_findings` sets the matched id for a matching finding | `tag_findings([{"title": "Model theft via extraction"}])` | `tagged[0]["ai_vulnerability"] == "model-theft"` | Matches | PASS |
+| TC-AIVULN-18 | Heat map includes every known vulnerability, including zero-count ones | `build_ai_atlas_heatmap([])` | `len(heatmap) == len(AI_VULNERABILITIES)`; every row's `count == 0` | Matches | PASS |
+| TC-AIVULN-19 | Heat map counts real tagged findings | Tag 2 prompt-injection findings + 1 model-theft finding, then build the heat map | `prompt-injection` row `count == 2`; `model-theft` row `count == 1` | Matches | PASS |
+| TC-AIVULN-20 | Heat map ignores findings with no matched vulnerability | Tag `[{"title": "SQL Injection"}]`, build the heat map | Every row's `count == 0` | Matches | PASS |
+| TC-AIVULN-21 | Heat map rows carry the ATLAS cross-reference | `build_ai_atlas_heatmap([])` | The `prompt-injection` row's `atlas_technique_id == "AML.T0051"`, `atlas_tactic == "Initial Access"` | Matches | PASS |
 
 ---
 

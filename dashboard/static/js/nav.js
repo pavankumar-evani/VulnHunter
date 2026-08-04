@@ -17,6 +17,8 @@ const NAV = [
       tip: "Hub view across SAST, DAST, SCA, and secrets-in-code - counts and links into each." },
     { path: "/queue?category=infra-vm", label: "Infrastructure Vulnerabilities", icon: "infra",
       tip: "Remediation Queue pre-filtered to Infrastructure Vulnerability Management findings (Tenable/Armis-style asset scanning)." },
+    { path: "/ai-vulnerabilities", label: "AI Vulnerabilities", icon: "aiVuln",
+      tip: "Prompt injection, model poisoning, and other AI/ML risks - with an illustrative MITRE ATLAS heat map, summaries, and remediation guidance." },
     { path: "/vulnhunt", label: "SAST (Static Application Security Testing)", icon: "scan",
       tip: "Static Application Security Testing - this is the Code Scan page (source code, no target install)." },
     { path: "/queue?category=dast", label: "DAST (Dynamic Application Security Testing)", icon: "dast",

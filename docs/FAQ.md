@@ -134,6 +134,22 @@ DAST: the category and its CWE mappings are real and wired up, but it shows 0
 findings today because the demo app has no planted API-security example, and one
 wasn't fabricated just to fill the card.
 
+### Is the AI Vulnerabilities page's MITRE ATLAS mapping authoritative?
+
+No, and it says so directly on the page. `/ai-vulnerabilities`
+(`remediation/enrichment/ai_vuln_taxonomy.py`) documents ten real, established AI/ML
+security concepts - prompt injection, training-data/model poisoning, supply-chain
+compromise, excessive agency, and more - each with a summary and remediation
+guidance, plus a cross-reference to a MITRE ATLAS tactic/technique. That
+cross-reference is this module's own reading of published ATLAS documentation
+(atlas.mitre.org), not a verified/authoritative mapping pulled from a live ATLAS API
+- exactly the same "keyword heuristic, suggestion to verify, not a fact to cite"
+posture already applied to the Risk Dashboard's MITRE ATT&CK heat map. Verify any
+specific tactic/technique ID against atlas.mitre.org before citing it formally. Like
+DAST and API Vulnerabilities, this shows 0 findings against this repo's real demo
+data - there's no AI/ML component in `vulnerable-demo-app/` to actually trigger it,
+and nothing was faked to make the category look populated.
+
 ### Is the owner suggestion on `/assets` real machine learning?
 
 No, and calling it that would be dishonest. `/assets` can suggest an owner/team for an

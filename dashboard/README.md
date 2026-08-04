@@ -64,6 +64,11 @@ empty state with instructions instead of erroring.
 - **`remediation/enrichment/compensating_controls.py`** — keyword-heuristic
   compensating-control suggestions (same honesty pattern as `attack_mapping.py`) shown on
   the `/exceptions` request form.
+- **`remediation/enrichment/ai_vuln_taxonomy.py`** — ten real AI/ML vulnerability
+  categories (prompt injection, model poisoning, etc.) with summary/remediation
+  guidance and an illustrative MITRE ATLAS cross-reference, shown on
+  `/ai-vulnerabilities`. Same "keyword heuristic, verify before citing formally"
+  honesty pattern as `attack_mapping.py`'s ATT&CK tagging.
 - **`remediation/connectors/jira_connector.py`**, **`splunk_connector.py`**,
   **`crowdstrike_connector.py`** — same "built against public docs, unverified against a
   live tenant" pattern as the ServiceNow/Tenable/Armis connectors. Jira and Splunk are
@@ -98,6 +103,7 @@ empty state with instructions instead of erroring.
 | `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target, CSV/JSON/MD export |
 | `/playbooks/<filename>` | Full content of one generated Ansible playbook |
 | `/risk` | Risk Management dashboard - MITRE ATT&CK heat map, top vulnerabilities by type (with affected-asset count and owner), top assets by critical findings, an editable internal/external-facing classification per asset, and a CVSS v3.1 severity-definitions reference |
+| `/ai-vulnerabilities` | AI Vulnerabilities - ten real AI/ML security categories (prompt injection, model poisoning, supply-chain compromise, etc.) with summary/remediation guidance and an illustrative MITRE ATLAS heat map; 0 findings against this repo's demo data (no AI/ML component), same honest treatment as DAST |
 | `/exceptions` | Request/approve/revoke time-boxed risk-acceptance waivers per finding, with keyword-suggested compensating controls on the request form, CSV/JSON/MD export |
 | `/assets` | Every asset with findings against it, aggregated, with an editable owner/team, CSV/JSON/MD export, and a "CMDB import" panel to bulk-assign owner/team from an uploaded CSV export (see below) |
 | `/priority-rules` | Live YAML editor for `remediation/config/priority_rules.yaml`, with one-click presets for a pure-CVSS/severity model vs. the shipped VPR-style (threat-intel-aware) model - both are the same underlying weighted-score engine, just with the KEV/EPSS overrides toggled |

@@ -865,6 +865,23 @@ class ApiRiskAttackHeatmap(unittest.TestCase):
         self.assertGreater(by_technique["T1210"]["count"], 0)
 
 
+class ApiAiVulnerabilities(unittest.TestCase):
+    def test_returns_the_full_taxonomy_and_heatmap(self):
+        resp = client.get("/api/ai-vulnerabilities")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertTrue(len(body["vulnerabilities"]) >= 8)
+        self.assertTrue(all("summary" in v and "remediation" in v for v in body["vulnerabilities"]))
+        self.assertEqual(len(body["heatmap"]), len(body["vulnerabilities"]))
+
+    def test_heatmap_is_all_zero_against_this_repos_real_demo_data(self):
+        """Honest scope check: no AI/ML component in this repo's demo app, so no real
+        finding should match - see ai_vuln_taxonomy.py's module docstring."""
+        resp = client.get("/api/ai-vulnerabilities")
+        heatmap = resp.json()["heatmap"]
+        self.assertTrue(all(row["count"] == 0 for row in heatmap))
+
+
 class ApiIngestGeneric(unittest.TestCase):
     """The vendor-agnostic ingestion webhook. Writes to remediation/live-data/ (real,
     gitignored path, same as the live Tenable/Armis connectors) - cleaned up in

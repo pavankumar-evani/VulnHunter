@@ -37,6 +37,7 @@ const ICONS = {
   pin: '<path d="M12 21s7-7.2 7-12.2A7 7 0 105 8.8C5 13.8 12 21 12 21z"/><circle cx="12" cy="8.8" r="2.4"/>',
   container: '<rect x="3" y="7" width="18" height="12" rx="1"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="8" y1="7" x2="8" y2="19"/><line x1="16" y1="7" x2="16" y2="19"/>',
   api: '<polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/>',
+  aiVuln: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="17" r="2.2"/><circle cx="19" cy="17" r="2.2"/><line x1="12" y1="7.2" x2="6.3" y2="15.3"/><line x1="12" y1="7.2" x2="17.7" y2="15.3"/><line x1="7.2" y1="17" x2="16.8" y2="17"/>',
 };
 
 export function icon(name, size = 18) {

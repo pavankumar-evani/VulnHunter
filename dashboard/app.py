@@ -42,6 +42,9 @@ from remediation.connectors.servicenow_connector import (  # noqa: E402
 from remediation.connectors.splunk_connector import (  # noqa: E402
     DEFAULT_SOURCETYPE as SPLUNK_DEFAULT_SOURCETYPE, SplunkConnector, build_hec_event,
 )
+from remediation.enrichment.ai_vuln_taxonomy import (  # noqa: E402
+    AI_VULNERABILITIES, build_ai_atlas_heatmap, tag_findings as tag_ai_vulnerabilities,
+)
 from remediation.enrichment.attack_mapping import build_attack_heatmap  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, cmdb_import, pattern_recognition  # noqa: E402
@@ -557,6 +560,17 @@ def api_risk_attack_heatmap():
     return {"heatmap": build_attack_heatmap(queue)}
 
 
+@app.get("/api/ai-vulnerabilities")
+def api_ai_vulnerabilities():
+    """Real findings tagged against the AI/ML vulnerability taxonomy (illustrative
+    MITRE ATLAS cross-reference - see ai_vuln_taxonomy.py's module docstring), plus
+    the full taxonomy reference (summary/remediation per category) regardless of
+    whether any finding matched it. Honest expectation: this repo's demo data has no
+    AI/ML component, so `heatmap` will show all zero counts - not faked."""
+    findings = tag_ai_vulnerabilities(dashboard_data.load_remediation_findings())
+    return {"vulnerabilities": AI_VULNERABILITIES, "heatmap": build_ai_atlas_heatmap(findings)}
+
+
 class GenericIngestBody(BaseModel):
     findings: list[dict]
 
@@ -749,7 +763,7 @@ def _serve_shell():
 for _route in (
     "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
     "/jira", "/splunk", "/xdr", "/infoblox", "/axonius", "/ai-assist", "/reports", "/support", "/faq",
-    "/exceptions", "/assets", "/appsec", "/inbox", "/risk", "/login", "/profile",
+    "/exceptions", "/assets", "/appsec", "/inbox", "/risk", "/ai-vulnerabilities", "/login", "/profile",
 ):
     app.api_route(_route, methods=["GET", "HEAD"], include_in_schema=False)(_serve_shell)
 

@@ -52,6 +52,13 @@ const FAQS = [
     "fix. API Vulnerabilities is new detection guidance for future scans (missing auth, " +
     "wildcard CORS, mass assignment) - same honest treatment as DAST: wired up and real, " +
     "but shows 0 findings today since the demo app has no planted example."],
+  ["Is the AI Vulnerabilities page's MITRE ATLAS mapping authoritative?",
+    "No, and it says so on the page itself. The ten AI/ML vulnerability categories " +
+    "(prompt injection, model poisoning, supply-chain compromise, etc.) each cross-" +
+    "reference a MITRE ATLAS tactic/technique - this module's own reading of published " +
+    "ATLAS docs, not a verified mapping, same \"suggestion to verify\" posture as the " +
+    "existing ATT&CK heat map. Shows 0 findings against real demo data, same honest " +
+    "treatment as DAST and API Vulnerabilities - nothing faked to look populated."],
   ["Is the owner suggestion on Asset Inventory real machine learning?",
     "No. It's three transparent, weighted pattern-matching signals - hostname naming " +
     "convention, IP subnet, and asset type (plus MAC vendor matching for type " +

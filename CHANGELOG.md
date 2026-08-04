@@ -6,7 +6,30 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Added
+- **AI Vulnerabilities** (`/ai-vulnerabilities`, `remediation/enrichment/ai_vuln_taxonomy.py`)
+  — a new top-level Security Domains category alongside Application and
+  Infrastructure Vulnerabilities: ten real, established AI/ML security concepts
+  (prompt injection, training-data/model poisoning, supply-chain compromise,
+  improper output handling, excessive agency, unbounded consumption, model theft,
+  misinformation, insecure plugin/tool design, sensitive information disclosure),
+  each with a summary and concrete remediation guidance, plus an illustrative MITRE
+  ATLAS tactic/technique cross-reference and heat map - same "keyword heuristic,
+  verify before citing formally" honesty pattern as the existing MITRE ATT&CK heat
+  map on the Risk Dashboard. New scanner detection guidance
+  (`.claude/agents/vuln-scanner.md`) for AI/ML-specific patterns (prompt injection via
+  unsanitized input, insecure model deserialization, excessive agent autonomy) for
+  future scans - honestly shows 0 findings today since this repo's demo app has no
+  AI/ML component, same treatment as DAST and API Vulnerabilities. 23 new tests.
+
 ### Fixed
+- **Content area/login page biased toward the left edge on wide screens**
+  (`dashboard/static/style.css`) - `.content` had `max-width` but no `margin: 0 auto`,
+  so within its column-flex parent it stretched-then-capped flush against the left
+  edge instead of centering, most visibly on `/login` (the sign-in card centers
+  *within* `.content`'s own box, which itself wasn't centered in the viewport).
+  Fixed by centering `.content`'s own box - verified the login card now sits at the
+  exact viewport center regardless of window width.
 - **Content area capped at 1200px regardless of viewport or sidebar state**
   (`dashboard/static/style.css`) - widened the default cap to 1600px, and removed it
   entirely while the sidebar is collapsed, since a fixed cap defeated the whole point

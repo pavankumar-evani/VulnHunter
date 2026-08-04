@@ -31,6 +31,7 @@ const routes = [
   { pattern: /^\/appsec\/?$/, load: () => import("./pages/appsec.js") },
   { pattern: /^\/inbox\/?$/, load: () => import("./pages/inbox.js") },
   { pattern: /^\/risk\/?$/, load: () => import("./pages/risk.js") },
+  { pattern: /^\/ai-vulnerabilities\/?$/, load: () => import("./pages/aiVulnerabilities.js") },
   { pattern: /^\/login\/?$/, load: () => import("./pages/login.js") },
   { pattern: /^\/profile\/?$/, load: () => import("./pages/profile.js") },
   { pattern: /^\/playbooks\/([^/]+)$/, load: () => import("./pages/playbookDetail.js") },

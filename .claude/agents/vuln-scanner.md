@@ -33,6 +33,14 @@ path for issues including (not limited to):
 - **Container/Docker issues**: running as root - no `USER` directive (CWE-250), secrets
   baked into image layers via `ENV`/`ARG` (CWE-798), use of `latest` or an unpinned base
   image tag.
+- **AI/ML security**: an LLM call built by concatenating unsanitized user input
+  directly into a system/instruction prompt (prompt injection risk); a model file
+  (`.pkl`/`.pt`/`.pth`/etc.) loaded via plain `pickle.load`/`torch.load` without a safe/
+  weights-only loader, especially if the file's origin isn't fully trusted (insecure
+  deserialization applied to an ML model); an agent/tool-calling setup where the LLM
+  can invoke a sensitive tool/function (file write, shell, payment, email) with no
+  human-approval step in between (excessive agency). See
+  `remediation/enrichment/ai_vuln_taxonomy.py` for the full taxonomy these map to.
 - **API/authorization issues**: a route/endpoint handler with no authentication or
   authorization check at all on data that isn't genuinely public (Flask/FastAPI missing
   a `Depends(...)`/`@login_required`-style guard, Express missing an auth middleware in

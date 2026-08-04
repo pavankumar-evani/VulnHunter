@@ -11,6 +11,28 @@ test_same_inputs_produce_the_same_prompt (test_ai_assist.PromptConstruction.test
 Pure function: no hidden state, no timestamps baked into the prompt itself. ... ok
 test_summarize_action_asks_for_executive_summary (test_ai_assist.PromptConstruction.test_summarize_action_asks_for_executive_summary) ... ok
 test_unknown_action_raises_value_error (test_ai_assist.PromptConstruction.test_unknown_action_raises_value_error) ... ok
+test_heatmap_counts_real_tagged_findings (test_ai_vuln_taxonomy.AiAtlasHeatmap.test_heatmap_counts_real_tagged_findings) ... ok
+test_heatmap_ignores_findings_with_no_matched_vulnerability (test_ai_vuln_taxonomy.AiAtlasHeatmap.test_heatmap_ignores_findings_with_no_matched_vulnerability) ... ok
+test_heatmap_includes_every_known_vulnerability_even_with_zero_findings (test_ai_vuln_taxonomy.AiAtlasHeatmap.test_heatmap_includes_every_known_vulnerability_even_with_zero_findings) ... ok
+test_heatmap_rows_carry_the_atlas_cross_reference (test_ai_vuln_taxonomy.AiAtlasHeatmap.test_heatmap_rows_carry_the_atlas_cross_reference) ... ok
+test_backdoored_model_also_matches_poisoning (test_ai_vuln_taxonomy.KeywordMatching.test_backdoored_model_also_matches_poisoning) ... ok
+test_jailbreak_also_matches_prompt_injection (test_ai_vuln_taxonomy.KeywordMatching.test_jailbreak_also_matches_prompt_injection) ... ok
+test_model_denial_of_service_matches_unbounded_consumption (test_ai_vuln_taxonomy.KeywordMatching.test_model_denial_of_service_matches_unbounded_consumption) ... ok
+test_model_extraction_matches_model_theft (test_ai_vuln_taxonomy.KeywordMatching.test_model_extraction_matches_model_theft) ... ok
+test_no_ai_findings_in_this_repos_real_demo_data (test_ai_vuln_taxonomy.KeywordMatching.test_no_ai_findings_in_this_repos_real_demo_data)
+Honest scope check: this repo's demo app isn't an AI/ML system, so real ... ok
+test_no_keyword_match_returns_none_not_a_guess (test_ai_vuln_taxonomy.KeywordMatching.test_no_keyword_match_returns_none_not_a_guess) ... ok
+test_prompt_injection_matches (test_ai_vuln_taxonomy.KeywordMatching.test_prompt_injection_matches) ... ok
+test_system_prompt_leak_matches_sensitive_info_disclosure (test_ai_vuln_taxonomy.KeywordMatching.test_system_prompt_leak_matches_sensitive_info_disclosure) ... ok
+test_training_data_poisoning_matches (test_ai_vuln_taxonomy.KeywordMatching.test_training_data_poisoning_matches) ... ok
+test_unsafe_pickle_deserialization_matches_supply_chain (test_ai_vuln_taxonomy.KeywordMatching.test_unsafe_pickle_deserialization_matches_supply_chain) ... ok
+test_tag_findings_adds_field_without_mutating_input (test_ai_vuln_taxonomy.TagFindingsBatch.test_tag_findings_adds_field_without_mutating_input) ... ok
+test_tag_findings_sets_none_for_a_non_matching_finding (test_ai_vuln_taxonomy.TagFindingsBatch.test_tag_findings_sets_none_for_a_non_matching_finding) ... ok
+test_tag_findings_sets_the_matched_id (test_ai_vuln_taxonomy.TagFindingsBatch.test_tag_findings_sets_the_matched_id) ... ok
+test_every_entry_has_the_required_fields (test_ai_vuln_taxonomy.Taxonomy.test_every_entry_has_the_required_fields) ... ok
+test_every_id_is_unique (test_ai_vuln_taxonomy.Taxonomy.test_every_id_is_unique) ... ok
+test_get_vulnerability_returns_none_for_unknown_id (test_ai_vuln_taxonomy.Taxonomy.test_get_vulnerability_returns_none_for_unknown_id) ... ok
+test_get_vulnerability_returns_the_matching_entry (test_ai_vuln_taxonomy.Taxonomy.test_get_vulnerability_returns_the_matching_entry) ... ok
 test_critical_count_only_counts_critical_severity (test_asset_inventory.BuildAssetInventory.test_critical_count_only_counts_critical_severity) ... ok
 test_facing_defaults_to_unknown_when_not_set (test_asset_inventory.BuildAssetInventory.test_facing_defaults_to_unknown_when_not_set) ... ok
 test_facing_is_attached_from_ownership_map (test_asset_inventory.BuildAssetInventory.test_facing_is_attached_from_ownership_map) ... ok
@@ -190,6 +212,9 @@ The critical safety test, same pattern as /api/run and /api/servicenow/send: ...
 test_unknown_action_returns_400 (test_dashboard.ApiAiAssist.test_unknown_action_returns_400) ... ok
 test_unknown_finding_returns_404 (test_dashboard.ApiAiAssist.test_unknown_finding_returns_404) ... ok
 test_works_for_a_code_scan_finding_too (test_dashboard.ApiAiAssist.test_works_for_a_code_scan_finding_too) ... ok
+test_heatmap_is_all_zero_against_this_repos_real_demo_data (test_dashboard.ApiAiVulnerabilities.test_heatmap_is_all_zero_against_this_repos_real_demo_data)
+Honest scope check: no AI/ML component in this repo's demo app, so no real ... ok
+test_returns_the_full_taxonomy_and_heatmap (test_dashboard.ApiAiVulnerabilities.test_returns_the_full_taxonomy_and_heatmap) ... ok
 test_already_owned_asset_never_gets_a_suggestion_for_itself (test_dashboard.ApiAssets.test_already_owned_asset_never_gets_a_suggestion_for_itself) ... ok
 test_cmdb_import_apply_requires_login (test_dashboard.ApiAssets.test_cmdb_import_apply_requires_login) ... ok
 test_cmdb_import_apply_then_asset_shows_new_owner (test_dashboard.ApiAssets.test_cmdb_import_apply_then_asset_shows_new_owner) ... ok
@@ -568,7 +593,7 @@ test_batch_passes_custom_sourcetype_and_index_through (test_splunk_connector.Sen
 test_batch_sends_events_for_all_findings (test_splunk_connector.SendEventsForFindingsBatch.test_batch_sends_events_for_all_findings) ... ok
 
 ----------------------------------------------------------------------
-Ran 522 tests in 13.661s
+Ran 545 tests in 21.745s
 
 OK
 WARNING: VULNHUNTER_SESSION_SECRET is not set - using a random secret generated for this process only. Set it to a real, stable value before any real deployment (see dashboard/README.md).

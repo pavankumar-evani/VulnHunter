@@ -463,7 +463,16 @@ a.notif-item:hover { background: var(--bg); }
   50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(22,163,74,0); }
 }
 
-.content { padding: 24px 32px 60px; max-width: 1600px; }
+/* `.main-column` is a column-direction flex container, so `.content` (a flex item)
+   defaults to `align-items: stretch` - when its own `max-width` caps it below the
+   available width (any viewport wider than 1600px), a stretched-but-capped item sits
+   flush against the cross-start (left) edge rather than centering, unless given its
+   own auto margins. Without this, both regular pages AND the login/logout screen (see
+   `.app-shell.auth-page .content` above, which centers the *card* within `.content`'s
+   own box) visibly sit left-biased on any wide monitor - the login card in particular
+   ends up centered somewhere in the left ~1600px of the screen instead of the actual
+   viewport center. */
+.content { padding: 24px 32px 60px; max-width: 1600px; margin: 0 auto; width: 100%; }
 /* Collapsing the sidebar (sidebarToggle.js) is meant to give a genuine full-screen
    content view - a fixed max-width would defeat that on a wide monitor, so drop the
    cap entirely while collapsed instead of just widening it. */
