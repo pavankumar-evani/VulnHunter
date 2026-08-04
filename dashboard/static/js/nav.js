@@ -48,25 +48,14 @@ const NAV = [
     { path: "/priority-rules", label: "Priority Rules", icon: "rules",
       tip: "Tune severity/asset/KEV/EPSS weights and SLA windows - takes effect immediately." },
   ] },
-  { group: "Adaptors — Ticketing / SOAR", items: [
-    { path: "/servicenow", label: "ServiceNow", icon: "servicenow",
-      tip: "Ticketing - preview or create ServiceNow Incidents per finding via the Table API." },
-    { path: "/jira", label: "Jira", icon: "jira",
-      tip: "Ticketing - preview or create Jira issues per finding via the REST API v3." },
-  ] },
-  { group: "Adaptors — SIEM", items: [
-    { path: "/splunk", label: "Splunk", icon: "splunk",
-      tip: "SIEM - preview or send findings to Splunk as HTTP Event Collector events." },
-  ] },
-  { group: "Adaptors — XDR / EDR", items: [
-    { path: "/xdr", label: "CrowdStrike Falcon", icon: "xdr",
-      tip: "Pull alerts from CrowdStrike Falcon and normalize them into findings - reference page, CLI/connector-driven like Tenable/Armis." },
-  ] },
-  { group: "Adaptors — Asset Discovery / IPAM", items: [
-    { path: "/infoblox", label: "Infoblox", icon: "infoblox",
-      tip: "Pull DNS host records from Infoblox NIOS (WAPI) and normalize them into asset inventory - reference page, connector-driven." },
-    { path: "/axonius", label: "Axonius", icon: "axonius",
-      tip: "Pull aggregated device records from Axonius cyber asset management and normalize them into asset inventory - reference page, connector-driven." },
+  // A single hub instead of four separate "Adaptors — X" groups (was: Ticketing/SOAR,
+  // SIEM, XDR/EDR, Asset Discovery/IPAM as four flat sidebar sections) - /adaptors has
+  // a dropdown/filter selecting among all of them (6 with a working preview + a broad
+  // researched-but-not-yet-wired-up catalog), consistent settings panel reflecting
+  // whichever one is selected. See adaptorCatalog.js.
+  { group: "Adaptors", items: [
+    { path: "/adaptors", label: "Adaptors", icon: "adaptor",
+      tip: "Every external system VulnHunter talks to (or has researched), in one place - pick a connector from the dropdown." },
   ] },
   { group: "Operations", items: [
     { path: "/run", label: "Run Pipeline", icon: "run",

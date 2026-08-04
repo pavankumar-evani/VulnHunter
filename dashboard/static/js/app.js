@@ -23,6 +23,7 @@ const routes = [
   { pattern: /^\/xdr\/?$/, load: () => import("./pages/xdr.js") },
   { pattern: /^\/infoblox\/?$/, load: () => import("./pages/infoblox.js") },
   { pattern: /^\/axonius\/?$/, load: () => import("./pages/axonius.js") },
+  { pattern: /^\/adaptors\/?$/, load: () => import("./pages/adaptors.js") },
   { pattern: /^\/run\/?$/, load: () => import("./pages/run.js") },
   { pattern: /^\/ai-assist\/?$/, load: () => import("./pages/aiAssist.js") },
   { pattern: /^\/reports\/?$/, load: () => import("./pages/reports.js") },

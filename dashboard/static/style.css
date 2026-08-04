@@ -550,6 +550,48 @@ h2 { font-size: 1.15rem; margin-top: 32px; }
 .domain-card-label { font-weight: 600; }
 .domain-card-note { color: var(--text-muted); font-size: 0.82rem; }
 
+/* --- Adaptors hub (one dropdown/filter instead of six sidebar entries) --- */
+.adaptor-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.adaptor-picker label { font-weight: 600; font-size: 0.88rem; }
+.adaptor-picker select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 260px;
+}
+.adaptor-count { color: var(--text-muted); font-size: 0.82rem; }
+.adaptor-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.adaptor-option-icon { color: var(--brand-accent); flex-shrink: 0; }
+.adaptor-option-status {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.adaptor-status-live { background: #dcfce7; color: #166534; }
+.adaptor-status-reference { background: var(--info-bg); color: var(--info-text); }
+
 .table-scroll {
   overflow-x: auto;
   border-radius: 8px;
