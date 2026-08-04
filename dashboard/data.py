@@ -140,6 +140,21 @@ def save_priority_rules_text(text):
     priority_engine.DEFAULT_RULES_PATH.write_text(text, encoding="utf-8")
 
 
+def sla_and_priority_definitions():
+    """A display-ready summary of the CURRENTLY CONFIGURED SLA windows and priority
+    thresholds, for the Overview page's reference panel - reads the same
+    priority_rules.yaml load_live_queue() itself uses, so an admin who retunes
+    weights on /priority-rules sees this panel update too, rather than a hardcoded
+    snapshot that could silently drift out of sync with the real config."""
+    rules = priority_engine.load_rules()
+    return {
+        "sla_days": rules["sla_days"],
+        "priority_thresholds": rules["priority_thresholds"],
+        "kev_override": rules["kev_override"],
+        "epss_escalation": rules["epss_escalation"],
+    }
+
+
 def load_live_queue():
     """The LIVE, re-scored, threat-intel-tagged remediation queue - computed fresh on
     every request from normalized-findings.json + whatever priority_rules.yaml

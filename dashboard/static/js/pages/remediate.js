@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
+import { paginate, paginationHtml, wirePagination } from "../pagination.js";
 
 export const title = "/remediate — Remediation Plan (snapshot)";
 
@@ -94,22 +95,28 @@ export async function render(container) {
         </thead>
         <tbody id="plan-body"></tbody>
       </table>
-    </div>`;
+    </div>
+    <div id="plan-pagination"></div>`;
 
   const tbody = container.querySelector("#plan-body");
   const countEl = container.querySelector("#plan-count");
   let currentFiltered = plan.queue;
+  let page = 1;
 
   function renderRows() {
     const filtered = plan.queue.filter((row) =>
       (filters.riskTier === "all" || row["Risk Tier"] === filters.riskTier) &&
       (filters.target === "all" || row["Automation Target"] === filters.target));
     currentFiltered = filtered;
-    tbody.innerHTML = filtered.length
-      ? filtered.map((row) => rowHtml(row, data.playbooks_by_finding[row.ID])).join("")
+    const paged = paginate(filtered, page);
+    page = paged.page;
+    tbody.innerHTML = paged.rows.length
+      ? paged.rows.map((row) => rowHtml(row, data.playbooks_by_finding[row.ID])).join("")
       : `<tr><td colspan="11" class="empty-state">No findings match the current filters.</td></tr>`;
     countEl.textContent = `${filtered.length} of ${plan.queue.length} finding(s)`;
+    container.querySelector("#plan-pagination").innerHTML = paginationHtml(paged.page, paged.totalPages);
   }
+  wirePagination(container, (p) => { page = p; renderRows(); });
 
   wireExportButtons(container, "plan", {
     getRows: () => currentFiltered,
@@ -117,7 +124,7 @@ export async function render(container) {
     filenameBase: "vulnhunter-remediation-plan",
   });
 
-  container.querySelector("#f-risk-tier").addEventListener("change", (e) => { filters.riskTier = e.target.value; renderRows(); });
-  container.querySelector("#f-target").addEventListener("change", (e) => { filters.target = e.target.value; renderRows(); });
+  container.querySelector("#f-risk-tier").addEventListener("change", (e) => { filters.riskTier = e.target.value; page = 1; renderRows(); });
+  container.querySelector("#f-target").addEventListener("change", (e) => { filters.target = e.target.value; page = 1; renderRows(); });
   renderRows();
 }

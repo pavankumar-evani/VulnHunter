@@ -9,6 +9,38 @@ function kpi(value, label, cls = "") {
   return `<div class="kpi-card ${cls}"><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div>`;
 }
 
+const PRIORITY_ORDER = ["Critical", "High", "Medium", "Low"];
+
+function definitionsPanel(rules) {
+  const slaRows = PRIORITY_ORDER.map((tier) => `
+    <tr>
+      <td><span class="badge badge-${tier.toLowerCase()}">${tier}</span></td>
+      <td>${rules.sla_days[tier]} day(s)</td>
+      <td>Weighted score ≥ ${rules.priority_thresholds[tier]}</td>
+    </tr>`).join("");
+
+  return `
+    <details class="faq-item" id="definitions-panel">
+      <summary>What do "Priority" and "SLA" mean here? (definitions)</summary>
+      <p>Priority is a weighted score (severity + asset criticality + asset type),
+      mapped to a tier by the thresholds below - live-configurable on the
+      <a href="/priority-rules" data-link>Priority Rules</a> page, not hardcoded.</p>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Priority tier</th><th>SLA window</th><th>How a finding reaches this tier</th></tr></thead>
+          <tbody>${slaRows}</tbody>
+        </table>
+      </div>
+      <p class="filter-count" style="margin-top:10px">
+        Two overrides can escalate a finding past its weighted score alone:
+        ${rules.kev_override.enabled ? `a <strong>CISA KEV-listed</strong> finding is forced straight to
+        <strong>${escapeHtml(rules.kev_override.forces_priority)}</strong>` : "the KEV override is currently disabled"};
+        ${rules.epss_escalation.enabled ? `an <strong>EPSS score ≥ ${rules.epss_escalation.threshold}</strong>
+        forces at least <strong>${escapeHtml(rules.epss_escalation.forces_priority_at_least)}</strong>` : "the EPSS escalation is currently disabled"}.
+      </p>
+    </details>`;
+}
+
 function renderBody(data) {
   const riskRows = Object.entries(data.plan.risk_tier_counts || {}).map(([tier, count]) => `
     <tr>
@@ -48,6 +80,8 @@ function renderBody(data) {
       asset-criticality weights, and these overrides are all editable on the
       <a href="/priority-rules" data-link>Priority Rules</a> page.
     </div>
+
+    ${definitionsPanel(data.priority_rules)}
 
     ${data.plan.available ? `
       <h2>Risk tier breakdown (remediation queue)</h2>

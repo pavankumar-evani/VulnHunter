@@ -6,6 +6,37 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Added
+- **Clickable finding ID opens a full detail view** (`dashboard/static/js/findingDetail.js`,
+  new) — clicking any finding's ID in the live Remediation Queue opens a modal (reusing
+  `dom.js`'s existing `openModal`/`closeModal` pattern) showing everything the normalized
+  finding schema carries that the table row doesn't: source/source_ref, description,
+  CVSS, full KEV/EPSS detail, asset OS, first-seen date, and the `recommended_fix` text,
+  plus quick links to Ask AI and the remediation plan. Wired into `queue.js`; the table
+  row's ID cell is now a `<button>` instead of a plain `<td>`.
+- **Numbered pagination on the three main finding tables** (`dashboard/static/js/pagination.js`,
+  new) — the live Remediation Queue, Code Scan Results, and Remediation Plan tables no
+  longer dump every row into one unbounded scroll; they now slice to 15 rows per page with
+  a Prev/1 2 3…N/Next bar, matching the "must not require scrolling the whole page" and
+  "option to navigate next pages with numbering" ask. A `?highlight=<id>` deep link (from
+  global search) now also jumps to whichever page the matching row lands on, not just
+  scrolling within the current page. Page resets to 1 whenever a filter, sort, or the
+  tenant selection changes.
+- **SLA/priority definitions info panel on the Overview page** (`dashboard/static/js/pages/overview.js`,
+  `dashboard/data.py`'s new `sla_and_priority_definitions()`) — a collapsible "What do
+  Priority and SLA mean here?" block reading the *live* `priority_rules.yaml` values (not
+  a hardcoded snapshot), so it can never drift from what `/priority-rules` actually has
+  configured.
+
+### Fixed
+- **Sidebar/topbar chrome scrolled away with the page instead of staying fixed, and the
+  content area could force the whole page to scroll vertically** (`dashboard/static/style.css`)
+  — added a fixed-viewport app-shell (`html,body{height:100%}`, `body{overflow:hidden}`,
+  `.app-shell{height:100vh}`) with only `.content` scrolling internally
+  (`flex:1;min-height:0;overflow-y:auto`), needing `min-height:0` on `.main-column` too
+  (the classic flexbox `min-height:auto` gotcha) so it can shrink to make room for its
+  scrolling child instead of overflowing the shell.
+
 ### Changed
 - **Security Domains nav trimmed to one entry per domain, not one per sub-category**
   (`dashboard/static/js/nav.js`) — SAST, DAST, Secrets Management, SCA, Container

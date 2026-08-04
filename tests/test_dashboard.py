@@ -146,6 +146,17 @@ class ApiOverview(unittest.TestCase):
         for asset_type in ("windows-server", "unix-server", "application", "certificate"):
             self.assertIn(asset_type, payload["asset_type_breakdown"])
 
+    def test_overview_includes_the_live_priority_rules_summary(self):
+        """Overview's SLA/priority definitions panel reads the real, currently
+        configured priority_rules.yaml - not a hardcoded snapshot."""
+        resp = client.get("/api/overview")
+        rules = resp.json()["priority_rules"]
+        for tier in ("Critical", "High", "Medium", "Low"):
+            self.assertIn(tier, rules["sla_days"])
+            self.assertIn(tier, rules["priority_thresholds"])
+        self.assertIn("enabled", rules["kev_override"])
+        self.assertIn("threshold", rules["epss_escalation"])
+
 
 class ApiVulnhunt(unittest.TestCase):
     def test_lists_all_nine_findings(self):

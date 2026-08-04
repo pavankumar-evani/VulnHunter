@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
+import { paginate, paginationHtml, wirePagination, DEFAULT_PAGE_SIZE } from "../pagination.js";
 
 export const title = "/vulnhunt — Code Scan Results";
 
@@ -112,24 +113,36 @@ export async function render(container) {
         <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Category</th><th>CWE</th><th>File</th><th>Auto-fixable?</th></tr></thead>
         <tbody id="scan-body"></tbody>
       </table>
-    </div>`;
+    </div>
+    <div id="scan-pagination"></div>`;
 
   const tbody = container.querySelector("#scan-body");
   const countEl = container.querySelector("#scan-count");
   let currentFiltered = findings;
+  let page = 1;
+
+  let hasScrolledToHighlight = false;
 
   function renderRows() {
     const filtered = findings.filter((f) =>
       (filters.severity === "all" || f.Severity === filters.severity) &&
       (filters.category === "all" || f._category === filters.category));
     currentFiltered = filtered;
-    tbody.innerHTML = filtered.length
-      ? filtered.map(rowHtml).join("")
+    if (highlightId && !hasScrolledToHighlight) {
+      const idx = filtered.findIndex((f) => f.ID === highlightId);
+      if (idx !== -1) page = Math.floor(idx / DEFAULT_PAGE_SIZE) + 1;
+    }
+    const paged = paginate(filtered, page);
+    page = paged.page;
+    tbody.innerHTML = paged.rows.length
+      ? paged.rows.map(rowHtml).join("")
       : `<tr><td colspan="7" class="empty-state">No findings match the current filters.</td></tr>`;
     countEl.textContent = `${filtered.length} of ${findings.length} finding(s)`;
+    container.querySelector("#scan-pagination").innerHTML = paginationHtml(paged.page, paged.totalPages);
 
     if (highlightId) applyHighlight(filtered);
   }
+  wirePagination(container, (p) => { page = p; renderRows(); });
 
   wireExportButtons(container, "scan", {
     getRows: () => currentFiltered,
@@ -145,7 +158,10 @@ export async function render(container) {
     const row = container.querySelector(`[data-finding-id="${CSS.escape(highlightId)}"]`);
     if (row) {
       row.classList.add("row-highlight");
-      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (!hasScrolledToHighlight) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        hasScrolledToHighlight = true;
+      }
       if (noteEl) noteEl.innerHTML = "";
       return;
     }
@@ -157,7 +173,7 @@ export async function render(container) {
       : `<div class="callout callout-warn">Finding <code>${escapeHtml(highlightId)}</code> was not found.</div>`;
   }
 
-  container.querySelector("#f-severity").addEventListener("change", (e) => { filters.severity = e.target.value; renderRows(); });
-  container.querySelector("#f-category").addEventListener("change", (e) => { filters.category = e.target.value; renderRows(); });
+  container.querySelector("#f-severity").addEventListener("change", (e) => { filters.severity = e.target.value; page = 1; renderRows(); });
+  container.querySelector("#f-category").addEventListener("change", (e) => { filters.category = e.target.value; page = 1; renderRows(); });
   renderRows();
 }

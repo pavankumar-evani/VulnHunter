@@ -105,6 +105,7 @@ evidence rather than a mocked demo.
 | Dashboard `/api/splunk/*` | `ApiSplunk` | TC-DASH-94 – 97 | 4/4 PASS |
 | Dashboard `/api/assets/cmdb-import/*` | `ApiAssets` (additional cases) | TC-DASH-98 – 100 | 3/3 PASS |
 | Dashboard `/api/assets` pattern-suggestion field | `ApiAssets` (additional cases) | TC-DASH-101 – 103 | 3/3 PASS |
+| Dashboard `/api/overview` live priority-rules summary | `ApiOverview` (additional case) | TC-DASH-107 | 1/1 PASS |
 | Dashboard AI-assist prompt construction | `PromptConstruction` | TC-AI-01 – 12 | 12/12 PASS |
 | Dashboard report data generation | `GenerateReportData` | TC-REPORTGEN-01 – 07 | 7/7 PASS |
 | Dashboard report HTML rendering | `RenderReportHtml` | TC-REPORTGEN-08 – 12 | 5/5 PASS |
@@ -166,7 +167,7 @@ evidence rather than a mocked demo.
 | Infra sub-category classification | `ClassifyFinding` | TC-INFRA-01 – 10 | 10/10 PASS |
 | Infra sub-category tagging | `TagInfraCategories` | TC-INFRA-11 – 13 | 3/3 PASS |
 | Infra sub-category counts | `InfraCategoryCounts` | TC-INFRA-14 – 16 | 3/3 PASS |
-| **Total** | | **562** | **562/562 PASS** |
+| **Total** | | **563** | **563/563 PASS** |
 
 ---
 
@@ -388,6 +389,7 @@ test-for-test.
 | TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 9`, `remediation_findings: 14` | Matches | PASS |
 | TC-DASH-18 | Live queue lists all 14 findings sorted by priority | `GET /api/queue` | HTTP 200; finding IDs equal exactly `FIND-1`...`FIND-14`; priorities sorted highest-first (Critical > High > Medium > Low) | Matches | PASS |
 | TC-DASH-19 | Live queue shows SLA breach status and ATT&CK tags | `GET /api/queue` | At least one finding has `sla.breached` true; `T1210` (PrintNightmare/Log4Shell-style RCE) appears among the findings' `attack_techniques` | Matches | PASS |
+| TC-DASH-107 | Overview's SLA/priority definitions panel reads the real, currently-configured priority rules | `GET /api/overview` | Response includes a `priority_rules` object with `sla_days`/`priority_thresholds` for all 4 tiers (Critical/High/Medium/Low), plus `kev_override`/`epss_escalation` objects | Matches | PASS |
 | TC-DASH-106 | Live queue findings carry the infra sub-category | `GET /api/queue` | `FIND-1` (WIN-DC01, windows-server) has `infra_category == "os"`; every application/certificate finding has `infra_category is None` | Matches | PASS |
 | TC-DASH-20 | `GET /api/priority-rules` returns the current rules YAML text | `GET /api/priority-rules` (against a temp copy of the real rules file, so the shipped file is never mutated) | HTTP 200; `rules_text` contains `sla_days` | Matches | PASS |
 | TC-DASH-21 | Valid YAML POST saves the new rules | `POST /api/priority-rules` with `rules_text` edited to change `Medium: 30` to `Medium: 5` | HTTP 200; response message contains `"saved"`; the (temp) rules file on disk now contains `Medium: 5` | Matches | PASS |

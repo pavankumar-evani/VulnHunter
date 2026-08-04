@@ -5,6 +5,8 @@ import { getTenant, filterByTenant } from "../tenant.js";
 import { QUEUE_SCAN_TYPES, SCAN_TYPE_LABELS } from "../scanTypes.js";
 import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
+import { paginate, paginationHtml, wirePagination, DEFAULT_PAGE_SIZE } from "../pagination.js";
+import { openFindingDetail } from "../findingDetail.js";
 
 const EXPORT_COLUMNS = [
   { label: "Priority", value: (f) => f.priority },
@@ -16,6 +18,7 @@ const EXPORT_COLUMNS = [
   { label: "CVE", value: (f) => f.cve },
   { label: "KEV", value: (f) => (f.kev && f.kev.listed ? "Yes" : "No") },
   { label: "EPSS", value: (f) => (f.epss ? f.epss.score : "") },
+  { label: "Last Seen", value: (f) => f.last_seen },
   { label: "SLA Due", value: (f) => f.sla && f.sla.due_date },
   { label: "SLA Breached", value: (f) => !!(f.sla && f.sla.breached) },
   { label: "ATT&CK Techniques", value: (f) => (f.attack_techniques || []).map((t) => t.technique_id).join("; ") },
@@ -59,7 +62,7 @@ function rowHtml(f) {
   return `
     <tr data-finding-id="${escapeHtml(f.id)}">
       <td><span class="badge badge-priority-${(f.priority || "").toLowerCase()}">${escapeHtml(f.priority)}</span></td>
-      <td>${escapeHtml(f.id)}</td>
+      <td><button type="button" class="link-button finding-id-link" data-finding-id="${escapeHtml(f.id)}">${escapeHtml(f.id)}</button></td>
       <td>${escapeHtml(f.asset && f.asset.name)}</td>
       <td class="asset-type-cell">${escapeHtml(f.asset && f.asset.type)}</td>
       <td>${category}</td>
@@ -67,6 +70,7 @@ function rowHtml(f) {
       <td><code>${escapeHtml(f.cve || "—")}</code></td>
       <td>${kev}</td>
       <td>${epss}</td>
+      <td>${escapeHtml(f.last_seen || "—")}</td>
       <td>${slaCell}</td>
       <td>${attackTags}</td>
       <td><a href="/ai-assist?finding_id=${encodeURIComponent(f.id)}" data-link class="ai-assist-link">${icon("ai", 14)} Ask AI</a></td>
@@ -126,6 +130,7 @@ export async function render(container) {
   let allFindings = [];
   let lastFetched = null;
   let sort = { key: "priority", dir: "desc" };
+  let page = 1;
   // A nav deep-link (e.g. /queue?category=infra-vm from the Security Domains menu) can
   // preselect the category filter on load - falls back to "all" the same as before.
   const initialCategory = new URLSearchParams(window.location.search).get("category") || "all";
@@ -152,17 +157,29 @@ export async function render(container) {
   function renderRows() {
     const sliced = currentSlice();
     const sorted = sortFindings(sliced, sort.key, sort.dir);
+
+    // A highlighted deep-link (?highlight=<id>) may land on a page other than the
+    // current one - jump to its page once, same one-time-only rule as the scroll itself.
+    if (highlightId && !hasScrolledToHighlight) {
+      const idx = sorted.findIndex((f) => f.id === highlightId);
+      if (idx !== -1) page = Math.floor(idx / DEFAULT_PAGE_SIZE) + 1;
+    }
+
+    const paged = paginate(sorted, page);
+    page = paged.page;
     const tbody = container.querySelector("#queue-body");
     if (!tbody) return;
-    tbody.innerHTML = sorted.length
-      ? sorted.map(rowHtml).join("")
-      : `<tr><td colspan="12" class="empty-state">No findings match the current filters.</td></tr>`;
+    tbody.innerHTML = paged.rows.length
+      ? paged.rows.map(rowHtml).join("")
+      : `<tr><td colspan="13" class="empty-state">No findings match the current filters.</td></tr>`;
     container.querySelectorAll("th.sortable").forEach((th) => {
       const indicator = th.querySelector(".sort-indicator");
       indicator.textContent = th.dataset.sort === sort.key ? (sort.dir === "asc" ? "▲" : "▼") : "";
     });
     const countEl = container.querySelector("#queue-count");
     if (countEl) countEl.textContent = `${sorted.length} of ${allFindings.length} finding(s)`;
+    const paginationEl = container.querySelector("#queue-pagination");
+    if (paginationEl) paginationEl.innerHTML = paginationHtml(paged.page, paged.totalPages);
 
     // KPI cards always reflect the current tenant/filter slice, not the unfiltered total.
     const sla = computeSlaSummary(sliced);
@@ -230,14 +247,15 @@ export async function render(container) {
       th.addEventListener("click", () => {
         const key = th.dataset.sort;
         sort = sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" };
+        page = 1;
         renderRows();
       });
     });
-    container.querySelector("#f-priority").addEventListener("change", (e) => { filters.priority = e.target.value; renderRows(); });
-    container.querySelector("#f-asset-type").addEventListener("change", (e) => { filters.assetType = e.target.value; renderRows(); });
-    container.querySelector("#f-category").addEventListener("change", (e) => { filters.category = e.target.value; renderRows(); });
-    container.querySelector("#f-infra-type").addEventListener("change", (e) => { filters.infraType = e.target.value; renderRows(); });
-    container.querySelector("#f-kev-only").addEventListener("change", (e) => { filters.kevOnly = e.target.checked; renderRows(); });
+    container.querySelector("#f-priority").addEventListener("change", (e) => { filters.priority = e.target.value; page = 1; renderRows(); });
+    container.querySelector("#f-asset-type").addEventListener("change", (e) => { filters.assetType = e.target.value; page = 1; renderRows(); });
+    container.querySelector("#f-category").addEventListener("change", (e) => { filters.category = e.target.value; page = 1; renderRows(); });
+    container.querySelector("#f-infra-type").addEventListener("change", (e) => { filters.infraType = e.target.value; page = 1; renderRows(); });
+    container.querySelector("#f-kev-only").addEventListener("change", (e) => { filters.kevOnly = e.target.checked; page = 1; renderRows(); });
   }
 
   function renderShell() {
@@ -295,7 +313,7 @@ export async function render(container) {
             <tr>
               <th class="sortable" data-sort="priority">Priority <span class="sort-indicator"></span></th>
               <th>ID</th><th>Asset</th><th>Asset Type</th><th>Category</th><th>Title</th><th>CVE</th>
-              <th>KEV</th><th>EPSS</th>
+              <th>KEV</th><th>EPSS</th><th>Last Seen</th>
               <th class="sortable" data-sort="sla">SLA Due <span class="sort-indicator"></span></th>
               <th>ATT&amp;CK</th><th>AI</th>
             </tr>
@@ -303,6 +321,7 @@ export async function render(container) {
           <tbody id="queue-body"></tbody>
         </table>
       </div>
+      <div id="queue-pagination"></div>
 
       <div class="callout">
         Priority reasoning for each finding (why it landed where it did) is in the plan detail
@@ -330,8 +349,18 @@ export async function render(container) {
     renderLiveBadge();
   }
 
-  const onTenantChanged = () => renderRows();
+  const onTenantChanged = () => { page = 1; renderRows(); };
   window.addEventListener("tenant-changed", onTenantChanged);
+
+  // Delegated on the outer container (survives renderShell()'s innerHTML replacement) -
+  // wired exactly once per render() call, same rule as wirePagination below.
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest(".finding-id-link");
+    if (!btn) return;
+    const finding = allFindings.find((f) => f.id === btn.dataset.findingId);
+    if (finding) openFindingDetail(finding);
+  });
+  wirePagination(container, (p) => { page = p; renderRows(); });
 
   await load();
   const tickTimer = setInterval(renderLiveBadge, 1000);

@@ -87,6 +87,7 @@ def api_overview():
             "risk_tier_counts": plan.get("risk_tier_counts", {}),
         },
         "asset_type_breakdown": dashboard_data.asset_type_breakdown(findings),
+        "priority_rules": dashboard_data.sla_and_priority_definitions(),
     }
 
 
