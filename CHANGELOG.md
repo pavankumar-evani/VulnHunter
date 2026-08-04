@@ -6,6 +6,22 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Changed
+- **Security Domains nav trimmed to one entry per domain, not one per sub-category**
+  (`dashboard/static/js/nav.js`) — SAST, DAST, Secrets Management, SCA, Container
+  Vulnerabilities, and API Vulnerabilities are no longer separate sidebar items; they
+  now appear only as cards on the Application Vulnerabilities hub (`/appsec`), same
+  as before this change already did for those categories, just also removed from the
+  main menu now. Infrastructure Vulnerabilities gets the same hub-page treatment
+  instead of one flat link: a new `/infrastructure` page splits it into OS, Network,
+  Network Security, OT/IoT, and Cloud Infrastructure sub-categories
+  (`remediation/enrichment/infra_classification.py`, a lookup against `asset.type`,
+  same honest "real category, 0 findings" treatment as Cloud Infrastructure - no
+  cloud-asset finding in this repo's demo data yet). The Queue page gained a matching
+  `infraType` deep-link param and filter dropdown. Certificate Vulnerabilities and AI
+  Vulnerabilities stay top-level entries, unchanged - they're their own domains, not
+  sub-categories of Application or Infrastructure. 17 new tests.
+
 ### Added
 - **AI Vulnerabilities** (`/ai-vulnerabilities`, `remediation/enrichment/ai_vuln_taxonomy.py`)
   — a new top-level Security Domains category alongside Application and

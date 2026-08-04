@@ -15,7 +15,7 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   "asset": {
     "name": "WIN-DC01",
     "ip": "10.20.30.41",
-    "type": "windows-server | windows-endpoint | unix-server | network-routing-switching | network-security-device | iot-ot-device | application | certificate",
+    "type": "windows-server | windows-endpoint | unix-server | network-routing-switching | network-security-device | iot-ot-device | cloud-infrastructure | application | certificate",
     "os": "Microsoft Windows Server 2019 Datacenter"
   },
   "title": "MS Windows Print Spooler Remote Code Execution (PrintNightmare)",
@@ -52,6 +52,13 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   OS-level patching: application-layer library CVEs (e.g. Log4Shell) and TLS/certificate
   lifecycle findings (expiry, deprecated protocols) are a different remediation domain
   again — a code/library upgrade or a cert renewal, not an OS package update.
+  `cloud-infrastructure` is listed for completeness (real vulnerability-management
+  platforms, including Tenable and Armis, do cover AWS/Azure/GCP asset/posture
+  scanning) but has **no sample finding in this repo's demo data yet** - same
+  "supported category, not faked" treatment `scan_type_mapping.py` already documents
+  for DAST. See `remediation/enrichment/infra_classification.py` for how `asset.type`
+  rolls up into the Infrastructure Vulnerabilities hub's OS/Network/Network Security/
+  OT/Cloud sub-categories.
 - **`remediation_domain`** is set by the normalizer from `asset.type`, but kept as a
   separate field (not just reusing `asset.type`) because in a real deployment some asset
   types might route to more than one remediation mechanism (e.g. a Windows endpoint patched

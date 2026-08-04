@@ -52,6 +52,13 @@ const FAQS = [
     "fix. API Vulnerabilities is new detection guidance for future scans (missing auth, " +
     "wildcard CORS, mass assignment) - same honest treatment as DAST: wired up and real, " +
     "but shows 0 findings today since the demo app has no planted example."],
+  ["Where did SAST/DAST/Secrets/SCA/Container/API go from the sidebar?",
+    "Still real, working pages - just not separate menu entries. They're cards on the " +
+    "Application Vulnerabilities hub (/appsec) instead, so the main menu shows one " +
+    "entry per domain, not per sub-category. Infrastructure Vulnerabilities got the " +
+    "same treatment: /infrastructure splits it into OS/Network/Network Security/OT-IoT/" +
+    "Cloud cards. Cloud Infrastructure honestly shows 0 findings - no cloud-asset " +
+    "finding in this repo's demo data, same as DAST and API Vulnerabilities."],
   ["Is the AI Vulnerabilities page's MITRE ATLAS mapping authoritative?",
     "No, and it says so on the page itself. The ten AI/ML vulnerability categories " +
     "(prompt injection, model poisoning, supply-chain compromise, etc.) each cross-" +

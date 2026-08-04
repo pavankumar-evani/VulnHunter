@@ -1,6 +1,6 @@
 # VulnHunter — Test Cases & Results
 
-Formal test case log for all twenty-five test files: `tests/test_pipeline_artifacts.py` (both
+Formal test case log for all twenty-six test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
 `tests/test_dashboard.py` (the web dashboard's FastAPI JSON API and SPA shell routes,
 including the live queue, priority-rules editor, ServiceNow/Jira/Splunk preview, the
@@ -34,7 +34,9 @@ these normalize into asset records, not vulnerability findings), and
 owner/team/type suggestion heuristic for the asset inventory), and
 `tests/test_ai_vuln_taxonomy.py` (the AI/ML vulnerability taxonomy and its
 illustrative MITRE ATLAS cross-reference, same keyword-heuristic honesty pattern as
-`test_attack_mapping.py`). Every row below
+`test_attack_mapping.py`), and `tests/test_infra_classification.py` (the OS/Network/
+Network Security/OT-IoT/Cloud sub-classification behind the Infrastructure
+Vulnerabilities hub). Every row below
 maps 1:1 to one `test_*` method in one of those files — there is no test case here
 without a corresponding, runnable assertion, and no assertion in any suite that isn't
 documented here.
@@ -48,7 +50,7 @@ pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 545 / 545 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 562 / 562 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -85,7 +87,7 @@ evidence rather than a mocked demo.
 | Dashboard `/api/playbooks/{filename}` | `ApiPlaybookDetail` | TC-DASH-12 – 13 | 2/2 PASS |
 | Dashboard `/api/run` | `ApiRunPipeline` | TC-DASH-14 – 16 | 3/3 PASS |
 | Dashboard `/api/status` | `ApiStatus` | TC-DASH-17 | 1/1 PASS |
-| Dashboard `/api/queue` (live queue) | `ApiLiveQueue` | TC-DASH-18 – 19 | 2/2 PASS |
+| Dashboard `/api/queue` (live queue) | `ApiLiveQueue` | TC-DASH-18 – 19, 106 | 3/3 PASS |
 | Dashboard `/api/priority-rules` editor | `ApiPriorityRules` | TC-DASH-20 – 22 | 3/3 PASS |
 | Dashboard `/api/servicenow/*` | `ApiServiceNow` | TC-DASH-23 – 25 | 3/3 PASS |
 | Dashboard SPA shell routes | `HtmlShellRoutesServeTheSpaShell` | TC-DASH-26 – 31 | 6/6 PASS |
@@ -161,7 +163,10 @@ evidence rather than a mocked demo.
 | AI vulnerability keyword matching (incl. honest-scope check) | `KeywordMatching` | TC-AIVULN-05 – 14 | 10/10 PASS |
 | AI vulnerability batch tagging | `TagFindingsBatch` | TC-AIVULN-15 – 17 | 3/3 PASS |
 | AI vulnerability / MITRE ATLAS heat map | `AiAtlasHeatmap` | TC-AIVULN-18 – 21 | 4/4 PASS |
-| **Total** | | **545** | **545/545 PASS** |
+| Infra sub-category classification | `ClassifyFinding` | TC-INFRA-01 – 10 | 10/10 PASS |
+| Infra sub-category tagging | `TagInfraCategories` | TC-INFRA-11 – 13 | 3/3 PASS |
+| Infra sub-category counts | `InfraCategoryCounts` | TC-INFRA-14 – 16 | 3/3 PASS |
+| **Total** | | **562** | **562/562 PASS** |
 
 ---
 
@@ -383,6 +388,7 @@ test-for-test.
 | TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 9`, `remediation_findings: 14` | Matches | PASS |
 | TC-DASH-18 | Live queue lists all 14 findings sorted by priority | `GET /api/queue` | HTTP 200; finding IDs equal exactly `FIND-1`...`FIND-14`; priorities sorted highest-first (Critical > High > Medium > Low) | Matches | PASS |
 | TC-DASH-19 | Live queue shows SLA breach status and ATT&CK tags | `GET /api/queue` | At least one finding has `sla.breached` true; `T1210` (PrintNightmare/Log4Shell-style RCE) appears among the findings' `attack_techniques` | Matches | PASS |
+| TC-DASH-106 | Live queue findings carry the infra sub-category | `GET /api/queue` | `FIND-1` (WIN-DC01, windows-server) has `infra_category == "os"`; every application/certificate finding has `infra_category is None` | Matches | PASS |
 | TC-DASH-20 | `GET /api/priority-rules` returns the current rules YAML text | `GET /api/priority-rules` (against a temp copy of the real rules file, so the shipped file is never mutated) | HTTP 200; `rules_text` contains `sla_days` | Matches | PASS |
 | TC-DASH-21 | Valid YAML POST saves the new rules | `POST /api/priority-rules` with `rules_text` edited to change `Medium: 30` to `Medium: 5` | HTTP 200; response message contains `"saved"`; the (temp) rules file on disk now contains `Medium: 5` | Matches | PASS |
 | TC-DASH-22 | Invalid YAML POST is rejected and the file is left unchanged | `POST /api/priority-rules` with `rules_text="not: valid: yaml: ["` | HTTP 400; `detail` contains `"invalid YAML"`; rules file content identical to before the request | Matches | PASS |
@@ -1324,6 +1330,39 @@ mutation).
 | TC-AIVULN-19 | Heat map counts real tagged findings | Tag 2 prompt-injection findings + 1 model-theft finding, then build the heat map | `prompt-injection` row `count == 2`; `model-theft` row `count == 1` | Matches | PASS |
 | TC-AIVULN-20 | Heat map ignores findings with no matched vulnerability | Tag `[{"title": "SQL Injection"}]`, build the heat map | Every row's `count == 0` | Matches | PASS |
 | TC-AIVULN-21 | Heat map rows carry the ATLAS cross-reference | `build_ai_atlas_heatmap([])` | The `prompt-injection` row's `atlas_technique_id == "AML.T0051"`, `atlas_tactic == "Initial Access"` | Matches | PASS |
+
+---
+
+## Suite 33: Infrastructure sub-category classification (`remediation/enrichment/infra_classification.py`)
+
+**Purpose:** prove the OS/Network/Network Security/OT-IoT/Cloud sub-classification
+behind the Infrastructure Vulnerabilities hub (`/infrastructure`) correctly maps every
+real `asset.type` value in the schema, correctly declines to classify non-infra
+findings (application/certificate) rather than forcing them into a bucket, and its
+count-rollup shows the full known taxonomy - including Cloud Infrastructure, which
+has no sample finding in this repo's demo data (same honest "real category, 0
+findings" treatment as DAST - see the module docstring). **Preconditions (all
+TC-INFRA):** `remediation/enrichment/infra_classification.py` importable; every test
+constructs its own in-memory finding dicts, no file I/O.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-INFRA-01 | `windows-server` classifies as `os` | `classify_infra_finding({"asset": {"type": "windows-server"}})` | `"os"` | Matches | PASS |
+| TC-INFRA-02 | `windows-endpoint` also classifies as `os` | `classify_infra_finding({"asset": {"type": "windows-endpoint"}})` | `"os"` | Matches | PASS |
+| TC-INFRA-03 | `unix-server` classifies as `os` | `classify_infra_finding({"asset": {"type": "unix-server"}})` | `"os"` | Matches | PASS |
+| TC-INFRA-04 | `network-routing-switching` classifies as `network` | `classify_infra_finding({"asset": {"type": "network-routing-switching"}})` | `"network"` | Matches | PASS |
+| TC-INFRA-05 | `network-security-device` classifies as `network-security` | `classify_infra_finding({"asset": {"type": "network-security-device"}})` | `"network-security"` | Matches | PASS |
+| TC-INFRA-06 | `iot-ot-device` classifies as `ot` | `classify_infra_finding({"asset": {"type": "iot-ot-device"}})` | `"ot"` | Matches | PASS |
+| TC-INFRA-07 | `cloud-infrastructure` classifies as `cloud` | `classify_infra_finding({"asset": {"type": "cloud-infrastructure"}})` | `"cloud"` | Matches | PASS |
+| TC-INFRA-08 | `application` asset type is not an infra category | `classify_infra_finding({"asset": {"type": "application"}})` | `None` (negative test - never forced into a bucket) | Matches | PASS |
+| TC-INFRA-09 | `certificate` asset type is not an infra category | `classify_infra_finding({"asset": {"type": "certificate"}})` | `None` | Matches | PASS |
+| TC-INFRA-10 | A missing/absent asset type returns `None`, not a crash | `classify_infra_finding({"asset": {}})`, `classify_infra_finding({})` | Both return `None` | Matches | PASS |
+| TC-INFRA-11 | `tag_infra_categories` adds fields without mutating input | `tag_infra_categories([{"asset": {"type": "windows-server"}}])` | Input dict's key set unchanged; tagged output has `infra_category`/`infra_category_label` keys | Matches | PASS |
+| TC-INFRA-12 | Tag sets the correct label for a real category | `tag_infra_categories([{"asset": {"type": "iot-ot-device"}}])` | `tagged[0]["infra_category"] == "ot"`; `tagged[0]["infra_category_label"] == "OT / IoT"` | Matches | PASS |
+| TC-INFRA-13 | Tag sets `None`/`None` for a non-infra finding | `tag_infra_categories([{"asset": {"type": "application"}}])` | Both `infra_category` and `infra_category_label` are `None` | Matches | PASS |
+| TC-INFRA-14 | Counts include every known category, including zero-count ones | `build_infra_category_counts([])` | `len(rows) == len(INFRA_CATEGORIES)`; every row's `count == 0` | Matches | PASS |
+| TC-INFRA-15 | Cloud Infrastructure shows zero by default, honestly | `build_infra_category_counts(tag_infra_categories([{"asset": {"type": "windows-server"}}]))` | The `cloud` row's `count == 0` and `label == "Cloud Infrastructure"` | Matches | PASS |
+| TC-INFRA-16 | Counts real tagged findings per category, excluding non-infra ones | Tag a mix of 6 infra findings (3 `os`, 1 each `network`/`network-security`/`ot`) plus 1 `application` finding, build the counts | `os` count `3`; `network`/`network-security`/`ot` each `1`; total across all rows `== 6` (the application finding excluded entirely) | Matches | PASS |
 
 ---
 

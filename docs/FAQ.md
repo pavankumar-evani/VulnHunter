@@ -134,6 +134,19 @@ DAST: the category and its CWE mappings are real and wired up, but it shows 0
 findings today because the demo app has no planted API-security example, and one
 wasn't fabricated just to fill the card.
 
+### Where did SAST/DAST/Secrets/SCA/Container/API go from the sidebar?
+
+They're still real, working pages - just not separate top-level menu entries
+anymore. They're listed as cards on the Application Vulnerabilities hub (`/appsec`)
+instead, so the main menu shows one entry per real domain (Application,
+Infrastructure, AI, Certificate) rather than every sub-category flattened into the
+sidebar. Same idea for Infrastructure Vulnerabilities: `/infrastructure` now splits
+it into OS, Network, Network Security, OT/IoT, and Cloud Infrastructure cards
+(`remediation/enrichment/infra_classification.py`, a lookup against `asset.type`)
+rather than one flat link. Cloud Infrastructure shows 0 findings honestly - there's
+no cloud-asset finding in this repo's demo data, same treatment DAST and API
+Vulnerabilities already get.
+
 ### Is the AI Vulnerabilities page's MITRE ATLAS mapping authoritative?
 
 No, and it says so directly on the page. `/ai-vulnerabilities`

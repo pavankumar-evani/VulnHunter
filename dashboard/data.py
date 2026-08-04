@@ -20,6 +20,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from remediation.config import priority_engine  # noqa: E402
 from remediation.enrichment.attack_mapping import tag_findings  # noqa: E402
 from remediation.enrichment.compensating_controls import tag_compensating_controls  # noqa: E402
+from remediation.enrichment.infra_classification import tag_infra_categories  # noqa: E402
 from remediation.enrichment.scan_type_mapping import tag_scan_types  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 
@@ -148,6 +149,7 @@ def load_live_queue():
     findings = load_remediation_findings()
     findings = tag_findings(findings)
     findings = tag_scan_types(findings)
+    findings = tag_infra_categories(findings)
     findings = tag_compensating_controls(findings)
     active_exceptions = exceptions_store.active_exceptions_by_finding()
     findings = [{**f, "exception": active_exceptions.get(f["id"])} for f in findings]

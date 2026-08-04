@@ -763,7 +763,7 @@ def _serve_shell():
 for _route in (
     "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
     "/jira", "/splunk", "/xdr", "/infoblox", "/axonius", "/ai-assist", "/reports", "/support", "/faq",
-    "/exceptions", "/assets", "/appsec", "/inbox", "/risk", "/ai-vulnerabilities", "/login", "/profile",
+    "/exceptions", "/assets", "/appsec", "/infrastructure", "/inbox", "/risk", "/ai-vulnerabilities", "/login", "/profile",
 ):
     app.api_route(_route, methods=["GET", "HEAD"], include_in_schema=False)(_serve_shell)
 

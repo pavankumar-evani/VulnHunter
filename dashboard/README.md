@@ -69,6 +69,10 @@ empty state with instructions instead of erroring.
   guidance and an illustrative MITRE ATLAS cross-reference, shown on
   `/ai-vulnerabilities`. Same "keyword heuristic, verify before citing formally"
   honesty pattern as `attack_mapping.py`'s ATT&CK tagging.
+- **`remediation/enrichment/infra_classification.py`** — splits Infrastructure
+  Vulnerability Management findings into OS/Network/Network Security/OT-IoT/Cloud
+  sub-categories by `asset.type`, shown on `/infrastructure`. Tagged onto every live
+  queue finding in `load_live_queue()`, alongside `scan_type`/`attack_techniques`.
 - **`remediation/connectors/jira_connector.py`**, **`splunk_connector.py`**,
   **`crowdstrike_connector.py`** — same "built against public docs, unverified against a
   live tenant" pattern as the ServiceNow/Tenable/Armis connectors. Jira and Splunk are
@@ -96,10 +100,11 @@ empty state with instructions instead of erroring.
 | `/` | KPI overview across both pipelines, SLA/KEV/EPSS summary, risk-tier + asset-class breakdown, live-refreshed every 20s |
 | `/ai-assist` | Ask Claude to explain/remediate/summarize a finding - dry-run preview by default, explicit confirm to spend real API usage |
 | `/inbox` | Real system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not person-to-person messaging; also a bell icon + dropdown in the topbar on every page |
-| `/appsec` | Application Vulnerabilities hub - rolls up SAST/DAST/SCA/Secrets/Container/API counts with links into each pre-filtered view |
+| `/appsec` | Application Vulnerabilities hub - rolls up SAST/DAST/SCA/Secrets/Container/API counts with links into each pre-filtered view. These six are sidebar-menu-only reachable through this hub, not separate top-level nav entries |
+| `/infrastructure` | Infrastructure Vulnerabilities hub - rolls up OS/Network/Network Security/OT-IoT/Cloud counts (`remediation/enrichment/infra_classification.py`) with links into each pre-filtered `/queue` view |
 | `/queue?category=infra-vm` / `?category=dast` / `?category=sca` / `?category=cert-mgmt` | The Security Domains menu's deep links into `/queue`, pre-filtered by category |
 | `/vulnhunt` / `/vulnhunt?category=Secrets` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category; also serves as the SAST and Secrets Management nav entries |
-| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable and filterable client-side (priority, asset type, category, KEV-only), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link, CSV/JSON/MD export |
+| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable and filterable client-side (priority, asset type, category, infra sub-category, KEV-only), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link, CSV/JSON/MD export |
 | `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target, CSV/JSON/MD export |
 | `/playbooks/<filename>` | Full content of one generated Ansible playbook |
 | `/risk` | Risk Management dashboard - MITRE ATT&CK heat map, top vulnerabilities by type (with affected-asset count and owner), top assets by critical findings, an editable internal/external-facing classification per asset, and a CVSS v3.1 severity-definitions reference |

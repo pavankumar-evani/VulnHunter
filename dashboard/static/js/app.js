@@ -29,6 +29,7 @@ const routes = [
   { pattern: /^\/exceptions\/?$/, load: () => import("./pages/exceptions.js") },
   { pattern: /^\/assets\/?$/, load: () => import("./pages/assets.js") },
   { pattern: /^\/appsec\/?$/, load: () => import("./pages/appsec.js") },
+  { pattern: /^\/infrastructure\/?$/, load: () => import("./pages/infrastructure.js") },
   { pattern: /^\/inbox\/?$/, load: () => import("./pages/inbox.js") },
   { pattern: /^\/risk\/?$/, load: () => import("./pages/risk.js") },
   { pattern: /^\/ai-vulnerabilities\/?$/, load: () => import("./pages/aiVulnerabilities.js") },

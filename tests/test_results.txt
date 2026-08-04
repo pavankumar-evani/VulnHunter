@@ -263,6 +263,8 @@ test_send_with_confirm_but_missing_credentials_is_rejected (test_dashboard.ApiJi
 test_send_with_confirm_but_not_logged_in_is_rejected (test_dashboard.ApiJira.test_send_with_confirm_but_not_logged_in_is_rejected) ... ok
 test_send_without_confirm_never_touches_the_network (test_dashboard.ApiJira.test_send_without_confirm_never_touches_the_network)
 Mirrors /api/servicenow/send's dry-run guarantee: submitting without confirm ... ok
+test_queue_findings_carry_the_infra_sub_category (test_dashboard.ApiLiveQueue.test_queue_findings_carry_the_infra_sub_category)
+Real windows-server/unix-server findings should classify as "os" - powers ... ok
 test_queue_lists_all_findings_sorted_by_priority (test_dashboard.ApiLiveQueue.test_queue_lists_all_findings_sorted_by_priority) ... ok
 test_queue_shows_sla_and_attack_tags (test_dashboard.ApiLiveQueue.test_queue_shows_sla_and_attack_tags) ... ok
 test_danger_notifications_sort_before_warn_and_info (test_dashboard.ApiNotifications.test_danger_notifications_sort_before_warn_and_info) ... ok
@@ -387,6 +389,23 @@ test_normalize_handles_no_ips_gracefully (test_infoblox_connector.InfobloxNormal
 Covers both an explicit empty ipv4addrs list and a record missing the key ... ok
 test_normalize_maps_documented_shape (test_infoblox_connector.InfobloxNormalizeHostRecord.test_normalize_maps_documented_shape) ... ok
 test_normalize_takes_first_ip_when_multiple_present (test_infoblox_connector.InfobloxNormalizeHostRecord.test_normalize_takes_first_ip_when_multiple_present) ... ok
+test_application_asset_type_is_not_an_infra_category (test_infra_classification.ClassifyFinding.test_application_asset_type_is_not_an_infra_category)
+Application/certificate findings are a different domain entirely - this ... ok
+test_certificate_asset_type_is_not_an_infra_category (test_infra_classification.ClassifyFinding.test_certificate_asset_type_is_not_an_infra_category) ... ok
+test_cloud_infrastructure_classifies_as_cloud (test_infra_classification.ClassifyFinding.test_cloud_infrastructure_classifies_as_cloud) ... ok
+test_iot_ot_device_classifies_as_ot (test_infra_classification.ClassifyFinding.test_iot_ot_device_classifies_as_ot) ... ok
+test_missing_asset_type_returns_none (test_infra_classification.ClassifyFinding.test_missing_asset_type_returns_none) ... ok
+test_network_routing_switching_classifies_as_network (test_infra_classification.ClassifyFinding.test_network_routing_switching_classifies_as_network) ... ok
+test_network_security_device_classifies_as_network_security (test_infra_classification.ClassifyFinding.test_network_security_device_classifies_as_network_security) ... ok
+test_unix_server_classifies_as_os (test_infra_classification.ClassifyFinding.test_unix_server_classifies_as_os) ... ok
+test_windows_endpoint_also_classifies_as_os (test_infra_classification.ClassifyFinding.test_windows_endpoint_also_classifies_as_os) ... ok
+test_windows_server_classifies_as_os (test_infra_classification.ClassifyFinding.test_windows_server_classifies_as_os) ... ok
+test_cloud_shows_zero_by_default_honestly (test_infra_classification.InfraCategoryCounts.test_cloud_shows_zero_by_default_honestly) ... ok
+test_counts_include_every_known_category_even_with_zero_findings (test_infra_classification.InfraCategoryCounts.test_counts_include_every_known_category_even_with_zero_findings) ... ok
+test_counts_real_tagged_findings_per_category (test_infra_classification.InfraCategoryCounts.test_counts_real_tagged_findings_per_category) ... ok
+test_tag_infra_categories_adds_fields_without_mutating_input (test_infra_classification.TagInfraCategories.test_tag_infra_categories_adds_fields_without_mutating_input) ... ok
+test_tag_sets_none_label_for_a_non_infra_finding (test_infra_classification.TagInfraCategories.test_tag_sets_none_label_for_a_non_infra_finding) ... ok
+test_tag_sets_the_correct_label (test_infra_classification.TagInfraCategories.test_tag_sets_the_correct_label) ... ok
 test_base_url_stored_and_trailing_slash_stripped (test_jira_connector.AuthAndConstruction.test_base_url_stored_and_trailing_slash_stripped) ... ok
 test_project_key_stored_on_connector (test_jira_connector.AuthAndConstruction.test_project_key_stored_on_connector) ... ok
 test_session_gets_basic_auth_configured (test_jira_connector.AuthAndConstruction.test_session_gets_basic_auth_configured) ... ok
@@ -593,7 +612,7 @@ test_batch_passes_custom_sourcetype_and_index_through (test_splunk_connector.Sen
 test_batch_sends_events_for_all_findings (test_splunk_connector.SendEventsForFindingsBatch.test_batch_sends_events_for_all_findings) ... ok
 
 ----------------------------------------------------------------------
-Ran 545 tests in 21.745s
+Ran 562 tests in 20.648s
 
 OK
 WARNING: VULNHUNTER_SESSION_SECRET is not set - using a random secret generated for this process only. Set it to a real, stable value before any real deployment (see dashboard/README.md).

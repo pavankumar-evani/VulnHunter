@@ -3,6 +3,7 @@ import { escapeHtml, timeAgo } from "../dom.js";
 import { icon } from "../icons.js";
 import { getTenant, filterByTenant } from "../tenant.js";
 import { QUEUE_SCAN_TYPES, SCAN_TYPE_LABELS } from "../scanTypes.js";
+import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
 
 const EXPORT_COLUMNS = [
@@ -98,6 +99,7 @@ function applyFilters(findings, filters) {
     if (filters.priority !== "all" && f.priority !== filters.priority) return false;
     if (filters.assetType !== "all" && (f.asset && f.asset.type) !== filters.assetType) return false;
     if (filters.category !== "all" && f.scan_type !== filters.category) return false;
+    if (filters.infraType !== "all" && f.infra_category !== filters.infraType) return false;
     if (filters.kevOnly && !(f.kev && f.kev.listed)) return false;
     return true;
   });
@@ -127,7 +129,10 @@ export async function render(container) {
   // A nav deep-link (e.g. /queue?category=infra-vm from the Security Domains menu) can
   // preselect the category filter on load - falls back to "all" the same as before.
   const initialCategory = new URLSearchParams(window.location.search).get("category") || "all";
-  let filters = { priority: "all", assetType: "all", category: initialCategory, kevOnly: false };
+  // A card on the Infrastructure Vulnerabilities hub (/infrastructure) deep-links here
+  // with &infraType=os|network|network-security|ot|cloud on top of category=infra-vm.
+  const initialInfraType = new URLSearchParams(window.location.search).get("infraType") || "all";
+  let filters = { priority: "all", assetType: "all", category: initialCategory, infraType: initialInfraType, kevOnly: false };
   // A global-search result (search.js) deep-links here with ?highlight=<id> - the
   // matching row gets scrolled into view and visually marked once on load.
   const highlightId = new URLSearchParams(window.location.search).get("highlight");
@@ -200,6 +205,14 @@ export async function render(container) {
     return types.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
   }
 
+  function infraTypeOptions() {
+    // Always lists every known sub-category (see infraTypes.js), including "cloud"
+    // which has no sample data yet - same "show the full known taxonomy" reasoning
+    // as categoryOptions() below.
+    return INFRA_CATEGORIES.map((value) =>
+      `<option value="${value}" ${value === filters.infraType ? "selected" : ""}>${escapeHtml(INFRA_CATEGORY_LABELS[value])}</option>`).join("");
+  }
+
   function categoryOptions() {
     // Always list every real queue category (not just ones present in today's data) so a
     // deep link like /queue?category=dast shows a matching, selected dropdown option even
@@ -223,6 +236,7 @@ export async function render(container) {
     container.querySelector("#f-priority").addEventListener("change", (e) => { filters.priority = e.target.value; renderRows(); });
     container.querySelector("#f-asset-type").addEventListener("change", (e) => { filters.assetType = e.target.value; renderRows(); });
     container.querySelector("#f-category").addEventListener("change", (e) => { filters.category = e.target.value; renderRows(); });
+    container.querySelector("#f-infra-type").addEventListener("change", (e) => { filters.infraType = e.target.value; renderRows(); });
     container.querySelector("#f-kev-only").addEventListener("change", (e) => { filters.kevOnly = e.target.checked; renderRows(); });
   }
 
@@ -265,6 +279,9 @@ export async function render(container) {
         </label>
         <label>Category
           <select id="f-category"><option value="all" ${filters.category === "all" ? "selected" : ""}>All</option>${categoryOptions()}</select>
+        </label>
+        <label>Infra sub-category
+          <select id="f-infra-type"><option value="all" ${filters.infraType === "all" ? "selected" : ""}>All</option>${infraTypeOptions()}</select>
         </label>
         <label class="checkbox-label"><input type="checkbox" id="f-kev-only"> CISA KEV-listed only</label>
         <span class="filter-count" id="queue-count"></span>

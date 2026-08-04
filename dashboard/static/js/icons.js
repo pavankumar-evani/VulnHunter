@@ -38,6 +38,7 @@ const ICONS = {
   container: '<rect x="3" y="7" width="18" height="12" rx="1"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="8" y1="7" x2="8" y2="19"/><line x1="16" y1="7" x2="16" y2="19"/>',
   api: '<polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/>',
   aiVuln: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="17" r="2.2"/><circle cx="19" cy="17" r="2.2"/><line x1="12" y1="7.2" x2="6.3" y2="15.3"/><line x1="12" y1="7.2" x2="17.7" y2="15.3"/><line x1="7.2" y1="17" x2="16.8" y2="17"/>',
+  cloud: '<path d="M7 18h10.5a3.5 3.5 0 000-7 5.5 5.5 0 00-10.6-1.7A4.5 4.5 0 007 18z"/>',
 };
 
 export function icon(name, size = 18) {

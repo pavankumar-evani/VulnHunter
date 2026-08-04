@@ -322,6 +322,18 @@ class ApiLiveQueue(unittest.TestCase):
         }
         self.assertIn("T1210", all_technique_ids)  # PrintNightmare/Log4Shell-style RCE
 
+    def test_queue_findings_carry_the_infra_sub_category(self):
+        """Real windows-server/unix-server findings should classify as "os" - powers
+        the Infrastructure Vulnerabilities hub's OS/Network/Network Security/OT/Cloud
+        cards (see infra_classification.py)."""
+        resp = client.get("/api/queue")
+        payload = resp.json()
+        by_id = {f["id"]: f for f in payload["findings"]}
+        self.assertEqual(by_id["FIND-1"]["infra_category"], "os")  # WIN-DC01, windows-server
+        app_or_cert = [f for f in payload["findings"] if (f.get("asset") or {}).get("type") in ("application", "certificate")]
+        self.assertTrue(app_or_cert)
+        self.assertTrue(all(f["infra_category"] is None for f in app_or_cert))
+
 
 class ApiPriorityRules(unittest.TestCase):
     """Every test here uses a temporary rules file (via patching DEFAULT_RULES_PATH) so

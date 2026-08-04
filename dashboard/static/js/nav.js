@@ -12,27 +12,21 @@ const NAV = [
     { path: "/inbox", label: "Inbox", icon: "bell",
       tip: "Real system-generated notifications - SLA breaches, KEV, expiring exceptions - not person-to-person messages." },
   ] },
+  // SAST/DAST/Secrets/SCA/Container/API are deliberately NOT separate top-level
+  // entries here anymore - they're sub-listings shown as cards on the Application
+  // Vulnerabilities hub page (/appsec) only, so the main menu shows one entry per
+  // real domain instead of every sub-category flattened into the sidebar. Same
+  // reasoning for Infrastructure Vulnerabilities' OS/Network/Network Security/OT/
+  // Cloud split, now a hub page (/infrastructure) instead of a single flat link.
   { group: "Security Domains", items: [
     { path: "/appsec", label: "Application Vulnerabilities", icon: "appsec",
-      tip: "Hub view across SAST, DAST, SCA, and secrets-in-code - counts and links into each." },
-    { path: "/queue?category=infra-vm", label: "Infrastructure Vulnerabilities", icon: "infra",
-      tip: "Remediation Queue pre-filtered to Infrastructure Vulnerability Management findings (Tenable/Armis-style asset scanning)." },
+      tip: "Hub view across SAST, DAST, SCA, Secrets, Container, and API sub-categories - counts and links into each." },
+    { path: "/infrastructure", label: "Infrastructure Vulnerabilities", icon: "infra",
+      tip: "Hub view across OS, Network, Network Security, OT/IoT, and Cloud sub-categories (Tenable/Armis-style asset scanning)." },
     { path: "/ai-vulnerabilities", label: "AI Vulnerabilities", icon: "aiVuln",
       tip: "Prompt injection, model poisoning, and other AI/ML risks - with an illustrative MITRE ATLAS heat map, summaries, and remediation guidance." },
-    { path: "/vulnhunt", label: "SAST (Static Application Security Testing)", icon: "scan",
-      tip: "Static Application Security Testing - this is the Code Scan page (source code, no target install)." },
-    { path: "/queue?category=dast", label: "DAST (Dynamic Application Security Testing)", icon: "dast",
-      tip: "Remediation Queue pre-filtered to Dynamic Application Security Testing findings - no sample data yet, see the FAQ." },
-    { path: "/vulnhunt?category=Secrets", label: "Secrets Management", icon: "secrets",
-      tip: "Code Scan pre-filtered to hardcoded-secret findings (CWE-798)." },
-    { path: "/queue?category=sca", label: "SCA (Software Composition Analysis)", icon: "sca",
-      tip: "Remediation Queue pre-filtered to Software Composition Analysis findings (vulnerable third-party/bundled libraries)." },
     { path: "/queue?category=cert-mgmt", label: "Certificate Vulnerabilities", icon: "certmgmt",
       tip: "Remediation Queue pre-filtered to Certificate & TLS Lifecycle Management findings." },
-    { path: "/vulnhunt?category=Container", label: "Container Vulnerabilities", icon: "container",
-      tip: "Code Scan pre-filtered to base-image/Dockerfile findings (root user, baked-in secrets, unpinned tags)." },
-    { path: "/vulnhunt?category=API", label: "API Vulnerabilities", icon: "api",
-      tip: "Code Scan pre-filtered to API-security findings (missing auth, permissive CORS, mass assignment) - no sample data yet, see the FAQ." },
   ] },
   { group: "Remediation Engine", items: [
     { path: "/vulnhunt", label: "Code Scan", icon: "scan",
