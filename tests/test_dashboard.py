@@ -90,18 +90,18 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
 
     def test_remediation_findings_match_known_total(self):
         findings = dashboard_data.load_remediation_findings()
-        self.assertEqual(len(findings), 14)
+        self.assertEqual(len(findings), 15)
 
     def test_remediation_plan_queue_matches_findings_count(self):
         plan = dashboard_data.load_remediation_plan()
         self.assertTrue(plan["available"])
-        self.assertEqual(len(plan["queue"]), 14)
+        self.assertEqual(len(plan["queue"]), 15)
 
     def test_risk_tier_counts_match_known_split(self):
         plan = dashboard_data.load_remediation_plan()
         self.assertEqual(plan["risk_tier_counts"].get("auto-approvable"), 2)
         self.assertEqual(plan["risk_tier_counts"].get("needs-change-approval"), 5)
-        self.assertEqual(plan["risk_tier_counts"].get("manual-only"), 7)
+        self.assertEqual(plan["risk_tier_counts"].get("manual-only"), 8)
 
     def test_playbooks_match_known_count(self):
         playbooks = dashboard_data.load_playbooks()
@@ -109,15 +109,15 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
 
     def test_kev_and_high_epss_counts(self):
         findings = dashboard_data.load_remediation_findings()
-        self.assertEqual(dashboard_data.count_kev_listed(findings), 6)
-        self.assertEqual(dashboard_data.count_high_epss(findings), 7)
+        self.assertEqual(dashboard_data.count_kev_listed(findings), 7)
+        self.assertEqual(dashboard_data.count_high_epss(findings), 8)
 
     def test_asset_type_breakdown_covers_all_categories(self):
         findings = dashboard_data.load_remediation_findings()
         breakdown = dashboard_data.asset_type_breakdown(findings)
-        self.assertEqual(sum(breakdown.values()), 14)
+        self.assertEqual(sum(breakdown.values()), 15)
         for expected_type in ("windows-server", "unix-server", "network-routing-switching",
-                               "iot-ot-device", "application", "certificate"):
+                               "network-security-device", "iot-ot-device", "application", "certificate"):
             self.assertIn(expected_type, breakdown)
 
     def test_no_mojibake_in_parsed_text(self):
@@ -137,10 +137,10 @@ class ApiOverview(unittest.TestCase):
         payload = resp.json()
         self.assertEqual(payload["vulnhunt"]["total"], 9)
         self.assertEqual(payload["vulnhunt"]["auto_fixable"], 6)
-        self.assertEqual(payload["remediation"]["total"], 14)
+        self.assertEqual(payload["remediation"]["total"], 15)
         self.assertEqual(payload["playbook_count"], 7)
-        self.assertEqual(payload["kev_count"], 6)
-        self.assertEqual(payload["high_epss_count"], 7)
+        self.assertEqual(payload["kev_count"], 7)
+        self.assertEqual(payload["high_epss_count"], 8)
         for key in ("breached", "at_risk", "on_track"):
             self.assertIn(key, payload["sla"])
         for asset_type in ("windows-server", "unix-server", "application", "certificate"):
@@ -173,9 +173,9 @@ class ApiRemediate(unittest.TestCase):
         resp = client.get("/api/remediate")
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertEqual(len(payload["findings"]), 14)
+        self.assertEqual(len(payload["findings"]), 15)
         ids = {row["ID"] for row in payload["plan"]["queue"]}
-        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, 15)})
+        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, 16)})
         self.assertEqual(len(payload["playbooks_by_finding"]), 7)
 
 
@@ -239,7 +239,7 @@ class ApiStatus(unittest.TestCase):
         payload = resp.json()
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["vulnhunt_findings"], 9)
-        self.assertEqual(payload["remediation_findings"], 14)
+        self.assertEqual(payload["remediation_findings"], 15)
 
 
 class ApiAuth(unittest.TestCase):
@@ -316,7 +316,7 @@ class ApiLiveQueue(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         ids = {f["id"] for f in payload["findings"]}
-        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, 15)})
+        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, 16)})
 
         rank = {"Critical": 3, "High": 2, "Medium": 1, "Low": 0}
         ranks = [rank[f["priority"]] for f in payload["findings"]]
@@ -401,7 +401,7 @@ class ApiServiceNow(unittest.TestCase):
         resp = client.get("/api/servicenow/preview")
         self.assertEqual(resp.status_code, 200)
         previews = resp.json()["previews"]
-        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 15)})
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 16)})
 
     def test_send_without_confirm_never_touches_the_network(self):
         """The critical safety test, mirroring /api/run's dry-run guarantee: submitting
@@ -441,7 +441,7 @@ class ApiJira(unittest.TestCase):
         resp = client.get("/api/jira/preview")
         self.assertEqual(resp.status_code, 200)
         previews = resp.json()["previews"]
-        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 15)})
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 16)})
         # Uses the documented placeholder project key until a real one is entered.
         self.assertEqual(previews[0]["body"]["fields"]["project"]["key"], "VULN")
 
@@ -484,7 +484,7 @@ class ApiSplunk(unittest.TestCase):
         resp = client.get("/api/splunk/preview")
         self.assertEqual(resp.status_code, 200)
         previews = resp.json()["previews"]
-        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 15)})
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 16)})
         self.assertEqual(previews[0]["body"]["sourcetype"], "vulnhunter:finding")
 
     def test_send_without_confirm_never_touches_the_network(self):
@@ -597,7 +597,7 @@ class ApiReports(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertEqual(payload["period"], "weekly")
-        self.assertEqual(payload["remediation_total"], 14)
+        self.assertEqual(payload["remediation_total"], 15)
         self.assertEqual(payload["vulnhunt_total"], 9)
 
     def test_invalid_period_is_rejected(self):
@@ -986,8 +986,8 @@ class ApiNotifications(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         notifications = resp.json()["notifications"]
         sla_ids = {n["id"] for n in notifications if n["category"] == "SLA"}
-        # Matches the known real breach count elsewhere in this suite (queue KPI: 6 breached).
-        self.assertEqual(len(sla_ids), 6)
+        # Matches the known real breach count elsewhere in this suite (queue KPI: 7 breached).
+        self.assertEqual(len(sla_ids), 7)
         self.assertIn("sla-FIND-1", sla_ids)
 
     def test_danger_notifications_sort_before_warn_and_info(self):

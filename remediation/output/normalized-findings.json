@@ -89,7 +89,7 @@
     },
     "epss": {
       "score": 0.03939,
-      "percentile": 0.8935
+      "percentile": 0.89351
     }
   },
   {
@@ -147,7 +147,7 @@
     },
     "epss": {
       "score": 0.70561,
-      "percentile": 0.99327
+      "percentile": 0.99328
     }
   },
   {
@@ -372,5 +372,36 @@
     "last_seen": "2026-08-02",
     "kev": null,
     "epss": null
+  },
+  {
+    "id": "FIND-15",
+    "source": "tenable",
+    "source_ref": "187432",
+    "asset": {
+      "name": "FW-EDGE01",
+      "ip": "10.20.5.1",
+      "type": "network-security-device",
+      "os": "PAN-OS 11.1"
+    },
+    "title": "Palo Alto Networks PAN-OS GlobalProtect Command Injection",
+    "cve": "CVE-2024-3400",
+    "cvss": 10.0,
+    "severity": "Critical",
+    "description": "A command injection vulnerability in the GlobalProtect gateway/portal feature allows an unauthenticated attacker to execute arbitrary code with root privileges by creating a crafted file on the system.",
+    "recommended_fix": "Apply the PAN-OS hotfix referenced in Palo Alto Networks advisory PAN-SA-2024-0010, or disable GlobalProtect gateway/portal telemetry as an interim mitigation if the hotfix cannot be applied immediately.",
+    "remediation_domain": null,
+    "first_seen": "2026-07-29",
+    "last_seen": "2026-08-02",
+    "kev": {
+      "listed": true,
+      "date_added": "2024-04-12",
+      "vulnerability_name": "Palo Alto Networks PAN-OS Command Injection Vulnerability",
+      "known_ransomware_campaign_use": "Known",
+      "due_date": "2024-04-19"
+    },
+    "epss": {
+      "score": 0.99999,
+      "percentile": 1.0
+    }
   }
 ]

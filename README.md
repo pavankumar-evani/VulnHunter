@@ -230,14 +230,14 @@ claude
 /remediate --generate       # generates the Ansible playbooks for auto-remediable findings
 ```
 
-Expected result (against the included sample Tenable/Armis/threat-intel exports): 14
-findings normalized (9 Tenable, 3 Armis, 2 threat intel) across 6 asset classes,
-enriched with real CISA KEV/EPSS data (6 KEV-listed, 7 with EPSS ≥ 50%); 7 are eligible
+Expected result (against the included sample Tenable/Armis/threat-intel exports): 15
+findings normalized (10 Tenable, 3 Armis, 2 threat intel) across 7 asset classes,
+enriched with real CISA KEV/EPSS data (7 KEV-listed, 8 with EPSS ≥ 50%); 7 are eligible
 for automated fix generation (4 Windows Server, 3 Unix Server) and land in
-`remediation/output/` as reviewable playbooks; the remaining 7 (a core Cisco switch, an
-IoT camera and OT controller, a mobile endpoint, a Log4Shell-vulnerable application, and
-2 certificate/TLS findings) are fully planned in `REMEDIATION_PLAN.md` with a clear
-reason no fixer exists yet for that asset class.
+`remediation/output/` as reviewable playbooks; the remaining 8 (a core Cisco switch, a
+perimeter firewall, an IoT camera and OT controller, a mobile endpoint, a
+Log4Shell-vulnerable application, and 2 certificate/TLS findings) are fully planned in
+`REMEDIATION_PLAN.md` with a clear reason no fixer exists yet for that asset class.
 
 ## Project structure
 

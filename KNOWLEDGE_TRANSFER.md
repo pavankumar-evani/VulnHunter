@@ -227,12 +227,13 @@ comment header naming the finding it addresses, the risk tier, and a rollback in
 ready for human (or your org's Ansible Tower/AWX-style approved pipeline) review.
 
 **Validated result** (against the included mock Tenable/Armis/threat-intel exports,
-enriched with real live KEV/EPSS data): 14 findings normalized across all 3 sources and
-6 asset classes; 6 are KEV-listed (confirmed actively exploited — including Log4Shell and
-PrintNightmare) and 7 have EPSS ≥ 50%; 7 (4 Windows Server, 3 Unix Server) got a generated
-playbook; 7 (1 core network switch, IoT/OT/mobile devices, 1 Log4Shell application
-finding, 2 certificate/TLS findings) are fully planned but correctly left `manual-only`,
-since no fixer exists yet for those asset classes — see
+enriched with real live KEV/EPSS data): 15 findings normalized across all 3 sources and
+7 asset classes; 7 are KEV-listed (confirmed actively exploited — including Log4Shell,
+PrintNightmare, and a Palo Alto PAN-OS GlobalProtect command injection) and 8 have EPSS ≥
+50%; 7 (4 Windows Server, 3 Unix Server) got a generated playbook; 8 (1 core network
+switch, 1 perimeter firewall, IoT/OT/mobile devices, 1 Log4Shell application finding, 2
+certificate/TLS findings) are fully planned but correctly left `manual-only`, since no
+fixer exists yet for those asset classes — see
 [`REMEDIATION_PLAN.md`](REMEDIATION_PLAN.md) for the full generated report.
 
 ### 4.3 The Safety Model (the single most important design decision)
@@ -448,8 +449,9 @@ for network devices or IoT/OT. To add one:
 │   ├── requirements.txt        fastapi, uvicorn, httpx2 (tests only), pyyaml, requests
 │   └── README.md                scope, safety design, and explicit "not yet" list
 ├── remediation/
-│   ├── sample-data/       mock Tenable/Armis/threat-intel exports (14 findings: OS,
-│   │                      infra, IoT/OT, application, and certificate categories)
+│   ├── sample-data/       mock Tenable/Armis/threat-intel exports (15 findings: OS,
+│   │                      network/network-security infra, IoT/OT, application, and
+│   │                      certificate categories)
 │   ├── schema/            normalized Finding schema documentation (now includes kev/epss)
 │   ├── connectors/        live Tenable/Armis/ServiceNow/Jira/Splunk/CrowdStrike API
 │   │                      clients - built, unit-tested against mocked HTTP, unverified

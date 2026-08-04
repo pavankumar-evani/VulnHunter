@@ -7,6 +7,20 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **A real `network-security-device` finding in the sample data** (`remediation/sample-data/tenable_export.csv`)
+  - a Palo Alto Networks PAN-OS GlobalProtect command injection (CVE-2024-3400), a
+  real, well-known, actively-exploited 2024 CVE, filling the Infrastructure
+  Vulnerabilities hub's previously-empty "Network Security" card. Added by actually
+  re-running the real pipeline agents (`vuln-ingest-normalizer` →
+  `threat-intel-enricher` → `remediation-planner`), not by hand-editing
+  `normalized-findings.json` - the live CISA KEV/EPSS enrichment confirms it's
+  genuinely KEV-listed (added 2024-04-12) with an EPSS score of ~99.999%, same as the
+  rest of this repo's "real results from the last validated run" claim. Existing
+  finding IDs (FIND-1 through FIND-14) were left untouched; the new record was
+  appended as FIND-15 per the normalizer's stable-ID rule. Sample data now totals 15
+  findings across 7 asset classes (was 14 across 6); 7 KEV-listed, 8 with EPSS ≥ 50%
+  (was 6/7). All hardcoded test/doc counts referencing the old totals were updated to
+  match.
 - **Consistent findings tables (SLA + export) on the Security Domains hub pages**
   (`dashboard/static/js/findingsTable.js`, new shared module) - `/infrastructure` now
   shows a full live findings table (priority, clickable ID, SLA, KEV, EPSS, ATT&CK)

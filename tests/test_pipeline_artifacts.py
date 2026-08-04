@@ -136,8 +136,8 @@ class RemediationNormalizedFindingsAreWellFormed(unittest.TestCase):
         path = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
         cls.findings = json.loads(path.read_text(encoding="utf-8"))
 
-    def test_fourteen_findings_total(self):
-        self.assertEqual(len(self.findings), 14)
+    def test_fifteen_findings_total(self):
+        self.assertEqual(len(self.findings), 15)
 
     def test_every_finding_has_required_fields(self):
         required = {"id", "source", "source_ref", "asset", "title", "severity", "remediation_domain"}
@@ -160,6 +160,7 @@ class RemediationNormalizedFindingsAreWellFormed(unittest.TestCase):
         self.assertEqual(by_id["FIND-12"]["asset"]["type"], "application")     # Log4Shell
         self.assertEqual(by_id["FIND-13"]["asset"]["type"], "certificate")     # SSL cert expiry
         self.assertEqual(by_id["FIND-14"]["asset"]["type"], "certificate")     # deprecated TLS
+        self.assertEqual(by_id["FIND-15"]["asset"]["type"], "network-security-device")  # PAN-OS firewall
 
     def test_remediation_domain_only_set_for_supported_domains(self):
         supported = {"windows-server", "unix-server"}
@@ -241,7 +242,7 @@ class RemediationPlaybooksMatchThePlan(unittest.TestCase):
         self.assertTrue(playbook_ids.issubset(automatable_ids))
 
     def test_no_playbook_for_manual_only_findings(self):
-        manual_only_ids = {"FIND-6", "FIND-7", "FIND-8", "FIND-9", "FIND-12", "FIND-13", "FIND-14"}
+        manual_only_ids = {"FIND-6", "FIND-7", "FIND-8", "FIND-9", "FIND-12", "FIND-13", "FIND-14", "FIND-15"}
         playbook_ids = {p.name.split("-", 2)[0] + "-" + p.name.split("-", 2)[1] for p in self.playbooks}
         self.assertEqual(playbook_ids & manual_only_ids, set())
 
