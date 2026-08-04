@@ -3,11 +3,12 @@ VulnShop AI Assistant - a deliberately vulnerable AI/ML feature bolted onto Vuln
 used ONLY to test VulnHunter's AI/ML detection guidance. DO NOT deploy this anywhere.
 
 Planted vulnerabilities (for scoring / demo reference):
-  10. Hardcoded LLM API key                          -> CWE-798
+  10. Hardcoded LLM API key                          -> CWE-798 -- FIXED below
   11. Insecure deserialization of an uploaded "model" -> CWE-502 (AI/ML supply chain)
   12. Prompt injection via unsanitized concatenation   -> AI/ML: Prompt Injection
   13. Excessive agent autonomy (no approval gate)      -> AI/ML: Excessive Agency
 """
+import os
 import pickle
 import subprocess
 
@@ -15,9 +16,9 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# VULN 10 (CWE-798): hardcoded LLM API key, same class of issue as STRIPE_API_KEY in
-# app.py, just for an AI provider instead of a payment processor.
-ANTHROPIC_API_KEY = "sk-ant-api03-DEMO_FAKE_NOT_A_REAL_KEY_1234567890abcdef"
+# VULN 10 (CWE-798) - FIXED: read from the environment instead of hardcoding, same
+# pattern as STRIPE_API_KEY's fix in app.py.
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 
 def call_llm(prompt):

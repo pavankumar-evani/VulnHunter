@@ -4,29 +4,30 @@ VulnShop, used ONLY to test VulnHunter's Secrets/API-authorization detection gui
 DO NOT deploy this anywhere.
 
 Planted vulnerabilities (for scoring / demo reference):
-  14. Hardcoded AWS access key                        -> CWE-798
-  15. Hardcoded JWT signing secret                     -> CWE-798
+  14. Hardcoded AWS access key                        -> CWE-798 -- FIXED below
+  15. Hardcoded JWT signing secret                     -> CWE-798 -- FIXED below
   16. No authentication/authorization on admin route    -> CWE-284/CWE-863
-  17. Wildcard CORS on a sensitive endpoint             -> CWE-942
-  18. Mass assignment on user profile update            -> CWE-915
+  17. Wildcard CORS on a sensitive endpoint             -> CWE-942 -- FIXED below
+  18. Mass assignment on user profile update            -> CWE-915 -- FIXED below
 """
+import os
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 
-# VULN 14 (CWE-798): hardcoded AWS credentials.
-AWS_ACCESS_KEY_ID = "AKIAFAKE0000000DEMO1"
-AWS_SECRET_ACCESS_KEY = "DEMOfakeSecretAccessKeyNotReal0000000000"
+# VULN 14 (CWE-798) - FIXED: read from the environment instead of hardcoding.
+AWS_ACCESS_KEY_ID = os.environ["AWS_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
 
-# VULN 15 (CWE-798): hardcoded JWT signing secret - anyone with source access can forge
-# a valid admin token.
-JWT_SIGNING_SECRET = "vulnshop-demo-jwt-secret-DO-NOT-USE-IN-PRODUCTION"
+# VULN 15 (CWE-798) - FIXED: read from the environment instead of hardcoding.
+JWT_SIGNING_SECRET = os.environ["JWT_SIGNING_SECRET"]
 
-# VULN 17 (CWE-942): wildcard CORS applied globally, including the admin blueprint below -
-# any origin can read responses from these endpoints via a browser, not just vulnshop's
-# own frontend.
-CORS(app, resources={r"/*": {"origins": "*"}})
+# VULN 17 (CWE-942) - FIXED: scoped to the admin path and a single named origin,
+# configurable via the environment, instead of a wildcard applied to the whole app.
+ADMIN_CONSOLE_ORIGIN = os.environ.get("ADMIN_CONSOLE_ORIGIN", "https://admin.vulnshop.internal")
+CORS(app, resources={r"/admin/*": {"origins": ADMIN_CONSOLE_ORIGIN}})
 
 
 @app.route("/admin/users", methods=["GET"])
@@ -37,13 +38,17 @@ def list_all_users():
     return jsonify({"users": _load_all_users_from_db()})
 
 
+_PROFILE_UPDATABLE_FIELDS = {"name", "email", "phone", "notification_prefs"}
+
+
 @app.route("/admin/users/<user_id>", methods=["PUT"])
 def update_user_profile(user_id):
-    """VULN 18 (CWE-915): mass assignment - the entire request body is applied directly
-    to the user record with no allow-list, so a caller can set fields like `role` or
-    `is_admin` that a profile-update endpoint should never let them touch."""
-    updates = request.get_json(force=True)
-    _apply_updates_to_user(user_id, updates)  # e.g. {"is_admin": true} is accepted as-is
+    """VULN 18 (CWE-915) - FIXED: only an explicit allow-list of profile fields is
+    applied, so a caller can no longer set `role`/`is_admin`/etc. via this endpoint
+    (previously the entire request body was applied to the user record as-is)."""
+    body = request.get_json(force=True) or {}
+    updates = {k: v for k, v in body.items() if k in _PROFILE_UPDATABLE_FIELDS}
+    _apply_updates_to_user(user_id, updates)
     return jsonify({"status": "updated", "user_id": user_id})
 
 

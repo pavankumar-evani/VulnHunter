@@ -102,7 +102,7 @@ output = subprocess.check_output(llm_command, shell=True)
 **Why not auto-fixed:** safe remediation needs an allowlist of permitted actions plus a
 human-approval gate — a workflow/design decision, not a mechanical edit.
 
-### VULN-14 — Hardcoded AWS access key and secret access key — **CRITICAL** (CWE-798)
+### VULN-14 — Hardcoded AWS access key and secret access key — **CRITICAL** (CWE-798) — *already fixed*
 **File:** `admin_api.py:19`
 AWS access key ID and secret access key are hardcoded as module-level constants. Anyone
 with source access can use these credentials to access or abuse whatever AWS
@@ -111,11 +111,12 @@ resources/permissions the underlying IAM identity holds.
 AWS_ACCESS_KEY_ID = "AKIAFAKE0000000DEMO1"
 AWS_SECRET_ACCESS_KEY = "DEMOfakeSecretAccessKeyNotReal0000000000"
 ```
-**Fix:** remove the hardcoded credentials; use an IAM role/instance profile or an
-environment-variable/secrets-manager-backed credential provider instead; rotate the keys
-immediately if they were ever real.
+**Fix:** load both from `os.environ["AWS_ACCESS_KEY_ID"]`/`os.environ["AWS_SECRET_ACCESS_KEY"]`;
+rotate the keys immediately if they were ever real. (A real deployment should prefer an
+IAM role/instance profile over long-lived keys entirely - noted here, not applied, since
+that's an infrastructure change rather than a same-behavior code edit.)
 
-### VULN-15 — Hardcoded JWT signing secret — **CRITICAL** (CWE-798)
+### VULN-15 — Hardcoded JWT signing secret — **CRITICAL** (CWE-798) — *already fixed*
 **File:** `admin_api.py:24`
 The JWT signing secret is hardcoded in source. Anyone with source access can forge
 arbitrary JWTs, including tokens claiming admin privileges, completely bypassing
@@ -123,8 +124,7 @@ authentication for any endpoint that trusts tokens signed with this secret.
 ```
 JWT_SIGNING_SECRET = "vulnshop-demo-jwt-secret-DO-NOT-USE-IN-PRODUCTION"
 ```
-**Fix:** load the signing secret from an environment variable/secrets manager at
-runtime, use a high-entropy random value, and rotate it if it was ever exposed.
+**Fix:** load from `os.environ["JWT_SIGNING_SECRET"]`; rotate it if it was ever exposed.
 
 ### VULN-16 — Admin endpoint exposes all user records with no authentication or authorization — **CRITICAL** (CWE-284)
 **File:** `admin_api.py:32`
@@ -159,7 +159,7 @@ their other accounts too.
 would need a migration/re-registration plan, which is a product decision, not a
 same-behavior mechanical fix.
 
-### VULN-10 — Hardcoded LLM API key (Anthropic) — **HIGH** (CWE-798)
+### VULN-10 — Hardcoded LLM API key (Anthropic) — **HIGH** (CWE-798) — *already fixed*
 **File:** `ai_assistant.py:20`
 The Anthropic API key is hardcoded as a module-level string constant. Anyone with read
 access to the repository (or a decompiled/deployed artifact) can extract and reuse the
@@ -167,8 +167,7 @@ key to make billed API calls or exfiltrate it.
 ```
 ANTHROPIC_API_KEY = "sk-ant-api03-DEMO_FAKE_NOT_A_REAL_KEY_1234567890abcdef"
 ```
-**Fix:** load the key from an environment variable or secrets manager; remove the
-literal value from source control; rotate the key if it was ever real.
+**Fix:** load from `os.environ["ANTHROPIC_API_KEY"]`; rotate the key if it was ever real.
 
 ### VULN-12 — Prompt injection via unsanitized concatenation of user input into system prompt — **HIGH** (AI/ML: Prompt Injection)
 **File:** `ai_assistant.py:47`
@@ -187,7 +186,7 @@ system_prompt = (
 call (keeping system/user roles separate) — a change to the prompting architecture, not
 a one-line patch.
 
-### VULN-17 — Wildcard CORS policy applied to sensitive admin endpoints — **HIGH** (CWE-942)
+### VULN-17 — Wildcard CORS policy applied to sensitive admin endpoints — **HIGH** (CWE-942) — *already fixed*
 **File:** `admin_api.py:29`
 CORS is configured globally with `allow_origins="*"` for every route, including the
 `/admin/users` endpoints. This allows any origin's client-side JavaScript to read
@@ -196,10 +195,11 @@ of VULN-16.
 ```
 CORS(app, resources={r"/*": {"origins": "*"}})
 ```
-**Fix:** restrict CORS to an explicit allow-list of trusted origins, and do not apply
-permissive CORS to admin/internal routes at all.
+**Fix:** scope CORS to the `/admin/*` path only, restricted to a single named origin
+(`ADMIN_CONSOLE_ORIGIN`, configurable via the environment) instead of a wildcard applied
+to the whole app.
 
-### VULN-18 — Mass assignment on user profile update endpoint — **HIGH** (CWE-915)
+### VULN-18 — Mass assignment on user profile update endpoint — **HIGH** (CWE-915) — *already fixed*
 **File:** `admin_api.py:40`
 The `PUT /admin/users/<user_id>` handler takes the entire raw JSON request body and
 applies it directly to the user record with no explicit field allow-list. A caller can
@@ -209,8 +209,9 @@ user record as-is, enabling privilege escalation.
 updates = request.get_json(force=True)
 _apply_updates_to_user(user_id, updates)  # e.g. {"is_admin": true} is accepted as-is
 ```
-**Fix:** define an explicit allow-list of user-editable fields and copy only those keys
-from the request body, rejecting any other keys such as `role`/`is_admin`.
+**Fix:** applied an explicit allow-list (`name`, `email`, `phone`, `notification_prefs`)
+and copy only those keys from the request body, rejecting any other keys such as
+`role`/`is_admin`.
 
 ### VULN-5 — Debug mode enabled in entrypoint — **MEDIUM** (CWE-489) — *already fixed*
 **File:** `app.py:90`
@@ -235,12 +236,11 @@ verify compatibility.
 
 ## Remediation plan
 
-**Already fixed, historical record (6):** VULN-1, VULN-2, VULN-4, VULN-5, VULN-7,
-VULN-8 — all mechanical, behavior-preserving edits applied in an earlier pass.
-
-**Auto-fixing now (5):** VULN-10, VULN-14, VULN-15, VULN-17, VULN-18 — all mechanical,
-behavior-preserving edits (move a secret to an environment variable, replace a wildcard
-CORS origin list, add a field allow-list).
+**Already fixed, historical record (11):** VULN-1, VULN-2, VULN-4, VULN-5, VULN-7,
+VULN-8, VULN-10, VULN-14, VULN-15, VULN-17, VULN-18 — all mechanical, behavior-preserving
+edits (secrets moved to environment variables, parameterized SQL, arg-list subprocess
+calls, non-root container user, debug-mode env gate, CORS scoped to a single named
+origin, field allow-list added for mass assignment).
 
 **Needs human review (7):** VULN-3, VULN-6, VULN-9, VULN-11, VULN-12, VULN-13, VULN-16
 (see reasons above) — architectural/design decisions an automated fixer can't safely
