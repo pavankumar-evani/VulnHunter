@@ -10,6 +10,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
 import { icon } from "../icons.js";
 import { categoryFor } from "./vulnhunt.js";
+import { findingsTableHtml, wireFindingsTable } from "../findingsTable.js";
 
 export const title = "Application Vulnerabilities";
 
@@ -32,8 +33,9 @@ export async function render(container) {
   const secretsTotal = sastFindings.filter((f) => categoryFor(f.CWE, f.File) === "Secrets").length;
   const containerTotal = sastFindings.filter((f) => categoryFor(f.CWE, f.File) === "Container").length;
   const apiTotal = sastFindings.filter((f) => categoryFor(f.CWE, f.File) === "API").length;
-  const scaTotal = queue.findings.filter((f) => f.scan_type === "sca").length;
-  const dastTotal = queue.findings.filter((f) => f.scan_type === "dast").length;
+  const scaDastFindings = queue.findings.filter((f) => f.scan_type === "sca" || f.scan_type === "dast");
+  const scaTotal = scaDastFindings.filter((f) => f.scan_type === "sca").length;
+  const dastTotal = scaDastFindings.filter((f) => f.scan_type === "dast").length;
 
   container.innerHTML = `
     <p class="subtitle">Application-layer findings only - source code (SAST), bundled/
@@ -73,5 +75,19 @@ export async function render(container) {
       from <code>/api/vulnhunt</code> and <code>/api/queue</code>, the same data the Code
       Scan and Remediation Queue pages already show. Click any card to jump to the
       pre-filtered underlying view.
-    </div>`;
+    </div>
+
+    <h2>SCA and DAST findings (SLA-tracked)</h2>
+    <p class="subtitle">
+      SAST, Secrets, Container, and API findings come from source-code scanning
+      (<a href="/vulnhunt" data-link>Code Scan Results</a>) and aren't SLA-tracked queue
+      items by design - see the callout there. SCA and DAST findings are, so they get
+      the same live findings table as the Remediation Queue.
+    </p>
+    ${findingsTableHtml("appsec-hub")}`;
+
+  wireFindingsTable(container, scaDastFindings, {
+    exportGroupId: "appsec-hub",
+    filenameBase: "vulnhunter-appsec-sca-dast",
+  });
 }

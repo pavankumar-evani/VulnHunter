@@ -8,6 +8,8 @@ import { initNotificationBell } from "./notifications.js";
 import { initGlobalSearch } from "./search.js";
 import { initSidebarToggle } from "./sidebarToggle.js";
 import { initTooltips } from "./tooltip.js";
+import { initThreatTip } from "./threatTip.js";
+import { initPageFooter } from "./pageFooter.js";
 
 const routes = [
   { pattern: /^\/$/, load: () => import("./pages/overview.js") },
@@ -125,4 +127,6 @@ initNotificationBell();
 initAccountChip();
 initSidebarToggle();
 initTooltips();
+initThreatTip();
+initPageFooter();
 renderRoute();

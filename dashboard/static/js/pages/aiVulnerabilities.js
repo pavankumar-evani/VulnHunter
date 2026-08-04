@@ -8,8 +8,19 @@
 // count to be zero, not faked - see the FAQ.
 import { escapeHtml } from "../dom.js";
 import { api } from "../api.js";
+import { exportButtonsHtml, wireExportButtons } from "../export.js";
 
 export const title = "AI Vulnerabilities";
+
+const EXPORT_COLUMNS = [
+  { label: "Category", value: (v) => v.name },
+  { label: "Summary", value: (v) => v.summary },
+  { label: "Remediation", value: (v) => v.remediation },
+  { label: "ATLAS Tactic", value: (v) => v.atlas_tactic },
+  { label: "ATLAS Technique ID", value: (v) => v.atlas_technique_id },
+  { label: "ATLAS Technique Name", value: (v) => v.atlas_technique_name },
+  { label: "Finding Count", value: (v) => v.count },
+];
 
 // Same canonical-ish ordering convenience as risk.js's TACTIC_ORDER, but built from
 // whatever tactics this taxonomy actually uses (ATLAS has more tactics than the ten
@@ -72,6 +83,8 @@ function vulnerabilityCard(v) {
 export async function render(container) {
   container.innerHTML = `<div class="empty-state">Loading…</div>`;
   const { vulnerabilities, heatmap } = await api.aiVulnerabilities();
+  const countById = new Map(heatmap.map((row) => [row.id, row.count]));
+  const exportRows = vulnerabilities.map((v) => ({ ...v, count: countById.get(v.id) || 0 }));
 
   container.innerHTML = `
     <p class="subtitle">Real, established AI/ML security concepts - prompt injection,
@@ -100,7 +113,14 @@ export async function render(container) {
 
     <h2 style="margin-top:28px">AI/ML vulnerability categories</h2>
     <p class="filter-count" style="margin:-4px 0 8px">Click a category for its summary and remediation guidance.</p>
+    ${exportButtonsHtml("ai-vuln")}
     <div class="faq-list">
       ${vulnerabilities.map(vulnerabilityCard).join("")}
     </div>`;
+
+  wireExportButtons(container, "ai-vuln", {
+    getRows: () => exportRows,
+    columns: EXPORT_COLUMNS,
+    filenameBase: "vulnhunter-ai-vulnerabilities",
+  });
 }

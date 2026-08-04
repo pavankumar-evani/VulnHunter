@@ -10,6 +10,7 @@ import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
 import { icon } from "../icons.js";
 import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
+import { findingsTableHtml, wireFindingsTable } from "../findingsTable.js";
 
 export const title = "Infrastructure Vulnerabilities";
 
@@ -44,8 +45,12 @@ export async function render(container) {
   const queue = await api.queue();
 
   const counts = Object.fromEntries(INFRA_CATEGORIES.map((c) => [c, 0]));
+  const infraFindings = [];
   for (const f of queue.findings) {
-    if (f.infra_category && f.infra_category in counts) counts[f.infra_category] += 1;
+    if (f.infra_category && f.infra_category in counts) {
+      counts[f.infra_category] += 1;
+      infraFindings.push(f);
+    }
   }
 
   container.innerHTML = `
@@ -68,6 +73,14 @@ export async function render(container) {
       straight from <code>/api/queue</code>'s <code>infra_category</code> field
       (<code>remediation/enrichment/infra_classification.py</code>), the same data the
       Remediation Queue page already shows. Click any card to jump to the
-      pre-filtered underlying view.
-    </div>`;
+      pre-filtered underlying view, or a finding's ID below for its full detail.
+    </div>
+
+    <h2>All infrastructure findings</h2>
+    ${findingsTableHtml("infra-hub")}`;
+
+  wireFindingsTable(container, infraFindings, {
+    exportGroupId: "infra-hub",
+    filenameBase: "vulnhunter-infrastructure-vulnerabilities",
+  });
 }

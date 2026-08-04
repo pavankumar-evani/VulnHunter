@@ -7,6 +7,29 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Consistent findings tables (SLA + export) on the Security Domains hub pages**
+  (`dashboard/static/js/findingsTable.js`, new shared module) - `/infrastructure` now
+  shows a full live findings table (priority, clickable ID, SLA, KEV, EPSS, ATT&CK)
+  for every infra sub-category combined, and `/appsec` shows the same table scoped to
+  its SLA-tracked SCA/DAST findings (SAST/Secrets/Container/API stay card-links into
+  `/vulnhunt`, since raw code-scan findings aren't SLA-tracked queue items by design -
+  that distinction is called out on the page rather than faking an SLA for them).
+  `/ai-vulnerabilities` gets CSV/JSON/MD export of its taxonomy + heat-map counts
+  instead (its findings are honestly all zero today, so a findings table there would
+  just be empty). All three now match the Live Remediation Queue's look, per the
+  "sub-domain dashboards need to look consistent" ask.
+- **Dismissible top threat-intel tip banner and a bottom page footer, shown on every
+  route** (`dashboard/static/js/threatTip.js`, `dashboard/static/js/pageFooter.js`,
+  new; wired once from `app.js`, living in `index.html`'s shell as siblings of `#app`
+  so they persist across client-side navigation, same pattern as
+  `flash-container`/`modal-root`). The top banner surfaces a real, live-computed fact
+  from the same CISA KEV + FIRST.org EPSS data already on `/queue` (e.g. "N KEV-listed
+  findings are past SLA", the single highest-EPSS finding) - never a canned message,
+  and only ever says something the data actually supports; a close (×) dismisses it
+  for the rest of the browser session (`sessionStorage`). The bottom footer shows
+  live finding/playbook counts plus quick links to FAQ/Support/Priority Rules/scope
+  docs. Both stay hidden on the login page and reappear immediately after sign-in
+  (listening for the existing `vulnhunter-auth-changed` event, no reload needed).
 - **Clickable finding ID opens a full detail view** (`dashboard/static/js/findingDetail.js`,
   new) — clicking any finding's ID in the live Remediation Queue opens a modal (reusing
   `dom.js`'s existing `openModal`/`closeModal` pattern) showing everything the normalized

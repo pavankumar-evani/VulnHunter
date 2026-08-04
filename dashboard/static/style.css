@@ -675,6 +675,53 @@ code {
 .flash-success { background: #dcfce7; color: #166534; }
 .flash-error { background: var(--danger-bg); color: var(--danger); }
 
+/* --- Top-of-page threat-intel tip banner (threatTip.js) --- */
+#threat-tip-banner:empty { margin: 0; }
+.threat-tip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  font-size: 0.88rem;
+  flex-wrap: wrap;
+}
+.threat-tip .icon { flex-shrink: 0; }
+.threat-tip-text { flex: 1; min-width: 0; }
+.threat-tip-text a { color: inherit; font-weight: 600; white-space: nowrap; }
+.threat-tip-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.threat-tip-close:hover { opacity: 0.7; }
+
+/* --- Bottom-of-page footer (pageFooter.js) --- */
+#page-footer:empty { margin: 0; }
+.page-footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.page-footer-links { display: flex; gap: 14px; flex-wrap: wrap; }
+.page-footer-links a { color: var(--text-muted); }
+.page-footer-links a:hover { color: var(--brand-accent); }
+
 /* --- SLA / priority badges --- */
 .badge-priority-critical { background: #7f1d1d; color: white; }
 .badge-priority-high { background: #fee2e2; color: #991b1b; }
