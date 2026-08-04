@@ -50,22 +50,25 @@ const FAQS = [
     "scanner already detected (root user, baked-in secrets, unpinned base image) - they " +
     "were just falling into a generic \"Other\" bucket before a small category-mapping " +
     "fix. API Vulnerabilities is new detection guidance for future scans (missing auth, " +
-    "wildcard CORS, mass assignment) - same honest treatment as DAST: wired up and real, " +
-    "but shows 0 findings today since the demo app has no planted example."],
+    "wildcard CORS, mass assignment) - wired up and real, but shows 0 findings today " +
+    "since the demo app has no planted example (DAST, by contrast, now has real sample " +
+    "data - see the next answer)."],
   ["Where did SAST/DAST/Secrets/SCA/Container/API go from the sidebar?",
     "Still real, working pages - just not separate menu entries. They're cards on the " +
     "Application Vulnerabilities hub (/appsec) instead, so the main menu shows one " +
     "entry per domain, not per sub-category. Infrastructure Vulnerabilities got the " +
     "same treatment: /infrastructure splits it into OS/Network/Network Security/OT-IoT/" +
-    "Cloud cards. Cloud Infrastructure honestly shows 0 findings - no cloud-asset " +
-    "finding in this repo's demo data, same as DAST and API Vulnerabilities."],
+    "Cloud cards. Cloud Infrastructure and DAST both used to honestly show 0 findings; " +
+    "both now have real sample data (~300 each, real CVEs from NVD for Cloud, real " +
+    "CWE/OWASP classes for DAST since dynamic-testing bugs aren't CVE-numbered). API " +
+    "Vulnerabilities still shows 0, same honest treatment, for the reason above."],
   ["Is the AI Vulnerabilities page's MITRE ATLAS mapping authoritative?",
     "No, and it says so on the page itself. The ten AI/ML vulnerability categories " +
     "(prompt injection, model poisoning, supply-chain compromise, etc.) each cross-" +
     "reference a MITRE ATLAS tactic/technique - this module's own reading of published " +
     "ATLAS docs, not a verified mapping, same \"suggestion to verify\" posture as the " +
     "existing ATT&CK heat map. Shows 0 findings against real demo data, same honest " +
-    "treatment as DAST and API Vulnerabilities - nothing faked to look populated."],
+    "treatment as API Vulnerabilities - nothing faked to look populated."],
   ["Is the owner suggestion on Asset Inventory real machine learning?",
     "No. It's three transparent, weighted pattern-matching signals - hostname naming " +
     "convention, IP subnet, and asset type (plus MAC vendor matching for type " +

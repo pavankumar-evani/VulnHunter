@@ -304,29 +304,45 @@ rather than a promise to build N vendor-specific ones with no way to verify them
 
 ---
 
-## Not yet built
+## Reference catalog: researched, not yet built
 
 The connector *pattern* — vendor auth flow, paginated fetch, mapping into a stable
 internal schema, mocked-HTTP unit tests, an explicit "built vs. verified" caveat — is now
 proven eight times over for vulnerability-finding connectors (Tenable, Armis, ServiceNow,
 Jira, Splunk, CrowdStrike) and asset-inventory connectors (Infoblox, Axonius), plus the
 generic webhook adapter above for anything that can push data to VulnHunter rather than
-needing VulnHunter to pull from it. A **bespoke, vendor-specific pull connector**
-(matching a particular product's own auth/pagination/query language, the way Tenable's
-and Armis's do) is the same pattern again for:
+needing VulnHunter to pull from it.
 
-- **Microsoft Sentinel**
-- **IBM QRadar**
-- **Microsoft Defender**
-- **Qualys**
-
-None of these are built. Each is gated on picking a specific vendor and having real API
-docs (or, better, sandbox/tenant access to verify against) — not a technical blocker, a
-scoping one. See
+The 14 entries below are the same idea one stage earlier: real, researched facts about
+each product's actual public API (auth model, real endpoint/data shape, what would flow)
+— visible on the dashboard's consolidated **Adaptors** hub (`/adaptors`, pick "Reference"
+from the dropdown) via `dashboard/static/js/adaptorCatalog.js` — but with **no working
+code or tests behind them yet**. That's the honest, one-step-earlier label this repo
+already uses elsewhere ("built against docs, unit-tested, never exercised against a live
+tenant" for the eight connectors above); these simply haven't had the "built against
+docs" step done yet either. Each is gated on picking a specific vendor and building +
+testing the bespoke pull/push logic (or, better, getting sandbox/tenant access to verify
+against) — not a technical blocker, a scoping one. See
 [KNOWLEDGE_TRANSFER.md §11](../KNOWLEDGE_TRANSFER.md#11-the-enterprisemssp-platform-ask--scope-reality-check)
-for the full reasoning on why these (and dark-web monitoring, and "AI-based
-anomaly/behavioral detection") were deliberately scoped out rather than attempted
-alongside everything else — this document doesn't re-argue that case, only points at it.
+for the full reasoning on why building all of these out fully was deliberately scoped out
+rather than attempted alongside everything else.
+
+| Connector | Category | Auth model | Integration shape |
+|---|---|---|---|
+| Qualys VMDR | Vulnerability Scanners | API key + Basic Auth per Cloud Platform pod | Pull: host-based findings, same schema as Tenable |
+| Rapid7 InsightVM | Vulnerability Scanners | API key (`X-Api-Key`) | Pull: assets/vulnerabilities endpoints |
+| Wiz | Cloud Security (CNAPP) | OAuth2 client-credentials (GraphQL API) | Pull: issues/vulnerabilities → `asset.type=cloud-infrastructure` |
+| Prisma Cloud | Cloud Security (CNAPP) | API key + secret → exchanged token | Pull: alerts/compliance API → cloud-infrastructure findings |
+| AWS Security Hub | Cloud Security (CNAPP) | AWS IAM (SigV4-signed requests) | Pull: `GetFindings` (AWS Security Finding Format, a published schema) |
+| Microsoft Defender for Cloud | Cloud Security (CNAPP) | Azure AD (Entra ID) service principal | Pull: assessments/alerts APIs → cloud-infrastructure findings |
+| IBM QRadar | SIEM / SOAR | SEC token (API key) | Push: offenses/events, same direction as Splunk HEC |
+| Microsoft Sentinel | SIEM / SOAR | Azure AD service principal | Push (Log Analytics Data Collector) or pull (incidents API) |
+| Palo Alto Cortex XSOAR | SIEM / SOAR | API key | Push: create an Incident per finding, triggers org playbooks |
+| SentinelOne | XDR / EDR | API token | Pull: threats API → behavioral findings (cve/cvss/kev/epss null, same as CrowdStrike) |
+| Microsoft Defender for Endpoint | XDR / EDR | Azure AD app registration (Graph Security API) | Pull: alerts endpoint → behavioral findings |
+| Slack | Communication / On-Call | Bot token (OAuth2) or Incoming Webhook | Push: post notification-worthy events to a channel |
+| Microsoft Teams | Communication / On-Call | Incoming Webhook, or Graph API for adaptive cards | Push: same notification events as Slack |
+| PagerDuty | Communication / On-Call | Events API v2 routing key | Push: page only the highest-urgency subset (confirmed KEV + SLA-breached Critical) |
 
 ---
 

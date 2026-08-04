@@ -239,6 +239,20 @@ perimeter firewall, an IoT camera and OT controller, a mobile endpoint, a
 Log4Shell-vulnerable application, and 2 certificate/TLS findings) are fully planned in
 `REMEDIATION_PLAN.md` with a clear reason no fixer exists yet for that asset class.
 
+### Optional: bulk real-CVE sample data (2,400 more findings)
+
+The 15 findings above are the original, individually hand-curated set. Separately,
+`remediation/sample-data/generate_bulk_findings.py` sources ~300 additional real,
+distinct CVEs per category (OS, Network, Network Security, Cloud Infrastructure,
+Certificate, SCA, DAST, OT/IoT) from NVD's public CVE API - real CVE IDs, CVSS scores,
+and vendor descriptions, not fabricated - and `bulk_normalize.py` /
+`remediation/enrichment/kev_epss.py` / `bulk_plan.py` merge, classify, and enrich them
+the same way `/remediate` does, at a scale (2,400 findings) an LLM-subagent pass can't
+practically handle. Running `/remediate` fresh (with the default 3 sample files) still
+produces the original 15 - the shipped `remediation/output/normalized-findings.json` and
+`REMEDIATION_PLAN.md` in this repo already include the bulk-expanded 2,415 total. See
+that script's module docstring for exactly what it does and doesn't claim.
+
 ## Project structure
 
 ```

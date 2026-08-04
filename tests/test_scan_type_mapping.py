@@ -19,9 +19,20 @@ class ClassifyFinding(unittest.TestCase):
         finding = {"asset": {"type": "certificate"}}
         self.assertEqual(classify_finding(finding), "cert-mgmt")
 
-    def test_application_asset_is_sca(self):
-        finding = {"asset": {"type": "application"}}
+    def test_application_asset_with_a_cve_is_sca(self):
+        """Has a CVE => a versioned, publicly-tracked vulnerable dependency - SCA."""
+        finding = {"asset": {"type": "application"}, "cve": "CVE-2021-44228"}
         self.assertEqual(classify_finding(finding), "sca")
+
+    def test_application_asset_without_a_cve_is_dast(self):
+        """No CVE => an app-specific bug found by actively probing the running app,
+        not a versioned shared component anyone else could look up - DAST."""
+        finding = {"asset": {"type": "application"}, "cve": None}
+        self.assertEqual(classify_finding(finding), "dast")
+
+    def test_application_asset_missing_cve_key_entirely_is_dast(self):
+        finding = {"asset": {"type": "application"}}
+        self.assertEqual(classify_finding(finding), "dast")
 
     def test_windows_server_asset_is_infra_vm(self):
         finding = {"asset": {"type": "windows-server"}}
@@ -55,11 +66,12 @@ class TagScanTypes(unittest.TestCase):
     def test_tags_a_mixed_batch_correctly(self):
         findings = [
             {"id": "FIND-1", "asset": {"type": "certificate"}},
-            {"id": "FIND-2", "asset": {"type": "application"}},
+            {"id": "FIND-2", "asset": {"type": "application"}, "cve": "CVE-2021-44228"},
             {"id": "FIND-3", "asset": {"type": "windows-server"}},
+            {"id": "FIND-4", "asset": {"type": "application"}, "cve": None},
         ]
         tagged = tag_scan_types(findings)
-        self.assertEqual([f["scan_type"] for f in tagged], ["cert-mgmt", "sca", "infra-vm"])
+        self.assertEqual([f["scan_type"] for f in tagged], ["cert-mgmt", "sca", "infra-vm", "dast"])
 
 
 class Taxonomy(unittest.TestCase):

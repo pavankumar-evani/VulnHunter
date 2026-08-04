@@ -7,6 +7,44 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Massive real-data expansion: 15 → 2,415 findings**, sourced from NVD's public CVE
+  API, not fabricated (`remediation/sample-data/generate_bulk_findings.py`, new). Added
+  ~300 real, distinct CVEs to each of: OS (180 Windows + 120 Linux), Network
+  (Cisco/Juniper/Arista), Network Security (Fortinet/Palo Alto/Check Point/F5/SonicWall/
+  Citrix), Cloud Infrastructure (Kubernetes/Docker/AWS/Azure/GCP - a brand-new,
+  previously-empty category), Certificate/TLS (OpenSSL/GnuTLS/X.509), SCA (Log4j/Struts/
+  Spring/jQuery/etc.), and OT/IoT (SCADA/cameras/PLCs/building automation, via Armis-shaped
+  data). DAST (300 findings) is the one deliberate exception: real dynamic-testing bugs
+  aren't CVE-numbered, so these carry real, well-established CWE/OWASP vulnerability
+  classes (reflected/stored XSS, SQLi, SSRF, XXE, IDOR, etc.) instead - required teaching
+  `remediation/enrichment/scan_type_mapping.py` a new real distinguishing signal
+  (`application` + has a CVE → SCA, `application` + no CVE → DAST) since DAST had no path
+  to real data before. All 2,400 new findings went through the same real pipeline
+  (`remediation/sample-data/bulk_normalize.py` implementing vuln-ingest-normalizer.md's
+  documented classification rules as a script - an LLM-subagent pass isn't tractable at
+  this volume - then the real, live `remediation/enrichment/kev_epss.py` against CISA
+  KEV + FIRST.org EPSS: 41 genuinely KEV-listed, 152 with EPSS ≥ 50%). REMEDIATION_PLAN.md
+  was regenerated the same way (`remediation/sample-data/bulk_plan.py`), with a disclosed,
+  uniform action_type/risk_tier heuristic for the bulk majority (vs. individual per-CVE
+  research for the original 15) and its per-finding prose section capped to the top 60
+  by priority for readability - the compact queue table (all `dashboard/data.py` actually
+  parses) still covers every finding. AI Vulnerabilities and SAST-side code-scan
+  categories (Secrets/Container/API) were deliberately left out of this wave - see the
+  session notes on why (git-branch dependency for `/vulnhunt`'s data source).
+- **Consolidated Adaptors hub** (`/adaptors`, `dashboard/static/js/pages/adaptors.js`,
+  `dashboard/static/js/adaptorCatalog.js`) - replaces four separate "Adaptors — X"
+  sidebar groups (Ticketing/SOAR, SIEM, XDR/EDR, Asset Discovery/IPAM, six items total)
+  with one nav entry and a single dropdown/filter selector; picking a connector
+  dynamically renders its settings/preview panel below, reusing the existing
+  ServiceNow/Jira/Splunk/CrowdStrike/Infoblox/Axonius page modules unchanged. Also adds
+  14 new "reference catalog" connector entries - real, researched facts (auth model,
+  actual API/data shape) for Qualys, Rapid7 InsightVM, Wiz, Prisma Cloud, AWS Security
+  Hub, Microsoft Defender for Cloud, IBM QRadar, Microsoft Sentinel, Cortex XSOAR,
+  SentinelOne, Microsoft Defender for Endpoint, Slack, Microsoft Teams, and PagerDuty -
+  each honestly labeled "Reference" (no working preview/send code yet) versus the six
+  "Preview available" live connectors, one clear step short of the existing
+  built-against-docs-but-unverified honesty tier. `docs/INTEGRATIONS.md`'s former "Not
+  yet built" list is now this same researched catalog in doc form.
 - **A real `network-security-device` finding in the sample data** (`remediation/sample-data/tenable_export.csv`)
   - a Palo Alto Networks PAN-OS GlobalProtect command injection (CVE-2024-3400), a
   real, well-known, actively-exploited 2024 CVE, filling the Infrastructure

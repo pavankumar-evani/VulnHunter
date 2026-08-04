@@ -223,9 +223,8 @@ export async function render(container) {
   }
 
   function infraTypeOptions() {
-    // Always lists every known sub-category (see infraTypes.js), including "cloud"
-    // which has no sample data yet - same "show the full known taxonomy" reasoning
-    // as categoryOptions() below.
+    // Always lists every known sub-category (see infraTypes.js) - same "show the full
+    // known taxonomy" reasoning as categoryOptions() below.
     return INFRA_CATEGORIES.map((value) =>
       `<option value="${value}" ${value === filters.infraType ? "selected" : ""}>${escapeHtml(INFRA_CATEGORY_LABELS[value])}</option>`).join("");
   }
@@ -328,9 +327,10 @@ export async function render(container) {
         at <a href="/remediate" data-link>/remediate</a>. MITRE ATT&amp;CK tags are a
         keyword heuristic, not authoritative technique attribution — see
         <code>remediation/enrichment/attack_mapping.py</code>'s docstring. "Category" is a
-        methodology taxonomy (Infrastructure VM / SCA / Cert-Mgmt) inferred from asset
-        type — see <code>remediation/enrichment/scan_type_mapping.py</code>'s docstring
-        for what it does and doesn't claim (and why DAST has no sample data yet).
+        methodology taxonomy (Infrastructure VM / SCA / Cert-Mgmt / DAST) inferred from
+        asset type (and, for application findings, whether a CVE is present) — see
+        <code>remediation/enrichment/scan_type_mapping.py</code>'s docstring for what it
+        does and doesn't claim.
       </div>`;
     wireControls();
     wireExportButtons(container, "queue", {

@@ -129,10 +129,10 @@ image has none) or an unmapped CWE (CWE-250 for running as root) didn't match th
 category lookup in `dashboard/static/js/pages/vulnhunt.js`. That's fixed, so this
 category shows real findings today. **API Vulnerabilities** is newly-added detection
 guidance in `.claude/agents/vuln-scanner.md` (missing authentication on a route,
-wildcard CORS, mass assignment) for scans going forward - same honest treatment as
-DAST: the category and its CWE mappings are real and wired up, but it shows 0
-findings today because the demo app has no planted API-security example, and one
-wasn't fabricated just to fill the card.
+wildcard CORS, mass assignment) for scans going forward - the category and its CWE
+mappings are real and wired up, but it shows 0 findings today because the demo app has
+no planted API-security example, and one wasn't fabricated just to fill the card (DAST,
+by contrast, now has real sample data - see the next answer).
 
 ### Where did SAST/DAST/Secrets/SCA/Container/API go from the sidebar?
 
@@ -143,9 +143,12 @@ Infrastructure, AI, Certificate) rather than every sub-category flattened into t
 sidebar. Same idea for Infrastructure Vulnerabilities: `/infrastructure` now splits
 it into OS, Network, Network Security, OT/IoT, and Cloud Infrastructure cards
 (`remediation/enrichment/infra_classification.py`, a lookup against `asset.type`)
-rather than one flat link. Cloud Infrastructure shows 0 findings honestly - there's
-no cloud-asset finding in this repo's demo data, same treatment DAST and API
-Vulnerabilities already get.
+rather than one flat link. Cloud Infrastructure and DAST both used to show 0 findings
+honestly (no sample data for either); both now have real sample data (~300 each,
+sourced from NVD's public CVE API for Cloud, real CWE/OWASP vulnerability classes for
+DAST since dynamic-testing bugs aren't CVE-numbered - see
+`remediation/sample-data/generate_bulk_findings.py`). API Vulnerabilities still shows 0
+findings, same honest treatment, for the reason in the previous answer.
 
 ### Is the AI Vulnerabilities page's MITRE ATLAS mapping authoritative?
 
@@ -159,9 +162,9 @@ cross-reference is this module's own reading of published ATLAS documentation
 - exactly the same "keyword heuristic, suggestion to verify, not a fact to cite"
 posture already applied to the Risk Dashboard's MITRE ATT&CK heat map. Verify any
 specific tactic/technique ID against atlas.mitre.org before citing it formally. Like
-DAST and API Vulnerabilities, this shows 0 findings against this repo's real demo
-data - there's no AI/ML component in `vulnerable-demo-app/` to actually trigger it,
-and nothing was faked to make the category look populated.
+API Vulnerabilities, this shows 0 findings against this repo's real demo data - there's
+no AI/ML component in `vulnerable-demo-app/` to actually trigger it, and nothing was
+faked to make the category look populated.
 
 ### Is the owner suggestion on `/assets` real machine learning?
 

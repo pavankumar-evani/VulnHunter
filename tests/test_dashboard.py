@@ -89,36 +89,58 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
         self.assertEqual(vh["auto_fixable"], 6)
 
     def test_remediation_findings_match_known_total(self):
+        """Real total at time of writing: 15 hand-curated findings from the original
+        pipeline validation + 2,400 real-CVE findings added via bulk NVD sourcing (see
+        remediation/sample-data/generate_bulk_findings.py) = 2,415. This is a moving
+        target as more real data is added, so this asserts "at least the known floor"
+        rather than an exact snapshot - see test_pipeline_artifacts.py for the
+        structural well-formedness checks that matter regardless of exact count."""
         findings = dashboard_data.load_remediation_findings()
-        self.assertEqual(len(findings), 15)
+        self.assertGreaterEqual(len(findings), 2415)
 
     def test_remediation_plan_queue_matches_findings_count(self):
         plan = dashboard_data.load_remediation_plan()
         self.assertTrue(plan["available"])
-        self.assertEqual(len(plan["queue"]), 15)
+        findings = dashboard_data.load_remediation_findings()
+        self.assertEqual(len(plan["queue"]), len(findings))
 
     def test_risk_tier_counts_match_known_split(self):
         plan = dashboard_data.load_remediation_plan()
-        self.assertEqual(plan["risk_tier_counts"].get("auto-approvable"), 2)
-        self.assertEqual(plan["risk_tier_counts"].get("needs-change-approval"), 5)
-        self.assertEqual(plan["risk_tier_counts"].get("manual-only"), 8)
+        counts = plan["risk_tier_counts"]
+        # Structural invariants rather than exact counts (which grow as more real
+        # findings are added): every tier present, and they sum to the full queue.
+        for tier in ("auto-approvable", "needs-change-approval", "manual-only"):
+            self.assertIn(tier, counts)
+            self.assertGreater(counts[tier], 0)
+        self.assertEqual(sum(counts.values()), len(plan["queue"]))
 
     def test_playbooks_match_known_count(self):
+        """Real generated Ansible playbooks - still only for the original 7
+        auto/needs-change-approval findings from the hand-curated set (FIND-1, 2, 3, 4,
+        5, 10, 11). Generating playbooks for the bulk-sourced auto-approvable findings
+        too is a deliberately separate, not-yet-done follow-up (see REMEDIATION_PLAN.md's
+        scale note) - /remediate already handles a finding with no playbook gracefully
+        ("none" in the Playbook column), this isn't a gap this test should paper over."""
         playbooks = dashboard_data.load_playbooks()
         self.assertEqual(len(playbooks), 7)
 
     def test_kev_and_high_epss_counts(self):
+        """Real, live-verified counts against CISA KEV + FIRST.org EPSS at time of
+        writing: 41 KEV-listed, 152 with EPSS >= 50% (see remediation/enrichment/kev_epss.py).
+        Asserts a floor, not an exact snapshot - see test_remediation_findings_match_known_total."""
         findings = dashboard_data.load_remediation_findings()
-        self.assertEqual(dashboard_data.count_kev_listed(findings), 7)
-        self.assertEqual(dashboard_data.count_high_epss(findings), 8)
+        self.assertGreaterEqual(dashboard_data.count_kev_listed(findings), 41)
+        self.assertGreaterEqual(dashboard_data.count_high_epss(findings), 152)
 
     def test_asset_type_breakdown_covers_all_categories(self):
         findings = dashboard_data.load_remediation_findings()
         breakdown = dashboard_data.asset_type_breakdown(findings)
-        self.assertEqual(sum(breakdown.values()), 15)
+        self.assertEqual(sum(breakdown.values()), len(findings))
         for expected_type in ("windows-server", "unix-server", "network-routing-switching",
-                               "network-security-device", "iot-ot-device", "application", "certificate"):
+                               "network-security-device", "iot-ot-device", "application",
+                               "certificate", "cloud-infrastructure"):
             self.assertIn(expected_type, breakdown)
+            self.assertGreater(breakdown[expected_type], 0)
 
     def test_no_mojibake_in_parsed_text(self):
         """Regression guard for the subprocess-encoding bug: git output must be decoded
@@ -137,10 +159,10 @@ class ApiOverview(unittest.TestCase):
         payload = resp.json()
         self.assertEqual(payload["vulnhunt"]["total"], 9)
         self.assertEqual(payload["vulnhunt"]["auto_fixable"], 6)
-        self.assertEqual(payload["remediation"]["total"], 15)
+        self.assertGreaterEqual(payload["remediation"]["total"], 2415)
         self.assertEqual(payload["playbook_count"], 7)
-        self.assertEqual(payload["kev_count"], 7)
-        self.assertEqual(payload["high_epss_count"], 8)
+        self.assertGreaterEqual(payload["kev_count"], 41)
+        self.assertGreaterEqual(payload["high_epss_count"], 152)
         for key in ("breached", "at_risk", "on_track"):
             self.assertIn(key, payload["sla"])
         for asset_type in ("windows-server", "unix-server", "application", "certificate"):
@@ -169,13 +191,15 @@ class ApiVulnhunt(unittest.TestCase):
 
 
 class ApiRemediate(unittest.TestCase):
-    def test_lists_all_fourteen_findings_and_playbook_links(self):
+    def test_lists_all_findings_and_playbook_links(self):
         resp = client.get("/api/remediate")
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertEqual(len(payload["findings"]), 15)
+        self.assertGreaterEqual(len(payload["findings"]), 2415)
         ids = {row["ID"] for row in payload["plan"]["queue"]}
-        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, 16)})
+        # Every real finding ID (FIND-1..FIND-N) must appear in the plan queue - not an
+        # exact set (the total grows as more real data is added).
+        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, len(payload["findings"]) + 1)})
         self.assertEqual(len(payload["playbooks_by_finding"]), 7)
 
 
@@ -239,7 +263,7 @@ class ApiStatus(unittest.TestCase):
         payload = resp.json()
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["vulnhunt_findings"], 9)
-        self.assertEqual(payload["remediation_findings"], 15)
+        self.assertGreaterEqual(payload["remediation_findings"], 2415)
 
 
 class ApiAuth(unittest.TestCase):
@@ -316,7 +340,7 @@ class ApiLiveQueue(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         ids = {f["id"] for f in payload["findings"]}
-        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, 16)})
+        self.assertEqual(ids, {f"FIND-{i}" for i in range(1, len(payload["findings"]) + 1)})
 
         rank = {"Critical": 3, "High": 2, "Medium": 1, "Low": 0}
         ranks = [rank[f["priority"]] for f in payload["findings"]]
@@ -401,7 +425,7 @@ class ApiServiceNow(unittest.TestCase):
         resp = client.get("/api/servicenow/preview")
         self.assertEqual(resp.status_code, 200)
         previews = resp.json()["previews"]
-        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 16)})
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, len(previews) + 1)})
 
     def test_send_without_confirm_never_touches_the_network(self):
         """The critical safety test, mirroring /api/run's dry-run guarantee: submitting
@@ -441,7 +465,7 @@ class ApiJira(unittest.TestCase):
         resp = client.get("/api/jira/preview")
         self.assertEqual(resp.status_code, 200)
         previews = resp.json()["previews"]
-        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 16)})
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, len(previews) + 1)})
         # Uses the documented placeholder project key until a real one is entered.
         self.assertEqual(previews[0]["body"]["fields"]["project"]["key"], "VULN")
 
@@ -484,7 +508,7 @@ class ApiSplunk(unittest.TestCase):
         resp = client.get("/api/splunk/preview")
         self.assertEqual(resp.status_code, 200)
         previews = resp.json()["previews"]
-        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, 16)})
+        self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, len(previews) + 1)})
         self.assertEqual(previews[0]["body"]["sourcetype"], "vulnhunter:finding")
 
     def test_send_without_confirm_never_touches_the_network(self):
@@ -544,7 +568,9 @@ class ApiAiAssist(unittest.TestCase):
         self.assertIn("VULN-2", resp.json()["prompt"])
 
     def test_unknown_finding_returns_404(self):
-        resp = client.post("/api/ai-assist", json={"finding_id": "FIND-999", "action": "explain"})
+        # FIND-999 is a genuinely real finding now that bulk sample data pushed the
+        # total well past 999 - use an ID far outside any real range instead.
+        resp = client.post("/api/ai-assist", json={"finding_id": "FIND-9999999", "action": "explain"})
         self.assertEqual(resp.status_code, 404)
 
     def test_unknown_action_returns_400(self):
@@ -597,7 +623,7 @@ class ApiReports(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertEqual(payload["period"], "weekly")
-        self.assertEqual(payload["remediation_total"], 15)
+        self.assertGreaterEqual(payload["remediation_total"], 2415)
         self.assertEqual(payload["vulnhunt_total"], 9)
 
     def test_invalid_period_is_rejected(self):
@@ -986,9 +1012,13 @@ class ApiNotifications(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         notifications = resp.json()["notifications"]
         sla_ids = {n["id"] for n in notifications if n["category"] == "SLA"}
-        # Matches the known real breach count elsewhere in this suite (queue KPI: 7 breached).
-        self.assertEqual(len(sla_ids), 7)
+        # dashboard_data.MAX_SLA_BREACH_NOTIFICATIONS caps individual breach
+        # notifications at 10, plus one "...and N more" overflow notification once the
+        # real breach count (now in the thousands with bulk sample data) exceeds that -
+        # so this is a fixed cap, not a count that scales with the dataset.
+        self.assertEqual(len(sla_ids), dashboard_data.MAX_SLA_BREACH_NOTIFICATIONS + 1)
         self.assertIn("sla-FIND-1", sla_ids)
+        self.assertTrue(any(n_id.startswith("sla-overflow-") for n_id in sla_ids))
 
     def test_danger_notifications_sort_before_warn_and_info(self):
         notifications = client.get("/api/notifications").json()["notifications"]
@@ -1039,6 +1069,7 @@ class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
         "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
         "/jira", "/splunk", "/xdr", "/ai-assist", "/reports", "/support", "/faq",
         "/exceptions", "/assets", "/appsec", "/inbox", "/risk", "/login", "/profile",
+        "/adaptors", "/infoblox", "/axonius", "/infrastructure", "/ai-vulnerabilities",
     ]
 
     def test_every_known_route_serves_the_same_spa_shell(self):

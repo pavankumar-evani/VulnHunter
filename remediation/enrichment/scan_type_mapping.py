@@ -12,11 +12,15 @@ normalized-findings.json) and are already implicitly SAST; this module doesn't
 re-tag them.
 
 Dynamic Application Security Testing (DAST) is a real, supported category in this
-taxonomy (SCAN_TYPES below) but has **no sample finding in this repo's demo data
-yet** - a DAST scanner (OWASP ZAP, Burp Suite Enterprise, etc.) would feed findings
-through the same connector pattern Tenable/Armis already use, once one is wired up.
-Listed here for completeness, not faked with a fabricated finding just to fill the
-category.
+taxonomy (SCAN_TYPES below). A finding against an `application` asset is classified as
+DAST rather than SCA when it has no `cve` - a genuinely real, industry-standard
+distinguishing signal: SCA findings say "this specific CVE-numbered vulnerable
+dependency version is present" (there's a CVE because it's about a versioned,
+publicly-tracked component), while DAST findings say "this class of vulnerability was
+found by actively probing the running application" (an app-specific reflected-XSS or
+IDOR bug has no CVE - it's not a versioned, shared component anyone else could look up).
+A DAST scanner (OWASP ZAP, Burp Suite Enterprise, etc.) would feed findings through the
+same connector pattern Tenable/Armis already use.
 
 "Code coverage" (a test-suite quality metric - % of code exercised by tests) is a
 different kind of measurement entirely, not a vulnerability category, and isn't
@@ -40,18 +44,20 @@ SCAN_TYPE_LABELS = {
 
 _ASSET_TYPE_TO_SCAN_TYPE = {
     "certificate": "cert-mgmt",
-    "application": "sca",
 }
 _DEFAULT_SCAN_TYPE = "infra-vm"
 
 
 def classify_finding(finding):
     """Returns one of SCAN_TYPES for a single /remediate-pipeline finding, based on
-    asset.type. A finding against an `application` asset is treated as SCA (a
-    vulnerable bundled library, e.g. Log4Shell) rather than SAST, since /remediate
-    ingests third-party scan/asset data, not VulnHunter's own source-code analysis -
-    that's the fully separate /vulnhunt pipeline."""
+    asset.type (and, for `application` assets only, whether it has a CVE - see this
+    module's docstring for why that's the SCA/DAST split). A finding against an
+    `application` asset is SCA or DAST rather than SAST, since /remediate ingests
+    third-party scan/asset data, not VulnHunter's own source-code analysis - that's the
+    fully separate /vulnhunt pipeline."""
     asset_type = (finding.get("asset") or {}).get("type", "")
+    if asset_type == "application":
+        return "sca" if finding.get("cve") else "dast"
     return _ASSET_TYPE_TO_SCAN_TYPE.get(asset_type, _DEFAULT_SCAN_TYPE)
 
 

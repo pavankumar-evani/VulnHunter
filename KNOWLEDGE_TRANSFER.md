@@ -227,14 +227,25 @@ comment header naming the finding it addresses, the risk tier, and a rollback in
 ready for human (or your org's Ansible Tower/AWX-style approved pipeline) review.
 
 **Validated result** (against the included mock Tenable/Armis/threat-intel exports,
-enriched with real live KEV/EPSS data): 15 findings normalized across all 3 sources and
-7 asset classes; 7 are KEV-listed (confirmed actively exploited — including Log4Shell,
-PrintNightmare, and a Palo Alto PAN-OS GlobalProtect command injection) and 8 have EPSS ≥
-50%; 7 (4 Windows Server, 3 Unix Server) got a generated playbook; 8 (1 core network
-switch, 1 perimeter firewall, IoT/OT/mobile devices, 1 Log4Shell application finding, 2
-certificate/TLS findings) are fully planned but correctly left `manual-only`, since no
-fixer exists yet for those asset classes — see
+enriched with real live KEV/EPSS data): 15 hand-curated findings normalized across all 3
+sources and 7 asset classes; 7 are KEV-listed (confirmed actively exploited — including
+Log4Shell, PrintNightmare, and a Palo Alto PAN-OS GlobalProtect command injection) and 8
+have EPSS ≥ 50%; 7 (4 Windows Server, 3 Unix Server) got a generated playbook; 8 (1 core
+network switch, 1 perimeter firewall, IoT/OT/mobile devices, 1 Log4Shell application
+finding, 2 certificate/TLS findings) are fully planned but correctly left `manual-only`,
+since no fixer exists yet for those asset classes — see
 [`REMEDIATION_PLAN.md`](REMEDIATION_PLAN.md) for the full generated report.
+
+**Separately**, `remediation/sample-data/generate_bulk_findings.py` sources ~300
+additional real, distinct CVEs per category from NVD's public CVE API (not fabricated) -
+OS, Network, Network Security, Cloud Infrastructure, Certificate, SCA, DAST (real
+CWE/OWASP classes, since dynamic-testing bugs aren't CVE-numbered), and OT/IoT - bringing
+the shipped `normalized-findings.json`/`REMEDIATION_PLAN.md` in this repo to **2,415
+findings total**, still real-enriched (41 KEV-listed, 152 EPSS ≥ 50%, 307 auto-remediable
+by asset type). At that volume, normalization and planning use scripts implementing the
+same documented rules (`bulk_normalize.py`, `bulk_plan.py`) rather than an LLM-subagent
+pass per finding - see those scripts' docstrings for exactly what's disclosed as a
+uniform heuristic versus individually researched.
 
 ### 4.3 The Safety Model (the single most important design decision)
 

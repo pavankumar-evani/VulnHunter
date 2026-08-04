@@ -10,3 +10,8 @@ vulnerable-demo-app/.env
 # Live-fetched Tenable/Armis data is real vulnerability data about real infrastructure -
 # never commit it, unlike the fabricated remediation/sample-data/
 remediation/live-data/
+
+# Raw NVD API response cache for generate_bulk_findings.py - large (tens of MB), purely
+# a local speed-up for re-running the generator, not meaningful data itself. The derived
+# bulk_*.csv/json fixture files (committed) are what matters.
+remediation/sample-data/bulk/_nvd_cache/

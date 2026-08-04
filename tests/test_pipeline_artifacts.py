@@ -136,8 +136,12 @@ class RemediationNormalizedFindingsAreWellFormed(unittest.TestCase):
         path = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
         cls.findings = json.loads(path.read_text(encoding="utf-8"))
 
-    def test_fifteen_findings_total(self):
-        self.assertEqual(len(self.findings), 15)
+    def test_at_least_2415_findings_total(self):
+        """15 hand-curated + 2,400 real-CVE findings added via bulk NVD sourcing (see
+        remediation/sample-data/generate_bulk_findings.py) = 2,415 at time of writing.
+        Asserts a floor since this grows as more real data is added - see
+        tests/test_dashboard.py's DataLayerReadsRealArtifacts class for the same pattern."""
+        self.assertGreaterEqual(len(self.findings), 2415)
 
     def test_every_finding_has_required_fields(self):
         required = {"id", "source", "source_ref", "asset", "title", "severity", "remediation_domain"}
@@ -170,9 +174,12 @@ class RemediationNormalizedFindingsAreWellFormed(unittest.TestCase):
             else:
                 self.assertIsNone(f["remediation_domain"])
 
-    def test_seven_findings_eligible_for_automation(self):
+    def test_findings_eligible_for_automation(self):
+        """Real total at time of writing: 307 (184 windows-server + 123 unix-server,
+        all bulk-sourced findings on those two asset types) - see
+        test_at_least_2415_findings_total for why this asserts a floor."""
         eligible = [f for f in self.findings if f["remediation_domain"] is not None]
-        self.assertEqual(len(eligible), 7)
+        self.assertGreaterEqual(len(eligible), 307)
 
     def test_no_fabricated_cve_ids(self):
         """Every non-null CVE must match the standard CVE-YYYY-NNNN(N...) format -

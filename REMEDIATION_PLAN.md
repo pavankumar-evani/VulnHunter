@@ -1,201 +1,2743 @@
-# Remediation Plan — 15 findings (Tenable: 10, Armis: 3, Threat Intel: 2)
+# Remediation Plan — 2415 findings
 
-**Automated remediation available today:** 7 findings (windows-server + unix-server)
-**Manual-only (no fixer for this asset class yet):** 8 findings (network-routing-switching,
-network-security-device, iot-ot-device, application, certificate)
+**Automated remediation available today:** 307 findings (windows-server + unix-server)
+**Manual-only (no fixer for this asset class yet):** 2108 findings
 
-**Risk tier split:** 2 auto-approvable · 5 needs-change-approval · 8 manual-only
+**Risk tier split:** 303 auto-approvable · 4 needs-change-approval · 2108 manual-only
 
-**Threat intel:** 10 of 15 findings have a CVE and were checked against CISA KEV + EPSS
-data (FIND-8's CVE has a KEV check but no EPSS score available). **7 are KEV-listed**
-(confirmed actively exploited in the wild) and **8 have an EPSS score ≥ 50%** (near-term
-exploitation probability) — 2 findings clear the EPSS bar without being KEV-listed
-(FIND-5 at 70.6%, FIND-11 at 99.5%), which is exactly why both signals matter: EPSS
-catches near-term risk KEV hasn't (yet) confirmed.
+**Threat intel:** 41 findings are KEV-listed (confirmed actively exploited) and 152 have an EPSS score ≥ 50%.
 
-**New this run: FIND-15** (CVE-2024-3400, Palo Alto PAN-OS GlobalProtect command
-injection, `network-security-device`, KEV-listed since 2024-04-12, EPSS ~100.0%) — ranked
-#1 in the queue.
-
-**Why some "simple" fixes are still `manual-only` risk tier:** `needs-change-approval` and
-`auto-approvable` both presuppose there's an auto-generated artifact (an Ansible playbook)
-for a human to review or run. For the 8 findings whose `automation_target` is
-`manual-only` — no `remediation-fixer-*` subagent exists yet for their domain — there is no
-artifact to approve or auto-run, so the conservative, honest `risk_tier` is `manual-only`
-even when the underlying fix (e.g., disabling Telnet on one camera) is intrinsically
-low-risk. Only the 7 findings on `windows-server`/`unix-server` get the finer-grained
-`auto-approvable` vs. `needs-change-approval` split, based on asset criticality and
-whether the fix needs a reboot/service restart.
+**Scale note:** this plan now covers 2415 findings (2400 added via real-CVE bulk sourcing from NVD, see `remediation/sample-data/generate_bulk_findings.py`). `action_type` and `risk_tier` for the bulk-sourced majority come from one disclosed, uniform heuristic (`remediation/sample-data/bulk_plan.py`) rather than individual per-finding research - see that script's module docstring. The live, re-scored view at `/queue` remains the authoritative, always-current source; this file is the point-in-time snapshot `/remediate` shows.
 
 ## Remediation queue (priority order)
 
 | ID | Asset | Title | CVE | Severity | Action Type | Automation Target | Risk Tier | KEV | EPSS |
 |----|-------|-------|-----|----------|-------------|--------------------|-----------|-----|------|
-| FIND-15 | FW-EDGE01 | PAN-OS GlobalProtect Command Injection | CVE-2024-3400 | Critical | firmware-update | manual-only | manual-only | Yes | 100.0% |
-| FIND-6 | CSW-CORE01 | Cisco IOS XE Web UI Privilege Escalation | CVE-2023-20198 | Critical | config-change | manual-only | manual-only | Yes | 99.6% |
-| FIND-12 | APP-ORDERS01 | Apache Log4j2 RCE (Log4Shell) | CVE-2021-44228 | Critical | patch | manual-only | manual-only | Yes | 100.0% |
-| FIND-1 | WIN-DC01 | PrintNightmare RCE | CVE-2021-34527 | Critical | patch | ansible-windows | needs-change-approval | Yes | 99.8% |
-| FIND-2 | WIN-FS02 | EternalBlue (SMBv1 RCE) | CVE-2017-0144 | Critical | service-disable | ansible-windows | needs-change-approval | Yes | 99.2% |
-| FIND-4 | LNX-DB03 | Sudo Heap Overflow (Baron Samedit) | CVE-2021-3156 | Critical | patch | ansible-unix | auto-approvable | Yes | 99.3% |
-| FIND-11 | LNX-AUTH01 | OpenSSH Auth Bypass Regression | CVE-2024-6387 | Critical | patch | ansible-unix | needs-change-approval | No | 99.5% |
-| FIND-8 | HVAC-CTRL-B2 | Unauthenticated Mgmt Interface | CVE-2019-7592 | Critical | config-change | manual-only | manual-only | No | — |
-| FIND-5 | LNX-WEB05 | OpenSSL Infinite Loop DoS | CVE-2022-0778 | High | patch | ansible-unix | needs-change-approval | No | 70.6% |
-| FIND-3 | WIN-APP07 | MSHTML Security Feature Bypass | CVE-2024-30040 | High | patch | ansible-windows | auto-approvable | Yes | 3.9% |
-| FIND-10 | WIN-BASTION02 | Internet-facing RDP | — | High | network-restriction | ansible-windows | needs-change-approval | — | — |
-| FIND-7 | AXIS-CAM-LOBBY-03 | Telnet Service Exposed | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-6 | CSW-CORE01 | Cisco IOS XE Web UI Privilege Escalation | CVE-2023-20198 | Critical | firmware-update | manual-only | manual-only | Yes | 99.6% |
+| FIND-12 | APP-ORDERS01 | Apache Log4j2 Remote Code Execution (Log4Shell) | CVE-2021-44228 | Critical | patch | manual-only | manual-only | Yes | 100.0% |
+| FIND-15 | FW-EDGE01 | Palo Alto Networks PAN-OS GlobalProtect Command Injection | CVE-2024-3400 | Critical | firmware-update | manual-only | manual-only | Yes | 100.0% |
+| FIND-35 | WEB-PORTAL-0020 | The eay_check_x509cert function in KAME Racoon successfully verifies certificates even when OpenSSL validation fails,… | CVE-2004-0607 | Critical | config-change | manual-only | manual-only | No | 5.4% |
+| FIND-49 | WEB-PORTAL-0034 | Buffer overflow in the SSL_get_shared_ciphers function in OpenSSL 0.9.7 before 0.9.7l, 0.9.8 before 0.9.8d, and… | CVE-2006-3738 | Critical | config-change | manual-only | manual-only | No | 48.3% |
+| FIND-103 | WEB-PORTAL-0088 | OpenSSL before 0.9.8m does not check for a NULL return value from bn_wexpand function calls in (1) crypto/bn/bn_div.c,… | CVE-2009-3245 | Critical | config-change | manual-only | manual-only | No | 6.7% |
+| FIND-325 | CLOUD-0010 | A vulnerability in the container management subsystem of Cisco Digital Network Architecture (DNA) Center could allow… | CVE-2018-0268 | Critical | firmware-update | manual-only | manual-only | No | 5.2% |
+| FIND-334 | CLOUD-0019 | The Kubernetes integration in GitLab Enterprise Edition 11.x before 11.2.8, 11.3.x before 11.3.9, and 11.4.x before… | CVE-2018-18843 | Critical | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-403 | CLOUD-0088 | OneDev is an all-in-one devops platform. In OneDev before version 4.0.3, a Kubernetes REST endpoint exposes two… | CVE-2021-21243 | Critical | firmware-update | manual-only | manual-only | No | 54.5% |
+| FIND-457 | CLOUD-0142 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. A critical vulnerability has been discovered… | CVE-2022-29165 | Critical | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-483 | CLOUD-0168 | Microsoft has identified a vulnerability affecting the cluster connect feature of Azure Arc-enabled Kubernetes… | CVE-2022-37968 | Critical | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-598 | CLOUD-0283 | JumpServer is an open-source Privileged Access Management (PAM) tool that provides DevOps and IT teams with on-demand… | CVE-2024-40628 | Critical | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-599 | CLOUD-0284 | JumpServer is an open-source Privileged Access Management (PAM) tool that provides DevOps and IT teams with on-demand… | CVE-2024-40629 | Critical | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-924 | NET-RTSW-0009 | Cisco Gigabit Switch routers running IOS allow remote attackers to forward unauthorized packets due to improper… | CVE-1999-0775 | Critical | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-1008 | NET-RTSW-0093 | Cisco IOS 12.2 through 12.4 before 20060920, as used by Cisco IAD2430, IAD2431, and IAD2432 Integrated Access Devices,… | CVE-2006-4950 | Critical | firmware-update | manual-only | manual-only | No | 5.7% |
+| FIND-1011 | NET-RTSW-0096 | Cisco IOS 9.x, 10.x, 11.x, and 12.x and IOS XR 2.0.x, 3.0.x, and 3.2.x allows remote attackers to cause a denial of… | CVE-2007-0480 | Critical | firmware-update | manual-only | manual-only | No | 9.2% |
+| FIND-1045 | NET-RTSW-0130 | SNMPv3 HMAC verification in (1) Net-SNMP 5.2.x before 5.2.4.1, 5.3.x before 5.3.2.1, and 5.4.x before 5.4.1.1; (2)… | CVE-2008-0960 | Critical | firmware-update | manual-only | manual-only | No | 68.8% |
+| FIND-1100 | NET-RTSW-0185 | Unspecified vulnerability in the SIP implementation in Cisco IOS 12.3 and 12.4 allows remote attackers to execute… | CVE-2010-0580 | Critical | firmware-update | manual-only | manual-only | No | 5.2% |
+| FIND-1101 | NET-RTSW-0186 | Unspecified vulnerability in the SIP implementation in Cisco IOS 12.3 and 12.4 allows remote attackers to execute… | CVE-2010-0581 | Critical | firmware-update | manual-only | manual-only | No | 5.2% |
+| FIND-1107 | NET-RTSW-0192 | IOS 12.2(52)SE and 12.2(52)SE1 on Cisco Industrial Ethernet (IE) 3000 series switches has (1) a community name of… | CVE-2010-1574 | Critical | firmware-update | manual-only | manual-only | No | 4.7% |
+| FIND-1131 | NET-RTSW-0216 | The PKI functionality in Cisco IOS 15.0 and 15.1 does not prevent permanent caching of certain public keys, which… | CVE-2011-0935 | Critical | firmware-update | manual-only | manual-only | No | 4.0% |
+| FIND-1146 | NET-RTSW-0231 | Unspecified vulnerability in the Smart Install functionality in Cisco IOS 12.2 and 15.1 allows remote attackers to… | CVE-2011-3271 | Critical | firmware-update | manual-only | manual-only | No | 10.8% |
+| FIND-1218 | FW-EDGE-0003 | The FTP component in FortiGate 2.8 running FortiOS 2.8MR10 and v3beta, and other versions before 3.0 MR1, allows… | CVE-2005-3057 | Critical | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-1394 | FW-EDGE-0179 | Palo Alto Networks PAN-OS before 3.1.10 and 4.0.x before 4.0.5 allows remote attackers to execute arbitrary commands… | CVE-2012-6592 | Critical | firmware-update | manual-only | manual-only | No | 4.1% |
+| FIND-1395 | FW-EDGE-0180 | Palo Alto Networks PAN-OS before 3.1.10 and 4.0.x before 4.0.4 allows remote attackers to execute arbitrary commands… | CVE-2012-6593 | Critical | firmware-update | manual-only | manual-only | No | 4.1% |
+| FIND-1403 | FW-EDGE-0188 | The device-management command-line interface in Palo Alto Networks PAN-OS before 3.1.12, 4.0.x before 4.0.10, and… | CVE-2012-6601 | Critical | firmware-update | manual-only | manual-only | No | 4.4% |
+| FIND-1405 | FW-EDGE-0190 | The web management UI in Palo Alto Networks PAN-OS before 3.1.12, 4.0.x before 4.0.10, and 4.1.x before 4.1.4 allows… | CVE-2012-6603 | Critical | firmware-update | manual-only | manual-only | No | 4.4% |
+| FIND-1459 | FW-EDGE-0244 | When Security Assertion Markup Language (SAML) authentication is enabled and the 'Validate Identity Provider… | CVE-2020-2021 | Critical | firmware-update | manual-only | manual-only | Yes | 4.4% |
+| FIND-1514 | FW-EDGE-0299 | A command injection as a result of arbitrary file creation vulnerability in the GlobalProtect feature of Palo Alto… | CVE-2024-3400 | Critical | firmware-update | manual-only | manual-only | Yes | 100.0% |
+| FIND-1526 | LNX-SRV-0011 | The "capabilities" feature in Linux before 2.2.16 allows local users to cause a denial of service or gain privileges… | CVE-2000-0506 | Critical | patch | ansible-unix | auto-approvable | No | 11.4% |
+| FIND-1527 | LNX-SRV-0012 | The logrotate script for OpenLDAP before 1.2.11 in Conectiva Linux sends an improper signal to the kernel log daemon… | CVE-2000-0747 | Critical | patch | ansible-unix | auto-approvable | No | 1.7% |
+| FIND-1557 | LNX-SRV-0042 | Signed integer overflow in the bttv_read function in the bttv driver (bttv-driver.c) in Linux kernel before 2.4.20 has… | CVE-2002-1572 | Critical | patch | ansible-unix | auto-approvable | No | 2.3% |
+| FIND-1558 | LNX-SRV-0043 | Unspecified vulnerability in the pcilynx ieee1394 firewire driver (pcilynx.c) in Linux kernel before 2.4.20 has… | CVE-2002-1573 | Critical | patch | ansible-unix | auto-approvable | No | 2.3% |
+| FIND-1569 | LNX-SRV-0054 | The mxcsr code in Linux kernel 2.4 allows attackers to modify CPU state registers via a malformed address. | CVE-2003-0248 | Critical | patch | ansible-unix | auto-approvable | No | 3.7% |
+| FIND-1578 | LNX-SRV-0063 | Multiple integer overflows in the 32bit emulation for AMD64 architectures in Linux 2.4 kernel before 2.4.21 allows… | CVE-2003-0959 | Critical | patch | ansible-unix | auto-approvable | No | 1.7% |
+| FIND-1615 | LNX-SRV-0100 | Multiple "overflows" in the io_edgeport driver for Linux kernel 2.4.x have unknown impact and unknown attack vectors. | CVE-2004-1017 | Critical | patch | ansible-unix | auto-approvable | No | 3.3% |
+| FIND-1620 | LNX-SRV-0105 | Unspecified vulnerability in procfs in the Linux-VServer stable branch for the 2.4 kernel before 1.23 and… | CVE-2004-2613 | Critical | patch | ansible-unix | auto-approvable | No | 2.5% |
+| FIND-1633 | LNX-SRV-0118 | Multiple vulnerabilities in the IGMP functionality for Linux kernel 2.4.22 to 2.4.28, and 2.6.x to 2.6.9, allow local… | CVE-2004-1137 | Critical | patch | ansible-unix | auto-approvable | No | 20.8% |
+| FIND-1669 | WIN-SRV-0034 | Heap-based buffer overflow in the HtmlHelp program (hh.exe) in HTML Help for Microsoft Windows 98, Me, NT 4.0, 2000,… | CVE-2004-0201 | Critical | patch | ansible-windows | auto-approvable | No | 45.3% |
+| FIND-1674 | WIN-SRV-0039 | Unknown vulnerability in the Graphics Rendering Engine processes of Microsoft Windows 2000, Windows XP, and Windows… | CVE-2004-0209 | Critical | patch | ansible-windows | auto-approvable | No | 57.4% |
+| FIND-1676 | WIN-SRV-0041 | Buffer overflow in Microsoft Internet Explorer and Explorer on Windows XP SP1, WIndows 2000, Windows 98, and Windows… | CVE-2004-0214 | Critical | patch | ansible-windows | auto-approvable | No | 47.0% |
+| FIND-1677 | WIN-SRV-0042 | The Network News Transfer Protocol (NNTP) component of Microsoft Windows NT Server 4.0, Windows 2000 Server, Windows… | CVE-2004-0574 | Critical | patch | ansible-windows | auto-approvable | No | 64.4% |
+| FIND-1678 | WIN-SRV-0043 | Integer overflow in DUNZIP32.DLL for Microsoft Windows XP, Windows XP 64-bit Edition, Windows Server 2003, and Windows… | CVE-2004-0575 | Critical | patch | ansible-windows | auto-approvable | No | 60.3% |
+| FIND-1679 | WIN-SRV-0044 | The SMTP (Simple Mail Transfer Protocol) component of Microsoft Windows XP 64-bit Edition, Windows Server 2003,… | CVE-2004-0840 | Critical | patch | ansible-windows | auto-approvable | No | 30.3% |
+| FIND-1682 | WIN-SRV-0047 | The DHCP Server service for Microsoft Windows NT 4.0 Server and Terminal Server Edition does not properly validate the… | CVE-2004-0900 | Critical | patch | ansible-windows | auto-approvable | No | 26.0% |
+| FIND-1683 | WIN-SRV-0048 | The WINS service (wins.exe) on Microsoft Windows NT Server 4.0, Windows 2000 Server, and Windows Server 2003 allows… | CVE-2004-1080 | Critical | patch | ansible-windows | auto-approvable | No | 79.8% |
+| FIND-1684 | WIN-SRV-0049 | The Indexing Service for Microsoft Windows XP and Server 2003 does not properly validate the length of a message,… | CVE-2004-0897 | Critical | patch | ansible-windows | auto-approvable | No | 42.8% |
+| FIND-1691 | WIN-SRV-0056 | Stack-based buffer overflow in WINSRV.DLL in the Client Server Runtime System (CSRSS) process of Microsoft Windows… | CVE-2005-0551 | Critical | patch | ansible-windows | auto-approvable | No | 20.3% |
+| FIND-1695 | WIN-SRV-0060 | Integer overflow in Microsoft Windows 98, 2000, XP SP2 and earlier, and Server 2003 SP1 and earlier allows remote… | CVE-2005-1208 | Critical | patch | ansible-windows | auto-approvable | No | 47.3% |
+| FIND-1708 | WIN-SRV-0073 | Windows Shell for Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 allows remote attackers to execute… | CVE-2005-2122 | Critical | patch | ansible-windows | auto-approvable | No | 43.8% |
+| FIND-1724 | WIN-SRV-0089 | The Server Message Block (SMB) driver (MRXSMB.SYS) in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1… | CVE-2006-2373 | Critical | patch | ansible-windows | auto-approvable | No | 29.2% |
+| FIND-1732 | WIN-SRV-0097 | Buffer overflow in the DHCP Client service for Microsoft Windows 2000 SP4, Windows XP SP1 and SP2, and Server 2003 up… | CVE-2006-2372 | Critical | patch | ansible-windows | auto-approvable | No | 90.2% |
+| FIND-1735 | WIN-SRV-0100 | Buffer overflow in the Server Service in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1 allows remote… | CVE-2006-3439 | Critical | patch | ansible-windows | auto-approvable | No | 85.0% |
+| FIND-1736 | WIN-SRV-0101 | Buffer overflow in the Winsock API in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1 allows remote… | CVE-2006-3440 | Critical | patch | ansible-windows | auto-approvable | No | 57.3% |
+| FIND-1737 | WIN-SRV-0102 | Buffer overflow in the DNS Client service in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1 allows… | CVE-2006-3441 | Critical | patch | ansible-windows | auto-approvable | No | 62.0% |
+| FIND-1747 | WIN-SRV-0112 | Buffer overflow in the SNMP Service in Microsoft Windows 2000 SP4, XP SP2, Server 2003, Server 2003 SP1, and possibly… | CVE-2006-5583 | Critical | patch | ansible-windows | auto-approvable | No | 53.5% |
+| FIND-1758 | WIN-SRV-0123 | Stack-based buffer overflow in the AfxOleSetEditMenu function in the MFC component in Microsoft Windows 2000 SP4, XP… | CVE-2007-1512 | Critical | patch | ansible-windows | auto-approvable | No | 11.3% |
+| FIND-1759 | WIN-SRV-0124 | The dynamic DNS update mechanism in the DNS Server service on Microsoft Windows does not properly authenticate clients… | CVE-2007-1644 | Critical | patch | ansible-windows | auto-approvable | No | 32.6% |
+| FIND-1760 | WIN-SRV-0125 | Buffer overflow in FutureSoft TFTP Server 2000 on Microsoft Windows 2000 SP4 allows remote attackers to execute… | CVE-2007-1645 | Critical | patch | ansible-windows | auto-approvable | No | 13.1% |
+| FIND-1767 | WIN-SRV-0132 | Stack-based buffer overflow in the RPC interface in the Domain Name System (DNS) Server Service in Microsoft Windows… | CVE-2007-1748 | Critical | patch | ansible-windows | auto-approvable | No | 77.7% |
+| FIND-1777 | WIN-SRV-0142 | The "hit-highlighting" functionality in webhits.dll in Microsoft Internet Information Services (IIS) Web Server 5.0… | CVE-2007-2815 | Critical | patch | ansible-windows | auto-approvable | No | 71.9% |
+| FIND-1783 | WIN-SRV-0148 | The LDAP service in Windows Active Directory in Microsoft Windows 2000 Server SP4, Server 2003 SP1 and SP2, Server… | CVE-2007-0040 | Critical | patch | ansible-windows | auto-approvable | No | 39.2% |
+| FIND-1799 | WIN-SRV-0164 | Unspecified vulnerability in Server Message Block Version 2 (SMBv2) signing support in Microsoft Windows Vista allows… | CVE-2007-5351 | Critical | patch | ansible-windows | auto-approvable | No | 41.2% |
+| FIND-1805 | WIN-SRV-0170 | Heap-based buffer overflow in Object Linking and Embedding (OLE) Automation in Microsoft Windows 2000 SP4, XP SP2,… | CVE-2007-0065 | Critical | patch | ansible-windows | auto-approvable | No | 43.2% |
+| FIND-1806 | WIN-SRV-0171 | Heap-based buffer overflow in the WebDAV Mini-Redirector in Microsoft Windows XP SP2, Server 2003 SP1 and SP2, and… | CVE-2008-0080 | Critical | patch | ansible-windows | auto-approvable | No | 40.6% |
+| FIND-1819 | APP-0004 | Apache Log4j2 2.0-beta9 through 2.15.0 (excluding security releases 2.12.2, 2.12.3, and 2.3.1) JNDI features used in… | CVE-2021-44228 | Critical | patch | manual-only | manual-only | Yes | 100.0% |
+| FIND-1860 | APP-0045 | Apache Struts 2 before 2.2.3.1 evaluates a string as an OGNL expression during the handling of a conversion error,… | CVE-2012-0838 | Critical | patch | manual-only | manual-only | No | 13.9% |
+| FIND-1871 | APP-0056 | Apache Struts 2.0.0 through 2.3.15.1 enables Dynamic Method Invocation by default, which has unknown impact and attack… | CVE-2013-4316 | Critical | patch | manual-only | manual-only | No | 8.3% |
+| FIND-358 | CLOUD-0043 | Jenkins Kubernetes :: Pipeline :: Kubernetes Steps Plugin provides a custom whitelist for script security that allowed… | CVE-2019-10417 | Critical | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-359 | CLOUD-0044 | Jenkins Kubernetes :: Pipeline :: Arquillian Steps Plugin provides a custom whitelist for script security that allowed… | CVE-2019-10418 | Critical | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-446 | CLOUD-0131 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All unpatched versions of Argo CD starting… | CVE-2022-24768 | Critical | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-449 | CLOUD-0134 | Flux2 is an open and extensible continuous delivery solution for Kubernetes. Flux2 versions between 0.1.0 and 0.29.0,… | CVE-2022-24817 | Critical | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-452 | CLOUD-0137 | Flux is an open and extensible continuous delivery solution for Kubernetes. Path Traversal in the kustomize-controller… | CVE-2022-24877 | Critical | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-480 | CLOUD-0165 | A Cleartext Storage of Sensitive Information vulnerability in SUSE Rancher allows authenticated Cluster Owners,… | CVE-2021-36782 | Critical | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-523 | CLOUD-0208 | Improper Privilege Management vulnerability in SUSE Rancher allows Privilege Escalation. A failure in the update logic… | CVE-2023-22651 | Critical | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-527 | CLOUD-0212 | An Improper Privilege Management vulnerability in SUSE Rancher allowed standard users to leverage their existing… | CVE-2023-22647 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-532 | CLOUD-0217 | Sealos is an open source cloud operating system distribution based on the Kubernetes kernel. In versions of Sealos… | CVE-2023-33190 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-538 | CLOUD-0223 | Argo CD is a declarative continuous deployment for Kubernetes. Argo CD Cluster secrets might be managed declaratively… | CVE-2023-40029 | Critical | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-29 | WEB-PORTAL-0014 | Double free vulnerability in OpenSSL 0.9.7 allows remote attackers to cause a denial of service (crash) and possibly… | CVE-2003-0545 | Critical | config-change | manual-only | manual-only | No | 85.4% |
+| FIND-97 | WEB-PORTAL-0082 | The TLS protocol, and the SSL protocol 3.0 and possibly earlier, as used in Microsoft Internet Information Services… | CVE-2009-3555 | Critical | config-change | manual-only | manual-only | No | 87.3% |
+| FIND-110 | WEB-PORTAL-0095 | OpenSSL in Apple Mac OS X 10.6.x before 10.6.5 does not properly perform arithmetic, which allows remote attackers to… | CVE-2010-1378 | Critical | config-change | manual-only | manual-only | No | 1.3% |
+| FIND-224 | WEB-PORTAL-0209 | Double free vulnerability in the dsa_priv_decode function in crypto/dsa/dsa_ameth.c in OpenSSL 1.0.1 before 1.0.1s and… | CVE-2016-0705 | Critical | config-change | manual-only | manual-only | No | 26.3% |
+| FIND-227 | WEB-PORTAL-0212 | The fmtstr function in crypto/bio/b_print.c in OpenSSL 1.0.1 before 1.0.1s and 1.0.2 before 1.0.2g improperly… | CVE-2016-0799 | Critical | config-change | manual-only | manual-only | No | 32.4% |
+| FIND-228 | WEB-PORTAL-0213 | The doapr_outch function in crypto/bio/b_print.c in OpenSSL 1.0.1 before 1.0.1s and 1.0.2 before 1.0.2g does not… | CVE-2016-2842 | Critical | config-change | manual-only | manual-only | No | 53.7% |
+| FIND-233 | WEB-PORTAL-0218 | The ASN.1 implementation in OpenSSL before 1.0.1o and 1.0.2 before 1.0.2c allows remote attackers to execute arbitrary… | CVE-2016-2108 | Critical | config-change | manual-only | manual-only | No | 77.9% |
+| FIND-240 | WEB-PORTAL-0225 | OpenSSL through 1.0.2h incorrectly uses pointer arithmetic for heap-buffer boundary checks, which might allow remote… | CVE-2016-2177 | Critical | config-change | manual-only | manual-only | No | 44.5% |
+| FIND-242 | WEB-PORTAL-0227 | Unspecified vulnerability in the Oracle Secure Global Desktop component in Oracle Virtualization 4.63, 4.71, and 5.2… | CVE-2016-3613 | Critical | config-change | manual-only | manual-only | No | 5.5% |
+| FIND-244 | WEB-PORTAL-0229 | Crestron Electronics DM-TXRX-100-STR devices with firmware before 1.3039.00040 use a hardcoded 0xb9eed4d955a59eb3… | CVE-2016-5669 | Critical | config-change | manual-only | manual-only | No | 1.6% |
+| FIND-247 | WEB-PORTAL-0232 | The BN_bn2dec function in crypto/bn/bn_print.c in OpenSSL before 1.1.0 does not properly validate division results,… | CVE-2016-2182 | Critical | config-change | manual-only | manual-only | No | 44.2% |
+| FIND-249 | WEB-PORTAL-0234 | Integer overflow in the MDC2_Update function in crypto/mdc2/mdc2dgst.c in OpenSSL before 1.1.0 allows remote attackers… | CVE-2016-6303 | Critical | config-change | manual-only | manual-only | No | 32.0% |
+| FIND-255 | WEB-PORTAL-0240 | statem/statem.c in OpenSSL 1.1.0a does not consider memory-block movement after a realloc call, which allows remote… | CVE-2016-6309 | Critical | config-change | manual-only | manual-only | No | 70.2% |
+| FIND-286 | WEB-PORTAL-0271 | An issue was discovered in the OpenSSL library in Ruby before 2.3.8, 2.4.x before 2.4.5, 2.5.x before 2.5.2, and 2.6.x… | CVE-2018-16395 | Critical | config-change | manual-only | manual-only | No | 10.7% |
+| FIND-296 | WEB-PORTAL-0281 | An issue was discovered in the openssl crate before 0.10.9 for Rust. A use-after-free occurs in CMS Signing. | CVE-2018-20997 | Critical | config-change | manual-only | manual-only | No | 1.7% |
+| FIND-301 | WEB-PORTAL-0286 | Postgresql Windows installer before versions 11.5, 10.10, 9.6.15, 9.5.19, 9.4.24 is vulnerable via bundled OpenSSL… | CVE-2019-10211 | Critical | config-change | manual-only | manual-only | No | 1.8% |
+| FIND-303 | WEB-PORTAL-0288 | The OpenSSL extension of Ruby (Git trunk) versions after 2011-09-01 up to 2011-11-03 always generated an exponent… | CVE-2011-4121 | Critical | config-change | manual-only | manual-only | No | 2.5% |
+| FIND-315 | WEB-PORTAL-0300 | The Aviatrix OpenVPN client through 2.5.7 on Linux, macOS, and Windows is vulnerable when OpenSSL parameters are… | CVE-2020-7224 | Critical | config-change | manual-only | manual-only | No | 2.3% |
+| FIND-320 | CLOUD-0005 | Kubernetes version 1.5.0-1.5.4 is vulnerable to a privilege escalation in the PodSecurityPolicy admission plugin… | CVE-2017-1000056 | Critical | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-337 | CLOUD-0022 | In all Kubernetes versions prior to v1.10.11, v1.11.5, and v1.12.3, incorrect handling of error responses to proxied… | CVE-2018-1002105 | Critical | firmware-update | manual-only | manual-only | No | 87.0% |
+| FIND-487 | CLOUD-0172 | KubeView through 0.1.31 allows attackers to obtain control of a Kubernetes cluster because api/scrape/kube-system does… | CVE-2022-45933 | Critical | firmware-update | manual-only | manual-only | No | 51.7% |
+| FIND-559 | CLOUD-0244 | capsule-proxy is a reverse proxy for the capsule operator project. Affected versions are subject to a privilege… | CVE-2023-48312 | Critical | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-574 | CLOUD-0259 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Prior to versions 2.8.13, 2.9.9, and 2.10.4,… | CVE-2024-21652 | Critical | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-612 | CLOUD-0297 | A security issue was discovered in the Kubernetes Image Builder versions <= v0.1.37 where default credentials are… | CVE-2024-9486 | Critical | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-677 | WEBAPP-INTERNAL-WIKI | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-681 | WEBAPP-CHECKOUT-SERVICE | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-695 | WEBAPP-ORDER-SERVICE | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-711 | WEBAPP-BILLING-API | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-761 | WEBAPP-SUPPORT-TICKETING | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-767 | WEBAPP-VENDOR-ONBOARDING | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-794 | WEBAPP-SEARCH-SERVICE | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-801 | WEBAPP-MARKETING-CMS | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-831 | WEBAPP-EMPLOYEE-HR-PORTAL | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-850 | WEBAPP-PARTNER-EXTRANET | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-861 | WEBAPP-CUSTOMER-PORTAL | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-869 | WEBAPP-LOYALTY-REWARDS | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-881 | WEBAPP-REPORTING-DASHBOARD | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-889 | WEBAPP-MOBILE-BACKEND-API | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-906 | WEBAPP-NOTIFICATION-SERVICE | SQL Injection (blind, boolean-based) (CWE-89) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-1234 | FW-EDGE-0019 | Fortinet FortiAnalyzer before 5.0.12 and 5.2.x before 5.2.5; FortiSwitch 3.3.x before 3.3.3; FortiCache 3.0.x before… | CVE-2016-1909 | Critical | firmware-update | manual-only | manual-only | No | 71.3% |
+| FIND-1235 | FW-EDGE-0020 | Buffer overflow in the Cookie parser in Fortinet FortiOS 4.x before 4.1.11, 4.2.x before 4.2.13, and 4.3.x before… | CVE-2016-6909 | Critical | firmware-update | manual-only | manual-only | No | 49.9% |
+| FIND-1259 | FW-EDGE-0044 | A format string vulnerability in Fortinet FortiOS 5.6.0 allows attacker to execute unauthorized code or commands via… | CVE-2018-1352 | Critical | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1279 | FW-EDGE-0064 | An authentication bypass using an alternate path or channel [CWE-288] in Fortinet FortiOS version 7.2.0 through 7.2.1… | CVE-2022-40684 | Critical | firmware-update | manual-only | manual-only | Yes | 100.0% |
+| FIND-1305 | FW-EDGE-0090 | A stack-based overflow vulnerability [CWE-124] in Fortinet FortiOS version 7.0.0 through 7.0.10 and 7.2.0 through… | CVE-2023-33308 | Critical | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1315 | FW-EDGE-0100 | A out-of-bounds write in Fortinet FortiOS versions 7.4.0 through 7.4.2, 7.2.0 through 7.2.6, 7.0.0 through 7.0.13,… | CVE-2024-21762 | Critical | firmware-update | manual-only | manual-only | Yes | 84.3% |
+| FIND-1317 | FW-EDGE-0102 | A use of externally-controlled format string in Fortinet FortiOS versions 7.4.0 through 7.4.2, 7.2.0 through 7.2.6,… | CVE-2024-23113 | Critical | firmware-update | manual-only | manual-only | Yes | 61.7% |
+| FIND-1321 | FW-EDGE-0106 | A out-of-bounds write vulnerability in Fortinet FortiOS 7.4.0 through 7.4.1, FortiOS 7.2.0 through 7.2.5, FortiOS… | CVE-2023-42789 | Critical | firmware-update | manual-only | manual-only | No | 3.3% |
+| FIND-1343 | FW-EDGE-0128 | A buffer underwrite ('buffer underflow') vulnerability in the administrative interface of Fortinet FortiOS version… | CVE-2023-25610 | Critical | firmware-update | manual-only | manual-only | No | 18.3% |
+| FIND-1347 | FW-EDGE-0132 | A missing authentication for critical function in Fortinet FortiProxy versions 7.6.0 through 7.6.1, FortiSwitchManager… | CVE-2025-22252 | Critical | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1370 | FW-EDGE-0155 | A improper verification of cryptographic signature vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS… | CVE-2025-59718 | Critical | firmware-update | manual-only | manual-only | Yes | 63.0% |
+| FIND-1374 | FW-EDGE-0159 | An Authentication Bypass Using an Alternate Path or Channel vulnerability [CWE-288] vulnerability in Fortinet… | CVE-2026-24858 | Critical | firmware-update | manual-only | manual-only | Yes | 85.8% |
+| FIND-1412 | FW-EDGE-0197 | The management web interface in Palo Alto Networks PAN-OS before 5.0.18, 6.0.x before 6.0.13, 6.1.x before 6.1.10, and… | CVE-2016-3655 | Critical | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1414 | FW-EDGE-0199 | Buffer overflow in the GlobalProtect Portal in Palo Alto Networks PAN-OS before 5.0.18, 6.0.x before 6.0.13, 6.1.x… | CVE-2016-3657 | Critical | firmware-update | manual-only | manual-only | No | 4.8% |
+| FIND-1418 | FW-EDGE-0203 | Buffer overflow in the management web interface in Palo Alto Networks PAN-OS before 5.0.20, 5.1.x before 5.1.13, 6.0.x… | CVE-2016-9150 | Critical | firmware-update | manual-only | manual-only | No | 34.8% |
+| FIND-1426 | FW-EDGE-0211 | The GlobalProtect external interface in Palo Alto Networks PAN-OS before 6.1.17, 7.x before 7.0.15, 7.1.x before… | CVE-2017-7945 | Critical | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1429 | FW-EDGE-0214 | The DNS Proxy in Palo Alto Networks PAN-OS before 6.1.18, 7.x before 7.0.16, 7.1.x before 7.1.11, and 8.x before 8.0.3… | CVE-2017-8390 | Critical | firmware-update | manual-only | manual-only | No | 6.1% |
+| FIND-1433 | FW-EDGE-0218 | XML external entity (XXE) vulnerability in the GlobalProtect internal and external gateway interface in Palo Alto… | CVE-2017-9458 | Critical | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1434 | FW-EDGE-0219 | The web interface packet capture management component in Palo Alto Networks PAN-OS before 6.1.19, 7.0.x before 7.0.19,… | CVE-2017-15940 | Critical | firmware-update | manual-only | manual-only | No | 4.9% |
+| FIND-1437 | FW-EDGE-0222 | Palo Alto Networks PAN-OS before 6.1.19, 7.0.x before 7.0.19, 7.1.x before 7.1.14, and 8.0.x before 8.0.6 allows… | CVE-2017-15944 | Critical | firmware-update | manual-only | manual-only | Yes | 98.3% |
+| FIND-1483 | FW-EDGE-0268 | A memory corruption vulnerability exists in Palo Alto Networks GlobalProtect portal and gateway interfaces that… | CVE-2021-3064 | Critical | firmware-update | manual-only | manual-only | No | 19.1% |
+| FIND-1817 | APP-0002 | In Apache Log4j 2.x before 2.8.2, when using the TCP socket server or UDP socket server to receive serialized log… | CVE-2017-5645 | Critical | patch | manual-only | manual-only | No | 89.0% |
+| FIND-1825 | APP-0010 | By design, the JDBCAppender in Log4j 1.2.x accepts an SQL statement as a configuration parameter where the values to… | CVE-2022-23305 | Critical | patch | manual-only | manual-only | No | 66.5% |
+| FIND-1853 | APP-0038 | The ExceptionDelegator component in Apache Struts before 2.2.3.1 interprets parameter values as OGNL expressions… | CVE-2012-0391 | Critical | patch | manual-only | manual-only | Yes | 75.1% |
+| FIND-1869 | APP-0054 | Apache Struts 2.0.0 through 2.3.15 allows remote attackers to execute arbitrary OGNL expressions via a parameter with… | CVE-2013-2251 | Critical | patch | manual-only | manual-only | Yes | 100.0% |
+| FIND-1884 | APP-0069 | XSLTResult in Apache Struts 2.x before 2.3.20.2, 2.3.24.x before 2.3.24.2, and 2.3.28.x before 2.3.28.1 allows remote… | CVE-2016-3082 | Critical | patch | manual-only | manual-only | No | 19.5% |
+| FIND-1885 | APP-0070 | Apache Struts 2.3.19 to 2.3.20.2, 2.3.21 to 2.3.24.1, and 2.3.25 to 2.3.28, when Dynamic Method Invocation is enabled,… | CVE-2016-3087 | Critical | patch | manual-only | manual-only | No | 80.5% |
+| FIND-1893 | APP-0078 | The REST plugin in Apache Struts 2 2.3.19 through 2.3.28.1 allows remote attackers to execute arbitrary code via a… | CVE-2016-4438 | Critical | patch | manual-only | manual-only | No | 16.6% |
+| FIND-1895 | APP-0080 | Apache Struts 2 before 2.3.29 and 2.5.x before 2.5.1 allow attackers to have unspecified impact via vectors related to… | CVE-2016-4436 | Critical | patch | manual-only | manual-only | No | 6.5% |
+| FIND-1896 | APP-0081 | The Jakarta Multipart parser in Apache Struts 2 2.3.x before 2.3.32 and 2.5.x before 2.5.10.1 has incorrect exception… | CVE-2017-5638 | Critical | patch | manual-only | manual-only | Yes | 100.0% |
+| FIND-1897 | APP-0082 | The Struts 1 plugin in Apache Struts 2.1.x and 2.3.x might allow remote code execution via a malicious field value… | CVE-2017-9791 | Critical | patch | manual-only | manual-only | Yes | 98.8% |
+| FIND-1902 | APP-0087 | In the Convention plugin in Apache Struts 2.3.x before 2.3.31, and 2.5.x before 2.5.5, it is possible to prepare a… | CVE-2016-6795 | Critical | patch | manual-only | manual-only | No | 8.2% |
+| FIND-1904 | APP-0089 | In Apache Struts 2.0.0 through 2.3.33 and 2.5 through 2.5.10.1, using an unintentional expression in a Freemarker tag… | CVE-2017-12611 | Critical | patch | manual-only | manual-only | No | 87.1% |
+| FIND-1913 | APP-0098 | Apache Struts before 2.3.1.2 allows remote attackers to bypass security protections in the ParameterInterceptor class… | CVE-2011-3923 | Critical | patch | manual-only | manual-only | No | 88.4% |
+| FIND-1916 | APP-0101 | Apache Struts 2.0.0 to 2.5.20 forced double OGNL evaluation, when evaluated on raw user input in tag attributes, may… | CVE-2019-0230 | Critical | patch | manual-only | manual-only | No | 97.1% |
+| FIND-1918 | APP-0103 | Forced OGNL evaluation, when evaluated on raw user input in tag attributes, may lead to remote code execution.… | CVE-2020-17530 | Critical | patch | manual-only | manual-only | Yes | 95.6% |
+| FIND-1919 | APP-0104 | The fix issued for CVE-2020-17530 was incomplete. So from Apache Struts 2.0.0 to 2.5.29, still some of the tag’s… | CVE-2021-31805 | Critical | patch | manual-only | manual-only | No | 85.3% |
+| FIND-1923 | APP-0108 | File upload logic in Apache Struts is flawed. An attacker can manipulate file upload params to enable paths traversal… | CVE-2024-53677 | Critical | patch | manual-only | manual-only | No | 78.2% |
+| FIND-1946 | APP-0131 | Spring Framework, versions 5.0 prior to 5.0.5 and versions 4.3 prior to 4.3.15 and older unsupported versions, allow… | CVE-2018-1270 | Critical | patch | manual-only | manual-only | No | 77.2% |
+| FIND-1949 | APP-0134 | Spring Framework, versions 5.0 prior to 5.0.5 and versions 4.3 prior to 4.3.16 and older unsupported versions, allow… | CVE-2018-1275 | Critical | patch | manual-only | manual-only | No | 57.6% |
+| FIND-1955 | APP-0140 | Pivotal Spring Framework through 5.3.16 suffers from a potential remote code execution (RCE) issue if used for Java… | CVE-2016-1000027 | Critical | patch | manual-only | manual-only | No | 32.3% |
+| FIND-1959 | APP-0144 | Spring Integration framework provides Kryo Codec implementations as an alternative for Java (de)serialization. When… | CVE-2020-5413 | Critical | patch | manual-only | manual-only | No | 4.4% |
+| FIND-1961 | APP-0146 | Element Plug-in for vCenter Server incorporates SpringBoot Framework. SpringBoot Framework versions prior to 1.3.2 are… | CVE-2021-26987 | Critical | patch | manual-only | manual-only | No | 2.4% |
+| FIND-1978 | APP-0163 | Thorn SFTP gateway 3.4.x before 3.4.4 uses Pivotal Spring Framework for Java deserialization of untrusted data, which… | CVE-2023-47174 | Critical | patch | manual-only | manual-only | No | 1.0% |
+| FIND-1980 | APP-0165 | An issue in SpringBlade v.3.7.0 and before allows a remote attacker to escalate privileges via the lack of permissions… | CVE-2023-47458 | Critical | patch | manual-only | manual-only | No | 0.6% |
+| FIND-2041 | APP-0226 | Unauthenticated arbitrary file upload vulnerability in Blueimp jQuery-File-Upload <= v9.22.0 | CVE-2018-9206 | Critical | patch | manual-only | manual-only | No | 97.1% |
+| FIND-2042 | APP-0227 | Unauthenticated arbitrary file upload vulnerability in jQuery Picture Cut <= v1.1Beta | CVE-2018-9208 | Critical | patch | manual-only | manual-only | No | 2.7% |
+| FIND-2043 | APP-0228 | Arbitrary file upload in jQuery Upload File <= 4.0.2 | CVE-2018-9207 | Critical | patch | manual-only | manual-only | No | 3.5% |
+| FIND-2047 | APP-0232 | An insecure component vulnerability exists in Magento 2.1 prior to 2.1.19, Magento 2.2 prior to 2.2.10, Magento 2.3… | CVE-2019-8121 | Critical | patch | manual-only | manual-only | No | 1.2% |
+| FIND-2048 | APP-0233 | Unrestricted file upload vulnerability in server/php/UploadHandler.php in the jQuery File Upload Plugin 6.4.4 for… | CVE-2014-8739 | Critical | patch | manual-only | manual-only | No | 91.7% |
+| FIND-2065 | APP-0250 | elFinder is an open-source file manager for web, written in JavaScript using jQuery UI. Several vulnerabilities affect… | CVE-2021-32682 | Critical | patch | manual-only | manual-only | No | 69.9% |
+| FIND-2076 | APP-0261 | Forms generated by JQueryForm.com before 2022-02-05 (if file-upload capability is enabled) allow remote… | CVE-2022-24984 | Critical | patch | manual-only | manual-only | No | 2.6% |
+| FIND-2097 | APP-0282 | A JQuery Unrestricted Arbitrary File Upload vulnerability was discovered in Hospital Management System V4.0 which… | CVE-2020-26629 | Critical | patch | manual-only | manual-only | No | 1.2% |
+| FIND-2115 | APP-0300 | The Work The Flow File Upload plugin for WordPress is vulnerable to arbitrary file uploads due to missing file type… | CVE-2015-10138 | Critical | patch | manual-only | manual-only | No | 2.4% |
+| FIND-422 | CLOUD-0107 | BinderHub is a kubernetes-based cloud service that allows users to share reproducible interactive computing… | CVE-2021-39159 | Critical | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1943 | APP-0128 | Under some situations, the Spring Framework 4.2.0 to 4.2.1, 4.0.0 to 4.1.7, 3.2.0 to 3.2.14 and older unsupported… | CVE-2015-5211 | Critical | patch | manual-only | manual-only | No | 2.6% |
+| FIND-43 | WEB-PORTAL-0028 | Multiple vulnerabilities in the OpenSSL ASN.1 parser, as used in Novell iManager 2.0.2, allows remote attackers to… | CVE-2005-1730 | Critical | config-change | manual-only | manual-only | No | 4.6% |
+| FIND-54 | WEB-PORTAL-0039 | Off-by-one error in the DTLS implementation in OpenSSL 0.9.8 before 0.9.8f allows remote attackers to execute… | CVE-2007-4995 | Critical | config-change | manual-only | manual-only | No | 11.2% |
+| FIND-101 | WEB-PORTAL-0086 | The U.S. Defense Information Systems Agency (DISA) Security Readiness Review (SRR) script for the Solaris x86 platform… | CVE-2009-4211 | Critical | config-change | manual-only | manual-only | No | 1.7% |
+| FIND-123 | WEB-PORTAL-0108 | Double free vulnerability in OpenSSL 0.9.8 before 0.9.8s, when X509_V_FLAG_POLICY_CHECK is enabled, allows remote… | CVE-2011-4109 | Critical | config-change | manual-only | manual-only | No | 17.7% |
+| FIND-211 | WEB-PORTAL-0196 | The OpenSSLX509Certificate class in org/conscrypt/OpenSSLX509Certificate.java in Android before 5.1.1 LMY48I… | CVE-2015-3837 | Critical | config-change | manual-only | manual-only | No | 1.5% |
+| FIND-937 | NET-RTSW-0022 | HTTP server for Cisco IOS 11.3 to 12.2 allows attackers to bypass authentication and execute arbitrary commands, when… | CVE-2001-0537 | Critical | firmware-update | manual-only | manual-only | No | 68.5% |
+| FIND-969 | NET-RTSW-0054 | Cisco IOS 12.0 through 12.2, when IP routing is disabled, accepts false ICMP redirect messages, which allows remote… | CVE-2003-1398 | Critical | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-989 | NET-RTSW-0074 | Cisco IOS 12.0 to 12.4 might allow remote attackers to execute arbitrary code via a heap-based buffer overflow in… | CVE-2005-3481 | Critical | firmware-update | manual-only | manual-only | No | 7.1% |
+| FIND-1000 | NET-RTSW-0085 | The web interface on Cisco IOS 12.3(8)JA and 12.3(8)JA1, as used on the Cisco Wireless Access Point and Wireless… | CVE-2006-3291 | Critical | firmware-update | manual-only | manual-only | No | 3.8% |
+| FIND-1017 | NET-RTSW-0102 | The FTP Server in Cisco IOS 11.3 through 12.4 does not properly check user authorization, which allows remote… | CVE-2007-2586 | Critical | firmware-update | manual-only | manual-only | No | 14.4% |
+| FIND-1023 | NET-RTSW-0108 | Buffer overflow in the Next Hop Resolution Protocol (NHRP) functionality in Cisco IOS 12.0 through 12.4 allows remote… | CVE-2007-4286 | Critical | firmware-update | manual-only | manual-only | No | 19.4% |
+| FIND-1025 | NET-RTSW-0110 | Multiple memory leaks in Cisco IOS 12.0 through 12.4 allow remote attackers to cause a denial of service (device… | CVE-2007-4292 | Critical | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-1031 | NET-RTSW-0116 | Stack-based buffer overflow in the Line Printer Daemon (LPD) in Cisco IOS before 12.2(18)SXF11, 12.4(16a), and… | CVE-2007-5381 | Critical | firmware-update | manual-only | manual-only | No | 14.7% |
+| FIND-1037 | NET-RTSW-0122 | Integer overflow in Cisco IOS allows remote attackers to execute arbitrary code via unspecified vectors. NOTE: as of… | CVE-2007-5552 | Critical | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-1057 | NET-RTSW-0142 | Cisco IOS 12.2 and 12.3 on Cisco uBR10012 series devices, when linecard redundancy is configured, enables a read/write… | CVE-2008-3807 | Critical | firmware-update | manual-only | manual-only | No | 3.5% |
+| FIND-1181 | NET-RTSW-0266 | Cisco IOS 12.0, 15.0, and 15.1, when a Policy Feature Card 3C (PFC3C) is used, does not create a fragment entry during… | CVE-2011-4012 | Critical | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1661 | WIN-SRV-0026 | The Windows Internet Naming Service (WINS) for Microsoft Windows Server 2003, and possibly Windows NT and Server 2000,… | CVE-2003-0825 | Critical | patch | ansible-windows | auto-approvable | No | 12.2% |
+| FIND-1711 | WIN-SRV-0076 | Heap-based buffer overflow in T2EMBED.DLL in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 up to SP1,… | CVE-2006-0010 | Critical | patch | ansible-windows | auto-approvable | No | 33.1% |
+| FIND-1727 | WIN-SRV-0092 | Buffer overflow in the TCP/IP Protocol driver in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1 and… | CVE-2006-2379 | Critical | patch | ansible-windows | auto-approvable | No | 54.1% |
+| FIND-1753 | WIN-SRV-0118 | Integer overflow in the Vector Markup Language (VML) implementation (vgx.dll) in Microsoft Internet Explorer 5.01, 6,… | CVE-2007-0024 | Critical | patch | ansible-windows | auto-approvable | No | 43.7% |
+| FIND-1755 | WIN-SRV-0120 | Buffer overflow in the Step-by-Step Interactive Training in Microsoft Windows 2000 SP4, XP SP2 and Professional, and… | CVE-2006-3448 | Critical | patch | ansible-windows | auto-approvable | No | 36.7% |
+| FIND-1765 | WIN-SRV-0130 | Unspecified vulnerability in Microsoft Agent (msagent\agentsvr.exe) in Windows 2000 SP4, XP SP2, and Server 2003, 2003… | CVE-2007-1205 | Critical | patch | ansible-windows | auto-approvable | No | 30.9% |
+| FIND-1768 | WIN-SRV-0133 | Unspecified vulnerability in Microsoft Windows 2000, XP, and Server 2003 allows user-assisted remote attackers to… | CVE-2007-2374 | Critical | patch | ansible-windows | auto-approvable | No | 17.4% |
+| FIND-1769 | WIN-SRV-0134 | Microsoft Internet Explorer 5.01 SP4 on Windows 2000 SP4; 6 SP1 on Windows 2000 SP4; 6 and 7 on Windows XP SP2, or… | CVE-2007-0942 | Critical | patch | ansible-windows | auto-approvable | No | 32.2% |
+| FIND-1770 | WIN-SRV-0135 | Unspecified vulnerability in the CTableCol::OnPropertyChange method in Microsoft Internet Explorer 5.01 SP4 on Windows… | CVE-2007-0944 | Critical | patch | ansible-windows | auto-approvable | No | 35.1% |
+| FIND-1771 | WIN-SRV-0136 | Microsoft Internet Explorer 6 SP1 on Windows 2000 SP4; 6 and 7 on Windows XP SP2, or Windows Server 2003 SP1 or SP2;… | CVE-2007-0945 | Critical | patch | ansible-windows | auto-approvable | No | 31.0% |
+| FIND-1772 | WIN-SRV-0137 | Unspecified vulnerability in Microsoft Internet Explorer 7 on Windows XP SP2, Windows Server 2003 SP1 or SP2, or… | CVE-2007-0946 | Critical | patch | ansible-windows | auto-approvable | No | 31.0% |
+| FIND-1773 | WIN-SRV-0138 | Use-after-free vulnerability in Microsoft Internet Explorer 7 on Windows XP SP2, Windows Server 2003 SP1 or SP2, or… | CVE-2007-0947 | Critical | patch | ansible-windows | auto-approvable | No | 32.0% |
+| FIND-1774 | WIN-SRV-0139 | Unspecified vulnerability in the mdsauth.dll COM object in Microsoft Windows Media Server in the Microsoft Internet… | CVE-2007-2221 | Critical | patch | ansible-windows | auto-approvable | No | 34.9% |
+| FIND-1780 | WIN-SRV-0145 | Unspecified vulnerability in the Windows Schannel Security Package for Microsoft Windows 2000 SP4, XP SP2, and Server… | CVE-2007-2218 | Critical | patch | ansible-windows | auto-approvable | No | 12.5% |
+| FIND-1781 | WIN-SRV-0146 | Unspecified vulnerability in the Win32 API on Microsoft Windows 2000, XP SP2, and Server 2003 SP1 and SP2 allows… | CVE-2007-2219 | Critical | patch | ansible-windows | auto-approvable | No | 31.8% |
+| FIND-1784 | WIN-SRV-0149 | The PE Loader service in Microsoft .NET Framework 1.0, 1.1, and 2.0 for Windows 2000, XP, Server 2003, and Vista… | CVE-2007-0041 | Critical | patch | ansible-windows | auto-approvable | No | 30.7% |
+| FIND-1786 | WIN-SRV-0151 | The Just In Time (JIT) Compiler service in Microsoft .NET Framework 1.0, 1.1, and 2.0 for Windows 2000, XP, Server… | CVE-2007-0043 | Critical | patch | ansible-windows | auto-approvable | No | 30.7% |
+| FIND-1788 | WIN-SRV-0153 | Object linking and embedding (OLE) Automation, as used in Microsoft Windows 2000 SP4, XP SP2, Server 2003 SP1 and SP2,… | CVE-2007-2224 | Critical | patch | ansible-windows | auto-approvable | No | 34.5% |
+| FIND-1789 | WIN-SRV-0154 | Integer overflow in the AttemptWrite function in Graphics Rendering Engine (GDI) on Microsoft Windows 2000 SP4, XP… | CVE-2007-3034 | Critical | patch | ansible-windows | auto-approvable | No | 51.9% |
+| FIND-1791 | WIN-SRV-0156 | Kodak Image Viewer in Microsoft Windows 2000 SP4, and in some cases XP SP2 and Server 2003 SP1 and SP2, allows remote… | CVE-2007-2217 | Critical | patch | ansible-windows | auto-approvable | No | 41.4% |
+| FIND-1793 | WIN-SRV-0158 | Heap-based buffer overflow in Microsoft Outlook Express 6 and earlier, and Windows Mail for Vista, allows remote… | CVE-2007-3897 | Critical | patch | ansible-windows | auto-approvable | No | 54.6% |
+| FIND-1794 | WIN-SRV-0159 | The URL handling in Shell32.dll in the Windows shell in Microsoft Windows XP and Server 2003, with Internet Explorer 7… | CVE-2007-3896 | Critical | patch | ansible-windows | auto-approvable | No | 53.8% |
+| FIND-1797 | WIN-SRV-0162 | Heap-based buffer overflow in Windows Media Format Runtime 7.1, 9, 9.5, 9.5 x64 Edition, 11, and Windows Media… | CVE-2007-0064 | Critical | patch | ansible-windows | auto-approvable | No | 36.0% |
+| FIND-1801 | WIN-SRV-0166 | Unspecified vulnerability in the kernel in Microsoft Windows XP SP2, Server 2003, and Vista allows remote attackers to… | CVE-2007-0069 | Critical | patch | ansible-windows | auto-approvable | No | 49.2% |
+| FIND-1807 | WIN-SRV-0172 | The (1) VBScript (VBScript.dll) and (2) JScript (JScript.dll) scripting engines 5.1 and 5.6, as used in Microsoft… | CVE-2008-0083 | Critical | patch | ansible-windows | auto-approvable | No | 30.0% |
+| FIND-1811 | WIN-SRV-0176 | The HxTocCtrl ActiveX control (hxvz.dll), as used in Microsoft Internet Explorer 5.01 SP4 and 6 SP1, in Windows XP… | CVE-2008-1086 | Critical | patch | ansible-windows | auto-approvable | No | 30.5% |
+| FIND-1812 | WIN-SRV-0177 | Stack-based buffer overflow in GDI in Microsoft Windows 2000 SP4, XP SP2, Server 2003 SP1 and SP2, Vista, and Server… | CVE-2008-1087 | Critical | patch | ansible-windows | auto-approvable | No | 56.6% |
+| FIND-1814 | WIN-SRV-0179 | Apple Safari on Mac OS X, and before 3.1.2 on Windows, does not prompt the user before downloading an object that has… | CVE-2008-2540 | Critical | patch | ansible-windows | auto-approvable | No | 8.3% |
+| FIND-1863 | APP-0048 | Apache Struts Showcase App 2.0.0 through 2.3.13, as used in Struts 2 before 2.3.14.3, allows remote attackers to… | CVE-2013-1965 | Critical | patch | manual-only | manual-only | No | 93.4% |
+| FIND-1864 | APP-0049 | Apache Struts 2 before 2.3.14.2 allows remote attackers to execute arbitrary OGNL code via a crafted request that is… | CVE-2013-1966 | Critical | patch | manual-only | manual-only | No | 71.8% |
+| FIND-1866 | APP-0051 | Apache Struts 2 before 2.3.14.3 allows remote attackers to execute arbitrary OGNL code via a request with a crafted… | CVE-2013-2134 | Critical | patch | manual-only | manual-only | No | 70.2% |
+| FIND-1867 | APP-0052 | Apache Struts 2 before 2.3.14.3 allows remote attackers to execute arbitrary OGNL code via a request with a crafted… | CVE-2013-2135 | Critical | patch | manual-only | manual-only | No | 13.8% |
+| FIND-276 | WEB-PORTAL-0261 | Node.js was affected by OpenSSL vulnerability CVE-2017-3737 in regards to the use of SSL_read() due to TLS handshake… | CVE-2017-15896 | Critical | config-change | manual-only | manual-only | No | 2.4% |
+| FIND-309 | WEB-PORTAL-0294 | An issue was discovered in openfortivpn 1.11.0 when used with OpenSSL before 1.0.2. tunnel.c mishandles certificate… | CVE-2020-7043 | Critical | config-change | manual-only | manual-only | No | 2.5% |
+| FIND-310 | WEB-PORTAL-0295 | openssl_x509_check_host in lua-openssl 0.7.7-1 mishandles X.509 certificate validation because it uses lua_pushboolean… | CVE-2020-9432 | Critical | config-change | manual-only | manual-only | No | 0.8% |
+| FIND-311 | WEB-PORTAL-0296 | openssl_x509_check_email in lua-openssl 0.7.7-1 mishandles X.509 certificate validation because it uses… | CVE-2020-9433 | Critical | config-change | manual-only | manual-only | No | 0.8% |
+| FIND-312 | WEB-PORTAL-0297 | openssl_x509_check_ip_asc in lua-openssl 0.7.7-1 mishandles X.509 certificate validation because it uses… | CVE-2020-9434 | Critical | config-change | manual-only | manual-only | No | 0.8% |
+| FIND-313 | WEB-PORTAL-0298 | A flaw was found when an OpenSSL security provider is used with Wildfly, the 'enabled-protocols' value in the Wildfly… | CVE-2019-14887 | Critical | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-410 | CLOUD-0095 | Kubernetes Java client libraries in version 10.0.0 and versions prior to 9.0.1 allow writes to paths outside of the… | CVE-2020-8570 | Critical | firmware-update | manual-only | manual-only | No | 3.6% |
+| FIND-507 | CLOUD-0192 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All Argo CD versions starting with 2.3.0-rc1… | CVE-2023-23947 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-536 | CLOUD-0221 | KubePi is an opensource kubernetes management panel. A normal user has permission to create/update users, they can… | CVE-2023-37917 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-577 | CLOUD-0262 | datahub-helm provides the Kubernetes Helm charts for deploying Datahub and its dependencies on a Kubernetes cluster.… | CVE-2024-29037 | Critical | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-642 | WEBAPP-BILLING-API | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-649 | WEBAPP-VENDOR-ONBOARDING | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-650 | WEBAPP-CHECKOUT-SERVICE | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-666 | WEBAPP-CUSTOMER-PORTAL | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-667 | WEBAPP-EMPLOYEE-HR-PORTAL | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-724 | WEBAPP-MARKETING-CMS | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-745 | WEBAPP-INTERNAL-WIKI | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-754 | WEBAPP-REPORTING-DASHBOARD | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-776 | WEBAPP-SUPPORT-TICKETING | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-815 | WEBAPP-SEARCH-SERVICE | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-816 | WEBAPP-MOBILE-BACKEND-API | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-827 | WEBAPP-NOTIFICATION-SERVICE | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-868 | WEBAPP-LOYALTY-REWARDS | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-872 | WEBAPP-PARTNER-EXTRANET | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-877 | WEBAPP-ORDER-SERVICE | Server-Side Request Forgery (SSRF) (CWE-918) | — | Critical | config-change | manual-only | manual-only | — | — |
+| FIND-1264 | FW-EDGE-0049 | An Improper Limitation of a Pathname to a Restricted Directory ("Path Traversal") in Fortinet FortiOS 6.0.0 to 6.0.4,… | CVE-2018-13379 | Critical | firmware-update | manual-only | manual-only | Yes | 100.0% |
+| FIND-1267 | FW-EDGE-0052 | An Improper Authorization vulnerability in Fortinet FortiOS 6.0.0 to 6.0.4, 5.6.0 to 5.6.8 and 5.4.1 to 5.4.10 and… | CVE-2018-13382 | Critical | firmware-update | manual-only | manual-only | Yes | 81.7% |
+| FIND-1972 | APP-0157 | Grails Spring Security Core plugin is vulnerable to privilege escalation. The vulnerability allows an attacker access… | CVE-2022-41923 | Critical | patch | manual-only | manual-only | No | 1.7% |
+| FIND-464 | CLOUD-0149 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All versions of Argo CD starting with v1.0.0… | CVE-2022-31035 | Critical | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-468 | CLOUD-0153 | Weave GitOps is a simple open source developer platform for people who want cloud native applications, without needing… | CVE-2022-31098 | Critical | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-501 | CLOUD-0186 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Versions of Argo CD starting with v1.8.2 and… | CVE-2023-22482 | Critical | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-565 | CLOUD-0250 | Microsoft Azure Kubernetes Service Confidential Container Remote Code Execution Vulnerability | CVE-2024-21376 | Critical | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-566 | CLOUD-0251 | Microsoft Azure Kubernetes Service Confidential Container Elevation of Privilege Vulnerability | CVE-2024-21403 | Critical | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-569 | CLOUD-0254 | Microsoft Azure Kubernetes Service Confidential Container Elevation of Privilege Vulnerability | CVE-2024-21400 | Critical | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-572 | CLOUD-0257 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Due to the improper URL protocols filtering… | CVE-2024-28175 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-582 | CLOUD-0267 | Microsoft Azure Kubernetes Service Confidential Container Elevation of Privilege Vulnerability | CVE-2024-29990 | Critical | firmware-update | manual-only | manual-only | No | 18.0% |
+| FIND-589 | CLOUD-0274 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. It has been discovered that an unprivileged… | CVE-2024-31989 | Critical | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1022 | NET-RTSW-0107 | Unspecified vulnerability in Cisco IOS and Cisco IOS XR 12.x up to 12.3, including some versions before 12.3(15) and… | CVE-2007-4285 | Critical | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1070 | NET-RTSW-0155 | Memory leak in the SSLVPN feature in Cisco IOS 12.3 through 12.4 allows remote attackers to cause a denial of service… | CVE-2009-0628 | Critical | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1278 | FW-EDGE-0063 | A improper neutralization of special elements used in an os command ('os command injection') in Fortinet FortiOS… | CVE-2021-44171 | Critical | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1338 | FW-EDGE-0123 | A weak authentication in Fortinet FortiOS versions 7.4.0 through 7.4.4, 7.2.0 through 7.2.8, 7.0.0 through 7.0.15,… | CVE-2024-48886 | Critical | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1393 | FW-EDGE-0178 | The device-management command-line interface in Palo Alto Networks PAN-OS before 3.1.10 and 4.0.x before 4.0.5 allows… | CVE-2012-6591 | Critical | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1396 | FW-EDGE-0181 | The device-management command-line interface in Palo Alto Networks PAN-OS before 3.1.11, 4.0.x before 4.0.8, and 4.1.x… | CVE-2012-6594 | Critical | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1397 | FW-EDGE-0182 | The device-management command-line interface in Palo Alto Networks PAN-OS 4.0.x before 4.0.9 and 4.1.x before 4.1.2… | CVE-2012-6595 | Critical | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1400 | FW-EDGE-0185 | The device-management command-line interface in Palo Alto Networks PAN-OS 4.0.x before 4.0.8 allows remote… | CVE-2012-6598 | Critical | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1401 | FW-EDGE-0186 | The device-management command-line interface in Palo Alto Networks PAN-OS 4.0.x before 4.0.8 and 4.1.x before 4.1.1… | CVE-2012-6599 | Critical | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1402 | FW-EDGE-0187 | The device-management command-line interface in Palo Alto Networks PAN-OS 4.0.x before 4.0.9 and 4.1.x before 4.1.2… | CVE-2012-6600 | Critical | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-1404 | FW-EDGE-0189 | The device-management command-line interface in Palo Alto Networks PAN-OS before 3.1.10 and 4.0.x before 4.0.4 allows… | CVE-2012-6602 | Critical | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1406 | FW-EDGE-0191 | The device-management command-line interface in Palo Alto Networks PAN-OS before 3.1.11 and 4.0.x before 4.0.9 allows… | CVE-2012-6604 | Critical | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1407 | FW-EDGE-0192 | The device-management command-line interface in Palo Alto Networks PAN-OS before 3.1.11 and 4.0.x before 4.0.9 allows… | CVE-2012-6605 | Critical | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1742 | WIN-SRV-0107 | Unspecified vulnerability in the Server service in Microsoft Windows 2000 SP4, Server 2003 SP1 and earlier, and XP SP2… | CVE-2006-4696 | Critical | patch | ansible-windows | auto-approvable | No | 43.5% |
+| FIND-1798 | WIN-SRV-0163 | Stack-based buffer overflow in the Microsoft Message Queuing (MSMQ) service in Microsoft Windows 2000 Server SP4,… | CVE-2007-3039 | Critical | patch | ansible-windows | auto-approvable | No | 69.1% |
+| FIND-1813 | WIN-SRV-0178 | Microsoft Windows XP Professional SP2, Vista, and Server 2003 and 2008 does not properly assign activities to the (1)… | CVE-2008-1436 | Critical | patch | ansible-windows | auto-approvable | No | 36.8% |
+| FIND-1821 | APP-0006 | It was found that the fix to address CVE-2021-44228 in Apache Log4j 2.15.0 was incomplete in certain non-default… | CVE-2021-45046 | Critical | patch | manual-only | manual-only | Yes | 100.0% |
+| FIND-1 | WIN-DC01 | MS Windows Print Spooler Remote Code Execution (PrintNightmare) | CVE-2021-34527 | Critical | patch | ansible-windows | needs-change-approval | Yes | 99.8% |
+| FIND-323 | CLOUD-0008 | In Kubernetes versions 1.3.x, 1.4.x, 1.5.x, 1.6.x and prior to versions 1.7.14, 1.8.9 and 1.9.4 containers using… | CVE-2017-1002101 | High | firmware-update | manual-only | manual-only | No | 11.5% |
+| FIND-327 | CLOUD-0012 | Kubernetes CRI-O version prior to 1.9 contains a Privilege Context Switching Error (CWE-270) vulnerability in the… | CVE-2018-1000400 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-330 | CLOUD-0015 | The F5 BIG-IP Controller for Kubernetes 1.0.0-1.5.0 (k8s-bigip-crtl) passes BIG-IP username and password as command… | CVE-2018-5543 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-331 | CLOUD-0016 | An exposure of sensitive information vulnerability exists in Jenkins Kubernetes Plugin 1.10.1 and earlier in… | CVE-2018-1999040 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-339 | CLOUD-0024 | Cloud Foundry Container Runtime, versions prior to 0.29.0, deploys Kubernetes clusters utilize the same CA… | CVE-2019-3779 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-347 | CLOUD-0032 | A cross-site request forgery vulnerability in Jenkins JX Resources Plugin 1.0.36 and earlier in… | CVE-2019-10338 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-348 | CLOUD-0033 | A missing permission check in Jenkins JX Resources Plugin 1.0.36 and earlier in… | CVE-2019-10339 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-362 | CLOUD-0047 | A cross-site request forgery vulnerability in Jenkins ElasticBox Jenkins Kubernetes CI/CD Plugin allows attackers to… | CVE-2019-10468 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-367 | CLOUD-0052 | A cross-site request forgery vulnerability in Jenkins Alauda Kubernetes Suport Plugin 2.3.0 and earlier allows… | CVE-2019-16575 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-373 | CLOUD-0058 | Jenkins Google Kubernetes Engine Plugin 0.8.0 and earlier does not configure its YAML parser to prevent the… | CVE-2020-2121 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-385 | CLOUD-0070 | Jenkins ElasticBox Jenkins Kubernetes CI/CD Plugin 1.3 and earlier does not configure its YAML parser to prevent the… | CVE-2020-2211 | High | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-426 | CLOUD-0111 | A security issue was discovered in Kubernetes where a user may be able to create a container with subpath volume… | CVE-2021-25741 | High | firmware-update | manual-only | manual-only | No | 8.0% |
+| FIND-428 | CLOUD-0113 | Minio is a Kubernetes native application for cloud storage. All users on release `RELEASE.2021-10-10T16-53-30Z` are… | CVE-2021-41137 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-429 | CLOUD-0114 | kustomize-controller is a Kubernetes operator, specialized in running continuous delivery pipelines for infrastructure… | CVE-2021-41254 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-432 | CLOUD-0117 | MinIO is a Kubernetes native application for cloud storage. Prior to version `RELEASE.2021-12-27T07-23-18Z`, a… | CVE-2021-43858 | High | firmware-update | manual-only | manual-only | No | 35.5% |
+| FIND-434 | CLOUD-0119 | Prior to v0.6.1, bored-agent failed to sanitize incoming kubernetes impersonation headers allowing a user to override… | CVE-2022-0270 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-436 | CLOUD-0121 | capsule-proxy is a reverse proxy for Capsule Operator which provides multi-tenancy in Kubernetes. In versions prior to… | CVE-2022-23652 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-443 | CLOUD-0128 | A flaw was found in CRI-O in the way it set kernel options for a pod. This issue allows anyone with rights to deploy a… | CVE-2022-0811 | High | firmware-update | manual-only | manual-only | No | 18.6% |
+| FIND-469 | CLOUD-0154 | IBM Spectrum Protect Plus Container Backup and Restore (10.1.5 through 10.1.10.2 for Kubernetes and 10.1.7 through… | CVE-2022-22472 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-478 | CLOUD-0163 | A flaw was found in the Red Hat Advanced Cluster Security for Kubernetes. Notifier secrets were not properly sanitized… | CVE-2022-1902 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-488 | CLOUD-0173 | Capsule is a multi-tenancy and policy-based framework for Kubernetes. Prior to version 0.1.3, a ServiceAccount… | CVE-2022-46167 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-495 | CLOUD-0180 | Weave GitOps is a simple open source developer platform for people who want cloud native applications, without needing… | CVE-2022-23508 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-541 | CLOUD-0226 | A flaw was found in the Kubernetes service for notebooks in RHODS, where it does not prevent pods from other… | CVE-2023-0923 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-547 | CLOUD-0232 | A security issue was discovered in Kubernetes where a user that can create pods on Windows nodes may be able to… | CVE-2023-3676 | High | firmware-update | manual-only | manual-only | No | 11.7% |
+| FIND-548 | CLOUD-0233 | A security issue was discovered in Kubernetes where a user that can create pods on Windows nodes may be able to… | CVE-2023-3955 | High | firmware-update | manual-only | manual-only | No | 3.4% |
+| FIND-550 | CLOUD-0235 | A security issue was discovered in Kubernetes where a user that can create pods on Windows nodes running… | CVE-2023-3893 | High | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-596 | CLOUD-0281 | Spring Cloud Data Flow is a microservices-based Streaming and Batch data processing in Cloud Foundry and Kubernetes.… | CVE-2024-22263 | High | firmware-update | manual-only | manual-only | No | 17.5% |
+| FIND-606 | CLOUD-0291 | Prior to 3385, the user-controlled role parameter enters the application in the… | CVE-2024-42363 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-607 | CLOUD-0292 | Kanister is a data protection workflow management tool. The kanister has a deployment called… | CVE-2024-43403 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1284 | FW-EDGE-0069 | A relative path traversal vulnerability [CWE-23] in Fortinet FortiOS version 7.2.0 through 7.2.2, 7.0.0 through 7.0.8… | CVE-2022-41335 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1290 | FW-EDGE-0075 | An improper neutralization of input during web page generation vulnerability ('Cross-site Scripting') [CWE-79] in… | CVE-2022-41330 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1313 | FW-EDGE-0098 | A double free in Fortinet FortiOS versions 7.0.0 through 7.0.5, FortiPAM version 1.0.0 through 1.0.3, 1.1.0 through… | CVE-2023-41678 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1314 | FW-EDGE-0099 | An improper privilege management vulnerability [CWE-269] in a Fortinet FortiOS HA cluster version 7.4.0 through 7.4.1… | CVE-2023-44250 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1320 | FW-EDGE-0105 | A use of externally-controlled format string in Fortinet FortiOS 7.2.0 through 7.2.4, 7.0.0 through 7.0.11, 6.4.0… | CVE-2023-29181 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1342 | FW-EDGE-0127 | An incorrect privilege assignment vulnerability [CWE-266] in Fortinet FortiOS version 7.6.0, 7.4.0 through 7.4.4,… | CVE-2024-40591 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1383 | FW-EDGE-0168 | A out-of-bounds write vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4.0 through 7.4.8, FortiOS… | CVE-2025-53844 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1474 | FW-EDGE-0259 | An OS command injection vulnerability in the Palo Alto Networks PAN-OS web interface enables an authenticated… | CVE-2021-3050 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1478 | FW-EDGE-0263 | A memory corruption vulnerability in Palo Alto Networks PAN-OS GlobalProtect Clientless VPN enables an authenticated… | CVE-2021-3056 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1479 | FW-EDGE-0264 | An OS command injection vulnerability in the Palo Alto Networks PAN-OS web interface enables an authenticated… | CVE-2021-3058 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1496 | FW-EDGE-0281 | A DOM-Based cross-site scripting (XSS) vulnerability in Palo Alto Networks PAN-OS software enables a remote attacker… | CVE-2023-6790 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1824 | APP-0009 | JMSSink in all versions of Log4j 1.x is vulnerable to deserialization of untrusted data when the attacker has write… | CVE-2022-23302 | High | patch | manual-only | manual-only | No | 63.6% |
+| FIND-1826 | APP-0011 | CVE-2020-9493 identified a deserialization issue that was present in Apache Chainsaw. Prior to Chainsaw V2.0 Chainsaw… | CVE-2022-23307 | High | patch | manual-only | manual-only | No | 54.4% |
+| FIND-1827 | APP-0012 | The Apache Log4j hotpatch package before log4j-cve-2021-44228-hotpatch-1.1-13 didn’t mimic the permissions of the JVM… | CVE-2021-3100 | High | patch | manual-only | manual-only | No | 0.4% |
+| FIND-1828 | APP-0013 | Incomplete fix for CVE-2021-3100. The Apache Log4j hotpatch package starting with log4j-cve-2021-44228-hotpatch-1.1-16… | CVE-2022-0070 | High | patch | manual-only | manual-only | No | 0.4% |
+| FIND-1831 | APP-0016 | Apache ActiveMQ Artemis allows access to diagnostic information and controls through MBeans, which are also exposed… | CVE-2023-50780 | High | patch | manual-only | manual-only | No | 17.0% |
+| FIND-1880 | APP-0065 | Apache Struts 2.x before 2.3.28 allows remote attackers to execute arbitrary code via a "%{}" sequence in a tag… | CVE-2016-0785 | High | patch | manual-only | manual-only | No | 8.8% |
+| FIND-1890 | APP-0075 | Apache Struts 2 2.3.20 through 2.3.28.1 mishandles token validation, which allows remote attackers to conduct… | CVE-2016-4430 | High | patch | manual-only | manual-only | No | 3.7% |
+| FIND-1908 | APP-0093 | Apache Struts 2.x before 2.3.29 allows remote attackers to execute arbitrary code via a "%{}" sequence in a tag… | CVE-2016-4461 | High | patch | manual-only | manual-only | No | 8.0% |
+| FIND-1909 | APP-0094 | The TextParseUtil.translateVariables method in Apache Struts 2.x before 2.3.20 allows remote attackers to execute… | CVE-2016-3090 | High | patch | manual-only | manual-only | No | 5.7% |
+| FIND-1914 | APP-0099 | A local code execution issue exists in Apache Struts2 when processing malformed XSLT files, which could let a… | CVE-2012-1592 | High | patch | manual-only | manual-only | No | 28.5% |
+| FIND-1942 | APP-0127 | When processing user provided XML documents, the Spring Framework 4.0.0 to 4.0.4, 3.0.0 to 3.2.8, and possibly earlier… | CVE-2014-0225 | High | patch | manual-only | manual-only | No | 1.7% |
+| FIND-1951 | APP-0136 | Spring Framework version 5.0.5 when used in combination with any versions of Spring Security contains an authorization… | CVE-2018-1258 | High | patch | manual-only | manual-only | No | 2.4% |
+| FIND-2061 | APP-0246 | Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution') in jquery-sparkle 1.5.2-beta… | CVE-2021-20084 | High | patch | manual-only | manual-only | No | 1.4% |
+| FIND-2062 | APP-0247 | Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution') in jquery-deparam 0.5.1… | CVE-2021-20087 | High | patch | manual-only | manual-only | No | 2.1% |
+| FIND-2063 | APP-0248 | Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution') in… | CVE-2021-20083 | High | patch | manual-only | manual-only | No | 4.2% |
+| FIND-2064 | APP-0249 | Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution') in jquery-bbq 1.2.1 allows a… | CVE-2021-20086 | High | patch | manual-only | manual-only | No | 6.1% |
+| FIND-2077 | APP-0262 | Forms generated by JQueryForm.com before 2022-02-05 allows a remote authenticated attacker to bypass authentication… | CVE-2022-24985 | High | patch | manual-only | manual-only | No | 2.3% |
+| FIND-2094 | APP-0279 | The Jquery news ticker plugin for WordPress is vulnerable to SQL Injection via the plugin's shortcode in versions up… | CVE-2023-5430 | High | patch | manual-only | manual-only | No | 0.8% |
+| FIND-2095 | APP-0280 | The Jquery accordion slideshow plugin for WordPress is vulnerable to SQL Injection via the plugin's shortcode in… | CVE-2023-5464 | High | patch | manual-only | manual-only | No | 0.8% |
+| FIND-383 | CLOUD-0068 | In Conjur OSS Helm Chart before 2.0.0, a recently identified critical vulnerability resulted in the installation of… | CVE-2020-4062 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-611 | CLOUD-0296 | JUJU_CONTEXT_ID is a predictable authentication secret. On a Juju machine (non-Kubernetes) or Juju charm container (on… | CVE-2024-7558 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-430 | CLOUD-0115 | Minio console is a graphical user interface for the for MinIO operator. Minio itself is a multi-cloud object storage… | CVE-2021-41266 | High | firmware-update | manual-only | manual-only | No | 48.4% |
+| FIND-1487 | FW-EDGE-0272 | A PAN-OS URL filtering policy misconfiguration could allow a network-based attacker to conduct reflected and amplified… | CVE-2022-0028 | High | firmware-update | manual-only | manual-only | Yes | 2.1% |
+| FIND-144 | WEB-PORTAL-0129 | PostgreSQL 9.2.x before 9.2.4, 9.1.x before 9.1.9, 9.0.x before 9.0.13, and 8.4.x before 8.4.17, when using OpenSSL,… | CVE-2013-1900 | High | config-change | manual-only | manual-only | No | 4.5% |
+| FIND-333 | CLOUD-0018 | Following the Gardener architecture, the Kubernetes apiserver of a Gardener managed shoot cluster resides in the… | CVE-2018-2475 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-378 | CLOUD-0063 | Their is an information disclosure vulnerability in Helm from version 3.1.0 and before version 3.2.0. `lookup` is a… | CVE-2020-11013 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-421 | CLOUD-0106 | Contour is a Kubernetes ingress controller using Envoy proxy. In Contour before version 1.17.1 a specially crafted… | CVE-2021-32783 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-502 | CLOUD-0187 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Versions starting with 2.5.0-rc1 and above,… | CVE-2023-22736 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-580 | CLOUD-0265 | There is a difficult‑to‑exploit improper authentication issue in the Home application for Esri Portal for ArcGIS… | CVE-2024-25699 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1021 | NET-RTSW-0106 | Unspecified vulnerability in the server side of the Secure Copy (SCP) implementation in Cisco 12.2-based IOS allows… | CVE-2007-4263 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1055 | NET-RTSW-0140 | Cisco IOS 12.0 through 12.4 on Cisco 10000, uBR10012 and uBR7200 series devices handles external UDP packets that are… | CVE-2008-3805 | High | firmware-update | manual-only | manual-only | No | 3.3% |
+| FIND-1056 | NET-RTSW-0141 | Cisco IOS 12.0 through 12.4 on Cisco 10000, uBR10012 and uBR7200 series devices handles external UDP packets that are… | CVE-2008-3806 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-371 | CLOUD-0056 | The docker-kubic package in SUSE CaaS Platform 3.0 before 17.09.1_ce-7.6.1 provided access to an insecure API locally… | CVE-2019-3682 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-605 | CLOUD-0290 | Capsule is a multi-tenancy and policy-based framework for Kubernetes. In Capsule v0.7.0 and earlier, the tenant-owner… | CVE-2024-39690 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-463 | CLOUD-0148 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All versions of Argo CD starting with… | CVE-2022-31034 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-471 | CLOUD-0156 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Argo CD starting with version 0.4.0 and… | CVE-2022-31105 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-563 | CLOUD-0248 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. The Argo CD API prior to versions 2.10-rc2,… | CVE-2024-22424 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-610 | CLOUD-0295 | External Secrets Operator is a Kubernetes operator that integrates external secret management systems. The… | CVE-2024-45041 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1458 | FW-EDGE-0243 | A cleartext transmission of sensitive information vulnerability in Palo Alto Networks PAN-OS Panorama that discloses… | CVE-2020-2013 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-235 | WEB-PORTAL-0220 | The X509_NAME_oneline function in crypto/x509/x509_obj.c in OpenSSL before 1.0.1t and 1.0.2 before 1.0.2h allows… | CVE-2016-2176 | High | config-change | manual-only | manual-only | No | 22.8% |
+| FIND-297 | WEB-PORTAL-0282 | An unprivileged user or program on Microsoft Windows which can create OpenSSL configuration files in a fixed location… | CVE-2019-2390 | High | config-change | manual-only | manual-only | No | 1.0% |
+| FIND-512 | CLOUD-0197 | KubeVirt is a virtual machine management add-on for Kubernetes. In versions 0.59.0 and prior, if a malicious user has… | CVE-2023-26484 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-546 | CLOUD-0231 | Garden provides automation for Kubernetes development and testing. Prior tov ersions 0.13.17 and 0.12.65, Garden has a… | CVE-2023-44392 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-570 | CLOUD-0255 | Improper Authentication vulnerability in Apache Pulsar Proxy allows an attacker to connect to the /proxy-stats… | CVE-2022-34321 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-627 | WEBAPP-NOTIFICATION-SERVICE | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-644 | WEBAPP-SUPPORT-TICKETING | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-657 | WEBAPP-MOBILE-BACKEND-API | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-678 | WEBAPP-BILLING-API | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-707 | WEBAPP-LOYALTY-REWARDS | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-730 | WEBAPP-ORDER-SERVICE | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-732 | WEBAPP-PARTNER-EXTRANET | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-736 | WEBAPP-MARKETING-CMS | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-752 | WEBAPP-VENDOR-ONBOARDING | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-759 | WEBAPP-SEARCH-SERVICE | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-777 | WEBAPP-CHECKOUT-SERVICE | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-839 | WEBAPP-EMPLOYEE-HR-PORTAL | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-875 | WEBAPP-INTERNAL-WIKI | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-887 | WEBAPP-CUSTOMER-PORTAL | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-900 | WEBAPP-REPORTING-DASHBOARD | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-1288 | FW-EDGE-0073 | A relative path traversal vulnerability [CWE-23] in Fortinet FortiOS version 7.2.0 through 7.2.2, 7.0.0 through 7.0.8… | CVE-2022-42476 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1467 | FW-EDGE-0252 | An authentication bypass vulnerability exists in the GlobalProtect SSL VPN component of Palo Alto Networks PAN-OS… | CVE-2020-2050 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1889 | APP-0074 | ActionServlet.java in Apache Struts 1 1.x through 1.3.10 does not properly restrict the Validator configuration, which… | CVE-2016-1182 | High | patch | manual-only | manual-only | No | 25.7% |
+| FIND-1926 | APP-0111 | Denial of Service vulnerability in Apache Struts, file leak in multipart request processing causes disk exhaustion.… | CVE-2025-66675 | High | patch | manual-only | manual-only | No | 0.5% |
+| FIND-1983 | APP-0168 | In Spring Cloud Function framework, versions 4.1.x prior to 4.1.2, 4.0.x prior to 4.0.8 an application is vulnerable… | CVE-2024-22271 | High | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2104 | APP-0289 | The WesHacks GitHub repository provides the official Hackathon competition website source code for the Muweilah… | CVE-2024-52583 | High | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2 | WIN-FS02 | MS17-010: SMBv1 Remote Code Execution (EternalBlue) | CVE-2017-0144 | Critical | patch | ansible-windows | auto-approvable | Yes | 99.2% |
+| FIND-295 | WEB-PORTAL-0280 | An issue was discovered in the openssl crate before 0.9.0 for Rust. There is an SSL/TLS man-in-the-middle… | CVE-2016-10931 | High | config-change | manual-only | manual-only | No | 0.7% |
+| FIND-336 | CLOUD-0021 | In Minikube versions 0.3.0-0.29.0, minikube exposes the Kubernetes Dashboard listening on the VM IP at port 30000. In… | CVE-2018-1002103 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-344 | CLOUD-0029 | In Kubernetes v1.12.0-v1.12.4 and v1.13.0, the rest.AnonymousClientConfig() method returns a copy of the provided… | CVE-2019-11243 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-352 | CLOUD-0037 | The Kubernetes kube-apiserver mistakenly allows access to a cluster-scoped custom resource if the request is made as… | CVE-2019-11247 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-447 | CLOUD-0132 | A flaw was found in all versions of kubeclient up to (but not including) v4.9.3, the Ruby client for Kubernetes REST… | CVE-2022-0759 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-448 | CLOUD-0133 | Garden is an automation platform for Kubernetes development and testing. In versions prior to 0.12.39 multiple… | CVE-2022-24829 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-494 | CLOUD-0179 | An image signature validation bypass vulnerability in Kyverno 1.8.3 and 1.8.4 allows a malicious image registry (or a… | CVE-2022-47633 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-604 | CLOUD-0289 | Kamaji is the Hosted Control Plane Manager for Kubernetes. In versions 1.0.0 and earlier, Kamaji uses an "open at the… | CVE-2024-42480 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-626 | WEBAPP-MARKETING-CMS | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-632 | WEBAPP-MOBILE-BACKEND-API | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-640 | WEBAPP-MOBILE-BACKEND-API | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-660 | WEBAPP-NOTIFICATION-SERVICE | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-687 | WEBAPP-ORDER-SERVICE | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-698 | WEBAPP-REPORTING-DASHBOARD | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-704 | WEBAPP-PARTNER-EXTRANET | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-727 | WEBAPP-LOYALTY-REWARDS | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-728 | WEBAPP-SUPPORT-TICKETING | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-743 | WEBAPP-BILLING-API | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-757 | WEBAPP-VENDOR-ONBOARDING | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-760 | WEBAPP-CHECKOUT-SERVICE | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-765 | WEBAPP-SEARCH-SERVICE | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-773 | WEBAPP-BILLING-API | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-774 | WEBAPP-ORDER-SERVICE | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-781 | WEBAPP-LOYALTY-REWARDS | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-784 | WEBAPP-CUSTOMER-PORTAL | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-788 | WEBAPP-SEARCH-SERVICE | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-791 | WEBAPP-INTERNAL-WIKI | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-799 | WEBAPP-SUPPORT-TICKETING | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-805 | WEBAPP-VENDOR-ONBOARDING | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-806 | WEBAPP-MARKETING-CMS | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-828 | WEBAPP-REPORTING-DASHBOARD | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-841 | WEBAPP-INTERNAL-WIKI | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-860 | WEBAPP-CUSTOMER-PORTAL | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-862 | WEBAPP-PARTNER-EXTRANET | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-876 | WEBAPP-EMPLOYEE-HR-PORTAL | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-904 | WEBAPP-NOTIFICATION-SERVICE | Unrestricted File Upload (CWE-434) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-905 | WEBAPP-CHECKOUT-SERVICE | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-908 | WEBAPP-EMPLOYEE-HR-PORTAL | JWT Signature Verification Bypass ('alg: none') (CWE-290) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-1254 | FW-EDGE-0039 | An information disclosure vulnerability in Fortinet FortiOS 6.0.0 and below versions reveals user's web portal login… | CVE-2018-9185 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1310 | FW-EDGE-0095 | An improper authorization vulnerability in Fortinet FortiOS 7.0.0 - 7.0.11 and 7.2.0 - 7.2.4 allows an attacker… | CVE-2023-41841 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1322 | FW-EDGE-0107 | A stack-based buffer overflow vulnerability in Fortinet FortiOS 7.4.0 through 7.4.1, FortiOS 7.2.0 through 7.2.5,… | CVE-2023-42790 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1341 | FW-EDGE-0126 | A stack-based buffer overflow [CWE-121] vulnerability in Fortinet FortiOS version 7.2.4 through 7.2.8 and version… | CVE-2024-35279 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1356 | FW-EDGE-0141 | An authentication bypass using an alternate path or channel [CWE-288] vulnerability in Fortinet FortiOS 6.4.0 through… | CVE-2024-26009 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1373 | FW-EDGE-0158 | A heap-based buffer overflow vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4.0 through 7.4.8,… | CVE-2025-25249 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1380 | FW-EDGE-0165 | An Authentication Bypass by Primary Weakness vulnerability [CWE-305] vulnerability in Fortinet FortiOS 7.6.0 through… | CVE-2026-22153 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1448 | FW-EDGE-0233 | A format string vulnerability in the Varrcvr daemon of PAN-OS on PA-7000 Series devices with a Log Forwarding Card… | CVE-2020-1992 | High | firmware-update | manual-only | manual-only | No | 3.4% |
+| FIND-1451 | FW-EDGE-0236 | An external control of path and data vulnerability in the Palo Alto Networks PAN-OS Panorama XSLT processing logic… | CVE-2020-2001 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1452 | FW-EDGE-0237 | An authentication bypass by spoofing vulnerability exists in the authentication daemon and User-ID components of Palo… | CVE-2020-2002 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1480 | FW-EDGE-0265 | An OS command injection vulnerability in the Palo Alto Networks PAN-OS management interface exists when performing… | CVE-2021-3059 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1488 | FW-EDGE-0273 | An authentication bypass vulnerability in the Palo Alto Networks PAN-OS 8.1 web interface allows a network-based… | CVE-2022-0030 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1809 | WIN-SRV-0174 | Heap-based buffer overflow in the CreateDIBPatternBrushPt function in GDI in Microsoft Windows 2000 SP4, XP SP2,… | CVE-2008-1083 | High | patch | ansible-windows | auto-approvable | No | 57.1% |
+| FIND-1865 | APP-0050 | Apache Struts 2 before 2.3.14.2 allows remote attackers to execute arbitrary OGNL code via a crafted request that is… | CVE-2013-2115 | High | patch | manual-only | manual-only | No | 72.8% |
+| FIND-1883 | APP-0068 | Apache Struts 2.3.19 to 2.3.20.2, 2.3.21 to 2.3.24.1, and 2.3.25 to 2.3.28, when Dynamic Method Invocation is enabled,… | CVE-2016-3081 | High | patch | manual-only | manual-only | No | 92.9% |
+| FIND-1888 | APP-0073 | ActionServlet.java in Apache Struts 1 1.x through 1.3.10 mishandles multithreaded access to an ActionForm instance,… | CVE-2016-1181 | High | patch | manual-only | manual-only | No | 13.1% |
+| FIND-1901 | APP-0086 | The REST Plugin in Apache Struts 2.1.1 through 2.3.x before 2.3.34 and 2.5.x before 2.5.13 uses an XStreamHandler with… | CVE-2017-9805 | High | patch | manual-only | manual-only | Yes | 99.4% |
+| FIND-1912 | APP-0097 | Apache Struts versions 2.3 to 2.3.34 and 2.5 to 2.5.16 suffer from possible Remote Code Execution when… | CVE-2018-11776 | High | patch | manual-only | manual-only | Yes | 100.0% |
+| FIND-1927 | APP-0112 | Missing XML Validation vulnerability in Apache Struts, Apache Struts. This issue affects Apache Struts: from 2.0.0… | CVE-2025-68493 | High | patch | manual-only | manual-only | No | 37.1% |
+| FIND-1982 | APP-0167 | Applications that use UriComponentsBuilder in Spring Framework to parse an externally provided URL (e.g. through a… | CVE-2024-22259 | High | patch | manual-only | manual-only | No | 2.6% |
+| FIND-2012 | APP-0197 | In an untrusted JMS environment, org.springframework.jms.support.converter.MappingJackson2MessageConverter and… | CVE-2026-41855 | High | patch | manual-only | manual-only | No | 0.3% |
+| FIND-4 | LNX-DB03 | Sudo Heap-Based Buffer Overflow (Baron Samedit) | CVE-2021-3156 | Critical | patch | ansible-unix | needs-change-approval | Yes | 99.3% |
+| FIND-47 | WEB-PORTAL-0032 | OpenSSL 0.9.7 before 0.9.7l and 0.9.8 before 0.9.8d allows remote attackers to cause a denial of service (infinite… | CVE-2006-2937 | High | config-change | manual-only | manual-only | No | 10.5% |
+| FIND-48 | WEB-PORTAL-0033 | OpenSSL 0.9.7 before 0.9.7l, 0.9.8 before 0.9.8d, and earlier versions allows attackers to cause a denial of service… | CVE-2006-2940 | High | config-change | manual-only | manual-only | No | 4.9% |
+| FIND-61 | WEB-PORTAL-0046 | The PK11_SESSION cache in the OpenSSL PKCS#11 engine in Sun Solaris 10 does not maintain reference counts for… | CVE-2008-5410 | High | config-change | manual-only | manual-only | No | 2.5% |
+| FIND-277 | WEB-PORTAL-0262 | (1) lib/backup/cli/utility.rb in the backup-agoddard gem 3.0.28 and (2) lib/backup/cli/utility.rb in the… | CVE-2014-4993 | High | config-change | manual-only | manual-only | No | 0.5% |
+| FIND-291 | WEB-PORTAL-0276 | A vulnerability in the London Trust Media Private Internet Access (PIA) VPN Client 1.0.2 (build 02363) for Windows… | CVE-2019-12572 | High | config-change | manual-only | manual-only | No | 0.9% |
+| FIND-292 | WEB-PORTAL-0277 | A non-privileged user or program can put code and a config file in a known non-privileged path (under C:/usr/local/)… | CVE-2019-5443 | High | config-change | manual-only | manual-only | No | 0.7% |
+| FIND-415 | CLOUD-0100 | Visual Studio Code Kubernetes Tools Remote Code Execution Vulnerability | CVE-2021-28448 | High | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-498 | CLOUD-0183 | RHACM: unauthenticated SSRF in console API endpoint. A Server-Side Request Forgery (SSRF) vulnerability was found in… | CVE-2022-3841 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-958 | NET-RTSW-0043 | Extended Interior Gateway Routing Protocol (EIGRP), as implemented in Cisco IOS 11.3 through 12.2 and other products,… | CVE-2002-2208 | High | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-959 | NET-RTSW-0044 | The Cisco Optical Service Module (OSM) for the Catalyst 6500 and 7600 series running Cisco IOS 12.1(8)E through… | CVE-2002-2239 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-960 | NET-RTSW-0045 | Cisco IOS 11.2.x and 12.0.x does not limit the size of its redirect table, which allows remote attackers to cause a… | CVE-2002-2315 | High | firmware-update | manual-only | manual-only | No | 9.6% |
+| FIND-961 | NET-RTSW-0046 | Cisco AS5350 IOS 12.2(11)T with access control lists (ACLs) applied and possibly with ssh running allows remote… | CVE-2002-2379 | High | firmware-update | manual-only | manual-only | No | 5.9% |
+| FIND-964 | NET-RTSW-0049 | Cisco IOS 11.x and 12.0 through 12.2 allows remote attackers to cause a denial of service (traffic block) by sending a… | CVE-2003-0567 | High | firmware-update | manual-only | manual-only | No | 16.6% |
+| FIND-991 | NET-RTSW-0076 | Extended Interior Gateway Routing Protocol (EIGRP) 1.2, as implemented in Cisco IOS after 12.3(2), 12.3(3)B, and… | CVE-2005-4436 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1005 | NET-RTSW-0090 | The VLAN Trunking Protocol (VTP) feature in Cisco IOS 12.1(19) allows remote attackers to cause a denial of service by… | CVE-2006-4774 | High | firmware-update | manual-only | manual-only | No | 4.8% |
+| FIND-1006 | NET-RTSW-0091 | The VLAN Trunking Protocol (VTP) feature in Cisco IOS 12.1(19) and CatOS allows remote attackers to cause a denial of… | CVE-2006-4775 | High | firmware-update | manual-only | manual-only | No | 4.8% |
+| FIND-1010 | NET-RTSW-0095 | Memory leak in the TCP listener in Cisco IOS 9.x, 10.x, 11.x, and 12.x allows remote attackers to cause a denial of… | CVE-2007-0479 | High | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-1012 | NET-RTSW-0097 | Cisco IOS allows remote attackers to cause a denial of service (crash) via a crafted IPv6 Type 0 Routing header. | CVE-2007-0481 | High | firmware-update | manual-only | manual-only | No | 4.8% |
+| FIND-1013 | NET-RTSW-0098 | Cisco IOS after 12.3(14)T, 12.3(8)YC1, 12.3(8)YG, and 12.4, with voice support and without Session Initiated Protocol… | CVE-2007-0648 | High | firmware-update | manual-only | manual-only | No | 3.5% |
+| FIND-1019 | NET-RTSW-0104 | The Cisco Intrusion Prevention System (IPS) and IOS with Firewall/IPS Feature Set do not properly handle certain… | CVE-2007-2688 | High | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1020 | NET-RTSW-0105 | Cisco IOS 12.4 and earlier, when using the crypto packages and SSL support is enabled, allows remote attackers to… | CVE-2007-2813 | High | firmware-update | manual-only | manual-only | No | 3.4% |
+| FIND-1043 | NET-RTSW-0128 | The data-link switching (DLSw) component in Cisco IOS 12.0 through 12.4 allows remote attackers to cause a denial of… | CVE-2008-1152 | High | firmware-update | manual-only | manual-only | No | 3.7% |
+| FIND-1047 | NET-RTSW-0132 | The SERVICE.DNS signature engine in the Intrusion Prevention System (IPS) in Cisco IOS 12.3 and 12.4 allows remote… | CVE-2008-2739 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-1048 | NET-RTSW-0133 | Cisco IOS 12.4 allows remote attackers to cause a denial of service (device crash) via a normal, properly formed SSL… | CVE-2008-3798 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1049 | NET-RTSW-0134 | Memory leak in the Session Initiation Protocol (SIP) implementation in Cisco IOS 12.2 through 12.4, when VoIP is… | CVE-2008-3799 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-1058 | NET-RTSW-0143 | Unspecified vulnerability in Cisco IOS 12.0 through 12.4 allows remote attackers to cause a denial of service (device… | CVE-2008-3808 | High | firmware-update | manual-only | manual-only | No | 3.4% |
+| FIND-1060 | NET-RTSW-0145 | Cisco IOS 12.2 and 12.4, when NAT Skinny Call Control Protocol (SCCP) Fragmentation Support is enabled, allows remote… | CVE-2008-3810 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1061 | NET-RTSW-0146 | Cisco IOS 12.2 and 12.4, when NAT Skinny Call Control Protocol (SCCP) Fragmentation Support is enabled, allows remote… | CVE-2008-3811 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1063 | NET-RTSW-0148 | Unspecified vulnerability in Cisco IOS 12.2 and 12.4, when the L2TP mgmt daemon process is enabled, allows remote… | CVE-2008-3813 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-1068 | NET-RTSW-0153 | Unspecified vulnerability in Cisco IOS 12.0 through 12.4, when configured with (1) IP Service Level Agreements (SLAs)… | CVE-2009-0631 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1069 | NET-RTSW-0154 | The SSLVPN feature in Cisco IOS 12.3 through 12.4 allows remote attackers to cause a denial of service (device reload… | CVE-2009-0626 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1076 | NET-RTSW-0161 | Unspecified vulnerability in Cisco IOS 12.0 through 12.4, when SIP voice services are enabled, allows remote attackers… | CVE-2009-0636 | High | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-1083 | NET-RTSW-0168 | Cisco IOS 12.2 through 12.4 and 15.0 through 15.1, Cisco IOS XE 2.5.x and 2.6.x before 2.6.1, and Cisco Unified… | CVE-2009-2051 | High | firmware-update | manual-only | manual-only | No | 3.4% |
+| FIND-1087 | NET-RTSW-0172 | Unspecified vulnerability in Cisco IOS 12.2 through 12.4 allows remote attackers to cause a denial of service (device… | CVE-2009-2866 | High | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-1088 | NET-RTSW-0173 | Unspecified vulnerability in Cisco IOS 12.2XNA, 12.2XNB, 12.2XNC, 12.2XND, 12.4T, 12.4XZ, and 12.4YA, when Zone-Based… | CVE-2009-2867 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1089 | NET-RTSW-0174 | Unspecified vulnerability in Cisco IOS 12.2 through 12.4, when certificate-based authentication is enabled for IKE,… | CVE-2009-2868 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1090 | NET-RTSW-0175 | Unspecified vulnerability in Cisco IOS 12.2XNA, 12.2XNB, 12.2XNC, 12.2XND, 12.4MD, 12.4T, 12.4XZ, and 12.4YA allows… | CVE-2009-2869 | High | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-1091 | NET-RTSW-0176 | Unspecified vulnerability in Cisco IOS 12.2 through 12.4, when the Cisco Unified Border Element feature is enabled,… | CVE-2009-2870 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1092 | NET-RTSW-0177 | Unspecified vulnerability in Cisco IOS 12.2 and 12.4, when SSLVPN sessions, SSH sessions, or IKE encrypted nonces are… | CVE-2009-2871 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1095 | NET-RTSW-0180 | Unspecified vulnerability in the sshd_child_handler process in the SSH server in Cisco IOS XR 3.4.1 through 3.7.0… | CVE-2010-0137 | High | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-1096 | NET-RTSW-0181 | Unspecified vulnerability in Cisco IOS 12.0 through 12.4, IOS XE 2.1.x through 2.3.x before 2.3.2, and IOS XR 3.2.x… | CVE-2010-0576 | High | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1098 | NET-RTSW-0183 | The IKE implementation in Cisco IOS 12.2 through 12.4 on Cisco 7200 and 7301 routers with VAM2+ allows remote… | CVE-2010-0578 | High | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1099 | NET-RTSW-0184 | The SIP implementation in Cisco IOS 12.3 and 12.4 allows remote attackers to cause a denial of service (device reload)… | CVE-2010-0579 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1102 | NET-RTSW-0187 | Cisco IOS 12.1 through 12.4, and 15.0M before 15.0(1)M1, allows remote attackers to cause a denial of service… | CVE-2010-0582 | High | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1103 | NET-RTSW-0188 | Memory leak in the H.323 implementation in Cisco IOS 12.1 through 12.4, and 15.0M before 15.0(1)M1, allows remote… | CVE-2010-0583 | High | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1104 | NET-RTSW-0189 | Unspecified vulnerability in Cisco IOS 12.4, when NAT SCCP fragmentation support is enabled, allows remote attackers… | CVE-2010-0584 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1105 | NET-RTSW-0190 | Cisco IOS 12.1 through 12.4, when Cisco Unified Communications Manager Express (CME) or Cisco Unified Survivable… | CVE-2010-0585 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1106 | NET-RTSW-0191 | Cisco IOS 12.1 through 12.4, when Cisco Unified Communications Manager Express (CME) or Cisco Unified Survivable… | CVE-2010-0586 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1108 | NET-RTSW-0193 | Cisco IOS 15.1(2)T allows remote attackers to cause a denial of service (resource consumption and TCP outage) via… | CVE-2010-2827 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1110 | NET-RTSW-0195 | Unspecified vulnerability in the H.323 implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE… | CVE-2010-2828 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1111 | NET-RTSW-0196 | Unspecified vulnerability in the H.323 implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE… | CVE-2010-2829 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1113 | NET-RTSW-0198 | Unspecified vulnerability in the NAT for SIP implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1… | CVE-2010-2831 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1114 | NET-RTSW-0199 | Unspecified vulnerability in the NAT for H.323 implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1… | CVE-2010-2832 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1115 | NET-RTSW-0200 | Unspecified vulnerability in the NAT for H.225.0 implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1… | CVE-2010-2833 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1116 | NET-RTSW-0201 | Cisco IOS 12.2 through 12.4 and 15.0 through 15.1, Cisco IOS XE 2.5.x and 2.6.x before 2.6.1, and Cisco Unified… | CVE-2010-2834 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1117 | NET-RTSW-0202 | Cisco IOS 12.2 through 12.4 and 15.0 through 15.1, Cisco IOS XE 2.5.x and 2.6.x before 2.6.1, and Cisco Unified… | CVE-2010-2835 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1118 | NET-RTSW-0203 | Memory leak in the SSL VPN feature in Cisco IOS 12.4, 15.0, and 15.1, when HTTP port redirection is enabled, allows… | CVE-2010-2836 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1119 | NET-RTSW-0204 | The Neighbor Discovery (ND) protocol implementation in the IPv6 stack in Cisco IOS before 15.0(1)XA5 allows remote… | CVE-2010-4671 | High | firmware-update | manual-only | manual-only | No | 3.6% |
+| FIND-1120 | NET-RTSW-0205 | Cisco IOS before 15.0(1)XA does not properly handle IRC traffic during a specific time period after an initial reload,… | CVE-2009-5038 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1123 | NET-RTSW-0208 | Memory leak in Cisco IOS before 15.0(1)XA5 might allow remote attackers to cause a denial of service (memory… | CVE-2010-4683 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1126 | NET-RTSW-0211 | CallManager Express (CME) on Cisco IOS before 15.0(1)XA1 does not properly handle SIP TRUNK traffic that contains rate… | CVE-2010-4686 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1129 | NET-RTSW-0214 | Unspecified vulnerability in Cisco IOS 12.4(24)MD before 12.4(24)MD2 on the Cisco Content Services Gateway Second… | CVE-2011-0349 | High | firmware-update | manual-only | manual-only | No | 4.1% |
+| FIND-1130 | NET-RTSW-0215 | Unspecified vulnerability in Cisco IOS 12.4(24)MD before 12.4(24)MD2 on the Cisco Content Services Gateway Second… | CVE-2011-0350 | High | firmware-update | manual-only | manual-only | No | 4.1% |
+| FIND-1132 | NET-RTSW-0217 | Cisco IOS XR 3.8.3, 3.8.4, and 3.9.1 allows remote attackers to cause a denial of service (NetIO process restart or… | CVE-2011-0943 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1133 | NET-RTSW-0218 | Cisco IOS XR 3.6.x, 3.8.x before 3.8.3, and 3.9.x before 3.9.1 does not properly remove sshd_lock files from /tmp/,… | CVE-2011-0949 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1134 | NET-RTSW-0219 | Cisco IOS XR 3.9.x and 4.0.x before 4.0.3 and 4.1.x before 4.1.1, when an SPA interface processor is installed, allows… | CVE-2011-1651 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1136 | NET-RTSW-0221 | Cisco IOS 12.4MDA before 12.4(24)MDA5 on the Cisco Content Services Gateway - Second Generation (CSG2) allows remote… | CVE-2011-2064 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1137 | NET-RTSW-0222 | Unspecified vulnerability in Cisco IOS XR 4.1.x before 4.1.1 on Cisco Aggregation Services Routers (ASR) 9000 series… | CVE-2011-2549 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1138 | NET-RTSW-0223 | Cisco IOS 12.2(58)SE, when a login banner is configured, allows remote attackers to cause a denial of service (device… | CVE-2011-1624 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1140 | NET-RTSW-0225 | Unspecified vulnerability in Cisco IOS 12.4, 15.0, and 15.1, and IOS XE 2.5.x through 3.2.x, allows remote attackers… | CVE-2011-0939 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1141 | NET-RTSW-0226 | Cisco IOS 12.4, 15.0, and 15.1 allows remote attackers to cause a denial of service (device reload) via malformed IPv6… | CVE-2011-0944 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1142 | NET-RTSW-0227 | Memory leak in the Data-link switching (aka DLSw) feature in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and… | CVE-2011-0945 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1143 | NET-RTSW-0228 | The NAT implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE 3.1.xSG, allows remote… | CVE-2011-0946 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1144 | NET-RTSW-0229 | Memory leak in Cisco IOS 12.4, 15.0, and 15.1, Cisco IOS XE 2.5.x through 3.2.x, and Cisco Unified Communications… | CVE-2011-2072 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1145 | NET-RTSW-0230 | Unspecified vulnerability in Cisco IOS 12.2SB before 12.2(33)SB10 and 15.0S before 15.0(1)S3a on Cisco 10000 series… | CVE-2011-3270 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1147 | NET-RTSW-0232 | The IP Service Level Agreement (IP SLA) functionality in Cisco IOS 15.1, and IOS XE 2.1.x through 3.3.x, allows remote… | CVE-2011-3272 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1148 | NET-RTSW-0233 | Memory leak in Cisco IOS 15.0 through 15.1, when IPS or Zone-Based Firewall (aka ZBFW) is configured, allows remote… | CVE-2011-3273 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1150 | NET-RTSW-0235 | Memory leak in Cisco IOS 12.4, 15.0, and 15.1, and IOS XE 2.5.x through 3.2.x, allows remote attackers to cause a… | CVE-2011-3275 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1151 | NET-RTSW-0236 | Unspecified vulnerability in the NAT implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE… | CVE-2011-3276 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1152 | NET-RTSW-0237 | Unspecified vulnerability in the NAT implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE… | CVE-2011-3277 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1153 | NET-RTSW-0238 | Unspecified vulnerability in the NAT implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE… | CVE-2011-3278 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1154 | NET-RTSW-0239 | The provider-edge MPLS NAT implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE 3.1.xSG,… | CVE-2011-3279 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1156 | NET-RTSW-0241 | Unspecified vulnerability in Cisco IOS 15.0 through 15.1, in certain HTTP Layer 7 Application Control and Inspection… | CVE-2011-3281 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1157 | NET-RTSW-0242 | Unspecified vulnerability in Cisco IOS 12.2SRE before 12.2(33)SRE4, 15.0, and 15.1, and IOS XE 2.1.x through 3.3.x,… | CVE-2011-3282 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1162 | NET-RTSW-0247 | Memory leak in Cisco Unified Communications Manager (CUCM) 6.x before 6.1(5)su2, 7.x before 7.1(5b)su3, 8.x before… | CVE-2011-0941 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1165 | NET-RTSW-0250 | Memory leak in the NAT feature in Cisco IOS 12.4, 15.0, and 15.1 allows remote attackers to cause a denial of service… | CVE-2012-0383 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1167 | NET-RTSW-0252 | The Smart Install feature in Cisco IOS 12.2, 15.0, 15.1, and 15.2 allows remote attackers to cause a denial of service… | CVE-2012-0385 | High | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1168 | NET-RTSW-0253 | The SSHv2 implementation in Cisco IOS 12.2, 12.4, 15.0, 15.1, and 15.2 and IOS XE 2.3.x through 2.6.x and 3.1.xS… | CVE-2012-0386 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-1169 | NET-RTSW-0254 | Memory leak in the HTTP Inspection Engine feature in the Zone-Based Firewall in Cisco IOS 12.4, 15.0, 15.1, and 15.2… | CVE-2012-0387 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1170 | NET-RTSW-0255 | Memory leak in the H.323 inspection feature in the Zone-Based Firewall in Cisco IOS 12.4, 15.0, 15.1, and 15.2 allows… | CVE-2012-0388 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1171 | NET-RTSW-0256 | Memory leak in the Zone-Based Firewall in Cisco IOS 12.4, 15.0, 15.1, and 15.2 allows remote attackers to cause a… | CVE-2012-1310 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-1172 | NET-RTSW-0257 | The RSVP feature in Cisco IOS 15.0 and 15.1 and IOS XE 3.2.xS through 3.4.xS before 3.4.2S, when a VRF interface is… | CVE-2012-1311 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1174 | NET-RTSW-0259 | The WAAS Express feature in Cisco IOS 15.1 and 15.2 allows remote attackers to cause a denial of service (memory… | CVE-2012-1314 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1175 | NET-RTSW-0260 | Memory leak in the SIP inspection feature in the Zone-Based Firewall in Cisco IOS 12.4, 15.0, 15.1, and 15.2 allows… | CVE-2012-1315 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1176 | NET-RTSW-0261 | Memory leak in Cisco IOS 15.1 and 15.2 allows remote attackers to cause a denial of service (memory consumption) via… | CVE-2011-2578 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-1179 | NET-RTSW-0264 | The NETIO and IPV4_IO processes in Cisco IOS XR 3.8 through 4.1, as used in Cisco Carrier Routing System and other… | CVE-2011-3295 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1191 | NET-RTSW-0276 | Cisco IOS XR before 4.2.1 on ASR 9000 series devices and CRS series devices allows remote attackers to cause a denial… | CVE-2012-2488 | High | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-1195 | NET-RTSW-0280 | Cisco IOS 12.3 and 12.4 on Aironet access points allows remote attackers to cause a denial of service (radio-interface… | CVE-2012-1350 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1197 | NET-RTSW-0282 | Cisco IOS 12.2 allows remote attackers to cause a denial of service (CPU consumption) by establishing many IPv6… | CVE-2012-3079 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1203 | NET-RTSW-0288 | The SIP implementation in Cisco Unified Communications Manager (CUCM) 6.x and 7.x before 7.1(5b)su5, 8.x before… | CVE-2012-3949 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1206 | NET-RTSW-0291 | The SIP ALG feature in the NAT implementation in Cisco IOS 12.2, 12.4, and 15.0 through 15.2 allows remote attackers… | CVE-2012-4618 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-1207 | NET-RTSW-0292 | The NAT implementation in Cisco IOS 12.2, 12.4, and 15.0 through 15.2 allows remote attackers to cause a denial of… | CVE-2012-4619 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1208 | NET-RTSW-0293 | Cisco IOS 12.2 and 15.0 through 15.2 on Cisco 10000 series routers, when a tunnel interface exists, allows remote… | CVE-2012-4620 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1209 | NET-RTSW-0294 | The Device Sensor feature in Cisco IOS 15.0 through 15.2 allows remote attackers to cause a denial of service (device… | CVE-2012-4621 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1211 | NET-RTSW-0296 | The DHCPv6 server in Cisco IOS 12.2 through 12.4 and 15.0 through 15.2 and IOS XE 2.1.x through 2.6.x, 3.1.xS before… | CVE-2012-4623 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1214 | NET-RTSW-0299 | Race condition in the VRF-aware NAT feature in Cisco IOS 12.2 through 12.4 and 15.0 through 15.2 allows remote… | CVE-2013-1142 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1217 | FW-EDGE-0002 | The Internet Key Exchange version 1 (IKEv1) implementations in Fortinet FortiOS 2.50, 2.80 and 3.0, FortiClient 2.0,;… | CVE-2005-4570 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1228 | FW-EDGE-0013 | The Control and Provisioning of Wireless Access Points (CAPWAP) daemon in Fortinet FortiOS 5.0 Patch 7 build 4457… | CVE-2015-1452 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1294 | FW-EDGE-0079 | A cleartext transmission of sensitive information vulnerability [CWE-319] in Fortinet FortiOS version 7.2.0 through… | CVE-2022-41327 | High | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-1332 | FW-EDGE-0117 | A stack-based buffer overflow in Fortinet FortiOS version 7.4.0 through 7.4.2, 7.2.0 through 7.2.6, 7.0.0 through… | CVE-2024-23110 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1416 | FW-EDGE-0201 | Palo Alto Networks PAN-OS before 5.0.19, 5.1.x before 5.1.12, 6.0.x before 6.0.14, 6.1.x before 6.1.12, and 7.0.x… | CVE-2016-1712 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1419 | FW-EDGE-0204 | Palo Alto Networks PAN-OS before 5.0.20, 5.1.x before 5.1.13, 6.0.x before 6.0.15, 6.1.x before 6.1.15, 7.0.x before… | CVE-2016-9151 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1423 | FW-EDGE-0208 | The Management Web Interface in Palo Alto Networks PAN-OS before 7.1.9 allows remote authenticated users to gain… | CVE-2017-7218 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1428 | FW-EDGE-0213 | Palo Alto Networks Panorama VM Appliance with PAN-OS before 6.0.1 might allow remote attackers to execute arbitrary… | CVE-2015-6531 | High | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-1444 | FW-EDGE-0229 | An improper authentication check in Palo Alto Networks PAN-OS may allow an authenticated low privileged non-superuser… | CVE-2019-17437 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1616 | LNX-SRV-0101 | Integer overflow in the SCTP_SOCKOPT_DEBUG_NAME SCTP socket option in socket.c in the Linux kernel 2.4.25 and earlier… | CVE-2004-2013 | High | patch | ansible-unix | auto-approvable | No | 0.6% |
+| FIND-1709 | WIN-SRV-0074 | mshtml.dll in Microsoft Windows XP, Server 2003, and Internet Explorer 6.0 SP1 allows attackers to cause a denial of… | CVE-2005-4269 | High | patch | ansible-windows | auto-approvable | No | 4.9% |
+| FIND-1714 | WIN-SRV-0079 | Microsoft Windows XP SP1 and SP2, and Server 2003 up to SP1, allows remote attackers to cause a denial of service… | CVE-2006-0021 | High | patch | ansible-windows | auto-approvable | No | 62.9% |
+| FIND-1715 | WIN-SRV-0080 | The default configuration of the DNS Server service on Windows Server 2003 and Windows 2000, and the Microsoft DNS… | CVE-2006-0988 | High | patch | ansible-windows | auto-approvable | No | 55.0% |
+| FIND-1734 | WIN-SRV-0099 | The server driver (srv.sys) in Microsoft Windows NT 4.0, 2000, XP, and Server 2003 allows remote attackers to cause a… | CVE-2006-3942 | High | patch | ansible-windows | auto-approvable | No | 75.0% |
+| FIND-1785 | WIN-SRV-0150 | Interpretation conflict in ASP.NET in Microsoft .NET Framework 1.0, 1.1, and 2.0 for Windows 2000, XP, Server 2003,… | CVE-2007-0042 | High | patch | ansible-windows | auto-approvable | No | 76.2% |
+| FIND-1792 | WIN-SRV-0157 | rpcrt4.dll (aka the RPC runtime library) in Microsoft Windows XP SP2, XP Professional x64 Edition, Server 2003 SP1 and… | CVE-2007-2228 | High | patch | ansible-windows | auto-approvable | No | 43.3% |
+| FIND-1803 | WIN-SRV-0168 | Unspecified vulnerability in the TCP/IP support in Microsoft Windows Vista allows remote DHCP servers to cause a… | CVE-2008-0084 | High | patch | ansible-windows | auto-approvable | No | 73.6% |
+| FIND-1962 | APP-0147 | In Spring Framework, versions 5.2.x prior to 5.2.15 and versions 5.3.x prior to 5.3.7, a WebFlux application is… | CVE-2021-22118 | High | patch | manual-only | manual-only | No | 0.4% |
+| FIND-1973 | APP-0158 | TERASOLUNA Global Framework 1.0.0 (Public review version) and TERASOLUNA Server Framework for Java (Rich) 2.0.0.2 to… | CVE-2022-43484 | High | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2040 | APP-0225 | In Jupyter Notebook before 5.4.1, a maliciously forged notebook file can bypass sanitization to execute JavaScript in… | CVE-2018-8768 | High | patch | manual-only | manual-only | No | 1.1% |
+| FIND-317 | CLOUD-0002 | The API server in Kubernetes does not properly check admission control, which allows remote authenticated users to… | CVE-2016-1905 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-404 | CLOUD-0089 | OneDev is an all-in-one devops platform. In OneDev before version 4.0.3 there is a critical "zip slip" vulnerability.… | CVE-2021-21251 | High | firmware-update | manual-only | manual-only | No | 12.2% |
+| FIND-444 | CLOUD-0129 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Argo CD starting with version 1.3.0 but… | CVE-2022-24730 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-453 | CLOUD-0138 | Flux is an open and extensible continuous delivery solution for Kubernetes. Path Traversal in the kustomize-controller… | CVE-2022-24878 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-476 | CLOUD-0161 | Flux is a tool for keeping Kubernetes clusters in sync with sources of configuration (like Git repositories), and… | CVE-2022-36035 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-481 | CLOUD-0166 | Flux2 is a tool for keeping Kubernetes clusters in sync with sources of configuration, and Flux's helm-controller is a… | CVE-2022-36049 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-545 | CLOUD-0230 | A flaw was found in Red Hat OpenShift Data Science. When exporting a pipeline from the Elyra notebook pipeline editor… | CVE-2023-3361 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-111 | WEB-PORTAL-0096 | Multiple race conditions in ssl/t1_lib.c in OpenSSL 0.9.8f through 0.9.8o, 1.0.0, and 1.0.0a, when multi-threading and… | CVE-2010-3864 | High | config-change | manual-only | manual-only | No | 22.1% |
+| FIND-542 | CLOUD-0227 | Cilium is a networking, observability, and security solution with an eBPF-based dataplane. An attacker with the… | CVE-2023-39347 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1086 | NET-RTSW-0171 | Buffer overflow in the login implementation in the Extension Mobility feature in the Unified Communications Manager… | CVE-2009-2865 | High | firmware-update | manual-only | manual-only | No | 5.5% |
+| FIND-1738 | WIN-SRV-0103 | Unspecified vulnerability in Microsoft Windows 2000 SP4, XP SP1 and SP2, Server 2003 and 2003 SP1, allows remote… | CVE-2006-3648 | High | patch | ansible-windows | auto-approvable | No | 23.6% |
+| FIND-5 | LNX-WEB05 | OpenSSL Infinite Loop Denial of Service (BN_mod_sqrt) | CVE-2022-0778 | High | patch | ansible-unix | auto-approvable | No | 70.6% |
+| FIND-16 | WEB-PORTAL-0001 | OpenSSL and SSLeay allow remote attackers to reuse SSL sessions and bypass access controls. | CVE-1999-0428 | High | config-change | manual-only | manual-only | No | 3.2% |
+| FIND-19 | WEB-PORTAL-0004 | OpenSSL 0.9.6d and earlier, and 0.9.7-beta2 and earlier, does not properly handle ASCII representations of integers on… | CVE-2002-0655 | High | config-change | manual-only | manual-only | No | 8.2% |
+| FIND-20 | WEB-PORTAL-0005 | Buffer overflows in OpenSSL 0.9.6d and earlier, and 0.9.7-beta2 and earlier, allow remote attackers to execute… | CVE-2002-0656 | High | config-change | manual-only | manual-only | No | 89.8% |
+| FIND-21 | WEB-PORTAL-0006 | Buffer overflow in OpenSSL 0.9.7 before 0.9.7-beta3, with Kerberos enabled, allows attackers to execute arbitrary code… | CVE-2002-0657 | High | config-change | manual-only | manual-only | No | 9.2% |
+| FIND-24 | WEB-PORTAL-0009 | The SSL and TLS components for OpenSSL 0.9.6i and earlier, 0.9.7, and 0.9.7a allow remote attackers to perform an… | CVE-2003-0131 | High | config-change | manual-only | manual-only | No | 6.3% |
+| FIND-32 | WEB-PORTAL-0017 | The do_change_cipher_spec function in OpenSSL 0.9.6c to 0.9.6k, and 0.9.7a to 0.9.7c, allows remote attackers to cause… | CVE-2004-0079 | High | config-change | manual-only | manual-only | No | 9.5% |
+| FIND-40 | WEB-PORTAL-0025 | The default configuration on OpenSSL before 0.9.8 uses MD5 for creating message digests instead of a more… | CVE-2005-2946 | High | config-change | manual-only | manual-only | No | 0.8% |
+| FIND-44 | WEB-PORTAL-0029 | Unspecified vulnerability in VCEngine.php in v-creator before 1.3-pre3, when the VC_CRYPTO_METHOD option is OPENSSL,… | CVE-2006-1599 | High | config-change | manual-only | manual-only | No | 3.5% |
+| FIND-57 | WEB-PORTAL-0042 | OpenSSL 0.9.8c-1 up to versions before 0.9.8g-9 on Debian-based operating systems uses a random number generator that… | CVE-2008-0166 | High | config-change | manual-only | manual-only | No | 70.7% |
+| FIND-77 | WEB-PORTAL-0062 | lib/crypto/c_src/crypto_drv.c in erlang does not properly check the return value from the OpenSSL DSA_do_verify… | CVE-2009-0130 | High | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-78 | WEB-PORTAL-0063 | Internet Systems Consortium (ISC) BIND 9.6.0 and earlier does not properly check the return value from the OpenSSL… | CVE-2009-0265 | High | config-change | manual-only | manual-only | No | 2.5% |
+| FIND-79 | WEB-PORTAL-0064 | OpenSSL, probably 0.9.6, does not verify the Basic Constraints for an intermediate CA-signed certificate, which allows… | CVE-2009-0653 | High | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-92 | WEB-PORTAL-0077 | lib/ssluse.c in cURL and libcurl 7.4 through 7.19.5, when OpenSSL is used, does not properly handle a '\0' character… | CVE-2009-2417 | High | config-change | manual-only | manual-only | No | 3.6% |
+| FIND-107 | WEB-PORTAL-0092 | The Cryptographic Message Syntax (CMS) implementation in crypto/cms/cms_asn1.c in OpenSSL before 0.9.8o and 1.x before… | CVE-2010-0742 | High | config-change | manual-only | manual-only | No | 7.8% |
+| FIND-113 | WEB-PORTAL-0098 | OpenSSL before 1.0.0c, when J-PAKE is enabled, does not properly validate the public parameters in the J-PAKE… | CVE-2010-4252 | High | config-change | manual-only | manual-only | No | 8.1% |
+| FIND-133 | WEB-PORTAL-0118 | The asn1_d2i_read_bio function in crypto/asn1/a_d2i_fp.c in OpenSSL before 0.9.8v, 1.0.0 before 1.0.0i, and 1.0.1… | CVE-2012-2110 | High | config-change | manual-only | manual-only | No | 48.3% |
+| FIND-134 | WEB-PORTAL-0119 | Multiple integer signedness errors in crypto/buffer/buffer.c in OpenSSL 0.9.8v allow remote attackers to conduct… | CVE-2012-2131 | High | config-change | manual-only | manual-only | No | 17.0% |
+| FIND-149 | WEB-PORTAL-0134 | The asn1_time_to_time_t function in ext/openssl/openssl.c in PHP before 5.3.28, 5.4.x before 5.4.23, and 5.5.x before… | CVE-2013-6420 | High | config-change | manual-only | manual-only | No | 35.6% |
+| FIND-158 | WEB-PORTAL-0143 | The (1) TLS and (2) DTLS implementations in OpenSSL 1.0.1 before 1.0.1g do not properly handle Heartbeat Extension… | CVE-2014-0160 | High | config-change | manual-only | manual-only | Yes | 100.0% |
+| FIND-162 | WEB-PORTAL-0147 | Android before 4.4 does not properly arrange for seeding of the OpenSSL PRNG, which makes it easier for attackers to… | CVE-2013-7373 | High | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-175 | WEB-PORTAL-0160 | Multiple buffer overflows in crypto/srp/srp_lib.c in the SRP implementation in OpenSSL 1.0.1 before 1.0.1i allow… | CVE-2014-3512 | High | config-change | manual-only | manual-only | No | 74.1% |
+| FIND-200 | WEB-PORTAL-0185 | Integer underflow in the EVP_DecodeUpdate function in crypto/evp/encode.c in the base64-decoding implementation in… | CVE-2015-0292 | High | config-change | manual-only | manual-only | No | 44.5% |
+| FIND-203 | WEB-PORTAL-0188 | The dtls1_clear_queues function in ssl/d1_lib.c in OpenSSL before 0.9.8za, 1.0.0 before 1.0.0m, and 1.0.1 before… | CVE-2014-8176 | High | config-change | manual-only | manual-only | No | 16.6% |
+| FIND-205 | WEB-PORTAL-0190 | The X509_cmp_time function in crypto/x509/x509_vfy.c in OpenSSL before 0.9.8zg, 1.0.0 before 1.0.0s, 1.0.1 before… | CVE-2015-1789 | High | config-change | manual-only | manual-only | No | 74.5% |
+| FIND-213 | WEB-PORTAL-0198 | The Montgomery squaring implementation in crypto/bn/asm/x86_64-mont5.pl in OpenSSL 1.0.2 before 1.0.2e on the x86_64… | CVE-2015-3193 | High | config-change | manual-only | manual-only | No | 25.1% |
+| FIND-214 | WEB-PORTAL-0199 | crypto/rsa/rsa_ameth.c in OpenSSL 1.0.1 before 1.0.1q and 1.0.2 before 1.0.2e allows remote attackers to cause a… | CVE-2015-3194 | High | config-change | manual-only | manual-only | No | 44.0% |
+| FIND-217 | WEB-PORTAL-0202 | The nss_parse_ciphers function in libraries/libldap/tls_m.c in OpenLDAP does not properly parse OpenSSL-style… | CVE-2015-3276 | High | config-change | manual-only | manual-only | No | 5.3% |
+| FIND-225 | WEB-PORTAL-0210 | Multiple integer overflows in OpenSSL 1.0.1 before 1.0.1s and 1.0.2 before 1.0.2g allow remote attackers to cause a… | CVE-2016-0797 | High | config-change | manual-only | manual-only | No | 27.0% |
+| FIND-226 | WEB-PORTAL-0211 | Memory leak in the SRP_VBASE_get_by_user implementation in OpenSSL 1.0.1 before 1.0.1s and 1.0.2 before 1.0.2g allows… | CVE-2016-0798 | High | config-change | manual-only | manual-only | No | 24.4% |
+| FIND-229 | WEB-PORTAL-0214 | crypto/rsa/rsa_gen.c in OpenSSL before 0.9.6 mishandles C bitwise-shift operations that exceed the size of an… | CVE-2000-1254 | High | config-change | manual-only | manual-only | No | 3.1% |
+| FIND-230 | WEB-PORTAL-0215 | Integer overflow in the EVP_EncodeUpdate function in crypto/evp/encode.c in OpenSSL before 1.0.1t and 1.0.2 before… | CVE-2016-2105 | High | config-change | manual-only | manual-only | No | 39.6% |
+| FIND-231 | WEB-PORTAL-0216 | Integer overflow in the EVP_EncryptUpdate function in crypto/evp/evp_enc.c in OpenSSL before 1.0.1t and 1.0.2 before… | CVE-2016-2106 | High | config-change | manual-only | manual-only | No | 27.3% |
+| FIND-234 | WEB-PORTAL-0219 | The asn1_d2i_read_bio function in crypto/asn1/a_d2i_fp.c in the ASN.1 BIO implementation in OpenSSL before 1.0.1t and… | CVE-2016-2109 | High | config-change | manual-only | manual-only | No | 29.2% |
+| FIND-238 | WEB-PORTAL-0223 | The openssl_random_pseudo_bytes function in ext/openssl/openssl.c in PHP before 5.4.44, 5.5.x before 5.5.28, and 5.6.x… | CVE-2015-8867 | High | config-change | manual-only | manual-only | No | 4.4% |
+| FIND-239 | WEB-PORTAL-0224 | The nextBytes function in the SecureRandom class in Symfony before 2.3.37, 2.6.x before 2.6.13, and 2.7.x before 2.7.9… | CVE-2016-1902 | High | config-change | manual-only | manual-only | No | 1.9% |
+| FIND-243 | WEB-PORTAL-0228 | The TS_OBJ_print_bio function in crypto/ts/ts_lib.c in the X.509 Public Key Infrastructure Time-Stamp Protocol (TSP)… | CVE-2016-2180 | High | config-change | manual-only | manual-only | No | 28.5% |
+| FIND-245 | WEB-PORTAL-0230 | The DTLS implementation in OpenSSL before 1.1.0 does not properly restrict the lifetime of queue entries associated… | CVE-2016-2179 | High | config-change | manual-only | manual-only | No | 26.6% |
+| FIND-246 | WEB-PORTAL-0231 | The Anti-Replay feature in the DTLS implementation in OpenSSL before 1.1.0 mishandles early use of a new epoch number… | CVE-2016-2181 | High | config-change | manual-only | manual-only | No | 22.6% |
+| FIND-248 | WEB-PORTAL-0233 | The tls_decrypt_ticket function in ssl/t1_lib.c in OpenSSL before 1.1.0 does not consider the HMAC size during… | CVE-2016-6302 | High | config-change | manual-only | manual-only | No | 26.4% |
+| FIND-250 | WEB-PORTAL-0235 | Multiple memory leaks in t1_lib.c in OpenSSL before 1.0.1u, 1.0.2 before 1.0.2i, and 1.1.0 before 1.1.0a allow remote… | CVE-2016-6304 | High | config-change | manual-only | manual-only | No | 63.0% |
+| FIND-251 | WEB-PORTAL-0236 | The ssl3_read_bytes function in record/rec_layer_s3.c in OpenSSL 1.1.0 before 1.1.0a allows remote attackers to cause… | CVE-2016-6305 | High | config-change | manual-only | manual-only | No | 16.0% |
+| FIND-256 | WEB-PORTAL-0241 | crypto/x509/x509_vfy.c in OpenSSL 1.0.2i allows remote attackers to cause a denial of service (NULL pointer… | CVE-2016-7052 | High | config-change | manual-only | manual-only | No | 30.2% |
+| FIND-259 | WEB-PORTAL-0244 | The openssl gem for Ruby uses the same initialization vector (IV) in GCM Mode (aes-*-gcm) when the IV is set before… | CVE-2016-7798 | High | config-change | manual-only | manual-only | No | 3.2% |
+| FIND-260 | WEB-PORTAL-0245 | The RSA-CRT implementation in the Intel QuickAssist Technology (QAT) Engine for OpenSSL versions prior to 0.5.19 may… | CVE-2017-5681 | High | config-change | manual-only | manual-only | No | 1.4% |
+| FIND-261 | WEB-PORTAL-0246 | In OpenSSL 1.1.0 before 1.1.0c, applications parsing invalid CMS structures can crash with a NULL pointer dereference.… | CVE-2016-7053 | High | config-change | manual-only | manual-only | No | 21.7% |
+| FIND-262 | WEB-PORTAL-0247 | In OpenSSL 1.1.0 before 1.1.0c, TLS connections using *-CHACHA20-POLY1305 ciphersuites are susceptible to a DoS attack… | CVE-2016-7054 | High | config-change | manual-only | manual-only | No | 32.4% |
+| FIND-263 | WEB-PORTAL-0248 | In OpenSSL 1.1.0 before 1.1.0d, if a malicious server supplies bad parameters for a DHE or ECDHE key exchange then… | CVE-2017-3730 | High | config-change | manual-only | manual-only | No | 55.3% |
+| FIND-264 | WEB-PORTAL-0249 | If an SSL/TLS server or client is running on a 32-bit host, and a specific cipher is being used, then a truncated… | CVE-2017-3731 | High | config-change | manual-only | manual-only | No | 57.6% |
+| FIND-266 | WEB-PORTAL-0251 | During a renegotiation handshake if the Encrypt-Then-Mac extension is negotiated where it was not in the original… | CVE-2017-3733 | High | config-change | manual-only | manual-only | No | 12.9% |
+| FIND-268 | WEB-PORTAL-0253 | In PHP before 5.6.31, 7.x before 7.0.21, and 7.1.x before 7.1.7, the openssl extension PEM sealing code did not check… | CVE-2017-11144 | High | config-change | manual-only | manual-only | No | 6.2% |
+| FIND-270 | WEB-PORTAL-0255 | The decode method in the OpenSSL::ASN1 module in Ruby before 2.2.8, 2.3.x before 2.3.5, and 2.4.x through 2.4.1 allows… | CVE-2017-14033 | High | config-change | manual-only | manual-only | No | 7.7% |
+| FIND-272 | WEB-PORTAL-0257 | A denial of service flaw was found in OpenSSL 0.9.8, 1.0.1, 1.0.2 through 1.0.2h, and 1.1.0 in the way the TLS/SSL… | CVE-2016-8610 | High | config-change | manual-only | manual-only | No | 39.7% |
+| FIND-273 | WEB-PORTAL-0258 | In Tor before 0.2.5.16, 0.2.6 through 0.2.8 before 0.2.8.17, 0.2.9 before 0.2.9.14, 0.3.0 before 0.3.0.13, and 0.3.1… | CVE-2017-8821 | High | config-change | manual-only | manual-only | No | 2.0% |
+| FIND-281 | WEB-PORTAL-0266 | openssl.js was a malicious module published with the intent to hijack environment variables. It has been unpublished… | CVE-2017-16065 | High | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-282 | WEB-PORTAL-0267 | During key agreement in a TLS handshake using a DH(E) based ciphersuite a malicious server can send a very large prime… | CVE-2018-0732 | High | config-change | manual-only | manual-only | No | 49.3% |
+| FIND-287 | WEB-PORTAL-0272 | A bug exists in the way mod_ssl handled client renegotiations. A remote attacker could send a carefully crafted… | CVE-2019-0190 | High | config-change | manual-only | manual-only | No | 59.9% |
+| FIND-302 | WEB-PORTAL-0287 | The keygen.sh script in Shibboleth SP 2.0 (located in /usr/local/etc/shibboleth by default) uses OpenSSL to create a… | CVE-2010-2450 | High | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-314 | WEB-PORTAL-0299 | In FreeRADIUS 3.0.x before 3.0.20, the EAP-pwd module used a global OpenSSL BN_CTX instance to handle all handshakes.… | CVE-2019-17185 | High | config-change | manual-only | manual-only | No | 2.2% |
+| FIND-326 | CLOUD-0011 | CoreOS Tectonic 1.7.x before 1.7.9-tectonic.4 and 1.8.x before 1.8.4-tectonic.3 mounts a direct proxy to the… | CVE-2018-5256 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-332 | CLOUD-0017 | It was found that Kubernetes as used by Openshift Enterprise 3 did not correctly validate X.509 client intermediate… | CVE-2016-7075 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-338 | CLOUD-0023 | Kubernetes Dashboard before 1.10.1 allows attackers to bypass authentication and use Dashboard's Service Account for… | CVE-2018-18264 | High | firmware-update | manual-only | manual-only | No | 70.4% |
+| FIND-343 | CLOUD-0028 | Cloud Native Computing Foundation (CNCF) CNI (Container Networking Interface) 0.7.4 has a network firewall… | CVE-2019-9946 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-357 | CLOUD-0042 | An issue was discovered in GitLab Community and Enterprise Edition 10.1 through 12.2.1. Protections against SSRF… | CVE-2019-15728 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-361 | CLOUD-0046 | Improper input validation in the Kubernetes API server in versions v1.0-1.12 and versions prior to v1.13.12, v1.14.8,… | CVE-2019-11253 | High | firmware-update | manual-only | manual-only | No | 25.9% |
+| FIND-380 | CLOUD-0065 | Elastic Cloud on Kubernetes (ECK) versions prior to 1.1.0 generate passwords using a weak random number generator. If… | CVE-2020-7010 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-390 | CLOUD-0075 | In Contour ( Ingress controller for Kubernetes) before version 1.7.0, a bad actor can shut down all instances of… | CVE-2020-15127 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-437 | CLOUD-0122 | containerd is a container runtime available as a daemon for Linux and Windows. A bug was found in containerd prior to… | CVE-2022-23648 | High | firmware-update | manual-only | manual-only | No | 27.4% |
+| FIND-438 | CLOUD-0123 | Couchbase Operator 2.2.x before 2.2.3 exposes Sensitive Information to an Unauthorized Actor. Secrets are not redacted… | CVE-2022-26311 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-458 | CLOUD-0143 | Cilium is open source software for providing and securing network connectivity and loadbalancing between application… | CVE-2022-29179 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-460 | CLOUD-0145 | kCTF is a Kubernetes-based infrastructure for capture the flag (CTF) competitions. Prior to version 1.6.0, the kctf… | CVE-2022-31055 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-461 | CLOUD-0146 | Argo Events is an event-driven workflow automation framework for Kubernetes. Prior to version 1.7.1, several… | CVE-2022-31054 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-484 | CLOUD-0169 | Istio is an open platform-independent service mesh that provides traffic management, policy enforcement, and telemetry… | CVE-2022-39278 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-497 | CLOUD-0182 | KubePi is a modern Kubernetes panel. A session fixation attack allows an attacker to hijack a legitimate user session,… | CVE-2023-22479 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-518 | CLOUD-0203 | Jenkins Kubernetes Plugin 3909.v1f2c633e8590 and earlier does not properly mask (i.e., replace with asterisks)… | CVE-2023-30513 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-540 | CLOUD-0225 | Microsoft Azure Kubernetes Service Elevation of Privilege Vulnerability | CVE-2023-29332 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-568 | CLOUD-0253 | Helm is a package manager for Charts for Kubernetes. Versions prior to 3.14.2 contain an uninitialized variable… | CVE-2024-26147 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-575 | CLOUD-0260 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Prior to versions 2.8.13, 2.9.9, and 2.10.4,… | CVE-2024-21661 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-576 | CLOUD-0261 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Prior to versions 2.8.13, 2.9.9, and 2.10.4,… | CVE-2024-21662 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-578 | CLOUD-0263 | Meshery is an open source, cloud native manager that enables the design and management of Kubernetes-based… | CVE-2024-29031 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-602 | CLOUD-0287 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. This report details a security vulnerability… | CVE-2024-40634 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-916 | NET-RTSW-0001 | Cisco IOS 9.1 and earlier does not properly handle extended IP access lists when the IP route cache is enabled and the… | CVE-1999-1306 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-917 | NET-RTSW-0002 | In Cisco IOS 10.3, with the tacacs-ds or tacacs keyword, an extended IP access control list could bypass filtering. | CVE-1999-0161 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-918 | NET-RTSW-0003 | Some classic Cisco IOS devices have a vulnerability in the PPP CHAP authentication to establish unauthorized PPP… | CVE-1999-0160 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-925 | NET-RTSW-0010 | Web Cache Control Protocol (WCCP) in Cisco Cache Engine for Cisco IOS 11.2 and earlier does not use authentication,… | CVE-1999-1175 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-926 | NET-RTSW-0011 | Vulnerability in Cisco IOS 11.1CC and 11.1CT with distributed fast switching (DFS) enabled allows remote attackers to… | CVE-1999-1464 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-927 | NET-RTSW-0012 | Vulnerability in Cisco IOS 11.1 through 11.3 with distributed fast switching (DFS) enabled allows remote attackers to… | CVE-1999-1465 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-933 | NET-RTSW-0018 | Cisco IOS 12.1(3) and 12.1(3)T allows remote attackers to read and modify device configuration data via the… | CVE-2004-1776 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-935 | NET-RTSW-0020 | Cisco switches and routers running IOS 12.1 and earlier produce predictable TCP Initial Sequence Numbers (ISNs), which… | CVE-2001-0288 | High | firmware-update | manual-only | manual-only | No | 5.4% |
+| FIND-943 | NET-RTSW-0028 | Cisco IOS Firewall Feature set, aka Context Based Access Control (CBAC) or Cisco Secure Integrated Software, for IOS… | CVE-2001-0929 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-945 | NET-RTSW-0030 | Cisco 12000 with IOS 12.0 and line cards based on Engine 2 does not block non-initial packet fragments, which allows… | CVE-2001-0862 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-947 | NET-RTSW-0032 | Cisco 12000 with IOS 12.0 and line cards based on Engine 2 does not properly handle the implicit "deny ip any any"… | CVE-2001-0864 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-948 | NET-RTSW-0033 | Cisco 12000 with IOS 12.0 and line cards based on Engine 2 does not support the "fragment" keyword in an outgoing ACL,… | CVE-2001-0865 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-949 | NET-RTSW-0034 | Cisco 12000 with IOS 12.0 and lines card based on Engine 2 does not properly handle an outbound ACL when an input ACL… | CVE-2001-0866 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-950 | NET-RTSW-0035 | Cisco 12000 with IOS 12.0 and line cards based on Engine 2 does not properly filter does not properly filter packet… | CVE-2001-0867 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-954 | NET-RTSW-0039 | Cisco IOS software 11.3 through 12.2 running on Cisco uBR7200 and uBR7100 series Universal Broadband Routers allows… | CVE-2002-1706 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-962 | NET-RTSW-0047 | Buffer overflow in Cisco IOS 11.2.x to 12.0.x allows remote attackers to cause a denial of service and possibly… | CVE-2003-0100 | High | firmware-update | manual-only | manual-only | No | 9.6% |
+| FIND-967 | NET-RTSW-0052 | Buffer overflow in the HTTP server for Cisco IOS 12.2 and earlier allows remote attackers to execute arbitrary code… | CVE-2003-0647 | High | firmware-update | manual-only | manual-only | No | 5.9% |
+| FIND-968 | NET-RTSW-0053 | The Session Initiation Protocol (SIP) implementation in multiple Cisco products including IP Phone models 7940 and… | CVE-2003-1109 | High | firmware-update | manual-only | manual-only | No | 6.8% |
+| FIND-970 | NET-RTSW-0055 | Multiple vulnerabilities in the H.323 protocol implementation for Cisco IOS 11.3T through 12.2T allow remote attackers… | CVE-2004-0054 | High | firmware-update | manual-only | manual-only | No | 4.6% |
+| FIND-983 | NET-RTSW-0068 | Cisco IOS 12.2T, 12.3 and 12.3T, when using Easy VPN Server XAUTH version 6 authentication, allows remote attackers to… | CVE-2005-1057 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-984 | NET-RTSW-0069 | Cisco IOS 12.2T, 12.3 and 12.3T, when processing an ISAKMP profile that specifies XAUTH authentication after Phase 1… | CVE-2005-1058 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-985 | NET-RTSW-0070 | Cisco IOS 12.2T through 12.4 allows remote attackers to bypass Authentication, Authorization, and Accounting (AAA)… | CVE-2005-2105 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-987 | NET-RTSW-0072 | Buffer overflow in Firewall Authentication Proxy for FTP and/or Telnet Sessions for Cisco IOS 12.2ZH and 12.2ZL, 12.3… | CVE-2005-2841 | High | firmware-update | manual-only | manual-only | No | 14.1% |
+| FIND-992 | NET-RTSW-0077 | MD5 Neighbor Authentication in Extended Interior Gateway Routing Protocol (EIGRP) 1.2, as implemented in Cisco IOS… | CVE-2005-4437 | High | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-1001 | NET-RTSW-0086 | The default configuration of IOS HTTP server in Cisco Router Web Setup (CRWS) before 3.3.0 build 31 does not require… | CVE-2006-3595 | High | firmware-update | manual-only | manual-only | No | 4.2% |
+| FIND-1007 | NET-RTSW-0092 | Heap-based buffer overflow in the VLAN Trunking Protocol (VTP) feature in Cisco IOS 12.1(19) allows remote attackers… | CVE-2006-4776 | High | firmware-update | manual-only | manual-only | No | 7.4% |
+| FIND-1109 | NET-RTSW-0194 | Cisco IOS XR 3.4.0 through 3.9.1, when BGP is enabled, does not properly handle unrecognized transitive attributes,… | CVE-2010-3035 | High | firmware-update | manual-only | manual-only | Yes | 5.6% |
+| FIND-1155 | NET-RTSW-0240 | Memory leak in the NAT implementation in Cisco IOS 12.1 through 12.4 and 15.0 through 15.1, and IOS XE 3.1.xSG, allows… | CVE-2011-3280 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1158 | NET-RTSW-0243 | The ethernet-lldp component in Cisco IOS 12.2 before 12.2(33)SXJ1 does not properly support a large number of LLDP… | CVE-2011-1640 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1159 | NET-RTSW-0244 | The cat6000-dot1x component in Cisco IOS 12.2 before 12.2(33)SXI7 does not properly handle (1) a loop between a dot1x… | CVE-2011-2057 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1160 | NET-RTSW-0245 | The cat6000-dot1x component in Cisco IOS 12.2 before 12.2(33)SXI7 does not properly handle an external loop between a… | CVE-2011-2058 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1163 | NET-RTSW-0248 | The IKEv1 implementation in Cisco IOS 12.2 through 12.4 and 15.0 through 15.2 and IOS XE 2.1.x through 2.6.x and… | CVE-2012-0381 | High | firmware-update | manual-only | manual-only | No | 3.8% |
+| FIND-1164 | NET-RTSW-0249 | The Multicast Source Discovery Protocol (MSDP) implementation in Cisco IOS 12.0, 12.2 through 12.4, and 15.0 through… | CVE-2012-0382 | High | firmware-update | manual-only | manual-only | No | 3.8% |
+| FIND-1216 | FW-EDGE-0001 | Fortinet firewall running FortiOS 2.x contains a hardcoded username with the password set to the serial number, which… | CVE-2005-1837 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1219 | FW-EDGE-0004 | Interpretation conflict in Fortinet FortiGate 2.8, running FortiOS 2.8MR10 and v3beta, allows remote attackers to… | CVE-2005-3058 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-1225 | FW-EDGE-0010 | The FortiManager protocol service in Fortinet FortiOS before 4.3.16 and 5.0.0 before 5.0.8 on FortiGate devices allows… | CVE-2014-2216 | High | firmware-update | manual-only | manual-only | No | 5.1% |
+| FIND-1239 | FW-EDGE-0024 | An information disclosure vulnerability in Fortinet FortiOS 5.6.0, 5.4.4 and below versions allows attacker to get… | CVE-2017-3130 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-1257 | FW-EDGE-0042 | An uninitialized memory buffer leak exists in Fortinet FortiOS 5.6.1 to 5.6.3, 5.4.6 to 5.4.7, 5.2 all versions under… | CVE-2018-13376 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1272 | FW-EDGE-0057 | An Insufficient Entropy in PRNG vulnerability in Fortinet FortiOS 6.2.1, 6.2.0, 6.0.8 and below for device not enable… | CVE-2019-15703 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1280 | FW-EDGE-0065 | A access of uninitialized pointer in Fortinet FortiOS version 7.2.0, 7.0.0 through 7.0.5, 6.4.0 through 6.4.8, 6.2.0… | CVE-2022-29055 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1293 | FW-EDGE-0078 | A out-of-bounds write in Fortinet FortiOS version 7.2.0 through 7.2.3, FortiOS version 7.0.0 through 7.0.10, FortiOS… | CVE-2023-22640 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1319 | FW-EDGE-0104 | A null pointer dereference in Fortinet FortiOS version 7.2.0 through 7.2.4, 7.0.0 through 7.0.11, 6.4.0 through… | CVE-2023-29180 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1323 | FW-EDGE-0108 | A insufficiently protected credentials in Fortinet FortiProxy 7.4.0, 7.2.0 through 7.2.6, 7.0.0 through 7.0.12, 2.0.0… | CVE-2023-41677 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1333 | FW-EDGE-0118 | A stack-based buffer overflow in Fortinet FortiPAM version 1.2.0, 1.1.0 through 1.1.2, 1.0.0 through 1.0.3, FortiWeb,… | CVE-2024-26010 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1334 | FW-EDGE-0119 | A session fixation in Fortinet FortiOS version 7.4.0 through 7.4.3 and 7.2.0 through 7.2.7 and 7.0.0 through 7.0.13… | CVE-2023-50176 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1337 | FW-EDGE-0122 | A improper limitation of a pathname to a restricted directory ('path traversal') vulnerability in Fortinet… | CVE-2024-48884 | High | firmware-update | manual-only | manual-only | No | 14.9% |
+| FIND-1344 | FW-EDGE-0129 | A improper restriction of communication channel to intended endpoints vulnerability [CWE-923] in Fortinet FortiOS… | CVE-2024-26013 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1367 | FW-EDGE-0152 | A stack-based buffer overflow vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4.0 through 7.4.8,… | CVE-2025-53843 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1369 | FW-EDGE-0154 | A stack-based buffer overflow vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4.0 through 7.4.8,… | CVE-2025-58413 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1413 | FW-EDGE-0198 | The GlobalProtect Portal in Palo Alto Networks PAN-OS before 5.0.18, 6.0.x before 6.0.13, 6.1.x before 6.1.10, and… | CVE-2016-3656 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1435 | FW-EDGE-0220 | Palo Alto Networks PAN-OS before 6.1.19, 7.0.x before 7.0.19, 7.1.x before 7.1.13, and 8.0.x before 8.0.6 allows… | CVE-2017-15942 | High | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-1456 | FW-EDGE-0241 | An improper input validation vulnerability in the configuration daemon of Palo Alto Networks PAN-OS Panorama allows… | CVE-2020-2011 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1457 | FW-EDGE-0242 | Improper restriction of XML external entity reference ('XXE') vulnerability in Palo Alto Networks Panorama management… | CVE-2020-2012 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1462 | FW-EDGE-0247 | An insecure configuration of the appweb daemon of Palo Alto Networks PAN-OS 8.1 allows a remote unauthenticated user… | CVE-2020-2041 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1465 | FW-EDGE-0250 | An information exposure vulnerability exists in Palo Alto Networks Panorama software that discloses the token for the… | CVE-2020-2022 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1475 | FW-EDGE-0260 | An improper handling of exceptional conditions vulnerability exists in the Palo Alto Networks PAN-OS dataplane that… | CVE-2021-3053 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1482 | FW-EDGE-0267 | An improper handling of exceptional conditions vulnerability exists in Palo Alto Networks GlobalProtect portal and… | CVE-2021-3063 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1508 | FW-EDGE-0293 | A memory leak exists in Palo Alto Networks PAN-OS software that enables an attacker to send a burst of crafted packets… | CVE-2024-3382 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1510 | FW-EDGE-0295 | A vulnerability in Palo Alto Networks PAN-OS software enables a remote attacker to reboot PAN-OS firewalls when… | CVE-2024-3384 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1511 | FW-EDGE-0296 | A packet processing mechanism in Palo Alto Networks PAN-OS software enables a remote attacker to reboot hardware-based… | CVE-2024-3385 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1521 | LNX-SRV-0006 | IPChains in Linux kernels 2.2.10 and earlier does not reassemble IP fragments before checking the header information,… | CVE-1999-1018 | High | patch | ansible-unix | auto-approvable | No | 7.2% |
+| FIND-1538 | LNX-SRV-0023 | Masquerading code for Linux kernel before 2.2.19 does not fully check packet lengths in certain cases, which may lead… | CVE-2001-1398 | High | patch | ansible-unix | auto-approvable | No | 2.9% |
+| FIND-1548 | LNX-SRV-0033 | The MAC module in Netfilter in Linux kernel 2.4.1 through 2.4.11, when configured to filter based on MAC addresses,… | CVE-2001-1572 | High | patch | ansible-unix | auto-approvable | No | 2.8% |
+| FIND-1618 | LNX-SRV-0103 | The exit_thread function (process.c) in Linux kernel 2.6 through 2.6.5 does not invalidate the per-TSS io_bitmap… | CVE-2004-2536 | High | patch | ansible-unix | auto-approvable | No | 2.3% |
+| FIND-1641 | WIN-SRV-0006 | The default permissions for the MTS Package Administration registry key in Windows NT 4.0 allows local users to… | CVE-2001-0047 | High | patch | ansible-windows | auto-approvable | No | 5.6% |
+| FIND-1644 | WIN-SRV-0009 | Information disclosure vulnerability in Microsoft Windows 2000 telnet service allows remote attackers to determine the… | CVE-2001-0347 | High | patch | ansible-windows | auto-approvable | No | 13.8% |
+| FIND-1646 | WIN-SRV-0011 | SMTP service in (1) Microsoft Windows 2000 and (2) Internet Mail Connector (IMC) in Exchange Server 5.5 does not… | CVE-2002-0054 | High | patch | ansible-windows | auto-approvable | No | 22.4% |
+| FIND-1648 | WIN-SRV-0013 | Microsoft Windows 2000 running the Terminal Server 90-day trial version, and possibly other versions, does not apply… | CVE-2002-0444 | High | patch | ansible-windows | auto-approvable | No | 12.0% |
+| FIND-1649 | WIN-SRV-0014 | Buffer overflow in the HTML Help ActiveX Control (hhctrl.ocx) in Microsoft Windows 98, 98 Second Edition, Millennium… | CVE-2002-0693 | High | patch | ansible-windows | auto-approvable | No | 31.3% |
+| FIND-1650 | WIN-SRV-0015 | The HTML Help facility in Microsoft Windows 98, 98 Second Edition, Millennium Edition, NT 4.0, NT 4.0 Terminal Server… | CVE-2002-0694 | High | patch | ansible-windows | auto-approvable | No | 13.7% |
+| FIND-1654 | WIN-SRV-0019 | Buffer overflow in the RPC Locator service for Microsoft Windows NT 4.0, Windows NT 4.0 Terminal Server Edition,… | CVE-2003-0003 | High | patch | ansible-windows | auto-approvable | No | 43.4% |
+| FIND-1655 | WIN-SRV-0020 | Buffer overflow in ntdll.dll on Microsoft Windows NT 4.0, Windows NT 4.0 Terminal Server Edition, Windows 2000, and… | CVE-2003-0109 | High | patch | ansible-windows | auto-approvable | No | 85.7% |
+| FIND-1657 | WIN-SRV-0022 | Buffer overflow in a certain DCOM interface for RPC in Microsoft Windows NT 4.0, 2000, XP, and Server 2003 allows… | CVE-2003-0352 | High | patch | ansible-windows | auto-approvable | No | 98.5% |
+| FIND-1659 | WIN-SRV-0024 | The Authenticode capability in Microsoft Windows NT through Server 2003 does not prompt the user to download and… | CVE-2003-0660 | High | patch | ansible-windows | auto-approvable | No | 23.0% |
+| FIND-1662 | WIN-SRV-0027 | Stack-based buffer overflow in certain Active Directory service functions in LSASRV.DLL of the Local Security… | CVE-2003-0533 | High | patch | ansible-windows | auto-approvable | No | 85.7% |
+| FIND-1663 | WIN-SRV-0028 | Buffer overflow in the Private Communications Transport (PCT) protocol implementation in the Microsoft SSL library, as… | CVE-2003-0719 | High | patch | ansible-windows | auto-approvable | No | 81.2% |
+| FIND-1668 | WIN-SRV-0033 | Microsoft Internet Explorer 6.0.2800.1106 on Microsoft Windows XP SP2, and other versions including 5.01 and 5.5,… | CVE-2004-0727 | High | patch | ansible-windows | auto-approvable | No | 39.8% |
+| FIND-1671 | WIN-SRV-0036 | Network Dynamic Data Exchange (NetDDE) services for Microsoft Windows 98, Windows NT 4.0, Windows 2000, Windows XP,… | CVE-2004-0206 | High | patch | ansible-windows | auto-approvable | No | 74.7% |
+| FIND-1685 | WIN-SRV-0050 | Microsoft Windows XP SP2 and earlier, 2000 SP3 and SP4, Server 2003, and older operating systems allows remote… | CVE-2005-0048 | High | patch | ansible-windows | auto-approvable | No | 38.6% |
+| FIND-1688 | WIN-SRV-0053 | The document processing application used by the Windows Shell in Microsoft Windows 2000, Windows XP, and Windows… | CVE-2005-0063 | High | patch | ansible-windows | auto-approvable | No | 47.6% |
+| FIND-1693 | WIN-SRV-0058 | Buffer overflow in the Server Message Block (SMB) functionality for Microsoft Windows 2000, XP SP1 and SP2, and Server… | CVE-2005-1206 | High | patch | ansible-windows | auto-approvable | No | 70.3% |
+| FIND-1696 | WIN-SRV-0061 | Buffer overflow in the Telephony Application Programming Interface (TAPI) for Microsoft Windows 98, Windows 98 SE,… | CVE-2005-0058 | High | patch | ansible-windows | auto-approvable | No | 46.0% |
+| FIND-1700 | WIN-SRV-0065 | Buffer overflow in the Print Spooler service (Spoolsv.exe) for Microsoft Windows 2000, Windows XP, and Windows Server… | CVE-2005-1984 | High | patch | ansible-windows | auto-approvable | No | 54.7% |
+| FIND-1704 | WIN-SRV-0069 | The Client Service for NetWare (CSNW) on Microsoft Windows 2000 SP4, XP SP1 and Sp2, and Server 2003 SP1 and earlier,… | CVE-2005-1985 | High | patch | ansible-windows | auto-approvable | No | 37.3% |
+| FIND-1705 | WIN-SRV-0070 | Buffer overflow in Collaboration Data Objects (CDO), as used in Microsoft Windows and Microsoft Exchange Server,… | CVE-2005-1987 | High | patch | ansible-windows | auto-approvable | No | 44.5% |
+| FIND-1716 | WIN-SRV-0081 | Microsoft ISA Server 2004 allows remote attackers to bypass certain filtering rules, including ones for (1) ICMP and… | CVE-2006-1651 | High | patch | ansible-windows | auto-approvable | No | 15.2% |
+| FIND-1722 | WIN-SRV-0087 | Buffer overflow in the Routing and Remote Access service (RRAS) in Microsoft Windows 2000 SP4, XP SP1 and SP2, and… | CVE-2006-2370 | High | patch | ansible-windows | auto-approvable | No | 70.1% |
+| FIND-1723 | WIN-SRV-0088 | Buffer overflow in the Remote Access Connection Manager service (RASMAN) service in Microsoft Windows 2000 SP4, XP SP1… | CVE-2006-2371 | High | patch | ansible-windows | auto-approvable | No | 22.6% |
+| FIND-1730 | WIN-SRV-0095 | Heap-based buffer overflow in the Server Service (SRV.SYS driver) in Microsoft Windows 2000 SP4, XP SP1 and SP2,… | CVE-2006-1314 | High | patch | ansible-windows | auto-approvable | No | 60.6% |
+| FIND-1743 | WIN-SRV-0108 | Integer overflow in the ReadWideString function in agentdpv.dll in Microsoft Agent on Microsoft Windows 2000 SP4, XP… | CVE-2006-3445 | High | patch | ansible-windows | auto-approvable | No | 40.1% |
+| FIND-1744 | WIN-SRV-0109 | Buffer overflow in Client Service for NetWare (CSNW) in Microsoft Windows 2000 SP4, XP SP2, and Server 2003 up to SP1… | CVE-2006-4688 | High | patch | ansible-windows | auto-approvable | No | 75.2% |
+| FIND-1746 | WIN-SRV-0111 | Heap-based buffer overflow in the WMCheckURLScheme function in WMVCORE.DLL in Microsoft Windows Media Player (WMP)… | CVE-2006-6134 | High | patch | ansible-windows | auto-approvable | No | 41.3% |
+| FIND-1749 | WIN-SRV-0114 | The Remote Installation Service (RIS) in Microsoft Windows 2000 SP4 uses a TFTP server that allows anonymous access,… | CVE-2006-5584 | High | patch | ansible-windows | auto-approvable | No | 31.3% |
+| FIND-1761 | WIN-SRV-0126 | The default configuration of Microsoft Windows uses the Web Proxy Autodiscovery Protocol (WPAD) without static WPAD… | CVE-2007-1692 | High | patch | ansible-windows | auto-approvable | No | 15.3% |
+| FIND-1776 | WIN-SRV-0141 | The Terminal Server in Microsoft Windows 2003 Server, when using TLS, allows remote attackers to bypass SSL and… | CVE-2007-2593 | High | patch | ansible-windows | auto-approvable | No | 9.4% |
+| FIND-1808 | WIN-SRV-0173 | The DNS client in Microsoft Windows 2000 SP4, XP SP2, Server 2003 SP1 and SP2, and Vista uses predictable DNS… | CVE-2008-0087 | High | patch | ansible-windows | auto-approvable | No | 32.4% |
+| FIND-1820 | APP-0005 | JMSAppender in Log4j 1.2 is vulnerable to deserialization of untrusted data when the attacker has write access to the… | CVE-2021-4104 | High | patch | manual-only | manual-only | No | 81.1% |
+| FIND-1830 | APP-0015 | ** UNSUPPORTED WHEN ASSIGNED ** When using the Chainsaw or SocketAppender components with Log4j 1.x on JRE less than… | CVE-2023-26464 | High | patch | manual-only | manual-only | No | 1.9% |
+| FIND-1834 | APP-0019 | Apache Log4j Core's Rfc5424Layout https://logging.apache.org/log4j/2.x/manual/layouts.html#RFC5424Layout , in versions… | CVE-2026-34478 | High | patch | manual-only | manual-only | No | 0.8% |
+| FIND-1835 | APP-0020 | The Log4j1XmlLayout from the Apache Log4j 1-to-Log4j 2 bridge fails to escape characters forbidden by the XML 1.0… | CVE-2026-34479 | High | patch | manual-only | manual-only | No | 0.5% |
+| FIND-1836 | APP-0021 | Apache Log4j Core's XmlLayout https://logging.apache.org/log4j/2.x/manual/layouts.html#XmlLayout , in versions up to… | CVE-2026-34480 | High | patch | manual-only | manual-only | No | 0.9% |
+| FIND-1837 | APP-0022 | Apache Log4j's JsonTemplateLayout https://logging.apache.org/log4j/2.x/manual/json-template-layout.html , in versions… | CVE-2026-34481 | High | patch | manual-only | manual-only | No | 0.7% |
+| FIND-1840 | APP-0025 | Apache Software Foundation (ASF) Struts before 1.2.9 allows remote attackers to bypass validation via a request with a… | CVE-2006-1546 | High | patch | manual-only | manual-only | No | 6.1% |
+| FIND-1841 | APP-0026 | ActionForm in Apache Software Foundation (ASF) Struts before 1.2.9 with BeanUtils 1.7 allows remote attackers to cause… | CVE-2006-1547 | High | patch | manual-only | manual-only | Yes | 54.6% |
+| FIND-1874 | APP-0059 | ParametersInterceptor in Apache Struts before 2.3.20 does not properly restrict access to the getClass method, which… | CVE-2014-0112 | High | patch | manual-only | manual-only | No | 97.9% |
+| FIND-1875 | APP-0060 | CookieInterceptor in Apache Struts before 2.3.20, when a wildcard cookiesName value is used, does not properly… | CVE-2014-0113 | High | patch | manual-only | manual-only | No | 77.8% |
+| FIND-1876 | APP-0061 | Apache Commons BeanUtils, as distributed in lib/commons-beanutils-1.8.0.jar in Apache Struts 1.x through 1.3.10 and in… | CVE-2014-0114 | High | patch | manual-only | manual-only | No | 96.1% |
+| FIND-1879 | APP-0064 | The default exclude patterns (excludeParams) in Apache Struts 2.3.20 allow remote attackers to "compromise internal… | CVE-2015-1831 | High | patch | manual-only | manual-only | No | 6.3% |
+| FIND-1887 | APP-0072 | The MultiPageValidator implementation in Apache Struts 1 1.1 through 1.3.10 allows remote attackers to bypass intended… | CVE-2015-0899 | High | patch | manual-only | manual-only | No | 21.3% |
+| FIND-1891 | APP-0076 | Apache Struts 2 2.3.20 through 2.3.28.1 allows remote attackers to bypass intended access restrictions and conduct… | CVE-2016-4431 | High | patch | manual-only | manual-only | No | 9.7% |
+| FIND-1892 | APP-0077 | Apache Struts 2 2.3.20 through 2.3.28.1 allows remote attackers to bypass intended access restrictions and conduct… | CVE-2016-4433 | High | patch | manual-only | manual-only | No | 9.7% |
+| FIND-1899 | APP-0084 | When using a Spring AOP functionality to secure Struts actions it is possible to perform a DoS attack. Solution is to… | CVE-2017-9787 | High | patch | manual-only | manual-only | No | 9.7% |
+| FIND-1900 | APP-0085 | Apache Struts 2.x before 2.3.24.1 allows remote attackers to manipulate Struts internals, alter user sessions, or… | CVE-2015-5209 | High | patch | manual-only | manual-only | No | 9.1% |
+| FIND-1905 | APP-0090 | The REST Plugin in Apache Struts 2.1.x, 2.3.7 through 2.3.33 and 2.5 through 2.5.12 is using an outdated XStream… | CVE-2017-9793 | High | patch | manual-only | manual-only | No | 8.7% |
+| FIND-1906 | APP-0091 | In Apache Struts 2.3.7 through 2.3.33 and 2.5 through 2.5.12, if an application allows entering a URL in a form field… | CVE-2017-9804 | High | patch | manual-only | manual-only | No | 8.2% |
+| FIND-1911 | APP-0096 | The Apache Struts REST Plugin is using XStream library which is vulnerable and allow perform a DoS attack when using a… | CVE-2018-1327 | High | patch | manual-only | manual-only | No | 8.7% |
+| FIND-1917 | APP-0102 | An access permission override in Apache Struts 2.0.0 to 2.5.20 may cause a Denial of Service when performing a file… | CVE-2019-0233 | High | patch | manual-only | manual-only | No | 67.8% |
+| FIND-1925 | APP-0110 | Denial of Service vulnerability in Apache Struts, file leak in multipart request processing causes disk exhaustion.… | CVE-2025-64775 | High | patch | manual-only | manual-only | No | 1.5% |
+| FIND-1931 | APP-0116 | VMware SpringSource Spring Framework before 2.5.6.SEC03, 2.5.7.SR023, and 3.x before 3.0.6, when a container supports… | CVE-2011-2730 | High | patch | manual-only | manual-only | No | 11.8% |
+| FIND-1941 | APP-0126 | An issue was discovered in Pivotal Spring Framework before 3.2.18, 4.2.x before 4.2.9, and 4.3.x before 4.3.5. Paths… | CVE-2016-9878 | High | patch | manual-only | manual-only | No | 5.6% |
+| FIND-1944 | APP-0129 | Both Spring Security 3.2.x, 4.0.x, 4.1.0 and the Spring Framework 3.2.x, 4.0.x, 4.1.x, 4.2.x rely on URL pattern… | CVE-2016-5007 | High | patch | manual-only | manual-only | No | 2.8% |
+| FIND-1948 | APP-0133 | Spring Framework, versions 5.0 prior to 5.0.5 and versions 4.3 prior to 4.3.15 and older unsupported versions, provide… | CVE-2018-1272 | High | patch | manual-only | manual-only | No | 3.1% |
+| FIND-1953 | APP-0138 | Spring Framework, versions 5.0.x prior to 5.0.7 and 4.3.x prior to 4.3.18 and older unsupported versions, allows web… | CVE-2018-11040 | High | patch | manual-only | manual-only | No | 3.2% |
+| FIND-1954 | APP-0139 | Spring Framework, version 5.1, versions 5.0.x prior to 5.0.10, versions 4.3.x prior to 4.3.20, and older unsupported… | CVE-2018-15756 | High | patch | manual-only | manual-only | No | 9.5% |
+| FIND-1957 | APP-0142 | In Spring Framework, versions 5.2.x prior to 5.2.3, versions 5.1.x prior to 5.1.13, and versions 5.0.x prior to… | CVE-2020-5398 | High | patch | manual-only | manual-only | No | 88.4% |
+| FIND-1963 | APP-0148 | bubble fireworks is an open source java package relating to Spring Framework. In bubble fireworks before version… | CVE-2021-29500 | High | patch | manual-only | manual-only | No | 0.6% |
+| FIND-1970 | APP-0155 | In Spring Cloud Function versions prior to 3.2.6, it is possible for a user who directly interacts with framework… | CVE-2022-22979 | High | patch | manual-only | manual-only | No | 1.3% |
+| FIND-1975 | APP-0160 | Spring Framework running version 6.0.0 - 6.0.6 or 5.3.0 - 5.3.25 using "**" as a pattern in Spring Security… | CVE-2023-20860 | High | patch | manual-only | manual-only | No | 3.5% |
+| FIND-1977 | APP-0162 | Armeria is a microservice framework Spring supports Matrix variables. When Spring integration is used, Armeria calls… | CVE-2023-38493 | High | patch | manual-only | manual-only | No | 0.7% |
+| FIND-1981 | APP-0166 | In Spring Framework versions 6.0.15 and 6.1.2, it is possible for a user to provide specially crafted HTTP requests… | CVE-2024-22233 | High | patch | manual-only | manual-only | No | 1.0% |
+| FIND-1985 | APP-0170 | Applications serving static resources through the functional web frameworks WebMvc.fn or WebFlux.fn are vulnerable to… | CVE-2024-38816 | High | patch | manual-only | manual-only | No | 14.7% |
+| FIND-1986 | APP-0171 | Applications serving static resources through the functional web frameworks WebMvc.fn or WebFlux.fn are vulnerable to… | CVE-2024-38819 | High | patch | manual-only | manual-only | No | 54.9% |
+| FIND-1990 | APP-0175 | The Spring Framework annotation detection mechanism may not correctly resolve annotations on methods within type… | CVE-2025-41249 | High | patch | manual-only | manual-only | No | 0.5% |
+| FIND-1999 | APP-0184 | Spring MVC and WebFlux applications are vulnerable to Denial of Service (DoS) attacks when resolving static resources.… | CVE-2026-41842 | High | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2006 | APP-0191 | An integer overflow vulnerability exists in the evaluation logic of the Spring Expression Language (SpEL). An attacker… | CVE-2026-41849 | High | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2007 | APP-0192 | Applications that evaluate user-supplied Spring Expression Language (SpEL) expressions are vulnerable to an… | CVE-2026-41850 | High | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2015 | APP-0200 | SQL injection vulnerability in the jQuery autocomplete for indexed_search (rzautocomplete) extension before 0.0.9 for… | CVE-2013-4634 | High | patch | manual-only | manual-only | No | 1.4% |
+| FIND-2032 | APP-0217 | jqueryFileTree 2.1.5 and older Directory Traversal | CVE-2017-1000170 | High | patch | manual-only | manual-only | No | 59.1% |
+| FIND-2036 | APP-0221 | jQuery 3.0.0-rc.1 is vulnerable to Denial of Service (DoS) due to removing a logic that lowercased attribute names.… | CVE-2016-10707 | High | patch | manual-only | manual-only | No | 2.9% |
+| FIND-2075 | APP-0260 | Forms generated by JQueryForm.com before 2022-02-05 allow remote attackers to obtain the URI to any uploaded file by… | CVE-2022-24983 | High | patch | manual-only | manual-only | No | 2.7% |
+| FIND-2083 | APP-0268 | The jQuery Validation Plugin (jquery-validation) provides drop-in validation for forms. Versions of jquery-validation… | CVE-2022-31147 | High | patch | manual-only | manual-only | No | 2.0% |
+| FIND-166 | WEB-PORTAL-0151 | OpenSSL before 0.9.8za, 1.0.0 before 1.0.0m, and 1.0.1 before 1.0.1h does not properly restrict processing of… | CVE-2014-0224 | High | config-change | manual-only | manual-only | No | 95.3% |
+| FIND-289 | WEB-PORTAL-0274 | ChaCha20-Poly1305 is an AEAD cipher, and requires a unique nonce input for every encryption operation. RFC 7539… | CVE-2019-1543 | High | config-change | manual-only | manual-only | No | 5.7% |
+| FIND-290 | WEB-PORTAL-0275 | While investigating bug PROTON-2014, we discovered that under some circumstances Apache Qpid Proton versions 0.9 to… | CVE-2019-0223 | High | config-change | manual-only | manual-only | No | 6.2% |
+| FIND-414 | CLOUD-0099 | A flaw was found in the fabric8 kubernetes-client in version 4.2.0 and after. This flaw allows a malicious… | CVE-2021-20218 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-593 | CLOUD-0278 | IBM Db2 on Cloud Pak for Data and Db2 Warehouse on Cloud Pak for Data 3.5, 4.0, 4.5, 4.6, 4.7, and 4.8 could allow a… | CVE-2023-42005 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-619 | WEBAPP-VENDOR-ONBOARDING | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-620 | WEBAPP-REPORTING-DASHBOARD | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-629 | WEBAPP-MOBILE-BACKEND-API | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-634 | WEBAPP-BILLING-API | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-646 | WEBAPP-SUPPORT-TICKETING | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-648 | WEBAPP-NOTIFICATION-SERVICE | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-658 | WEBAPP-EMPLOYEE-HR-PORTAL | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-673 | WEBAPP-INTERNAL-WIKI | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-699 | WEBAPP-EMPLOYEE-HR-PORTAL | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-714 | WEBAPP-ORDER-SERVICE | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-720 | WEBAPP-LOYALTY-REWARDS | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-739 | WEBAPP-VENDOR-ONBOARDING | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-740 | WEBAPP-CHECKOUT-SERVICE | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-756 | WEBAPP-SEARCH-SERVICE | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-762 | WEBAPP-MARKETING-CMS | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-771 | WEBAPP-CUSTOMER-PORTAL | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-772 | WEBAPP-LOYALTY-REWARDS | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-803 | WEBAPP-NOTIFICATION-SERVICE | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-809 | WEBAPP-REPORTING-DASHBOARD | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-849 | WEBAPP-SUPPORT-TICKETING | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-853 | WEBAPP-MARKETING-CMS | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-854 | WEBAPP-PARTNER-EXTRANET | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-864 | WEBAPP-INTERNAL-WIKI | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-886 | WEBAPP-CUSTOMER-PORTAL | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-890 | WEBAPP-SEARCH-SERVICE | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-894 | WEBAPP-MOBILE-BACKEND-API | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-897 | WEBAPP-PARTNER-EXTRANET | Reflected Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-902 | WEBAPP-CHECKOUT-SERVICE | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-909 | WEBAPP-ORDER-SERVICE | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-914 | WEBAPP-BILLING-API | Stored Cross-Site Scripting (XSS) (CWE-79) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-1509 | FW-EDGE-0294 | A vulnerability in how Palo Alto Networks PAN-OS software processes data received from Cloud Identity Engine (CIE)… | CVE-2024-3383 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-384 | CLOUD-0069 | In versions 3.0.0-3.5.0, 2.0.0-2.9.0, and 1.0.1, the NGINX Controller installer starts the download of Kubernetes… | CVE-2020-5911 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-418 | CLOUD-0103 | Microsoft VsCode Kubernetes Tools Extension Elevation of Privilege Vulnerability | CVE-2021-31938 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-496 | CLOUD-0181 | Weave GitOps is a simple open source developer platform for people who want cloud native applications, without needing… | CVE-2022-23509 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-499 | CLOUD-0184 | KubePi is a modern Kubernetes panel. The API interfaces with unauthorized entities and may leak sensitive information.… | CVE-2023-22478 | High | firmware-update | manual-only | manual-only | No | 3.6% |
+| FIND-500 | CLOUD-0185 | KubeOperator is an open source Kubernetes distribution focused on helping enterprises plan, deploy and operate… | CVE-2023-22480 | High | firmware-update | manual-only | manual-only | No | 66.8% |
+| FIND-2055 | APP-0240 | baserCMS 4.3.6 and earlier is affected by Cross Site Scripting (XSS) via arbitrary script execution. Admin access is… | CVE-2020-15154 | High | patch | manual-only | manual-only | No | 1.0% |
+| FIND-340 | CLOUD-0025 | When running Tower before 3.4.3 on OpenShift or Kubernetes, application credentials are exposed to playbook job runs… | CVE-2019-3869 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-482 | CLOUD-0167 | Talos Linux is a Linux distribution built for Kubernetes deployments. Talos worker nodes use a join token to get… | CVE-2022-36103 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-526 | CLOUD-0211 | Arbitrary code execution in Apache Airflow CNCF Kubernetes provider version 5.0.0 allows user to change xcom sidecar… | CVE-2023-33234 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-549 | CLOUD-0234 | A privilege escalation flaw was found in the node restriction admission plugin of the kubernetes api server of… | CVE-2023-5408 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-558 | CLOUD-0243 | A security issue was discovered in Kubernetes where a user that can create pods and persistent volumes on Windows… | CVE-2023-5528 | High | firmware-update | manual-only | manual-only | No | 3.6% |
+| FIND-1166 | NET-RTSW-0251 | Cisco IOS 12.2 through 12.4 and 15.0 through 15.2 and IOS XE 2.1.x through 2.6.x and 3.1.xS before 3.1.2S, 3.2.xS… | CVE-2012-0384 | High | firmware-update | manual-only | manual-only | No | 3.9% |
+| FIND-1249 | FW-EDGE-0034 | An Information Disclosure vulnerability in Fortinet FortiOS 5.6.0 to 5.6.2, 5.4.0 to 5.4.5, 5.2 and below versions… | CVE-2017-7738 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1260 | FW-EDGE-0045 | A privilege escalation vulnerability in Fortinet FortiOS 6.0.0 to 6.0.6, 5.6.0 to 5.6.10, 5.4 and below allows admin… | CVE-2017-17544 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1312 | FW-EDGE-0097 | A use of externally-controlled format string in Fortinet FortiProxy versions 7.2.0 through 7.2.4, 7.0.0 through… | CVE-2023-36639 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1329 | FW-EDGE-0114 | A stack-based buffer overflow [CWE-121] vulnerability in Fortinet FortiOS version 7.2.1 through 7.2.6 and version… | CVE-2023-46714 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-1353 | FW-EDGE-0138 | A missing critical step in authentication vulnerability [CWE-304] in Fortinet FortiOS version 7.6.0 through 7.6.1,… | CVE-2024-52965 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1359 | FW-EDGE-0144 | A heap-based buffer overflow vulnerability in Fortinet FortiAnalyzer 7.6.0 through 7.6.2, FortiAnalyzer 7.4.0 through… | CVE-2024-50571 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1411 | FW-EDGE-0196 | The device management command line interface (CLI) in Palo Alto Networks PAN-OS before 5.0.18, 5.1.x before 5.1.11,… | CVE-2016-3654 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1447 | FW-EDGE-0232 | A stack-based buffer overflow vulnerability in the management server component of PAN-OS allows an authenticated user… | CVE-2020-1990 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1454 | FW-EDGE-0239 | An OS command injection and external control of filename vulnerability in Palo Alto Networks PAN-OS allows… | CVE-2020-2008 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1455 | FW-EDGE-0240 | An external control of filename vulnerability in the SD WAN component of Palo Alto Networks PAN-OS Panorama allows an… | CVE-2020-2009 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1476 | FW-EDGE-0261 | A time-of-check to time-of-use (TOCTOU) race condition vulnerability in the Palo Alto Networks PAN-OS web interface… | CVE-2021-3054 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1486 | FW-EDGE-0271 | A vulnerability exists in Palo Alto Networks PAN-OS software that enables an authenticated network-based PAN-OS… | CVE-2022-0024 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1517 | LNX-SRV-0002 | Bug in AMD K6 processor on Linux 2.0.x and 2.1.x kernels allows local users to cause a denial of service (crash) via a… | CVE-1999-1442 | High | patch | ansible-unix | auto-approvable | No | 0.9% |
+| FIND-1520 | LNX-SRV-0005 | Linux 2.0.37 does not properly encode the Custom segment limit, which allows local users to gain root privileges by… | CVE-1999-1166 | High | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1528 | LNX-SRV-0013 | Kernel logging daemon (klogd) in Linux does not properly cleanse user-injected format strings, which allows local… | CVE-2000-0867 | High | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1562 | LNX-SRV-0047 | User-mode Linux (UML) 2.4.17-8 does not restrict access to kernel address space, which allows local users to execute… | CVE-2002-2016 | High | patch | ansible-unix | auto-approvable | No | 1.1% |
+| FIND-1565 | LNX-SRV-0050 | uml_net in the kernel-utils package for Red Hat Linux 8.0 has incorrect setuid root privileges, which allows local… | CVE-2003-0019 | High | patch | ansible-unix | auto-approvable | No | 0.9% |
+| FIND-1566 | LNX-SRV-0051 | The kernel module loader in Linux kernel 2.2.x before 2.2.25, and 2.4.x before 2.4.21, allows local users to gain root… | CVE-2003-0127 | High | patch | ansible-unix | auto-approvable | No | 1.6% |
+| FIND-1576 | LNX-SRV-0061 | Integer overflow in the do_brk function for the brk system call in Linux kernel 2.4.22 and earlier allows local users… | CVE-2003-0961 | High | patch | ansible-unix | auto-approvable | No | 3.3% |
+| FIND-1580 | LNX-SRV-0065 | exit.c in Linux kernel 2.6-test9-CVS, as stored on kernel.bkbits.net, was modified to contain a backdoor, which could… | CVE-2003-1161 | High | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1583 | LNX-SRV-0068 | The mremap system call (do_mremap) in Linux kernel 2.4.x before 2.4.21, and possibly other versions before 2.4.24,… | CVE-2003-0985 | High | patch | ansible-unix | auto-approvable | No | 1.2% |
+| FIND-1584 | LNX-SRV-0069 | Unknown vulnerability in the eflags checking in the 32-bit ptrace emulation for the Linux kernel on AMD64 systems… | CVE-2004-0001 | High | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1587 | LNX-SRV-0072 | Stack-based buffer overflow in the ncp_lookup function for ncpfs in Linux kernel 2.4.x allows local users to gain… | CVE-2004-0010 | High | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1594 | LNX-SRV-0079 | Integer overflow in the ip_setsockopt function in Linux kernel 2.4.22 through 2.4.25 and 2.6.1 through 2.6.3 allows… | CVE-2004-0424 | High | patch | ansible-unix | auto-approvable | No | 1.2% |
+| FIND-1595 | LNX-SRV-0080 | Multiple unknown vulnerabilities in Linux kernel 2.4 and 2.6 allow local users to gain privileges or access kernel… | CVE-2004-0495 | High | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1599 | LNX-SRV-0084 | Integer signedness error in the cpufreq proc handler (cpufreq_procctl) in Linux kernel 2.6 allows local users to gain… | CVE-2004-0228 | High | patch | ansible-unix | auto-approvable | No | 0.8% |
+| FIND-1602 | LNX-SRV-0087 | Multiple unknown vulnerabilities in Linux kernel 2.6 allow local users to gain privileges or access kernel memory, a… | CVE-2004-0496 | High | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1611 | LNX-SRV-0096 | The POSIX Capability Linux Security Module (LSM) for Linux kernel 2.6 does not properly handle the credentials of a… | CVE-2004-1337 | High | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1628 | LNX-SRV-0113 | The load_elf_binary function in the binfmt_elf loader (binfmt_elf.c) in Linux kernel 2.4.x up to 2.4.27, and 2.6.x up… | CVE-2004-1070 | High | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1629 | LNX-SRV-0114 | The binfmt_elf loader (binfmt_elf.c) in Linux kernel 2.4.x up to 2.4.27, and 2.6.x up to 2.6.8, does not properly… | CVE-2004-1071 | High | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1630 | LNX-SRV-0115 | The binfmt_elf loader (binfmt_elf.c) in Linux kernel 2.4.x up to 2.4.27, and 2.6.x up to 2.6.8, may create an… | CVE-2004-1072 | High | patch | ansible-unix | auto-approvable | No | 0.6% |
+| FIND-1634 | LNX-SRV-0119 | Multiple buffer overflows in the (1) sys32_ni_syscall and (2) sys32_vm86_warning functions in sys_ia32.c for Linux… | CVE-2004-1151 | High | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1635 | LNX-SRV-0120 | Multiple drivers in Linux kernel 2.4.19 and earlier do not properly mark memory with the VM_IO flag, which causes… | CVE-2004-1057 | High | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1652 | WIN-SRV-0017 | The terminal services screensaver for Microsoft Windows 2000 does not automatically lock the terminal window if the… | CVE-2002-1933 | High | patch | ansible-windows | auto-approvable | No | 1.6% |
+| FIND-1658 | WIN-SRV-0023 | Microsoft SQL Server before Windows 2000 SP4 allows local users to gain privileges as the SQL Server user by calling… | CVE-2003-0496 | High | patch | ansible-windows | auto-approvable | No | 4.6% |
+| FIND-1673 | WIN-SRV-0038 | The Virtual DOS Machine (VDM) subsystem of Microsoft Windows NT 4.0, Windows 2000, Windows XP, and Windows Server 2003… | CVE-2004-0208 | High | patch | ansible-windows | auto-approvable | No | 1.5% |
+| FIND-1686 | WIN-SRV-0051 | Buffer overflow in the font processing component of Microsoft Windows 2000, Windows XP SP1 and SP2, and Windows Server… | CVE-2005-0060 | High | patch | ansible-windows | auto-approvable | No | 1.7% |
+| FIND-1687 | WIN-SRV-0052 | The kernel of Microsoft Windows 2000, Windows XP SP1 and SP2, and Windows Server 2003 allows local users to gain… | CVE-2005-0061 | High | patch | ansible-windows | auto-approvable | No | 1.8% |
+| FIND-1689 | WIN-SRV-0054 | Microsoft Windows XP Pro SP2 and Windows 2000 Server SP4 running Active Directory allow local users to bypass group… | CVE-2005-0545 | High | patch | ansible-windows | auto-approvable | No | 1.8% |
+| FIND-1694 | WIN-SRV-0059 | Buffer overflow in the Web Client service in Microsoft Windows XP and Windows Server 2003 allows remote authenticated… | CVE-2005-1207 | High | patch | ansible-windows | auto-approvable | No | 7.3% |
+| FIND-1712 | WIN-SRV-0077 | The ShellAbout API call in Korean Input Method Editor (IME) in Korean versions of Microsoft Windows XP SP1 and SP2,… | CVE-2006-0008 | High | patch | ansible-windows | auto-approvable | No | 1.7% |
+| FIND-1719 | WIN-SRV-0084 | Cisco Secure Access Control Server (ACS) 3.x for Windows stores ACS administrator passwords and the master key in the… | CVE-2006-0561 | High | patch | ansible-windows | auto-approvable | No | 0.4% |
+| FIND-1750 | WIN-SRV-0115 | The Client-Server Run-time Subsystem in Microsoft Windows XP SP2 and Server 2003 allows local users to gain privileges… | CVE-2006-5585 | High | patch | ansible-windows | auto-approvable | No | 1.7% |
+| FIND-1756 | WIN-SRV-0121 | The hardware detection functionality in the Windows Shell in Microsoft Windows XP SP2 and Professional, and Server… | CVE-2007-0211 | High | patch | ansible-windows | auto-approvable | No | 2.6% |
+| FIND-1764 | WIN-SRV-0129 | Buffer overflow in the Graphics Device Interface (GDI) in Microsoft Windows 2000 SP4; XP SP2; Server 2003 Gold, SP1,… | CVE-2007-1215 | High | patch | ansible-windows | auto-approvable | No | 2.7% |
+| FIND-1766 | WIN-SRV-0131 | The Virtual DOS Machine (VDM) in the Windows Kernel in Microsoft Windows NT 4.0; 2000 SP4; XP SP2; Server 2003, 2003… | CVE-2007-1206 | High | patch | ansible-windows | auto-approvable | No | 2.7% |
+| FIND-1802 | WIN-SRV-0167 | Unspecified vulnerability in Local Security Authority Subsystem Service (LSASS) in Microsoft Windows 2000 SP4, XP SP2,… | CVE-2007-5352 | High | patch | ansible-windows | auto-approvable | No | 2.6% |
+| FIND-1810 | WIN-SRV-0175 | Unspecified vulnerability in the kernel in Microsoft Windows 2000 SP4, XP SP2, Server 2003 SP1 and SP2, through Vista… | CVE-2008-1084 | High | patch | ansible-windows | auto-approvable | No | 6.8% |
+| FIND-1994 | APP-0179 | mcp-security provides Security and Authorization support for Model Context Protocol in Spring AI. Prior to 0.1.9, the… | CVE-2026-45609 | High | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2049 | APP-0234 | In Honeywell WIN-PAK 4.7.2, Web and prior versions, the affected product is vulnerable due to the usage of old jQuery… | CVE-2020-6978 | High | patch | manual-only | manual-only | No | 0.8% |
+| FIND-178 | WEB-PORTAL-0163 | Memory leak in d1_srtp.c in the DTLS SRTP extension in OpenSSL 1.0.1 before 1.0.1j allows remote attackers to cause a… | CVE-2014-3513 | High | config-change | manual-only | manual-only | No | 37.1% |
+| FIND-179 | WEB-PORTAL-0164 | Memory leak in the tls_decrypt_ticket function in t1_lib.c in OpenSSL before 0.9.8zc, 1.0.0 before 1.0.0o, and 1.0.1… | CVE-2014-3567 | High | config-change | manual-only | manual-only | No | 23.6% |
+| FIND-324 | CLOUD-0009 | In Kubernetes versions 1.3.x, 1.4.x, 1.5.x, 1.6.x and prior to versions 1.7.14, 1.8.9 and 1.9.4 containers using a… | CVE-2017-1002102 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-397 | CLOUD-0082 | An improper file permissions vulnerability affects Kata Containers prior to 1.11.5. When using a Kubernetes hostPath… | CVE-2020-28914 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-450 | CLOUD-0135 | Argo Workflows is an open source container-native workflow engine for orchestrating parallel jobs on Kubernetes. In… | CVE-2022-29164 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-472 | CLOUD-0157 | PolicyController is a utility used to enforce supply chain policy in Kubernetes clusters. In versions prior to 0.2.1… | CVE-2022-35930 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-557 | CLOUD-0242 | Kyverno is a policy engine designed for Kubernetes. An issue was found in Kyverno that allowed an attacker to control… | CVE-2023-47630 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-630 | WEBAPP-EMPLOYEE-HR-PORTAL | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-641 | WEBAPP-INTERNAL-WIKI | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-663 | WEBAPP-REPORTING-DASHBOARD | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-680 | WEBAPP-BILLING-API | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-689 | WEBAPP-LOYALTY-REWARDS | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-696 | WEBAPP-SUPPORT-TICKETING | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-706 | WEBAPP-MOBILE-BACKEND-API | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-734 | WEBAPP-SEARCH-SERVICE | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-802 | WEBAPP-CUSTOMER-PORTAL | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-821 | WEBAPP-PARTNER-EXTRANET | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-833 | WEBAPP-ORDER-SERVICE | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-855 | WEBAPP-CHECKOUT-SERVICE | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-856 | WEBAPP-VENDOR-ONBOARDING | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-873 | WEBAPP-MARKETING-CMS | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-903 | WEBAPP-NOTIFICATION-SERVICE | Insecure Direct Object Reference (IDOR) (CWE-639) | — | High | config-change | manual-only | manual-only | — | — |
+| FIND-929 | NET-RTSW-0014 | The IOS HTTP service in Cisco routers and switches running IOS 11.1 through 12.1 allows remote attackers to cause a… | CVE-2000-0380 | High | firmware-update | manual-only | manual-only | No | 35.0% |
+| FIND-952 | NET-RTSW-0037 | Heap-based buffer overflow in the TFTP server capability in Cisco IOS 11.1, 11.2, and 11.3 allows remote attackers to… | CVE-2002-0813 | High | firmware-update | manual-only | manual-only | No | 9.1% |
+| FIND-953 | NET-RTSW-0038 | Cisco IOS 12.0 through 12.2, when supporting SSH, allows remote attackers to cause a denial of service (CPU… | CVE-2002-1024 | High | firmware-update | manual-only | manual-only | No | 3.3% |
+| FIND-981 | NET-RTSW-0066 | Secure Shell (SSH) 2 in Cisco IOS 12.0 through 12.3 allows remote attackers to cause a denial of service (device… | CVE-2005-1020 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-982 | NET-RTSW-0067 | Memory leak in Secure Shell (SSH) in Cisco IOS 12.0 through 12.3, when authenticating against a TACACS+ server, allows… | CVE-2005-1021 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-994 | NET-RTSW-0079 | Unspecified vulnerability in Stack Group Bidding Protocol (SGBP) support in Cisco IOS 12.0 through 12.4 running on… | CVE-2006-0340 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-1015 | NET-RTSW-0100 | The ATOMIC.TCP signature engine in the Intrusion Prevention System (IPS) feature for Cisco IOS 12.4XA, 12.3YA, 12.3T,… | CVE-2007-0918 | High | firmware-update | manual-only | manual-only | No | 3.1% |
+| FIND-1024 | NET-RTSW-0109 | Cisco IOS 12.0 through 12.4 allows remote attackers to cause a denial of service via (1) a malformed MGCP packet,… | CVE-2007-4291 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1026 | NET-RTSW-0111 | Cisco IOS 12.0 through 12.4 allows remote attackers to cause a denial of service (device crash) via (1) "abnormal"… | CVE-2007-4293 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1036 | NET-RTSW-0121 | Off-by-one error in Cisco IOS allows remote attackers to execute arbitrary code via unspecified vectors that trigger a… | CVE-2007-5551 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1038 | NET-RTSW-0123 | Unspecified vulnerability in the Extensible Authentication Protocol (EAP) implementation in Cisco IOS 12.3 and 12.4 on… | CVE-2007-5651 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1039 | NET-RTSW-0124 | Cisco IOS 12.1, 12.2, 12.3, and 12.4, with IPv4 UDP services and the IPv6 protocol enabled, allows remote attackers to… | CVE-2008-1153 | High | firmware-update | manual-only | manual-only | No | 5.6% |
+| FIND-1041 | NET-RTSW-0126 | The virtual private dial-up network (VPDN) component in Cisco IOS before 12.3 allows remote attackers to cause a… | CVE-2008-1150 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1042 | NET-RTSW-0127 | Memory leak in the virtual private dial-up network (VPDN) component in Cisco IOS before 12.3 allows remote attackers… | CVE-2008-1151 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1044 | NET-RTSW-0129 | Multiple unspecified vulnerabilities in the SSH server in Cisco IOS 12.4 allow remote attackers to cause a denial of… | CVE-2008-1159 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1050 | NET-RTSW-0135 | Unspecified vulnerability in the Session Initiation Protocol (SIP) implementation in Cisco IOS 12.2 through 12.4 and… | CVE-2008-3800 | High | firmware-update | manual-only | manual-only | No | 3.5% |
+| FIND-1051 | NET-RTSW-0136 | Unspecified vulnerability in the Session Initiation Protocol (SIP) implementation in Cisco IOS 12.2 through 12.4 and… | CVE-2008-3801 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-1052 | NET-RTSW-0137 | Unspecified vulnerability in the Session Initiation Protocol (SIP) implementation in Cisco IOS 12.2 through 12.4, when… | CVE-2008-3802 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1054 | NET-RTSW-0139 | Unspecified vulnerability in the Multi Protocol Label Switching (MPLS) Forwarding Infrastructure (MFI) in Cisco IOS… | CVE-2008-3804 | High | firmware-update | manual-only | manual-only | No | 3.5% |
+| FIND-1059 | NET-RTSW-0144 | Cisco IOS 12.0 through 12.4 on Gigabit Switch Router (GSR) devices (aka 12000 Series routers) allows remote attackers… | CVE-2008-3809 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1062 | NET-RTSW-0147 | Cisco IOS 12.4, when IOS firewall Application Inspection Control (AIC) with HTTP Deep Packet Inspection is enabled,… | CVE-2008-3812 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1064 | NET-RTSW-0149 | Unspecified vulnerability in the VLAN Trunking Protocol (VTP) implementation on Cisco IOS and CatOS, when the VTP… | CVE-2008-4963 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1072 | NET-RTSW-0157 | The (1) Cisco Unified Communications Manager Express; (2) SIP Gateway Signaling Support Over Transport Layer Security… | CVE-2009-0630 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1073 | NET-RTSW-0158 | Multiple unspecified vulnerabilities in the (1) Mobile IP NAT Traversal feature and (2) Mobile IPv6 subsystem in Cisco… | CVE-2009-0633 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1074 | NET-RTSW-0159 | Multiple unspecified vulnerabilities in the home agent (HA) implementation in the (1) Mobile IP NAT Traversal feature… | CVE-2009-0634 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1075 | NET-RTSW-0160 | Memory leak in the Cisco Tunneling Control Protocol (cTCP) encapsulation feature in Cisco IOS 12.4, when an Easy VPN… | CVE-2009-0635 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1077 | NET-RTSW-0162 | The SCP server in Cisco IOS 12.2 through 12.4, when Role-Based CLI Access is enabled, does not enforce the CLI view… | CVE-2009-0637 | High | firmware-update | manual-only | manual-only | No | 3.3% |
+| FIND-1078 | NET-RTSW-0163 | Cisco IOS 12.0(32)S12 through 12.0(32)S13 and 12.0(33)S3 through 12.0(33)S4, 12.0(32)SY8 through 12.0(32)SY9,… | CVE-2009-1168 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1085 | NET-RTSW-0170 | Race condition in the Firewall Authentication Proxy feature in Cisco IOS 12.0 through 12.4 allows remote attackers to… | CVE-2009-2863 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1094 | NET-RTSW-0179 | Cisco IOS 12.0 through 12.4, when IP-based tunnels and the Cisco Express Forwarding feature are enabled, allows remote… | CVE-2009-2873 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1097 | NET-RTSW-0182 | Cisco IOS 12.2 through 12.4, when certain PMTUD, SNAT, or window-size configurations are used, allows remote attackers… | CVE-2010-0577 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1112 | NET-RTSW-0197 | The IGMPv3 implementation in Cisco IOS 12.2, 12.3, 12.4, and 15.0 and IOS XE 2.5.x before 2.5.2, when PIM is enabled,… | CVE-2010-2830 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1124 | NET-RTSW-0209 | Cisco IOS before 15.0(1)XA1, when certain TFTP debugging is enabled, allows remote attackers to cause a denial of… | CVE-2010-4684 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1173 | NET-RTSW-0258 | The MACE feature in Cisco IOS 15.1 and 15.2 allows remote attackers to cause a denial of service (device reload) via… | CVE-2012-1312 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1189 | NET-RTSW-0274 | Race condition in the Zone-Based Firewall in Cisco IOS 15.1 and 15.2, when IPS policies are configured, allows remote… | CVE-2012-1324 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1204 | NET-RTSW-0289 | The Intrusion Prevention System (IPS) feature in Cisco IOS 12.3 through 12.4 and 15.0 through 15.2, in certain… | CVE-2012-3950 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1205 | NET-RTSW-0290 | The BGP implementation in Cisco IOS 15.2, IOS XE 3.5.xS before 3.5.2S, and IOS XR 4.1.0 through 4.2.2 allows remote… | CVE-2012-4617 | High | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1210 | NET-RTSW-0295 | Cisco IOS XE 03.02.00.XO.15.0(2)XO on Catalyst 4500E series switches, when a Supervisor Engine 7L-E card is installed,… | CVE-2012-4622 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1215 | NET-RTSW-0300 | The RSVP protocol implementation in Cisco IOS 12.2 and 15.0 through 15.2 and IOS XE 3.1.xS through 3.4.xS before… | CVE-2013-1143 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-1453 | FW-EDGE-0238 | A cross-site scripting (XSS) vulnerability exists when visiting malicious websites with the Palo Alto Networks… | CVE-2020-2005 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1762 | WIN-SRV-0127 | Unspecified kernel GDI functions in Microsoft Windows 2000 SP4; XP SP2; and Server 2003 Gold, SP1, and SP2 allows… | CVE-2007-1211 | High | patch | ansible-windows | auto-approvable | No | 29.1% |
+| FIND-1779 | WIN-SRV-0144 | Race condition in Microsoft Internet Explorer 6 SP1; 6 and 7 for Windows XP SP2 and SP3; 6 and 7 for Server 2003 SP2;… | CVE-2007-3091 | High | patch | ansible-windows | auto-approvable | No | 27.7% |
+| FIND-1800 | WIN-SRV-0165 | The kernel in Microsoft Windows 2000 SP4, XP SP2, and Server 2003, when ICMP Router Discovery Protocol (RDP) is… | CVE-2007-0066 | High | patch | ansible-windows | auto-approvable | No | 31.5% |
+| FIND-1815 | WIN-SRV-0180 | Microsoft Windows XP SP2 and SP3, and Server 2003 SP1 and SP2, does not properly validate the option length field in… | CVE-2008-1440 | High | patch | ansible-windows | auto-approvable | No | 22.6% |
+| FIND-2002 | APP-0187 | Due to incorrect escaping, the use of JavaScriptUtils.javaScriptEscape() may lead to JavaScript code injection in the… | CVE-2026-41845 | High | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2103 | APP-0288 | Cross Site Scripting vulnerability in JavaScript Library jquery-ui v.1.13.1 allows a remote attacker to obtain… | CVE-2024-30875 | High | patch | manual-only | manual-only | No | 0.8% |
+| FIND-2109 | APP-0294 | Cross-Site Request Forgery (CSRF) vulnerability in bhzad WP jQuery Persian Datepicker wpjqp-datepicker allows Stored… | CVE-2025-28861 | High | patch | manual-only | manual-only | No | 0.1% |
+| FIND-2110 | APP-0295 | Cross-Site Request Forgery (CSRF) vulnerability in Sana Ullah jQuery Dropdown Menu jquery-drop-down-menu-plugin allows… | CVE-2025-30560 | High | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2112 | APP-0297 | Cross-Site Request Forgery (CSRF) vulnerability in milat Milat jQuery Automatic Popup milat-jquery-automatic-popup… | CVE-2025-46514 | High | patch | manual-only | manual-only | No | 0.1% |
+| FIND-3 | WIN-APP07 | Windows MSHTML Platform Security Feature Bypass | CVE-2024-30040 | High | patch | ansible-windows | auto-approvable | Yes | 3.9% |
+| FIND-236 | WEB-PORTAL-0221 | OpenSSLCipher.java in Conscrypt in Android 6.x before 2016-05-01 mishandles resets of the Additional Authenticated… | CVE-2016-2461 | High | config-change | manual-only | manual-only | No | 0.5% |
+| FIND-237 | WEB-PORTAL-0222 | OpenSSLCipher.java in Conscrypt in Android 6.x before 2016-05-01 mishandles updates of the Additional Authenticated… | CVE-2016-2462 | High | config-change | manual-only | manual-only | No | 0.4% |
+| FIND-417 | CLOUD-0102 | An insecure modification vulnerability flaw was found in containers using nmstate/kubernetes-nmstate-handler. An… | CVE-2020-1742 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1636 | WIN-SRV-0001 | Some web servers under Microsoft Windows allow remote attackers to bypass access restrictions for files with long file… | CVE-1999-0012 | High | patch | ansible-windows | auto-approvable | No | 18.2% |
+| FIND-1829 | APP-0014 | Versions of the Amazon AWS Apache Log4j hotpatch package before log4j-cve-2021-44228-hotpatch-1.3.5 are affected by a… | CVE-2022-33915 | High | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2052 | APP-0237 | In jQuery versions greater than or equal to 1.0.3 and before 3.5.0, passing HTML containing <option> elements from… | CVE-2020-11023 | Medium | patch | manual-only | manual-only | Yes | 83.8% |
+| FIND-2053 | APP-0238 | In jQuery starting with 1.12.0 and before 3.5.0, passing HTML from untrusted sources - even after sanitizing it - to… | CVE-2020-11022 | Medium | patch | manual-only | manual-only | No | 99.0% |
+| FIND-164 | WEB-PORTAL-0149 | The dtls1_reassemble_fragment function in d1_both.c in OpenSSL before 0.9.8za, 1.0.0 before 1.0.0m, and 1.0.1 before… | CVE-2014-0195 | Medium | config-change | manual-only | manual-only | No | 100.0% |
+| FIND-1854 | APP-0039 | The CookieInterceptor component in Apache Struts before 2.3.1.1 does not use the parameter-name whitelist, which… | CVE-2012-0392 | Medium | patch | manual-only | manual-only | No | 98.0% |
+| FIND-1856 | APP-0041 | The DebuggingInterceptor component in Apache Struts before 2.3.1.1, when developer mode is used, allows remote… | CVE-2012-0394 | Medium | patch | manual-only | manual-only | No | 74.4% |
+| FIND-1934 | APP-0119 | The SourceHttpMessageConverter in Spring MVC in Spring Framework before 3.2.5 and 4.0.0.M1 through 4.0.0.RC1 does not… | CVE-2013-6429 | Medium | patch | manual-only | manual-only | No | 90.5% |
+| FIND-1936 | APP-0121 | The Jaxb2RootElementHttpMessageConverter in Spring MVC in Spring Framework before 3.2.8 and 4.0.0 before 4.0.2 does… | CVE-2014-0054 | Medium | patch | manual-only | manual-only | No | 91.4% |
+| FIND-1286 | FW-EDGE-0071 | A improper limitation of a pathname to a restricted directory vulnerability ('path traversal') [CWE-22] in Fortinet… | CVE-2022-41328 | Medium | firmware-update | manual-only | manual-only | Yes | 11.9% |
+| FIND-1823 | APP-0008 | Apache Log4j2 versions 2.0-beta7 through 2.17.0 (excluding security fix releases 2.3.2 and 2.12.4) are vulnerable to a… | CVE-2021-44832 | Medium | patch | manual-only | manual-only | No | 97.9% |
+| FIND-210 | WEB-PORTAL-0195 | The X509_verify_cert function in crypto/x509/x509_vfy.c in OpenSSL 1.0.1n, 1.0.1o, 1.0.2b, and 1.0.2c does not… | CVE-2015-1793 | Medium | config-change | manual-only | manual-only | No | 61.8% |
+| FIND-1796 | WIN-SRV-0161 | The DNS server in Microsoft Windows 2000 Server SP4, and Server 2003 SP1 and SP2, uses predictable transaction IDs… | CVE-2007-3898 | Medium | patch | ansible-windows | auto-approvable | No | 52.3% |
+| FIND-2044 | APP-0229 | jQuery before 3.4.0, as used in Drupal, Backdrop CMS, and other products, mishandles jQuery.extend(true, {}, ...)… | CVE-2019-11358 | Medium | patch | manual-only | manual-only | No | 87.2% |
+| FIND-1929 | APP-0114 | SpringSource Spring Framework 2.5.x before 2.5.6.SEC02, 2.5.7 before 2.5.7.SR01, and 3.0.x before 3.0.3 allows remote… | CVE-2010-1622 | Medium | patch | manual-only | manual-only | No | 51.8% |
+| FIND-220 | WEB-PORTAL-0205 | The SSLv2 protocol, as used in OpenSSL before 1.0.1s and 1.0.2 before 1.0.2g and other products, requires a server to… | CVE-2016-0800 | Medium | config-change | manual-only | manual-only | No | 82.1% |
+| FIND-232 | WEB-PORTAL-0217 | The AES-NI implementation in OpenSSL before 1.0.1t and 1.0.2 before 1.0.2h does not consider memory allocation during… | CVE-2016-2107 | Medium | config-change | manual-only | manual-only | No | 89.1% |
+| FIND-274 | WEB-PORTAL-0259 | OpenSSL 1.0.2 (starting from version 1.0.2b) introduced an "error state" mechanism. The intent was that if a fatal… | CVE-2017-3737 | Medium | config-change | manual-only | manual-only | No | 78.7% |
+| FIND-974 | NET-RTSW-0059 | Cisco IOS 12.2(15) and earlier allows remote attackers to cause a denial of service (refused VTY (virtual terminal)… | CVE-2004-1464 | Medium | firmware-update | manual-only | manual-only | Yes | 5.1% |
+| FIND-1080 | NET-RTSW-0165 | Cisco IOS XR 3.4.0 through 3.8.1 allows remote attackers to cause a denial of service (session reset) via a BGP UPDATE… | CVE-2009-2055 | Medium | firmware-update | manual-only | manual-only | Yes | 3.3% |
+| FIND-1379 | FW-EDGE-0164 | An Exposure of Sensitive Information to an Unauthorized Actor vulnerability [CWE-200] vulnerability in Fortinet… | CVE-2025-68686 | Medium | firmware-update | manual-only | manual-only | Yes | 1.3% |
+| FIND-1822 | APP-0007 | Apache Log4j2 versions 2.0-alpha1 through 2.16.0 (excluding 2.12.3 and 2.3.1) did not protect from uncontrolled… | CVE-2021-45105 | Medium | patch | manual-only | manual-only | No | 100.0% |
+| FIND-1868 | APP-0053 | Multiple open redirect vulnerabilities in Apache Struts 2.0.0 through 2.3.15 allow remote attackers to redirect users… | CVE-2013-2248 | Medium | patch | manual-only | manual-only | No | 94.7% |
+| FIND-88 | WEB-PORTAL-0073 | ssl/s3_pkt.c in OpenSSL before 0.9.8i allows remote attackers to cause a denial of service (NULL pointer dereference… | CVE-2009-1386 | Medium | config-change | manual-only | manual-only | No | 80.1% |
+| FIND-136 | WEB-PORTAL-0121 | OpenSSL before 0.9.8l, and 0.9.8m through 1.x, does not properly restrict client-initiated renegotiation within the… | CVE-2011-1473 | Medium | config-change | manual-only | manual-only | No | 67.2% |
+| FIND-170 | WEB-PORTAL-0155 | Memory leak in d1_both.c in the DTLS implementation in OpenSSL 0.9.8 before 0.9.8zb, 1.0.0 before 1.0.0n, and 1.0.1… | CVE-2014-3507 | Medium | config-change | manual-only | manual-only | No | 51.4% |
+| FIND-189 | WEB-PORTAL-0174 | Memory leak in the dtls1_buffer_record function in d1_pkt.c in OpenSSL 1.0.0 before 1.0.0p and 1.0.1 before 1.0.1k… | CVE-2015-0206 | Medium | config-change | manual-only | manual-only | No | 59.3% |
+| FIND-1665 | WIN-SRV-0030 | The Microsoft Secure Sockets Layer (SSL) library, as used in Windows 2000, Windows XP, and Windows Server 2003, allows… | CVE-2004-0120 | Medium | patch | ansible-windows | auto-approvable | No | 50.7% |
+| FIND-1681 | WIN-SRV-0046 | The DHCP Server service for Microsoft Windows NT 4.0 Server and Terminal Server Edition, with DHCP logging enabled,… | CVE-2004-0899 | Medium | patch | ansible-windows | auto-approvable | No | 72.6% |
+| FIND-1697 | WIN-SRV-0062 | The Microsoft Windows kernel in Microsoft Windows 2000 Server, Windows XP, and Windows Server 2003 allows remote… | CVE-2005-1218 | Medium | patch | ansible-windows | auto-approvable | No | 57.3% |
+| FIND-1845 | APP-0030 | Multiple directory traversal vulnerabilities in Apache Struts 2.0.x before 2.0.12 and 2.1.x before 2.1.3 allow remote… | CVE-2008-6505 | Medium | patch | manual-only | manual-only | No | 72.5% |
+| FIND-1873 | APP-0058 | The ParametersInterceptor in Apache Struts before 2.3.16.2 allows remote attackers to "manipulate" the ClassLoader via… | CVE-2014-0094 | Medium | patch | manual-only | manual-only | No | 99.6% |
+| FIND-1265 | FW-EDGE-0050 | A Cross-site Scripting (XSS) vulnerability in Fortinet FortiOS 6.0.0 to 6.0.4, 5.6.0 to 5.6.7, 5.4.0 to 5.4.12, 5.2… | CVE-2018-13380 | Medium | firmware-update | manual-only | manual-only | No | 62.5% |
+| FIND-165 | WEB-PORTAL-0150 | The dtls1_get_message_fragment function in d1_both.c in OpenSSL before 0.9.8za, 1.0.0 before 1.0.0m, and 1.0.1 before… | CVE-2014-0221 | Medium | config-change | manual-only | manual-only | No | 87.9% |
+| FIND-167 | WEB-PORTAL-0152 | The ssl3_send_client_key_exchange function in s3_clnt.c in OpenSSL before 0.9.8za, 1.0.0 before 1.0.0m, and 1.0.1… | CVE-2014-3470 | Medium | config-change | manual-only | manual-only | No | 85.8% |
+| FIND-187 | WEB-PORTAL-0172 | The ssl3_get_key_exchange function in s3_clnt.c in OpenSSL before 0.9.8zd, 1.0.0 before 1.0.0p, and 1.0.1 before… | CVE-2015-0204 | Medium | config-change | manual-only | manual-only | No | 98.7% |
+| FIND-1046 | NET-RTSW-0131 | Multiple cross-site request forgery (CSRF) vulnerabilities in the HTTP Administration component in Cisco IOS 12.4 on… | CVE-2008-4128 | Medium | firmware-update | manual-only | manual-only | Yes | 33.0% |
+| FIND-1258 | FW-EDGE-0043 | A Improper Access Control in Fortinet FortiOS 6.0.2, 5.6.7 and before, FortiADC 6.1.0, 6.0.0 to 6.0.1, 5.4.0 to 5.4.4… | CVE-2018-13374 | Medium | firmware-update | manual-only | manual-only | Yes | 38.1% |
+| FIND-1262 | FW-EDGE-0047 | A heap buffer overflow in Fortinet FortiOS 6.0.0 through 6.0.4, 5.6.0 through 5.6.10, 5.4.0 through 5.4.12, 5.2.14 and… | CVE-2018-13383 | Medium | firmware-update | manual-only | manual-only | Yes | 33.6% |
+| FIND-1858 | APP-0043 | Multiple cross-site scripting (XSS) vulnerabilities in Apache Struts 2.0.14 and 2.2.3 allow remote attackers to inject… | CVE-2012-1006 | Medium | patch | manual-only | manual-only | No | 58.5% |
+| FIND-219 | WEB-PORTAL-0204 | The DH_check_pub_key function in crypto/dh/dh_check.c in OpenSSL 1.0.2 before 1.0.2f does not ensure that prime… | CVE-2016-0701 | Low | config-change | manual-only | manual-only | No | 83.6% |
+| FIND-177 | WEB-PORTAL-0162 | The SSL protocol 3.0, as used in OpenSSL through 1.0.1i and other products, uses nondeterministic CBC padding, which… | CVE-2014-3566 | Low | config-change | manual-only | manual-only | No | 100.0% |
+| FIND-7 | AXIS-CAM-LOBBY-03 | Device Exposes Telnet Service | — | High | manual-investigation | manual-only | manual-only | — | — |
+| FIND-8 | HVAC-CTRL-B2 | Unauthenticated Access to Management Interface | CVE-2019-7592 | Critical | firmware-update | manual-only | manual-only | No | — |
+| FIND-10 | WIN-BASTION02 | Internet-facing RDP discovered on Windows bastion host | — | High | config-change | ansible-windows | needs-change-approval | — | — |
+| FIND-11 | LNX-AUTH01 | OpenSSH regression allows authentication bypass under non-default config | CVE-2024-6387 | Critical | patch | ansible-unix | needs-change-approval | No | 99.5% |
+| FIND-2116 | OT-IOT-0001 | Heap-based buffer overflow in w32rtr.exe in GE Fanuc CIMPLICITY HMI SCADA system 7.0 before 7.0 SIM 9, and earlier… | CVE-2008-0176 | Critical | firmware-update | manual-only | manual-only | No | 7.9% |
+| FIND-2117 | OT-IOT-0002 | Windows Shell in Microsoft Windows XP SP3, Server 2003 SP2, Vista SP1 and SP2, Server 2008 SP2 and R2, and Windows 7… | CVE-2010-2568 | High | firmware-update | manual-only | manual-only | Yes | 91.3% |
+| FIND-2118 | OT-IOT-0003 | Siemens Simatic WinCC and PCS 7 SCADA system uses a hard-coded password, which allows local users to access a back-end… | CVE-2010-2772 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2119 | OT-IOT-0004 | Stack-based buffer overflow in WTclient.dll in SCADA Engine BACnet OPC Client before 1.0.25 allows user-assisted… | CVE-2010-4740 | Critical | firmware-update | manual-only | manual-only | No | 41.6% |
+| FIND-2120 | OT-IOT-0005 | Directory traversal vulnerability in IGSSdataServer.exe 9.00.00.11063 and earlier in 7-Technologies Interactive… | CVE-2011-1565 | Critical | firmware-update | manual-only | manual-only | No | 64.1% |
+| FIND-2121 | OT-IOT-0006 | Directory traversal vulnerability in dc.exe 9.00.00.11059 and earlier in 7-Technologies Interactive Graphical SCADA… | CVE-2011-1566 | Critical | firmware-update | manual-only | manual-only | No | 67.0% |
+| FIND-2122 | OT-IOT-0007 | Multiple stack-based buffer overflows in IGSSdataServer.exe 9.00.00.11063 and earlier in 7-Technologies Interactive… | CVE-2011-1567 | Critical | firmware-update | manual-only | manual-only | No | 69.6% |
+| FIND-2123 | OT-IOT-0008 | Format string vulnerability in the logText function in shmemmgr9.dll in IGSSdataServer.exe 9.00.00.11074, and… | CVE-2011-1568 | Critical | firmware-update | manual-only | manual-only | No | 19.4% |
+| FIND-2124 | OT-IOT-0009 | Unspecified vulnerability in the Open Database Connectivity (ODBC) component in 7T Interactive Graphical SCADA System… | CVE-2011-2214 | Critical | firmware-update | manual-only | manual-only | No | 4.7% |
+| FIND-2125 | OT-IOT-0010 | Stack-based buffer overflow in the Open Database Connectivity (ODBC) service (Odbcixv9se.exe) in 7-Technologies… | CVE-2011-2959 | Critical | firmware-update | manual-only | manual-only | No | 6.9% |
+| FIND-2126 | OT-IOT-0011 | Core Server HMI Service (Coreservice.exe) in Scadatec Limited Procyon SCADA 1.06, and other versions before 1.14,… | CVE-2011-3322 | Critical | firmware-update | manual-only | manual-only | No | 65.3% |
+| FIND-2127 | OT-IOT-0012 | Multiple stack-based buffer overflows in service.exe in Measuresoft ScadaPro 4.0.0 and earlier allow remote attackers… | CVE-2011-3490 | Critical | firmware-update | manual-only | manual-only | No | 36.4% |
+| FIND-2128 | OT-IOT-0013 | Multiple directory traversal vulnerabilities in service.exe in Measuresoft ScadaPro 4.0.0 and earlier allow remote… | CVE-2011-3495 | Critical | firmware-update | manual-only | manual-only | No | 10.8% |
+| FIND-2129 | OT-IOT-0014 | service.exe in Measuresoft ScadaPro 4.0.0 and earlier allows remote attackers to execute arbitrary commands via shell… | CVE-2011-3496 | Critical | firmware-update | manual-only | manual-only | No | 14.4% |
+| FIND-2130 | OT-IOT-0015 | service.exe in Measuresoft ScadaPro 4.0.0 and earlier allows remote attackers to execute arbitrary DLL functions via… | CVE-2011-3497 | Critical | firmware-update | manual-only | manual-only | No | 58.7% |
+| FIND-2132 | OT-IOT-0017 | Multiple buffer overflows in 7-Technologies (7T) Interactive Graphical SCADA System (IGSS) 9.0.0.11355 and earlier… | CVE-2011-4537 | High | firmware-update | manual-only | manual-only | No | 4.7% |
+| FIND-2133 | OT-IOT-0018 | Untrusted search path vulnerability in 7-Technologies (7T) Interactive Graphical SCADA System (IGSS) before… | CVE-2011-4053 | Critical | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-2136 | OT-IOT-0021 | Untrusted search path vulnerability in Measuresoft ScadaPro Client before 4.0.0 and ScadaPro Server before 4.0.0… | CVE-2012-1824 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2137 | OT-IOT-0022 | Buffer overflow in RunTime.exe in Sielco Sistemi Winlog Pro SCADA before 2.07.18 and Winlog Lite SCADA before 2.07.18… | CVE-2012-3815 | Critical | firmware-update | manual-only | manual-only | No | 44.3% |
+| FIND-2138 | OT-IOT-0023 | Stack-based buffer overflow in RunTime.exe in Sielco Sistemi Winlog Pro SCADA before 2.07.17 and Winlog Lite SCADA… | CVE-2012-4353 | Critical | firmware-update | manual-only | manual-only | No | 24.8% |
+| FIND-2139 | OT-IOT-0024 | TCPIPS_Story.dll in Sielco Sistemi Winlog Pro SCADA before 2.07.17 and Winlog Lite SCADA before 2.07.17 allows remote… | CVE-2012-4354 | Critical | firmware-update | manual-only | manual-only | No | 8.2% |
+| FIND-2140 | OT-IOT-0025 | TCPIPS_Story.dll in Sielco Sistemi Winlog Pro SCADA before 2.07.18 and Winlog Lite SCADA before 2.07.18 allows remote… | CVE-2012-4355 | Critical | firmware-update | manual-only | manual-only | No | 8.2% |
+| FIND-2142 | OT-IOT-0027 | Array index error in Sielco Sistemi Winlog Pro SCADA before 2.07.17 and Winlog Lite SCADA before 2.07.17 might allow… | CVE-2012-4357 | Critical | firmware-update | manual-only | manual-only | No | 7.4% |
+| FIND-2143 | OT-IOT-0028 | Sielco Sistemi Winlog Pro SCADA before 2.07.17 and Winlog Lite SCADA before 2.07.17 do not validate the return value… | CVE-2012-4358 | Critical | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-2144 | OT-IOT-0029 | Sielco Sistemi Winlog Pro SCADA before 2.07.18 and Winlog Lite SCADA before 2.07.18 do not validate the return value… | CVE-2012-4359 | Critical | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-2146 | OT-IOT-0031 | Directory traversal vulnerability in the web server in Fultek WinTr Scada 4.0.5 and earlier allows remote attackers to… | CVE-2012-3011 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2147 | OT-IOT-0032 | Stack-based buffer overflow in Schneider Electric Interactive Graphical SCADA System (IGSS) 10 and earlier allows… | CVE-2013-0657 | Critical | firmware-update | manual-only | manual-only | No | 21.3% |
+| FIND-2148 | OT-IOT-0033 | Multiple buffer overflows in an ActiveX control in PE3DO32A.ocx in IntegraXor SCADA Server 4.00 build 4250.0 and… | CVE-2012-4700 | Critical | firmware-update | manual-only | manual-only | No | 3.8% |
+| FIND-2150 | OT-IOT-0035 | MatrikonOPC SCADA DNP3 OPC Server 1.2.0 allows remote attackers to cause a denial of service (master-station daemon… | CVE-2013-2791 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2151 | OT-IOT-0036 | Triangle MicroWorks SCADA Data Gateway 2.50.0309 through 3.00.0616, DNP3 .NET Protocol components 3.06.0.171 through… | CVE-2013-2793 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-2153 | OT-IOT-0038 | The SCADA server in Ecava IntegraXor before 4.1.4369 allows remote attackers to read arbitrary project backup files… | CVE-2014-0752 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2155 | OT-IOT-0040 | Stack-based buffer overflow in the SCADA server in Ecava IntegraXor before 4.1.4390 allows remote attackers to cause a… | CVE-2014-0753 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-2157 | OT-IOT-0042 | MatrikonOPC SCADA DNP3 OPC Server 1.2.2.0 and earlier allows remote attackers to cause a denial of service (infinite… | CVE-2013-2829 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2158 | OT-IOT-0043 | Schneider Electric StruxureWare SCADA Expert Vijeo Citect 7.40, Vijeo Citect 7.20 through 7.30SP1, CitectSCADA 7.20… | CVE-2013-2824 | High | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-2162 | OT-IOT-0047 | Ecava IntegraXor SCADA Server Stable 4.1.4360 and earlier and Beta 4.1.4392 and earlier allows remote attackers to… | CVE-2014-2375 | High | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-2163 | OT-IOT-0048 | SQL injection vulnerability in Ecava IntegraXor SCADA Server Stable 4.1.4360 and earlier and Beta 4.1.4392 and earlier… | CVE-2014-2376 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-2168 | OT-IOT-0053 | Cross-site scripting (XSS) vulnerability in the login script in the Wind Farm Portal on Nordex Control 2 (NC2) SCADA… | CVE-2014-5408 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-2170 | OT-IOT-0055 | Heap-based buffer overflow in the SOAP web interface in SCADA Engine BACnet OPC Server before 2.1.371.24 allows remote… | CVE-2015-0979 | Critical | firmware-update | manual-only | manual-only | No | 4.6% |
+| FIND-2171 | OT-IOT-0056 | Format string vulnerability in BACnOPCServer.exe in the SOAP web interface in SCADA Engine BACnet OPC Server before… | CVE-2015-0980 | Critical | firmware-update | manual-only | manual-only | No | 3.6% |
+| FIND-2172 | OT-IOT-0057 | The SOAP web interface in SCADA Engine BACnet OPC Server before 2.1.371.24 allows remote attackers to bypass… | CVE-2015-0981 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2175 | OT-IOT-0060 | Directory traversal vulnerability in INDAS Web SCADA before 3 allows remote attackers to read arbitrary files via… | CVE-2016-8343 | High | firmware-update | manual-only | manual-only | No | 3.6% |
+| FIND-2176 | OT-IOT-0061 | An issue was discovered in Sielco Sistemi Winlog Lite SCADA Software, versions prior to Version 3.02.01, and Winlog… | CVE-2017-5161 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2177 | OT-IOT-0062 | A DLL Hijacking issue was discovered in Schneider Electric Interactive Graphical SCADA System (IGSS) Software, Version… | CVE-2017-6033 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2179 | OT-IOT-0064 | A Header Injection issue was discovered in Certec EDV GmbH atvise scada prior to Version 3.0. An "improper… | CVE-2017-6031 | High | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-2180 | OT-IOT-0065 | An Improper Access Control issue was discovered in LCDS - Leao Consultoria e Desenvolvimento de Sistemas LTDA ME… | CVE-2017-6016 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2181 | OT-IOT-0066 | An Uncontrolled Search Path Element issue was discovered in SIMPlight SCADA Software version 4.3.0.27 and prior. The… | CVE-2017-9661 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-2182 | OT-IOT-0067 | A Directory Traversal issue was discovered in SpiderControl SCADA Web Server. An attacker may be able to use a simple… | CVE-2017-12694 | High | firmware-update | manual-only | manual-only | No | 3.8% |
+| FIND-2183 | OT-IOT-0068 | A Stack-based Buffer Overflow issue was discovered in SpiderControl SCADA MicroBrowser Versions 1.6.30.144 and prior.… | CVE-2017-12707 | Critical | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2184 | OT-IOT-0069 | An Improper Privilege Management issue was discovered in SpiderControl SCADA Web Server Version 2.02.0007 and prior.… | CVE-2017-12728 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2186 | OT-IOT-0071 | A security misconfiguration vulnerability exists in Schneider Electric's IGSS SCADA Software versions 12 and prior.… | CVE-2017-9967 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2187 | OT-IOT-0072 | A vulnerability allows local attackers to escalate privilege on Rapid Scada 5.5.0 because of weak C:\SCADA… | CVE-2018-5313 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2188 | OT-IOT-0073 | A structured exception handler overflow vulnerability in Leao Consultoria e Desenvolvimento de Sistemas (LCDS) LTDA ME… | CVE-2018-5463 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2190 | OT-IOT-0075 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-10589 | Critical | firmware-update | manual-only | manual-only | No | 4.1% |
+| FIND-2191 | OT-IOT-0076 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-10590 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-2193 | OT-IOT-0078 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-7495 | High | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-2194 | OT-IOT-0079 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-7497 | Critical | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-2195 | OT-IOT-0080 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-7499 | Critical | firmware-update | manual-only | manual-only | No | 3.8% |
+| FIND-2196 | OT-IOT-0081 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-7501 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2197 | OT-IOT-0082 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-7503 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-2198 | OT-IOT-0083 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-7505 | Critical | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-2199 | OT-IOT-0084 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-8841 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2200 | OT-IOT-0085 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-8845 | Critical | firmware-update | manual-only | manual-only | No | 5.7% |
+| FIND-2201 | OT-IOT-0086 | CirCarLife Scada before 4.3 allows remote attackers to obtain sensitive information via a direct request for the… | CVE-2018-12634 | Critical | firmware-update | manual-only | manual-only | No | 56.8% |
+| FIND-2202 | OT-IOT-0087 | CirCarLife Scada v4.2.4 allows unauthorized upgrades via requests to the html/upgrade.html and… | CVE-2018-12635 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2203 | OT-IOT-0088 | LAquis SCADA Versions 4.1.0.3870 and prior has an untrusted pointer dereference vulnerability, which may allow remote… | CVE-2018-17893 | Critical | firmware-update | manual-only | manual-only | No | 6.4% |
+| FIND-2204 | OT-IOT-0089 | LAquis SCADA Versions 4.1.0.3870 and prior has several out-of-bounds read vulnerabilities, which may allow remote code… | CVE-2018-17895 | Critical | firmware-update | manual-only | manual-only | No | 4.8% |
+| FIND-2205 | OT-IOT-0090 | LAquis SCADA Versions 4.1.0.3870 and prior has several integer overflow to buffer overflow vulnerabilities, which may… | CVE-2018-17897 | Critical | firmware-update | manual-only | manual-only | No | 6.0% |
+| FIND-2206 | OT-IOT-0091 | LAquis SCADA Versions 4.1.0.3870 and prior has a path traversal vulnerability, which may allow remote code execution. | CVE-2018-17899 | High | firmware-update | manual-only | manual-only | No | 8.1% |
+| FIND-2207 | OT-IOT-0092 | LAquis SCADA Versions 4.1.0.3870 and prior, when processing project files the application fails to sanitize user input… | CVE-2018-17901 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2208 | OT-IOT-0093 | LAquis SCADA Versions 4.1.0.3870 and prior has several stack-based buffer overflow vulnerabilities, which may allow… | CVE-2018-17911 | High | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-2212 | OT-IOT-0097 | A Credential Management vulnerability exists in FoxView HMI SCADA (All Foxboro DCS, Foxboro Evo, and IA Series… | CVE-2018-7793 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2213 | OT-IOT-0098 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows execution of script code by opening a specially crafted report… | CVE-2018-18988 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2215 | OT-IOT-0100 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows the opening of a specially crafted report format file that may… | CVE-2018-18986 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-2217 | OT-IOT-0102 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows taking in user input without proper sanitation, which may allow… | CVE-2018-18992 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-2218 | OT-IOT-0103 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows taking in user input without proper authorization or sanitation,… | CVE-2018-18996 | Critical | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-2219 | OT-IOT-0104 | LCDS Laquis SCADA prior to version 4.1.0.4150 uses hard coded credentials, which may allow an attacker unauthorized… | CVE-2018-18998 | Critical | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-2221 | OT-IOT-0106 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows improper control of generation of code when opening a specially… | CVE-2018-19002 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-2222 | OT-IOT-0107 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows an attacker using a specially crafted project file to supply a… | CVE-2018-19029 | High | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-2223 | OT-IOT-0108 | A successful exploit of these vulnerabilities requires the local user to load a crafted DLL file in the system… | CVE-2015-1014 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2224 | OT-IOT-0109 | Opening a specially crafted LCDS LAquis SCADA before 4.3.1.71 ELS file may result in a write past the end of an… | CVE-2019-6536 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-2225 | OT-IOT-0110 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows an out of bounds read when opening a specially crafted project… | CVE-2018-18994 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-2226 | OT-IOT-0111 | A CWE-787: Out-of-bounds Write vulnerability exists in Interactive Graphical SCADA System (IGSS), Version 14 and… | CVE-2019-6827 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2227 | OT-IOT-0112 | A type confusion vulnerability may be exploited when LAquis SCADA 4.3.1.71 processes a specially crafted project file.… | CVE-2019-10980 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2231 | OT-IOT-0116 | A CWE-287: Improper Authentication vulnerability exists in a folder within EcoStruxure Geo SCADA Expert (ClearSCADA)… | CVE-2019-6854 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2232 | OT-IOT-0117 | The IEC870IP driver for AVEVA’s Vijeo Citect and Citect SCADA and Schneider Electric’s Power SCADA Operation has a… | CVE-2019-13537 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2233 | OT-IOT-0118 | A Heap-based Buffer Overflow was found in Emerson OpenEnterprise SCADA Server 2.83 (if Modbus or ROC Interfaces have… | CVE-2020-6970 | Critical | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2234 | OT-IOT-0119 | Triangle MicroWorks SCADA Data Gateway 3.02.0697 through 4.0.122, 2.41.0213 through 4.0.122 allows remote attackers to… | CVE-2020-10611 | Critical | firmware-update | manual-only | manual-only | No | 5.2% |
+| FIND-2235 | OT-IOT-0120 | Triangle MicroWorks SCADA Data Gateway 3.02.0697 through 4.0.122, 2.41.0213 through 4.0.122 allows remote attackers to… | CVE-2020-10613 | High | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-2236 | OT-IOT-0121 | Triangle MicroWorks SCADA Data Gateway 3.02.0697 through 4.0.122, 2.41.0213 through 4.0.122 allows remote attackers… | CVE-2020-10615 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2239 | OT-IOT-0124 | For the Central Licensing Server component used in ABB products ABB Ability™ System 800xA and related system… | CVE-2020-8479 | Critical | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-2241 | OT-IOT-0126 | LCDS LAquis SCADA Versions 4.3.1 and prior. The affected product is vulnerable to arbitrary file creation by… | CVE-2020-10622 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2242 | OT-IOT-0127 | Rapid Software LLC Rapid SCADA 5.8.0 is affected by a local privilege escalation vulnerability in the… | CVE-2020-22722 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2243 | OT-IOT-0128 | A CWE-502 Deserialization of Untrusted Data vulnerability exists in SCADAPack 7x Remote Connect (V3.6.3.574 and prior)… | CVE-2020-7528 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-2245 | OT-IOT-0130 | A CWE-285 Improper Authorization vulnerability exists in SCADAPack 7x Remote Connect (V3.6.3.574 and prior) which… | CVE-2020-7530 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-2246 | OT-IOT-0131 | A CWE-284 Improper Access Control vulnerability exists in SCADAPack 7x Remote Connect (V3.6.3.574 and prior) which… | CVE-2020-7531 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2247 | OT-IOT-0132 | A CWE-502 Deserialization of Untrusted Data vulnerability exists in SCADAPack x70 Security Administrator (V1.2.0 and… | CVE-2020-7532 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-2248 | OT-IOT-0133 | An attacker who convinces a valid user to open a specially crafted project file to exploit could execute code under… | CVE-2020-25188 | High | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-2249 | OT-IOT-0134 | A CWE-284:Improper Access Control vulnerability exists in EcoStruxureª and SmartStruxureª Power Monitoring and SCADA… | CVE-2020-7545 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-2251 | OT-IOT-0136 | A CWE-284: Improper Access Control vulnerability exists in EcoStruxureª and SmartStruxureª Power Monitoring and SCADA… | CVE-2020-7547 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2252 | OT-IOT-0137 | A CWE-522: Insufficiently Protected Credentials vulnerability exists in EcoStruxure Geo SCADA Expert 2019 (Original… | CVE-2020-28219 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2253 | OT-IOT-0138 | A CWE-119:Improper Restriction of Operations within the Bounds of a Memory Buffer vulnerability exists in Interactive… | CVE-2021-22709 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-2254 | OT-IOT-0139 | A CWE-119:Improper Restriction of Operations within the Bounds of a Memory Buffer vulnerability exists in Interactive… | CVE-2021-22710 | High | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-2255 | OT-IOT-0140 | A CWE-119:Improper Restriction of Operations within the Bounds of a Memory Buffer vulnerability exists in Interactive… | CVE-2021-22711 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2256 | OT-IOT-0141 | A CWE-119:Improper Restriction of Operations within the Bounds of a Memory Buffer vulnerability exists in Interactive… | CVE-2021-22712 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2258 | OT-IOT-0143 | OpenPLC ScadaBR through 0.9.1 on Linux and through 1.12.4 on Windows allows remote authenticated users to upload and… | CVE-2021-26828 | High | firmware-update | manual-only | manual-only | Yes | 39.4% |
+| FIND-2259 | OT-IOT-0144 | OpenPLC ScadaBR through 0.9.1 on Linux and through 1.12.4 on Windows allows stored XSS via system_settings.shtm. | CVE-2021-26829 | Medium | firmware-update | manual-only | manual-only | Yes | 48.0% |
+| FIND-2260 | OT-IOT-0145 | Insufficiently Protected Credentials vulnerability exists in EcoStruxure Control Expert (all versions prior to V15.0… | CVE-2021-22778 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2261 | OT-IOT-0146 | Authentication Bypass by Spoofing vulnerability exists in EcoStruxure Control Expert (all versions prior to V15.0 SP1,… | CVE-2021-22779 | Critical | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2262 | OT-IOT-0147 | Insufficiently Protected Credentials vulnerability exists in EcoStruxure Control Expert (all versions prior to V15.0… | CVE-2021-22780 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2265 | OT-IOT-0150 | LCDS LAquis SCADA through 4.3.1.1085 is vulnerable to a control bypass and path traversal. If an attacker can get a… | CVE-2021-41579 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2267 | OT-IOT-0152 | Improper Handling of Parameters vulnerability in Ipack Automation Systems Ipack SCADA Software allows : Blind SQL… | CVE-2021-3958 | Critical | firmware-update | manual-only | manual-only | No | 14.5% |
+| FIND-2268 | OT-IOT-0153 | A CWE-754: Improper Check for Unusual or Exceptional Conditions vulnerability exists that could cause a Denial of… | CVE-2021-22816 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2269 | OT-IOT-0154 | A CWE-190: Integer Overflow or Wraparound vulnerability exists that could cause heap-based buffer overflow, leading to… | CVE-2022-24310 | Critical | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-2270 | OT-IOT-0155 | A CWE-22: Improper Limitation of a Pathname to a Restricted Directory vulnerability exists that could cause… | CVE-2022-24311 | Critical | firmware-update | manual-only | manual-only | No | 3.5% |
+| FIND-2271 | OT-IOT-0156 | A CWE-22: Improper Limitation of a Pathname to a Restricted Directory vulnerability exists that could cause… | CVE-2022-24312 | Critical | firmware-update | manual-only | manual-only | No | 3.5% |
+| FIND-2272 | OT-IOT-0157 | A CWE-120: Buffer Copy without Checking Size of Input vulnerability exists that could cause a stack-based buffer… | CVE-2022-24313 | Critical | firmware-update | manual-only | manual-only | No | 44.6% |
+| FIND-2273 | OT-IOT-0158 | A CWE-125: Out-of-bounds Read vulnerability exists that could cause memory leaks potentially resulting in denial of… | CVE-2022-24314 | High | firmware-update | manual-only | manual-only | No | 18.2% |
+| FIND-2274 | OT-IOT-0159 | A CWE-125: Out-of-bounds Read vulnerability exists that could cause denial of service when an attacker repeatedly… | CVE-2022-24315 | High | firmware-update | manual-only | manual-only | No | 19.3% |
+| FIND-2275 | OT-IOT-0160 | A CWE-665: Improper Initialization vulnerability exists that could cause information exposure when an attacker sends a… | CVE-2022-24316 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2276 | OT-IOT-0161 | A CWE-862: Missing Authorization vulnerability exists that could cause information exposure when an attacker sends a… | CVE-2022-24317 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-2277 | OT-IOT-0162 | A CWE-326: Inadequate Encryption Strength vulnerability exists that could cause non-encrypted communication with the… | CVE-2022-24318 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2280 | OT-IOT-0165 | A CWE-754: Improper Check for Unusual or Exceptional Conditions vulnerability exists that could cause Denial of… | CVE-2022-24321 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2281 | OT-IOT-0166 | A CWE-120: Buffer Copy without Checking Size of Input vulnerability exists that could result in remote code execution… | CVE-2021-22802 | Critical | firmware-update | manual-only | manual-only | No | 20.2% |
+| FIND-2282 | OT-IOT-0167 | A CWE-434: Unrestricted Upload of File with Dangerous Type vulnerability exists that could lead to remote code… | CVE-2021-22803 | Critical | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-2283 | OT-IOT-0168 | A CWE-22: Improper Limitation of a Pathname to a Restricted Directory vulnerability exists that could cause disclosure… | CVE-2021-22804 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2284 | OT-IOT-0169 | A CWE-306: Missing Authentication for Critical Function vulnerability exists that could cause deletion of arbitrary… | CVE-2021-22805 | Critical | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2285 | OT-IOT-0170 | A CWE-306: Missing Authentication for Critical Function vulnerability exists that could cause deletion of arbitrary… | CVE-2021-22823 | Critical | firmware-update | manual-only | manual-only | No | 21.4% |
+| FIND-2286 | OT-IOT-0171 | A CWE-120: Buffer Copy without Checking Size of Input vulnerability exists that could result in denial of service, due… | CVE-2021-22824 | High | firmware-update | manual-only | manual-only | No | 14.2% |
+| FIND-2287 | OT-IOT-0172 | On ICL ScadaFlex II SCADA Controller SC-1 and SC-2 1.03.07 devices, unauthenticated remote attackers can overwrite,… | CVE-2022-25359 | Critical | firmware-update | manual-only | manual-only | No | 37.3% |
+| FIND-2288 | OT-IOT-0173 | A specially crafted packet sent to the Fernhill SCADA Server Version 3.77 and earlier may cause an exception, causing… | CVE-2022-21155 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-2289 | OT-IOT-0174 | A CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal) vulnerability exists that… | CVE-2021-22797 | High | firmware-update | manual-only | manual-only | No | 26.1% |
+| FIND-2291 | OT-IOT-0176 | Elcomplus SmartPTT SCADA Server web application does not, or cannot, sufficiently verify whether a well-formed, valid,… | CVE-2021-43937 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2292 | OT-IOT-0177 | Elcomplus SmartPTT SCADA Server is vulnerable to an unauthenticated user can request various files from the server… | CVE-2021-43938 | High | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-2296 | OT-IOT-0181 | Windows OS can be configured to overlay a “language bar” on top of any application. When this OS functionality is… | CVE-2022-1467 | High | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2297 | OT-IOT-0182 | When a non-existent resource is requested, the LCDS LAquis SCADA application (version 4.3.1.1011 and prior) returns… | CVE-2021-32989 | Critical | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-2299 | OT-IOT-0184 | Measuresoft ScadaPro Server (Versions prior to 6.8.0.1) uses an unmaintained ActiveX control, which may allow an… | CVE-2022-2892 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2300 | OT-IOT-0185 | Measuresoft ScadaPro Server (All Versions) uses unmaintained ActiveX controls. The controls may allow seven untrusted… | CVE-2022-2894 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2301 | OT-IOT-0186 | Measuresoft ScadaPro Server (All Versions) uses unmaintained ActiveX controls. These controls may allow two… | CVE-2022-2895 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2302 | OT-IOT-0187 | Measuresoft ScadaPro Server (All Versions) allows use after free while processing a specific project file. | CVE-2022-2896 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2303 | OT-IOT-0188 | Measuresoft ScadaPro Server and Client (All Versions) do not properly resolve links before file access; this could… | CVE-2022-2897 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2305 | OT-IOT-0190 | The security descriptor of Measuresoft ScadaPro Server version 6.7 has inconsistent permissions, which could allow a… | CVE-2022-3263 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2307 | OT-IOT-0192 | A CWE-863: Incorrect Authorization vulnerability exists that could cause Denial of Service against the Geo SCADA… | CVE-2023-22610 | Critical | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2308 | OT-IOT-0193 | A CWE-200: Exposure of Sensitive Information to an Unauthorized Actor vulnerability exists that could cause… | CVE-2023-22611 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2310 | OT-IOT-0195 | The listed versions of AVEVA Plant SCADA and AVEVA Telemetry Server are vulnerable to an improper authorization… | CVE-2023-1256 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2311 | OT-IOT-0196 | An privilege escalation issue was discovered in Scada-LTS 2.7.1.1 build 2948559113 allows remote attackers,… | CVE-2022-41976 | Critical | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2312 | OT-IOT-0197 | SmartPTT SCADA 1.1.0.0 allows remote code execution (when the attacker has administrator privileges) by writing a… | CVE-2023-30459 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-2313 | OT-IOT-0198 | On Triangle MicroWorks' SCADA Data Gateway version <= v5.01.03, an unauthenticated attacker can send a specially… | CVE-2023-2186 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2315 | OT-IOT-0200 | If an attacker can trick an authenticated user into loading a maliciously crafted .zip file onto Advantech WebAccess… | CVE-2023-2866 | High | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-2317 | OT-IOT-0202 | External input could be used on TEL-STER TelWin SCADA WebInterface to construct paths to files and directories without… | CVE-2023-0956 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2318 | OT-IOT-0203 | ARDEREG ​Sistema SCADA Central versions 2.203 and prior login page are vulnerable to an unauthenticated blind SQL… | CVE-2023-4485 | Critical | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2321 | OT-IOT-0206 | EisBaer Scada - CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal') | CVE-2023-42488 | High | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2322 | OT-IOT-0207 | EisBaer Scada - CWE-732: Incorrect Permission Assignment for Critical Resource | CVE-2023-42489 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2323 | OT-IOT-0208 | EisBaer Scada - CWE-200: Exposure of Sensitive Information to an Unauthorized Actor | CVE-2023-42490 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2324 | OT-IOT-0209 | EisBaer Scada - CWE-285: Improper Authorization | CVE-2023-42491 | High | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2325 | OT-IOT-0210 | EisBaer Scada - CWE-321: Use of Hard-coded Cryptographic Key | CVE-2023-42492 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2326 | OT-IOT-0211 | EisBaer Scada - CWE-256: Plaintext Storage of a Password | CVE-2023-42493 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2327 | OT-IOT-0212 | EisBaer Scada - CWE-749: Exposed Dangerous Method or Function | CVE-2023-42494 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2328 | OT-IOT-0213 | An issue was discovered in Scada-LTS v2.7.5.2 build 4551883606 and before, allows remote attackers with low-level… | CVE-2023-33472 | High | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2329 | OT-IOT-0214 | In Rapid Software LLC's Rapid SCADA versions prior to Version 5.8.4, an attacker can supply a malicious configuration… | CVE-2024-21852 | High | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-2330 | OT-IOT-0215 | In Rapid Software LLC's Rapid SCADA versions prior to Version 5.8.4, the product uses hard-coded credentials, which… | CVE-2024-21764 | Critical | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2334 | OT-IOT-0219 | In Rapid Software LLC's Rapid SCADA versions prior to Version 5.8.4, an authorized user can write directly to the… | CVE-2024-22016 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2336 | OT-IOT-0221 | Triangle MicroWorks SCADA Data Gateway Missing Authentication Vulnerability. This vulnerability allows remote… | CVE-2023-39457 | Critical | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2338 | OT-IOT-0223 | Triangle MicroWorks SCADA Data Gateway Directory Traversal Arbitrary File Creation Vulnerability. This vulnerability… | CVE-2023-39459 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2339 | OT-IOT-0224 | Triangle MicroWorks SCADA Data Gateway Event Log Directory Traversal Arbitrary File Creation Vulnerability. This… | CVE-2023-39460 | High | firmware-update | manual-only | manual-only | No | 2.9% |
+| FIND-2342 | OT-IOT-0227 | Triangle MicroWorks SCADA Data Gateway Trusted Certification Unrestricted Upload of File Remote Code Execution… | CVE-2023-39463 | High | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2343 | OT-IOT-0228 | Triangle MicroWorks SCADA Data Gateway GTWWebMonitorService Unquoted Search Path Remote Code Execution Vulnerability.… | CVE-2023-39464 | High | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2344 | OT-IOT-0229 | Triangle MicroWorks SCADA Data Gateway Use of Hard-coded Cryptograhic Key Information Disclosure Vulnerability. This… | CVE-2023-39465 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2347 | OT-IOT-0232 | Triangle MicroWorks SCADA Data Gateway DbasSectorFileToExecuteOnReset Exposed Dangerous Function Remote Code Execution… | CVE-2023-39468 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-2348 | OT-IOT-0233 | Triangle MicroWorks SCADA Data Gateway Restore Workspace Directory Traversal Remote Code Execution Vulnerability. This… | CVE-2022-0369 | High | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-2349 | OT-IOT-0234 | There are multiple ways in LCDS LAquis SCADA for an attacker to access locations outside of their own directory. | CVE-2024-5040 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2351 | OT-IOT-0236 | SpiderControl SCADA Web Server has a vulnerability that could allow an attacker to upload specially crafted malicious… | CVE-2024-8232 | High | firmware-update | manual-only | manual-only | No | 13.1% |
+| FIND-2352 | OT-IOT-0237 | CheckUser in ScadaServerEngine/MainLogic.cs in Rapid SCADA through 5.8.4 allows an empty password. | CVE-2024-47221 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2353 | OT-IOT-0238 | iniNet Solutions SpiderControl SCADA PC HMI Editor has a path traversal vulnerability. When the software loads a… | CVE-2024-10313 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2357 | OT-IOT-0242 | Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection') vulnerability in Bayraktar Solar… | CVE-2025-4822 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2375 | OT-IOT-0260 | ScadaApp for iOS 1.1.4.0 contains a denial of service vulnerability that allows attackers to crash the application by… | CVE-2019-25349 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2377 | OT-IOT-0262 | In ScadaBR version 1.2.0, a Missing Authentication for Critical Function vulnerability could allow an unauthenticated… | CVE-2026-8602 | Critical | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2378 | OT-IOT-0263 | In ScadaBR version 1.2.0, an OS Command Injection vulnerability could allow an attacker to execute commands as root on… | CVE-2026-8603 | Critical | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2379 | OT-IOT-0264 | In ScadaBR version 1.2.0, a CSRF vulnerability could allow an attacker to trigger any authenticated action through a… | CVE-2026-8604 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2380 | OT-IOT-0265 | In ScadaBR version 1.2.0, a Use of Hard-Coded Credentials vulnerability could allow an attacker to access the SCADA… | CVE-2026-8605 | Critical | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2383 | OT-IOT-0268 | In PROCON-WEB SCADA the endpoint 'GetGridData' is not properly sanitized. This allows a remote unauthenticated… | CVE-2026-16462 | Critical | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2384 | OT-IOT-0269 | A vulnerability in the Secure Sockets Layer (SSL) VPN functionality of the Cisco Adaptive Security Appliance (ASA)… | CVE-2018-0101 | Critical | firmware-update | manual-only | manual-only | No | 86.8% |
+| FIND-2385 | OT-IOT-0270 | A hard-coded cryptographic key vulnerability was identified in Red Lion Controls Sixnet-Managed Industrial Switches… | CVE-2016-9335 | Critical | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2386 | OT-IOT-0271 | Recently it was discovered as a part of the research on IoT devices in the most recent firmware for Shekar Endoscope… | CVE-2017-10723 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2387 | OT-IOT-0272 | Recently it was discovered as a part of the research on IoT devices in the most recent firmware for Shekar Endoscope… | CVE-2017-10724 | High | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-2389 | OT-IOT-0274 | Visual Components (owned by KUKA) is a robotic simulator that allows simulating factories and robots in order… | CVE-2020-10291 | High | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-2390 | OT-IOT-0275 | Visual Components (owned by KUKA) is a robotic simulator that allows simulating factories and robots in order… | CVE-2020-10292 | High | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-2391 | OT-IOT-0276 | In Weidmueller Industrial WLAN devices in multiple versions an exploitable command injection vulnerability exists in… | CVE-2021-33534 | High | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-2392 | OT-IOT-0277 | The PnPSCADA system, a product of SDG Technologies CC, is afflicted by a critical unauthenticated error-based… | CVE-2023-1934 | Critical | firmware-update | manual-only | manual-only | No | 8.1% |
+| FIND-2393 | OT-IOT-0278 | Industrial Control Systems Network Protocol Parsers (ICSNPP) - Ethercat Zeek Plugin versions d78dda6 and prior are… | CVE-2023-7242 | High | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2394 | OT-IOT-0279 | Industrial Control Systems Network Protocol Parsers (ICSNPP) - Ethercat Zeek Plugin versions d78dda6 and prior are… | CVE-2023-7243 | Critical | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2395 | OT-IOT-0280 | Industrial Control Systems Network Protocol Parsers (ICSNPP) - Ethercat Zeek Plugin versions d78dda6 and prior are… | CVE-2023-7244 | Critical | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2398 | OT-IOT-0283 | Cybersecurity Nozomi Networks Labs, a specialized security company focused on Industrial Control Systems (ICS) and… | CVE-2025-52600 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2399 | OT-IOT-0284 | Cybersecurity Nozomi Networks Labs, a specialized security company focused on Industrial Control Systems (ICS) and… | CVE-2025-52601 | High | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-2401 | OT-IOT-0286 | A vulnerability in the TCP throttling process for Cisco IoT Field Network Director (IoT-FND) could allow an… | CVE-2017-6780 | High | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-2402 | OT-IOT-0287 | In Android before 2018-01-05 on Qualcomm Snapdragon IoT, Snapdragon Mobile, Snapdragon Automobile APQ8096AU, MDM9206,… | CVE-2017-14911 | Critical | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-2404 | OT-IOT-0289 | A vulnerability in the web-based management interface of Cisco IoT Field Network Director (IoT-FND) could allow an… | CVE-2018-0270 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2405 | OT-IOT-0290 | Default and unremovable support credentials (user:lutron password:integration) allow attackers to gain total super… | CVE-2018-11629 | Critical | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-2406 | OT-IOT-0291 | Default and unremovable support credentials (user:nwk password:nwk2) allow attackers to gain total super user control… | CVE-2018-11681 | Critical | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-2407 | OT-IOT-0292 | Default and unremovable support credentials allow attackers to gain total super user control of an IoT device through… | CVE-2018-11682 | Critical | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-2409 | OT-IOT-0294 | A remote code execution vulnerability exists in the way that Azure IoT Hub Device Client SDK using MQTT protocol… | CVE-2018-8531 | High | firmware-update | manual-only | manual-only | No | 15.2% |
+| FIND-2412 | OT-IOT-0297 | Recently it was discovered as a part of the research on IoT devices in the most recent firmware for Shekar Endoscope… | CVE-2017-10720 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2414 | OT-IOT-0299 | Recently it was discovered as a part of the research on IoT devices in the most recent firmware for Shekar Endoscope… | CVE-2017-10722 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-543 | CLOUD-0228 | Cilium is a networking, observability, and security solution with an eBPF-based dataplane. An attacker with the… | CVE-2023-41333 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1033 | NET-RTSW-0118 | Multiple stack-based buffer overflows in Command EXEC in Cisco IOS allow local users to gain privileges via… | CVE-2007-5548 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1751 | WIN-SRV-0116 | Double free vulnerability in Microsoft Windows 2000, XP, 2003, and Vista allows local users to gain privileges by… | CVE-2006-6696 | Medium | patch | ansible-windows | auto-approvable | No | 3.4% |
+| FIND-1790 | WIN-SRV-0155 | Unspecified vulnerability in the (1) Windows Services for UNIX 3.0 and 3.5, and (2) Subsystem for UNIX-based… | CVE-2007-3036 | Medium | patch | ansible-windows | auto-approvable | No | 2.4% |
+| FIND-1795 | WIN-SRV-0160 | Buffer overflow in Macrovision SafeDisc secdrv.sys before 4.3.86.0, as shipped in Microsoft Windows XP SP2, XP… | CVE-2007-5587 | Medium | patch | ansible-windows | auto-approvable | No | 2.9% |
+| FIND-53 | WEB-PORTAL-0038 | Off-by-one error in the SSL_get_shared_ciphers function in OpenSSL 0.9.7 up to 0.9.7l, and 0.9.8 up to 0.9.8f, might… | CVE-2007-5135 | Medium | config-change | manual-only | manual-only | No | 16.1% |
+| FIND-64 | WEB-PORTAL-0049 | BIND 9.6.0, 9.5.1, 9.5.0, 9.4.3, and earlier does not properly check the return value from the OpenSSL DSA_verify… | CVE-2009-0025 | Medium | config-change | manual-only | manual-only | No | 6.9% |
+| FIND-84 | WEB-PORTAL-0069 | Stack-based buffer overflow in the crypto_recv function in ntp_crypto.c in ntpd in NTP before 4.2.4p7 and 4.2.5 before… | CVE-2009-1252 | Medium | config-change | manual-only | manual-only | No | 21.1% |
+| FIND-90 | WEB-PORTAL-0075 | Mutt 1.5.19, when linked against (1) OpenSSL (mutt_ssl.c) or (2) GnuTLS (mutt_ssl_gnutls.c), allows connections when… | CVE-2009-1390 | Medium | config-change | manual-only | manual-only | No | 1.9% |
+| FIND-94 | WEB-PORTAL-0079 | mutt_ssl.c in mutt 1.5.19 and 1.5.20, when OpenSSL is used, does not properly handle a '\0' character in a domain name… | CVE-2009-3765 | Medium | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-95 | WEB-PORTAL-0080 | mutt_ssl.c in mutt 1.5.16 and other versions before 1.5.19, when OpenSSL is used, does not verify the domain name in… | CVE-2009-3766 | Medium | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-100 | WEB-PORTAL-0085 | The vio_verify_callback function in viosslfactories.c in MySQL 5.0.x before 5.0.88 and 5.1.x before 5.1.41, when… | CVE-2009-4028 | Medium | config-change | manual-only | manual-only | No | 1.8% |
+| FIND-135 | WEB-PORTAL-0120 | Integer underflow in OpenSSL before 0.9.8x, 1.0.0 before 1.0.0j, and 1.0.1 before 1.0.1c, when TLS 1.1, TLS 1.2, or… | CVE-2012-2333 | Medium | config-change | manual-only | manual-only | No | 28.2% |
+| FIND-138 | WEB-PORTAL-0123 | mnet/xmlrpc/client.php in MNET in Moodle 1.9.x before 1.9.14, 2.0.x before 2.0.5, and 2.1.x before 2.1.2 does not… | CVE-2011-4302 | Medium | config-change | manual-only | manual-only | No | 1.3% |
+| FIND-146 | WEB-PORTAL-0131 | The OpenSSL::SSL.verify_certificate_identity function in lib/openssl/ssl.rb in Ruby 1.8 before 1.8.7-p374, 1.9 before… | CVE-2013-4073 | Medium | config-change | manual-only | manual-only | No | 2.8% |
+| FIND-172 | WEB-PORTAL-0157 | Race condition in the ssl_parse_serverhello_tlsext function in t1_lib.c in OpenSSL 1.0.0 before 1.0.0n and 1.0.1… | CVE-2014-3509 | Medium | config-change | manual-only | manual-only | No | 13.4% |
+| FIND-192 | WEB-PORTAL-0177 | Use-after-free vulnerability in the d2i_ECPrivateKey function in crypto/ec/ec_asn1.c in OpenSSL before 0.9.8zf, 1.0.0… | CVE-2015-0209 | Medium | config-change | manual-only | manual-only | No | 16.3% |
+| FIND-207 | WEB-PORTAL-0192 | Race condition in the ssl3_get_new_session_ticket function in ssl/s3_clnt.c in OpenSSL before 0.9.8zg, 1.0.0 before… | CVE-2015-1791 | Medium | config-change | manual-only | manual-only | No | 16.0% |
+| FIND-412 | CLOUD-0097 | Microsoft Azure Kubernetes Service Elevation of Privilege Vulnerability | CVE-2021-24109 | Medium | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-420 | CLOUD-0105 | Helm is a tool for managing Charts (packages of pre-configured Kubernetes resources). In versions of helm prior to… | CVE-2021-32690 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-445 | CLOUD-0130 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Argo CD starting with version 1.5.0 but… | CVE-2022-24731 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1027 | NET-RTSW-0112 | Unspecified vulnerability in Cisco Unified Communications Manager (CUCM) 5.0, 5.1, and 6.0, and IOS 12.0 through 12.4,… | CVE-2007-4294 | Medium | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1028 | NET-RTSW-0113 | Unspecified vulnerability in Cisco IOS 12.0 through 12.4 allows remote attackers to execute arbitrary code via a… | CVE-2007-4295 | Medium | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1067 | NET-RTSW-0152 | Cross-site request forgery (CSRF) vulnerability in the HTTP server in Cisco IOS 12.4(23) allows remote attackers to… | CVE-2009-0471 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1093 | NET-RTSW-0178 | Cisco IOS 12.0 through 12.4, when IP-based tunnels and the Cisco Express Forwarding feature are enabled, allows remote… | CVE-2009-2872 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1122 | NET-RTSW-0207 | CallManager Express (CME) on Cisco IOS before 15.0(1)XA allows remote authenticated users to cause a denial of service… | CVE-2009-5040 | Medium | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1277 | FW-EDGE-0062 | A improper verification of source of a communication channel in Fortinet FortiOS with IPS engine version 7.201 through… | CVE-2022-27491 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1445 | FW-EDGE-0230 | Missing XML validation vulnerability in the PAN-OS web interface on Palo Alto Networks PAN-OS software allows… | CVE-2020-1975 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1472 | FW-EDGE-0257 | An improper authentication vulnerability exists in Palo Alto Networks PAN-OS software that enables a SAML… | CVE-2021-3046 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1502 | FW-EDGE-0287 | A cross-site scripting (XSS) vulnerability in Palo Alto Networks PAN-OS software enables a malicious authenticated… | CVE-2024-0007 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1721 | WIN-SRV-0086 | Microsoft JScript 5.1, 5.5, and 5.6 on Windows 2000 SP4, and 5.6 on Windows XP, Server 2003, Windows 98 and Windows… | CVE-2006-1313 | Medium | patch | ansible-windows | auto-approvable | No | 29.4% |
+| FIND-1726 | WIN-SRV-0091 | Buffer overflow in the ART Image Rendering component (jgdw400.dll) in Microsoft Windows XP SP1 and Sp2, Server 2003… | CVE-2006-2378 | Medium | patch | ansible-windows | auto-approvable | No | 34.8% |
+| FIND-1748 | WIN-SRV-0113 | Buffer overflow in the Windows Media Format Runtime in Microsoft Windows Media Player (WMP) 6.4 and Windows XP SP2,… | CVE-2006-4702 | Medium | patch | ansible-windows | auto-approvable | No | 27.4% |
+| FIND-1804 | WIN-SRV-0169 | Unspecified vulnerability in Active Directory on Microsoft Windows 2000 and Windows Server 2003, and Active Directory… | CVE-2008-0088 | Medium | patch | ansible-windows | auto-approvable | No | 28.9% |
+| FIND-1843 | APP-0028 | Struts support in OpenSymphony XWork before 1.2.3, and 2.x before 2.0.4, as used in WebWork and Apache Struts,… | CVE-2007-4556 | Medium | patch | manual-only | manual-only | No | 25.7% |
+| FIND-1849 | APP-0034 | Apache Tiles 2.1 before 2.1.2, as used in Apache Struts and other products, evaluates Expression Language (EL)… | CVE-2009-1275 | Medium | patch | manual-only | manual-only | No | 2.8% |
+| FIND-1861 | APP-0046 | The token check mechanism in Apache Struts 2.0.0 through 2.3.4 does not properly validate the token name configuration… | CVE-2012-4386 | Medium | patch | manual-only | manual-only | No | 3.3% |
+| FIND-1878 | APP-0063 | Apache Struts 2.0.0 through 2.3.x before 2.3.20 uses predictable <s:token/> values, which allows remote attackers to… | CVE-2014-7809 | Medium | patch | manual-only | manual-only | No | 3.5% |
+| FIND-1930 | APP-0115 | Spring Framework 3.0.0 through 3.0.5, Spring Security 3.0.0 through 3.0.5 and 2.0.0 through 2.0.6, and possibly other… | CVE-2011-2894 | Medium | patch | manual-only | manual-only | No | 8.5% |
+| FIND-1932 | APP-0117 | The Spring OXM wrapper in Spring Framework before 3.2.4 and 4.0.0.M1, when using the JAXB marshaller, does not disable… | CVE-2013-4152 | Medium | patch | manual-only | manual-only | No | 26.5% |
+| FIND-1933 | APP-0118 | The Spring MVC in Spring Framework before 3.2.4 and 4.0.0.M1 through 4.0.0.M2 does not disable external entity… | CVE-2013-7315 | Medium | patch | manual-only | manual-only | No | 5.0% |
+| FIND-2024 | APP-0209 | Multiple cross-site request forgery (CSRF) vulnerabilities in the CrossSlide jQuery… | CVE-2015-2089 | Medium | patch | manual-only | manual-only | No | 1.0% |
+| FIND-427 | CLOUD-0112 | Loading specially-crafted yaml with the Kubernetes Java Client library can lead to code execution. | CVE-2021-25738 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-474 | CLOUD-0159 | A arbitrary code execution flaw was found in the Fabric 8 Kubernetes client affecting versions 5.0.0-beta-1 and above.… | CVE-2021-4178 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-520 | CLOUD-0205 | Clusternet is a general-purpose system for controlling Kubernetes clusters across different environments. An issue in… | CVE-2023-30622 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-521 | CLOUD-0206 | A flaw was found in the Open Cluster Management (OCM) when a user have access to the worker nodes which has the… | CVE-2023-2250 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-586 | CLOUD-0271 | In vulnerable versions of Calico (v3.27.2 and below), Calico Enterprise (v3.19.0-1, v3.18.1, v3.17.3 and below), and… | CVE-2024-33522 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1296 | FW-EDGE-0081 | A use of externally-controlled format string in Fortinet FortiOS version 7.2.0 through 7.2.4, FortiOS all versions… | CVE-2022-43953 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1297 | FW-EDGE-0082 | A out-of-bounds write in Fortinet FortiOS version 7.2.0 through 7.2.3, FortiOS version 7.0.0 through 7.0.10, FortiOS… | CVE-2023-22639 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1304 | FW-EDGE-0089 | A buffer copy without checking size of input ('classic buffer overflow') in Fortinet FortiAnalyzer version 7.0.2 and… | CVE-2021-43072 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1325 | FW-EDGE-0110 | A use of externally-controlled format string vulnerability in Fortinet FortiOS 7.4.0, FortiOS 7.2.0 through 7.2.5,… | CVE-2023-36640 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1327 | FW-EDGE-0112 | A use of externally-controlled format string vulnerability in Fortinet FortiOS 7.4.0, FortiOS 7.2.0 through 7.2.5,… | CVE-2023-45583 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1331 | FW-EDGE-0116 | A stack-based buffer overflow in Fortinet FortiOS version 7.4.0 through 7.4.1 and 7.2.0 through 7.2.7 and 7.0.0… | CVE-2023-46720 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1357 | FW-EDGE-0142 | A stack-based buffer overflow in Fortinet FortiOS version 7.4.0 through 7.4.1 and 7.2.0 through 7.2.7 and 7.0.0… | CVE-2023-46718 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1378 | FW-EDGE-0163 | A use of externally-controlled format string vulnerability in Fortinet FortiOS 7.6.0 through 7.6.4, FortiOS 7.4.0… | CVE-2025-64157 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-1384 | FW-EDGE-0169 | An Internal Asset Exposed to Unsafe Debug Access Level or State vulnerability [CWE-1244] vulnerability in Fortinet… | CVE-2025-67862 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-451 | CLOUD-0136 | Sourcegraph is a fast and featureful code search and navigation engine. Versions before 3.38.0 are vulnerable to… | CVE-2022-29171 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-454 | CLOUD-0139 | An issue was discovered in the Pinniped Supervisor with either LADPIdentityProvider or ActiveDirectoryIdentityProvider… | CVE-2022-22975 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-509 | CLOUD-0194 | Users may have access to secure endpoints in the control plane network. Kubernetes clusters are only affected if an… | CVE-2022-3294 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-531 | CLOUD-0216 | AWS Cloud Development Kit (AWS CDK) is an open-source software development framework to define cloud infrastructure in… | CVE-2023-35165 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1326 | FW-EDGE-0111 | A double free vulnerability [CWE-415] vulnerability in Fortinet FortiOS 6.4 all versions may allow a privileged… | CVE-2023-44247 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1351 | FW-EDGE-0136 | An Improper Privilege Management vulnerability [CWE-269] vulnerability in Fortinet FortiOS 7.6.0 through 7.6.1,… | CVE-2025-22254 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1355 | FW-EDGE-0140 | A double free vulnerability [CWE-415] vulnerability in Fortinet FortiOS 7.4.0, FortiOS 7.2.0 through 7.2.5, FortiOS… | CVE-2023-45584 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1389 | FW-EDGE-0174 | A stack-based buffer overflow vulnerability in Fortinet FortiOS 7.4.0 through 7.4.1, FortiOS 7.2 all versions,… | CVE-2026-59837 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1503 | FW-EDGE-0288 | Web sessions in the management interface in Palo Alto Networks PAN-OS software do not expire in certain situations,… | CVE-2024-0008 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1752 | WIN-SRV-0117 | The Client Server Run-Time Subsystem (CSRSS) in Microsoft Windows allows local users to cause a denial of service… | CVE-2006-6797 | Medium | patch | ansible-windows | auto-approvable | No | 7.0% |
+| FIND-1763 | WIN-SRV-0128 | Buffer overflow in the Graphics Device Interface (GDI) in Microsoft Windows 2000 SP4; XP SP2; Server 2003 Gold, SP1,… | CVE-2007-1212 | Medium | patch | ansible-windows | auto-approvable | No | 2.1% |
+| FIND-271 | WEB-PORTAL-0256 | There is a carry propagating bug in the x86_64 Montgomery squaring procedure in OpenSSL before 1.0.2m and 1.1.0 before… | CVE-2017-3736 | Medium | config-change | manual-only | manual-only | No | 10.1% |
+| FIND-279 | WEB-PORTAL-0264 | Constructed ASN.1 types with a recursive definition (such as can be found in PKCS7) could eventually exceed the stack… | CVE-2018-0739 | Medium | config-change | manual-only | manual-only | No | 18.9% |
+| FIND-319 | CLOUD-0004 | The API server in Kubernetes, as used in Red Hat OpenShift Enterprise 3.2, in a multi tenant environment allows remote… | CVE-2016-5392 | Medium | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-322 | CLOUD-0007 | Default access permissions for Persistent Volumes (PVs) created by the Kubernetes Azure cloud provider in versions… | CVE-2017-1002100 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-329 | CLOUD-0014 | A exposure of sensitive information vulnerability exists in Jenkins Kubernetes Plugin 1.7.0 and older in… | CVE-2018-1000187 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-341 | CLOUD-0026 | In all Kubernetes versions prior to v1.11.8, v1.12.6, and v1.13.4, users that are authorized to make patch requests to… | CVE-2019-1002100 | Medium | firmware-update | manual-only | manual-only | No | 10.4% |
+| FIND-351 | CLOUD-0036 | The kubectl cp command allows copying files between containers and the user machine. To copy files from a container,… | CVE-2019-11246 | Medium | firmware-update | manual-only | manual-only | No | 3.6% |
+| FIND-353 | CLOUD-0038 | The kubectl cp command allows copying files between containers and the user machine. To copy files from a container,… | CVE-2019-11249 | Medium | firmware-update | manual-only | manual-only | No | 3.7% |
+| FIND-354 | CLOUD-0039 | The Kubernetes client-go library logs request headers at verbosity levels of 7 or higher. This can disclose… | CVE-2019-11250 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-363 | CLOUD-0048 | A missing permission check in Jenkins ElasticBox Jenkins Kubernetes CI/CD Plugin allows attackers with Overall/Read… | CVE-2019-10469 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-364 | CLOUD-0049 | A missing permission check in Jenkins ElasticBox Jenkins Kubernetes CI/CD Plugin in form-related methods allowed users… | CVE-2019-10470 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-368 | CLOUD-0053 | A missing permission check in Jenkins Alauda Kubernetes Suport Plugin 2.3.0 and earlier allows attackers with… | CVE-2019-16576 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-376 | CLOUD-0061 | The Kubernetes API Server component in versions 1.1-1.14, and versions prior to 1.15.10, 1.16.7 and 1.17.3 allows an… | CVE-2019-11254 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-439 | CLOUD-0124 | Jenkins Kubernetes Continuous Deploy Plugin 2.3.1 and earlier allows users with Credentials/Create permission to read… | CVE-2022-27208 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-440 | CLOUD-0125 | A missing permission check in Jenkins Kubernetes Continuous Deploy Plugin 2.3.1 and earlier allows attackers with… | CVE-2022-27209 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-441 | CLOUD-0126 | A cross-site request forgery (CSRF) vulnerability in Jenkins Kubernetes Continuous Deploy Plugin 2.3.1 and earlier… | CVE-2022-27210 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-442 | CLOUD-0127 | A missing permission check in Jenkins Kubernetes Continuous Deploy Plugin 2.3.1 and earlier allows attackers with… | CVE-2022-27211 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-462 | CLOUD-0147 | Argo CD is a declarative continuous deployment for Kubernetes. Argo CD versions v0.7.0 and later are vulnerable to an… | CVE-2022-31016 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-477 | CLOUD-0162 | Helm is a tool for managing Charts. Charts are packages of pre-configured Kubernetes resources. Fuzz testing, provided… | CVE-2022-36055 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-479 | CLOUD-0164 | A vulnerability was found in the search-api container in Red Hat Advanced Cluster Management for Kubernetes when a… | CVE-2022-2238 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-503 | CLOUD-0188 | Jenkins Kubernetes Credentials Provider Plugin 1.208.v128ee9800c04 and earlier does not set the appropriate context… | CVE-2023-24425 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-508 | CLOUD-0193 | This vulnerability in the Snyk Kubernetes Monitor can result in irrelevant data being posted to a Snyk Organization,… | CVE-2023-1065 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-515 | CLOUD-0200 | Cilium is a networking, observability, and security solution with an eBPF-based dataplane. In version 1.13.0, when… | CVE-2023-27595 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-517 | CLOUD-0202 | CubeFS through 3.2.1 allows Kubernetes cluster-level privilege escalation. This occurs because DaemonSet has… | CVE-2023-30512 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-528 | CLOUD-0213 | Kyverno is a policy engine designed for Kubernetes. In versions of Kyverno prior to 1.10.0, resources which have the… | CVE-2023-34091 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-529 | CLOUD-0214 | Kubernetes secrets-store-csi-driver in versions before 1.3.3 discloses service account tokens in logs. | CVE-2023-2878 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-533 | CLOUD-0218 | Users may be able to launch containers using images that are restricted by ImagePolicyWebhook when using ephemeral… | CVE-2023-2727 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-534 | CLOUD-0219 | Users may be able to launch containers that bypass the mountable secrets policy enforced by the ServiceAccount… | CVE-2023-2728 | Medium | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-535 | CLOUD-0220 | KubePi is an opensource kubernetes management panel. The endpoint /kubepi/api/v1/users/search?pageNum=1&&pageSize=10… | CVE-2023-37916 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-539 | CLOUD-0224 | Argo CD is a declarative continuous deployment for Kubernetes. All versions of ArgoCD starting from v2.4 have a bug… | CVE-2023-40584 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-560 | CLOUD-0245 | Knative Serving builds on Kubernetes to support deploying and serving of applications and functions as serverless… | CVE-2023-48713 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-561 | CLOUD-0246 | Kruise provides automated management of large-scale applications on Kubernetes. Starting in version 0.8.0 and prior to… | CVE-2023-30617 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-562 | CLOUD-0247 | A flaw was found in CRI-O that involves an experimental annotation leading to a container being unconfined. This may… | CVE-2023-6476 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-564 | CLOUD-0249 | Since version 5.2.0, when using deferrable mode with the path of a Kubernetes configuration file for authentication,… | CVE-2023-51702 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-579 | CLOUD-0264 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All versions of ArgoCD starting from v2.4… | CVE-2024-29893 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-583 | CLOUD-0268 | Insertion of Sensitive Information into Log File vulnerability in the Apache Solr Operator. This issue affects all… | CVE-2024-31391 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-587 | CLOUD-0272 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. There is a Denial of Service (DoS)… | CVE-2024-32476 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-628 | WEBAPP-INTERNAL-WIKI | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-672 | WEBAPP-VENDOR-ONBOARDING | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-735 | WEBAPP-REPORTING-DASHBOARD | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-748 | WEBAPP-MOBILE-BACKEND-API | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-769 | WEBAPP-CUSTOMER-PORTAL | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-778 | WEBAPP-BILLING-API | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-782 | WEBAPP-MARKETING-CMS | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-792 | WEBAPP-ORDER-SERVICE | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-843 | WEBAPP-SUPPORT-TICKETING | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-846 | WEBAPP-PARTNER-EXTRANET | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-847 | WEBAPP-LOYALTY-REWARDS | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-858 | WEBAPP-EMPLOYEE-HR-PORTAL | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-878 | WEBAPP-NOTIFICATION-SERVICE | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-880 | WEBAPP-CHECKOUT-SERVICE | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-885 | WEBAPP-SEARCH-SERVICE | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-1221 | FW-EDGE-0006 | Fortinet FortiOS before 5.0.3 on FortiGate devices does not properly restrict Guest capabilities, which allows remote… | CVE-2013-4604 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1245 | FW-EDGE-0030 | A Denial of Service (DoS) vulnerability in Fortinet FortiOS 5.4.0 to 5.4.5 allows an authenticated user to cause the… | CVE-2017-14182 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1270 | FW-EDGE-0055 | Lack of root file system integrity checking in Fortinet FortiOS VM application images all versions below 6.0.5 may… | CVE-2019-5587 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1289 | FW-EDGE-0074 | An access of uninitialized pointer vulnerability [CWE-824] in the SSL VPN portal of Fortinet FortiOS version 7.2.0… | CVE-2022-45861 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1295 | FW-EDGE-0080 | A relative path traversal vulnerability [CWE-23] in Fortinet FortiOS version 7.2.0 through 7.2.3, version 7.0.0… | CVE-2022-42474 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1301 | FW-EDGE-0086 | A null pointer dereference in Fortinet FortiOS before 7.2.5, before 7.0.11 and before 6.4.13, FortiProxy before 7.2.4… | CVE-2023-33306 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1302 | FW-EDGE-0087 | A null pointer dereference in Fortinet FortiOS before 7.2.5 and before 7.0.11, FortiProxy before 7.2.3 and before… | CVE-2023-33307 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1307 | FW-EDGE-0092 | An improper access control vulnerability in Fortinet FortiOS 7.2.0 - 7.2.4 and 7.4.0 allows an attacker to access a… | CVE-2023-33301 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1309 | FW-EDGE-0094 | A use of GET request method with sensitive query strings vulnerability in Fortinet FortiOS 7.0.0 - 7.0.12, 7.2.0 -… | CVE-2023-37935 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1311 | FW-EDGE-0096 | A numeric truncation error in Fortinet FortiProxy version 7.2.0 through 7.2.4, FortiProxy version 7.0.0 through… | CVE-2023-36641 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1318 | FW-EDGE-0103 | A null pointer dereference in Fortinet FortiOS version 7.2.0 through 7.2.4, 7.0.0 through 7.0.11, 6.4.0 through… | CVE-2023-29179 | Medium | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1340 | FW-EDGE-0125 | An Improper Neutralization of CRLF Sequences in HTTP Headers ('http response splitting') vulnerability [CWE-113] in… | CVE-2024-54021 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1360 | FW-EDGE-0145 | A heap-based buffer overflow in Fortinet FortiSRA 1.5.0, 1.4.0 through 1.4.2, FortiPAM 1.5.0, 1.4.0 through 1.4.2,… | CVE-2025-22258 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1381 | FW-EDGE-0166 | A missing authentication for critical function vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4.0… | CVE-2025-53847 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1417 | FW-EDGE-0202 | The Addresses Object parser in Palo Alto Networks PAN-OS before 5.0.20, 5.1.x before 5.1.13, 6.0.x before 6.0.15,… | CVE-2016-9149 | Medium | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1420 | FW-EDGE-0205 | The Management Web Interface in Palo Alto Networks PAN-OS before 6.1.16, 7.0.x before 7.0.13, and 7.1.x before 7.1.8… | CVE-2017-5583 | Medium | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1425 | FW-EDGE-0210 | The Management Web Interface in Palo Alto Networks PAN-OS before 6.1.17, 7.x before 7.0.15, and 7.1.x before 7.1.9… | CVE-2017-7644 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1427 | FW-EDGE-0212 | The Management Web Interface in Palo Alto Networks PAN-OS before 7.1.9 allows remote authenticated users to obtain… | CVE-2017-7216 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1477 | FW-EDGE-0262 | An improper restriction of XML external entity (XXE) reference vulnerability in the Palo Alto Networks PAN-OS web… | CVE-2021-3055 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1489 | FW-EDGE-0274 | A local file deletion vulnerability in Palo Alto Networks PAN-OS software enables an authenticated administrator to… | CVE-2023-0004 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1491 | FW-EDGE-0276 | A cross-site scripting (XSS) vulnerability in Palo Alto Networks PAN-OS software on Panorama appliances enables an… | CVE-2023-0007 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1713 | WIN-SRV-0078 | Buffer overflow in the Web Client service (WebClnt.dll) for Microsoft Windows XP SP1 and SP2, and Server 2003 up to… | CVE-2006-0013 | Medium | patch | ansible-windows | auto-approvable | No | 34.9% |
+| FIND-1924 | APP-0109 | ** UNSUPPORTED WHEN ASSIGNED ** Improper Output Neutralization for Logs vulnerability in Apache Struts. This issue… | CVE-2025-54656 | Medium | patch | manual-only | manual-only | No | 0.6% |
+| FIND-1950 | APP-0135 | Spring Framework, versions 5.0.x prior to 5.0.6, versions 4.3.x prior to 4.3.17, and older unsupported versions allows… | CVE-2018-1257 | Medium | patch | manual-only | manual-only | No | 3.2% |
+| FIND-1960 | APP-0145 | In Spring Framework versions 5.2.0 - 5.2.8, 5.1.0 - 5.1.17, 5.0.0 - 5.0.18, 4.3.0 - 4.3.28, and older unsupported… | CVE-2020-5421 | Medium | patch | manual-only | manual-only | No | 10.7% |
+| FIND-1966 | APP-0151 | n Spring Framework versions 5.3.0 - 5.3.16 and older unsupported versions, it is possible for a user to provide a… | CVE-2022-22950 | Medium | patch | manual-only | manual-only | No | 36.1% |
+| FIND-1969 | APP-0154 | In spring framework versions prior to 5.3.20+ , 5.2.22+ and old unsupported versions, application with a STOMP over… | CVE-2022-22971 | Medium | patch | manual-only | manual-only | No | 3.2% |
+| FIND-1974 | APP-0159 | In Spring Framework versions 6.0.0 - 6.0.6, 5.3.0 - 5.3.25, 5.2.0.RELEASE - 5.2.22.RELEASE, and older unsupported… | CVE-2023-20861 | Medium | patch | manual-only | manual-only | No | 1.0% |
+| FIND-1976 | APP-0161 | In spring framework versions prior to 5.2.24 release+ ,5.3.27+ and 6.0.8+ , it is possible for a user to provide a… | CVE-2023-20863 | Medium | patch | manual-only | manual-only | No | 1.1% |
+| FIND-1988 | APP-0173 | Description In Spring Framework, versions 6.0.x as of 6.0.5, versions 6.1.x and 6.2.x, an application is vulnerable to… | CVE-2025-41234 | Medium | patch | manual-only | manual-only | No | 0.5% |
+| FIND-2068 | APP-0253 | jQuery-UI is the official jQuery user interface library. Prior to version 1.13.0, accepting the value of the… | CVE-2021-41182 | Medium | patch | manual-only | manual-only | No | 39.4% |
+| FIND-2069 | APP-0254 | jQuery-UI is the official jQuery user interface library. Prior to version 1.13.0, accepting the value of various… | CVE-2021-41183 | Medium | patch | manual-only | manual-only | No | 7.9% |
+| FIND-2070 | APP-0255 | jQuery-UI is the official jQuery user interface library. Prior to version 1.13.0, accepting the value of the `of`… | CVE-2021-41184 | Medium | patch | manual-only | manual-only | No | 40.8% |
+| FIND-2074 | APP-0259 | Forms generated by JQueryForm.com before 2022-02-05 allows a remote authenticated attacker to access the cleartext… | CVE-2022-24982 | Medium | patch | manual-only | manual-only | No | 1.2% |
+| FIND-2102 | APP-0287 | Improper Neutralization of Input During Web Page Generation (XSS or 'Cross-site Scripting') vulnerability in… | CVE-2024-37247 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2106 | APP-0291 | Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') vulnerability in AppJetty WP… | CVE-2024-56287 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2107 | APP-0292 | Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') vulnerability in Obaid Hossain… | CVE-2025-22546 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2108 | APP-0293 | Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') vulnerability in CHR Designer… | CVE-2025-22798 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-56 | WEB-PORTAL-0041 | The PRNG implementation for the OpenSSL FIPS Object Module 1.1.1 does not perform auto-seeding during the FIPS… | CVE-2007-5502 | Medium | config-change | manual-only | manual-only | No | 2.3% |
+| FIND-83 | WEB-PORTAL-0068 | The OpenSSL::OCSP module for Ruby in Apple Mac OS X 10.5 before 10.5.7 misinterprets an unspecified invalid response… | CVE-2009-0161 | Medium | config-change | manual-only | manual-only | No | 2.3% |
+| FIND-99 | WEB-PORTAL-0084 | Martin Lambers msmtp before 1.4.19, when OpenSSL is used, does not properly handle a '\0' character in a domain name… | CVE-2009-3942 | Medium | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-108 | WEB-PORTAL-0093 | RSA verification recovery in the EVP_PKEY_verify_recover function in OpenSSL 1.x before 1.0.0a, as used by pkeyutl and… | CVE-2010-1633 | Medium | config-change | manual-only | manual-only | No | 2.4% |
+| FIND-154 | WEB-PORTAL-0139 | A certain Apple patch for OpenSSL in Apple OS X 10.9.2 and earlier uses a Trust Evaluation Agent (TEA) feature without… | CVE-2014-2234 | Medium | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-181 | WEB-PORTAL-0166 | The (1) bundled GnuTLS SSL/TLS plugin and the (2) bundled OpenSSL SSL/TLS plugin in libpurple in Pidgin before 2.10.10… | CVE-2014-3694 | Medium | config-change | manual-only | manual-only | No | 2.3% |
+| FIND-316 | CLOUD-0001 | Directory traversal vulnerability in Kubernetes, as used in Red Hat OpenShift Enterprise 3.0, allows attackers to… | CVE-2015-5305 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-342 | CLOUD-0027 | The kubectl cp command allows copying files between containers and the user machine. To copy files from a container,… | CVE-2019-1002101 | Medium | firmware-update | manual-only | manual-only | No | 13.2% |
+| FIND-377 | CLOUD-0062 | X.509 certificates generated by the MongoDB Enterprise Kubernetes Operator may allow an attacker with access to the… | CVE-2020-7922 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-386 | CLOUD-0071 | The Kubernetes kube-apiserver in versions v1.6-v1.15, and versions prior to v1.16.13, v1.17.9 and v1.18.6 are… | CVE-2020-8559 | Medium | firmware-update | manual-only | manual-only | No | 6.1% |
+| FIND-567 | CLOUD-0252 | Helm is a tool for managing Charts. Charts are packages of pre-configured Kubernetes resources. When either the Helm… | CVE-2024-25620 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-571 | CLOUD-0256 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. "Local sync" is an Argo CD feature that… | CVE-2023-50726 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1014 | NET-RTSW-0099 | The Intrusion Prevention System (IPS) feature for Cisco IOS 12.4XE to 12.3T allows remote attackers to bypass IPS… | CVE-2007-0917 | Medium | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1128 | NET-RTSW-0213 | Cisco IOS 12.4(11)MD, 12.4(15)MD, 12.4(22)MD, 12.4(24)MD before 12.4(24)MD3, 12.4(22)MDA before 12.4(22)MDA5, and… | CVE-2011-0348 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1306 | FW-EDGE-0091 | A stack-based buffer overflow vulnerability [CWE-121] in Fortinet FortiOS before 7.0.3 allows a privileged attacker to… | CVE-2023-29182 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1481 | FW-EDGE-0266 | An OS command injection vulnerability in the Palo Alto Networks PAN-OS command line interface (CLI) enables an… | CVE-2021-3061 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1623 | LNX-SRV-0108 | Multiple vulnerabilities in the samba filesystem (smbfs) in Linux kernel 2.4 and 2.6 allow remote samba servers to… | CVE-2004-0883 | Medium | patch | ansible-unix | auto-approvable | No | 4.2% |
+| FIND-1624 | LNX-SRV-0109 | The smb_recv_trans2 function call in the samba filesystem (smbfs) in Linux kernel 2.4 and 2.6 does not properly handle… | CVE-2004-0949 | Medium | patch | ansible-unix | auto-approvable | No | 2.6% |
+| FIND-1626 | LNX-SRV-0111 | Direct Rendering Manager (DRM) driver in Linux kernel 2.6 does not properly check the DMA lock, which could allow… | CVE-2004-1056 | Medium | patch | ansible-unix | auto-approvable | No | 3.3% |
+| FIND-1855 | APP-0040 | The ParameterInterceptor component in Apache Struts before 2.3.1.1 does not prevent access to public constructors,… | CVE-2012-0393 | Medium | patch | manual-only | manual-only | No | 37.2% |
+| FIND-2092 | APP-0277 | The JQuery Accordion Menu Widget plugin for WordPress is vulnerable to Stored Cross-Site Scripting via… | CVE-2023-4890 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2096 | APP-0281 | The Jquery news ticker plugin for WordPress is vulnerable to Stored Cross-Site Scripting via 'jquery-news-ticker'… | CVE-2023-5432 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2100 | APP-0285 | The jQuery T(-) Countdown Widget plugin for WordPress is vulnerable to Stored Cross-Site Scripting via the plugin's… | CVE-2024-4783 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2101 | APP-0286 | The WP jQuery Lightbox plugin for WordPress is vulnerable to Stored Cross-Site Scripting via the ‘title’ attribute in… | CVE-2024-5425 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2105 | APP-0290 | The WP jQuery DataTable plugin for WordPress is vulnerable to Stored Cross-Site Scripting via the plugin's 'wp_jdt'… | CVE-2024-12499 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-381 | CLOUD-0066 | The Kubernetes kube-controller-manager in versions v1.0-1.14, versions prior to v1.15.12, v1.16.9, v1.17.5, and… | CVE-2020-8555 | Medium | firmware-update | manual-only | manual-only | No | 3.7% |
+| FIND-406 | CLOUD-0091 | Kubernetes API server in all versions allow an attacker who is able to create a ClusterIP service and set the… | CVE-2020-8554 | Medium | firmware-update | manual-only | manual-only | No | 9.3% |
+| FIND-413 | CLOUD-0098 | In containerd (an industry-standard container runtime) before versions 1.3.10 and 1.4.4, containers launched through… | CVE-2021-21334 | Medium | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-505 | CLOUD-0190 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All versions of Argo CD starting with… | CVE-2023-25163 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-613 | CLOUD-0298 | A security issue was discovered in the Kubernetes Image Builder versions <= v0.1.37 where default credentials are… | CVE-2024-9594 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1018 | NET-RTSW-0103 | The IOS FTP Server in Cisco IOS 11.3 through 12.4 allows remote authenticated users to cause a denial of service (IOS… | CVE-2007-2587 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1188 | NET-RTSW-0273 | Cisco IOS 15.1 and 15.2 and IOS XE 3.x, when configured as an IPsec hub with X.509 certificates in use, allows remote… | CVE-2011-4231 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1193 | NET-RTSW-0278 | Cisco IOS 15.0 and 15.1 on Catalyst 3560 and 3750 series switches allows remote authenticated users to cause a denial… | CVE-2012-1338 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1198 | NET-RTSW-0283 | The FlexVPN implementation in Cisco IOS 15.2 and 15.3 allows remote authenticated users to cause a denial of service… | CVE-2012-3893 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1199 | NET-RTSW-0284 | Cisco IOS 15.0 through 15.3 allows remote authenticated users to cause a denial of service (device crash) via an… | CVE-2012-3895 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1399 | FW-EDGE-0184 | Palo Alto Networks PAN-OS before 3.1.11 and 4.0.x before 4.0.9 allows remote authenticated users to cause a denial of… | CVE-2012-6597 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1504 | FW-EDGE-0289 | An improper verification vulnerability in the GlobalProtect gateway feature of Palo Alto Networks PAN-OS software… | CVE-2024-0009 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1922 | APP-0107 | A vulnerability, which was classified as critical, has been found in Xiamen Four-Faith Video Surveillance Management… | CVE-2023-6308 | Medium | patch | manual-only | manual-only | No | 1.0% |
+| FIND-511 | CLOUD-0196 | crossplane-runtime is a set of go libraries used to build Kubernetes controllers in Crossplane and its related stacks.… | CVE-2023-27484 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-581 | CLOUD-0266 | Azure Arc-enabled Kubernetes Extension Cluster-Scope Elevation of Privilege Vulnerability | CVE-2024-28917 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1252 | FW-EDGE-0037 | A local privilege escalation and local code execution vulnerability in Fortinet FortiOS 5.6.0 to 5.6.2, 5.4.0 to… | CVE-2017-14187 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1530 | LNX-SRV-0015 | Unknown vulnerability in binfmt_misc in the Linux kernel before 2.2.19, related to user pages. | CVE-2001-1390 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1754 | WIN-SRV-0119 | Microsoft Windows XP and Windows Server 2003 do not properly handle user logoff, which might allow local users to gain… | CVE-2007-0351 | Medium | patch | ansible-windows | auto-approvable | No | 0.3% |
+| FIND-1910 | APP-0095 | In Apache Struts 2.5 to 2.5.14, the REST Plugin is using an outdated JSON-lib library which is vulnerable and allow… | CVE-2017-15707 | Medium | patch | manual-only | manual-only | No | 4.9% |
+| FIND-2086 | APP-0271 | MooTools is a collection of JavaScript utilities for JavaScript developers. All known versions include a CSS selector… | CVE-2021-32821 | Medium | patch | manual-only | manual-only | No | 0.6% |
+| FIND-355 | CLOUD-0040 | Rancher 2 through 2.2.4 is vulnerable to a Cross-Site Websocket Hijacking attack that allows an exploiter to gain… | CVE-2019-13209 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-391 | CLOUD-0076 | In containerd (an industry-standard container runtime) before version 1.2.14 there is a credential leaking… | CVE-2020-15157 | Medium | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-486 | CLOUD-0171 | knative.dev/func is is a client library and CLI enabling the development and deployment of Kubernetes functions.… | CVE-2022-41939 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-553 | CLOUD-0238 | Kyverno is a policy engine designed for Kubernetes. A security vulnerability was found in Kyverno where an attacker… | CVE-2023-42813 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-556 | CLOUD-0241 | Kyverno is a policy engine designed for Kubernetes. A security vulnerability was found in Kyverno where an attacker… | CVE-2023-42816 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-600 | CLOUD-0285 | A security issue was discovered in Kubernetes clusters with Windows nodes where BUILTIN\Users may be able to read… | CVE-2024-5321 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-647 | WEBAPP-VENDOR-ONBOARDING | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-651 | WEBAPP-BILLING-API | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-664 | WEBAPP-SEARCH-SERVICE | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-674 | WEBAPP-MARKETING-CMS | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-692 | WEBAPP-NOTIFICATION-SERVICE | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-694 | WEBAPP-ORDER-SERVICE | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-705 | WEBAPP-EMPLOYEE-HR-PORTAL | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-719 | WEBAPP-MOBILE-BACKEND-API | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-746 | WEBAPP-INTERNAL-WIKI | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-766 | WEBAPP-CHECKOUT-SERVICE | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-789 | WEBAPP-PARTNER-EXTRANET | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-826 | WEBAPP-SUPPORT-TICKETING | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-844 | WEBAPP-CUSTOMER-PORTAL | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-866 | WEBAPP-LOYALTY-REWARDS | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-907 | WEBAPP-REPORTING-DASHBOARD | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-980 | NET-RTSW-0065 | Cisco IOS 12.1T, 12.2, 12.2T, 12.3 and 12.3T, with Multi Protocol Label Switching (MPLS) installed but disabled,… | CVE-2005-0197 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-993 | NET-RTSW-0078 | Unspecified vulnerability in the VLAN Trunking Protocol (VTP) feature in Cisco IOS 12.1(22)EA3 on Catalyst 2950T… | CVE-2005-4826 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1016 | NET-RTSW-0101 | Unspecified vulnerability in Cisco IOS 12.2SXA, SXB, SXD, and SXF; and the MSFC2, MSFC2a and MSFC3 running in Hybrid… | CVE-2007-1258 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1149 | NET-RTSW-0234 | Unspecified vulnerability in Cisco IOS 12.2SRE before 12.2(33)SRE4, 15.0, and 15.1, and IOS XE 2.1.x through 3.3.x,… | CVE-2011-3274 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1190 | NET-RTSW-0275 | dot11t/t_if_dot11_hal_ath.c in Cisco IOS 12.3, 12.4, 15.0, and 15.1 allows remote attackers to cause a denial of… | CVE-2012-1327 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1241 | FW-EDGE-0026 | A Cross-Site Scripting vulnerability in Fortinet FortiOS versions 5.6.0 and earlier allows attackers to Execute… | CVE-2017-3132 | Medium | firmware-update | manual-only | manual-only | No | 8.1% |
+| FIND-1242 | FW-EDGE-0027 | A Cross-Site Scripting vulnerability in Fortinet FortiOS versions 5.6.0 and earlier allows attackers to execute… | CVE-2017-3133 | Medium | firmware-update | manual-only | manual-only | No | 10.7% |
+| FIND-1246 | FW-EDGE-0031 | A Cross-Site-Scripting (XSS) vulnerability in Fortinet FortiOS 5.4.0 to 5.4.5 and 5.6.0 allows a remote… | CVE-2017-7733 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1247 | FW-EDGE-0032 | A reflected Cross-site Scripting (XSS) vulnerability in web proxy disclaimer response web pages in Fortinet FortiOS… | CVE-2017-7739 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1250 | FW-EDGE-0035 | A Cross-site Scripting vulnerability in Fortinet FortiOS 5.6.0 to 5.6.2, 5.4.0 to 5.4.7, 5.2 and earlier, allows… | CVE-2017-14190 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1251 | FW-EDGE-0036 | Multiple cross-site scripting (XSS) vulnerabilities in Fortinet FortiGate UTM WAF appliances with FortiOS 4.3.x before… | CVE-2012-0941 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-1268 | FW-EDGE-0053 | A Host Header Redirection vulnerability in Fortinet FortiOS all versions below 6.0.5 under SSL VPN web portal allows a… | CVE-2018-13384 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-1269 | FW-EDGE-0054 | A reflected Cross-Site-Scripting (XSS) vulnerability in Fortinet FortiOS 5.2.0 to 5.6.10, 6.0.0 to 6.0.4 under SSL VPN… | CVE-2019-5586 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1271 | FW-EDGE-0056 | A reflected Cross-Site-Scripting (XSS) vulnerability in Fortinet FortiOS 6.0.0 to 6.0.4 under SSL VPN web portal may… | CVE-2019-5588 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1388 | FW-EDGE-0173 | An Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') vulnerability [CWE-79]… | CVE-2026-23573 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1424 | FW-EDGE-0209 | Palo Alto Networks PAN-OS before 7.0.15 has XSS in the GlobalProtect external interface via crafted request… | CVE-2017-7409 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1430 | FW-EDGE-0215 | Cross-site scripting (XSS) vulnerability in the management web interface in Palo Alto Networks PAN-OS before 6.1.18,… | CVE-2017-9459 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1431 | FW-EDGE-0216 | Cross-site scripting (XSS) vulnerability in the GlobalProtect external interface in Palo Alto Networks PAN-OS before… | CVE-2017-9467 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1432 | FW-EDGE-0217 | Cross-site scripting (XSS) vulnerability in the GlobalProtect internal and external gateway interface in Palo Alto… | CVE-2017-12416 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1438 | FW-EDGE-0223 | Cross-site scripting (XSS) vulnerability in Palo Alto Networks PAN-OS before 6.1.19, 7.0.x before 7.0.19, 7.1.x before… | CVE-2017-15941 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1439 | FW-EDGE-0224 | Cross-site scripting (XSS) vulnerability in the Captive Portal function in Palo Alto Networks PAN-OS before 8.0.7… | CVE-2017-16878 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1441 | FW-EDGE-0226 | The PAN-OS response for GlobalProtect Gateway in Palo Alto Networks PAN-OS 6.1.21 and earlier, PAN-OS 7.1.18 and… | CVE-2018-10139 | Medium | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1443 | FW-EDGE-0228 | GlobalProtect Portal Login page in Palo Alto Networks PAN-OS before 8.1.4 allows an unauthenticated attacker to inject… | CVE-2018-10141 | Medium | firmware-update | manual-only | manual-only | No | 3.9% |
+| FIND-1515 | FW-EDGE-0300 | An improper input validation vulnerability in Palo Alto Networks PAN-OS software enables an attacker with the ability… | CVE-2024-5913 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1881 | APP-0066 | Apache Struts 2.x before 2.3.25 does not sanitize text in the Locale object constructed by I18NInterceptor, which… | CVE-2016-2162 | Medium | patch | manual-only | manual-only | No | 7.7% |
+| FIND-1882 | APP-0067 | Cross-site scripting (XSS) vulnerability in the URLDecoder function in JRE before 1.8, as used in Apache Struts 2.x… | CVE-2016-4003 | Medium | patch | manual-only | manual-only | No | 11.6% |
+| FIND-1907 | APP-0092 | Cross-site scripting (XSS) vulnerability in Apache Struts before 2.3.20. | CVE-2015-5169 | Medium | patch | manual-only | manual-only | No | 6.6% |
+| FIND-1915 | APP-0100 | Apache Struts before 2.3.20 has a cross-site scripting (XSS) vulnerability. | CVE-2015-2992 | Medium | patch | manual-only | manual-only | No | 5.8% |
+| FIND-1971 | APP-0156 | dotCMS before 22.06 allows remote attackers to bypass intended access control and obtain sensitive information by… | CVE-2022-35740 | Medium | patch | manual-only | manual-only | No | 1.2% |
+| FIND-2022 | APP-0207 | Cross-site scripting (XSS) vulnerability in jquery.ui.dialog.js in the Dialog widget in jQuery UI before 1.10.0 allows… | CVE-2010-5312 | Medium | patch | manual-only | manual-only | No | 18.4% |
+| FIND-2029 | APP-0214 | Cross-site scripting (XSS) vulnerability in jQuery UI before 1.12.0 might allow remote attackers to inject arbitrary… | CVE-2016-7103 | Medium | patch | manual-only | manual-only | No | 22.6% |
+| FIND-2030 | APP-0215 | Open redirect vulnerability in the Overlay module in Drupal 7.x before 7.41, the jQuery Update module 7.x-2.x before… | CVE-2015-7943 | Medium | patch | manual-only | manual-only | No | 1.8% |
+| FIND-2033 | APP-0218 | jQuery 1.4.2 allows remote attackers to conduct cross-site scripting (XSS) attacks via vectors related to use of the… | CVE-2014-6071 | Medium | patch | manual-only | manual-only | No | 2.3% |
+| FIND-2034 | APP-0219 | jQuery before 1.9.0 is vulnerable to Cross-site Scripting (XSS) attacks. The jQuery(strInput) function does not… | CVE-2012-6708 | Medium | patch | manual-only | manual-only | No | 8.6% |
+| FIND-2035 | APP-0220 | jQuery before 3.0.0 is vulnerable to Cross-site Scripting (XSS) attacks when a cross-domain Ajax request is performed… | CVE-2015-9251 | Medium | patch | manual-only | manual-only | No | 29.7% |
+| FIND-2037 | APP-0222 | Bookly #1 WordPress Booking Plugin Lite before 14.5 has XSS via a jQuery.ajax request to ng-payment_details_dialog.js. | CVE-2018-6891 | Medium | patch | manual-only | manual-only | No | 1.0% |
+| FIND-2038 | APP-0223 | A jQuery cross site scripting vulnerability is present when making Ajax requests to untrusted domains. This… | CVE-2017-6929 | Medium | patch | manual-only | manual-only | No | 1.2% |
+| FIND-2039 | APP-0224 | In Wicket jQuery UI 6.28.0 and earlier, 7.9.1 and earlier, and 8.0.0-M8 and earlier, a security issue has been… | CVE-2017-15719 | Medium | patch | manual-only | manual-only | No | 0.9% |
+| FIND-2045 | APP-0230 | A cross-site scripting (XSS) vulnerability in static/js/trape.js in Trape through 2019-05-08 allows remote attackers… | CVE-2019-13488 | Medium | patch | manual-only | manual-only | No | 1.1% |
+| FIND-2046 | APP-0231 | Premium Software CLEditor 1.4.5 and earlier is affected by: Cross Site Scripting (XSS). The impact is: An attacker… | CVE-2019-1010113 | Medium | patch | manual-only | manual-only | No | 0.8% |
+| FIND-2051 | APP-0236 | jQuery v2.2.2 allows XSS via a crafted onerror attribute of an IMG element. NOTE: this vulnerability has been reported… | CVE-2018-18405 | Medium | patch | manual-only | manual-only | No | 1.6% |
+| FIND-2054 | APP-0239 | jquery prior to 1.9.0 allows Cross-site Scripting attacks via the load method. The load method fails to recognize and… | CVE-2020-7656 | Medium | patch | manual-only | manual-only | No | 6.3% |
+| FIND-2056 | APP-0241 | In MediaWiki before 1.31.10 and 1.32.x through 1.34.x before 1.34.4, XSS related to jQuery can occur. The attacker… | CVE-2020-25814 | Medium | patch | manual-only | manual-only | No | 1.4% |
+| FIND-2057 | APP-0242 | An issue was discovered in MediaWiki before 1.31.10 and 1.32.x through 1.34.x before 1.34.4. The non-jqueryMsg version… | CVE-2020-25828 | Medium | patch | manual-only | manual-only | No | 1.1% |
+| FIND-2058 | APP-0243 | XSS exists in the MobileFrontend extension for MediaWiki before 1.34.4 because section.line is mishandled during regex… | CVE-2020-26120 | Medium | patch | manual-only | manual-only | No | 1.0% |
+| FIND-2066 | APP-0251 | The jQuery Tagline Rotator WordPress plugin is vulnerable to Reflected Cross-Site Scripting due to the use of… | CVE-2021-34663 | Medium | patch | manual-only | manual-only | No | 0.9% |
+| FIND-2067 | APP-0252 | The jQuery Reply to Comment WordPress plugin through 1.31 does not have any CSRF check when saving its settings, nor… | CVE-2021-24543 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2071 | APP-0256 | Quest KACE Desktop Authority before 11.2 allows XSS because it does not prevent untrusted HTML from reaching the… | CVE-2021-44030 | Medium | patch | manual-only | manual-only | No | 4.2% |
+| FIND-2073 | APP-0258 | A reflected cross-site scripting (XSS) vulnerability in forms generated by JQueryForm.com before 2022-02-05 allows… | CVE-2022-24981 | Medium | patch | manual-only | manual-only | No | 1.0% |
+| FIND-2078 | APP-0263 | A cross-site scripting (XSS) vulnerability in the fileNameStr parameter of jQuery-Upload-File v4.0.11 allows attackers… | CVE-2021-37504 | Medium | patch | manual-only | manual-only | No | 0.9% |
+| FIND-2079 | APP-0264 | jQuery Cookie 1.4.1 is affected by prototype pollution, which can lead to DOM cross-site scripting (XSS). | CVE-2022-23395 | Medium | patch | manual-only | manual-only | No | 1.1% |
+| FIND-2080 | APP-0265 | The jQuery deserialize library in Fisheye and Crucible before version 4.8.9 allowed remote attackers to to inject… | CVE-2021-43956 | Medium | patch | manual-only | manual-only | No | 0.7% |
+| FIND-2081 | APP-0266 | The jquery.json-viewer library through 1.4.0 for Node.js does not properly escape characters such as < in a JSON… | CVE-2022-30241 | Medium | patch | manual-only | manual-only | No | 0.7% |
+| FIND-2085 | APP-0270 | jQuery UI is a curated set of user interface interactions, effects, widgets, and themes built on top of jQuery.… | CVE-2022-31160 | Medium | patch | manual-only | manual-only | No | 2.5% |
+| FIND-2088 | APP-0273 | jQuery MiniColors is a color picker built on jQuery. Prior to version 2.3.6, jQuery MiniColors is prone to cross-site… | CVE-2021-32850 | Medium | patch | manual-only | manual-only | No | 0.8% |
+| FIND-2089 | APP-0274 | iziModal is a modal plugin with jQuery. Versions prior to 1.6.1 are vulnerable to cross-site scripting (XSS) when… | CVE-2021-32860 | Medium | patch | manual-only | manual-only | No | 0.6% |
+| FIND-2090 | APP-0275 | Cross Site Scripting (XSS) vulnerability in the DataTables plug-in 1.9.2 for jQuery allows attackers to run arbitrary… | CVE-2021-36713 | Medium | patch | manual-only | manual-only | No | 0.8% |
+| FIND-2091 | APP-0276 | A prototype pollution vulnerability exists in Strikingly CMS which can result in reflected cross-site scripting (XSS)… | CVE-2023-2582 | Medium | patch | manual-only | manual-only | No | 0.6% |
+| FIND-2093 | APP-0278 | Certain HP Enterprise LaserJet and HP LaserJet Managed Printers are potentially vulnerable to denial of service due to… | CVE-2023-5113 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2111 | APP-0296 | Versions of the package jquery-validation before 1.20.0 are vulnerable to Cross-site Scripting (XSS) in the… | CVE-2025-3573 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-379 | CLOUD-0064 | A vulnerability was found in all versions of containernetworking/plugins before version 0.8.6, that allows malicious… | CVE-2020-10749 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-392 | CLOUD-0077 | An issue has been discovered in GitLab Runner affecting all versions starting from 13.4.0 before 13.4.2, all versions… | CVE-2020-13327 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-522 | CLOUD-0207 | Baremetal Operator (BMO) is a bare metal host provisioning integration for Kubernetes. Prior to version 0.3.0, ironic… | CVE-2023-30841 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-618 | WEBAPP-SUPPORT-TICKETING | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-633 | WEBAPP-PARTNER-EXTRANET | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-683 | WEBAPP-LOYALTY-REWARDS | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-703 | WEBAPP-VENDOR-ONBOARDING | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-738 | WEBAPP-MARKETING-CMS | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-758 | WEBAPP-CUSTOMER-PORTAL | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-787 | WEBAPP-ORDER-SERVICE | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-820 | WEBAPP-NOTIFICATION-SERVICE | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-837 | WEBAPP-REPORTING-DASHBOARD | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-845 | WEBAPP-SEARCH-SERVICE | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-863 | WEBAPP-INTERNAL-WIKI | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-865 | WEBAPP-CHECKOUT-SERVICE | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-870 | WEBAPP-MOBILE-BACKEND-API | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-895 | WEBAPP-EMPLOYEE-HR-PORTAL | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-899 | WEBAPP-BILLING-API | Cross-Site Request Forgery (CSRF) (CWE-352) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-1372 | FW-EDGE-0157 | A key management errors vulnerability in Fortinet FortiAnalyzer 7.4.0 through 7.4.2, FortiAnalyzer 7.2.0 through… | CVE-2024-40593 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-1382 | FW-EDGE-0167 | An Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal') [CWE-22] vulnerability in Fortinet… | CVE-2025-61624 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-218 | WEB-PORTAL-0203 | ssl/s2_srvr.c in OpenSSL 1.0.1 before 1.0.1r and 1.0.2 before 1.0.2f does not prevent use of disabled ciphers, which… | CVE-2015-3197 | Medium | config-change | manual-only | manual-only | No | 10.7% |
+| FIND-221 | WEB-PORTAL-0206 | The get_client_master_key function in s2_srvr.c in the SSLv2 implementation in OpenSSL before 0.9.8zf, 1.0.0 before… | CVE-2016-0703 | Medium | config-change | manual-only | manual-only | No | 5.4% |
+| FIND-222 | WEB-PORTAL-0207 | An oracle protection mechanism in the get_client_master_key function in s2_srvr.c in the SSLv2 implementation in… | CVE-2016-0704 | Medium | config-change | manual-only | manual-only | No | 6.9% |
+| FIND-252 | WEB-PORTAL-0237 | The certificate parser in OpenSSL before 1.0.1u and 1.0.2 before 1.0.2i might allow remote attackers to cause a denial… | CVE-2016-6306 | Medium | config-change | manual-only | manual-only | No | 41.7% |
+| FIND-253 | WEB-PORTAL-0238 | The state-machine implementation in OpenSSL 1.1.0 before 1.1.0a allocates memory before checking for an excessive… | CVE-2016-6307 | Medium | config-change | manual-only | manual-only | No | 13.8% |
+| FIND-254 | WEB-PORTAL-0239 | statem/statem_dtls.c in the DTLS implementation in OpenSSL 1.1.0 before 1.1.0a allocates memory before checking for an… | CVE-2016-6308 | Medium | config-change | manual-only | manual-only | No | 14.1% |
+| FIND-265 | WEB-PORTAL-0250 | There is a carry propagating bug in the x86_64 Montgomery squaring procedure in OpenSSL 1.0.2 before 1.0.2k and 1.1.0… | CVE-2017-3732 | Medium | config-change | manual-only | manual-only | No | 15.4% |
+| FIND-267 | WEB-PORTAL-0252 | There is a carry propagating bug in the Broadwell-specific Montgomery multiplication procedure in OpenSSL 1.0.2 and… | CVE-2016-7055 | Medium | config-change | manual-only | manual-only | No | 14.2% |
+| FIND-275 | WEB-PORTAL-0260 | There is an overflow bug in the AVX2 Montgomery multiplication procedure used in exponentiation with 1024-bit moduli.… | CVE-2017-3738 | Medium | config-change | manual-only | manual-only | No | 13.4% |
+| FIND-278 | WEB-PORTAL-0263 | Because of an implementation bug the PA-RISC CRYPTO_memcmp function is effectively reduced to only comparing the least… | CVE-2018-0733 | Medium | config-change | manual-only | manual-only | No | 8.4% |
+| FIND-280 | WEB-PORTAL-0265 | The OpenSSL RSA Key generation algorithm has been shown to be vulnerable to a cache timing side channel attack. An… | CVE-2018-0737 | Medium | config-change | manual-only | manual-only | No | 12.0% |
+| FIND-284 | WEB-PORTAL-0269 | The OpenSSL ECDSA signature algorithm has been shown to be vulnerable to a timing side channel attack. An attacker… | CVE-2018-0735 | Medium | config-change | manual-only | manual-only | No | 4.8% |
+| FIND-285 | WEB-PORTAL-0270 | The OpenSSL DSA signature algorithm has been shown to be vulnerable to a timing side channel attack. An attacker could… | CVE-2018-0734 | Medium | config-change | manual-only | manual-only | No | 12.2% |
+| FIND-288 | WEB-PORTAL-0273 | If an application encounters a fatal protocol error and then calls SSL_shutdown() twice (once to send a close_notify,… | CVE-2019-1559 | Medium | config-change | manual-only | manual-only | No | 17.1% |
+| FIND-294 | WEB-PORTAL-0279 | Multiple padding oracle vulnerabilities (Zombie POODLE, GOLDENDOODLE, OpenSSL 0-length) in the CBC padding… | CVE-2019-5592 | Medium | config-change | manual-only | manual-only | No | 0.7% |
+| FIND-304 | WEB-PORTAL-0289 | verify_certificate_identity in the OpenSSL extension in Ruby before 2.0.0 patchlevel 645, 2.1.x before 2.1.6, and… | CVE-2015-1855 | Medium | config-change | manual-only | manual-only | No | 2.8% |
+| FIND-335 | CLOUD-0020 | In Kubernetes versions 1.9.0-1.9.9, 1.10.0-1.10.5, and 1.11.0-1.11.1, user input was handled insecurely while setting… | CVE-2018-1002101 | Medium | firmware-update | manual-only | manual-only | No | 4.1% |
+| FIND-387 | CLOUD-0072 | The Kubernetes kube-controller-manager in versions v1.0-v1.17 is vulnerable to a credential leakage via error messages… | CVE-2019-11252 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-389 | CLOUD-0074 | The Kubernetes ingress-nginx component prior to version 0.28.0 allows a user with the ability to create namespaces and… | CVE-2020-8553 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-411 | CLOUD-0096 | Helm is open-source software which is essentially "The Kubernetes Package Manager". Helm is a tool for managing… | CVE-2021-21303 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-510 | CLOUD-0195 | crossplane-runtime is a set of go libraries used to build Kubernetes controllers in Crossplane and its related stacks.… | CVE-2023-27483 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-591 | CLOUD-0276 | Meshery is an open source, cloud native manager that enables the design and management of Kubernetes-based… | CVE-2024-35181 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-592 | CLOUD-0277 | Meshery is an open source, cloud native manager that enables the design and management of Kubernetes-based… | CVE-2024-35182 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-623 | WEBAPP-MOBILE-BACKEND-API | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-662 | WEBAPP-MARKETING-CMS | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-723 | WEBAPP-ORDER-SERVICE | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-725 | WEBAPP-SEARCH-SERVICE | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-731 | WEBAPP-LOYALTY-REWARDS | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-753 | WEBAPP-REPORTING-DASHBOARD | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-764 | WEBAPP-PARTNER-EXTRANET | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-770 | WEBAPP-CUSTOMER-PORTAL | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-779 | WEBAPP-SUPPORT-TICKETING | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-786 | WEBAPP-NOTIFICATION-SERVICE | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-797 | WEBAPP-BILLING-API | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-798 | WEBAPP-VENDOR-ONBOARDING | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-804 | WEBAPP-CHECKOUT-SERVICE | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-819 | WEBAPP-EMPLOYEE-HR-PORTAL | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-912 | WEBAPP-INTERNAL-WIKI | Hardcoded API Key in Client-Side JavaScript (CWE-798) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-1236 | FW-EDGE-0021 | Long lived sessions in Fortinet FortiGate devices with FortiOS 5.x before 5.4.0 could violate a security policy during… | CVE-2016-7541 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1255 | FW-EDGE-0040 | A plaintext recovery of encrypted messages or a Man-in-the-middle (MiTM) attack on RSA PKCS #1 v1.5 encryption may be… | CVE-2018-9192 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1256 | FW-EDGE-0041 | A plaintext recovery of encrypted messages or a Man-in-the-middle (MiTM) attack on RSA PKCS #1 v1.5 encryption may be… | CVE-2018-9194 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1350 | FW-EDGE-0135 | A channel accessible by non-endpoint vulnerability [CWE-300] in Fortinet FortiOS version 7.4.0 through 7.4.3, 7.2.0… | CVE-2024-50568 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1440 | FW-EDGE-0225 | Palo Alto Networks PAN-OS 6.1, 7.1, and 8.0.x before 8.0.7, when an interface implements SSL decryption with RSA… | CVE-2017-17841 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-1485 | FW-EDGE-0270 | An improper handling of exceptional conditions vulnerability exists in the DNS proxy feature of Palo Alto Networks… | CVE-2022-0023 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1833 | APP-0018 | The fix for CVE-2025-68161 https://logging.apache.org/security.html#CVE-2025-68161 was incomplete: it addressed… | CVE-2026-34477 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-1838 | APP-0023 | Improper encoding of non-finite floating-point values during MapMessage JSON serialization in Apache Log4j API… | CVE-2026-49844 | Medium | patch | manual-only | manual-only | No | 0.6% |
+| FIND-1898 | APP-0083 | If an application allows enter an URL in a form field and built-in URLValidator is used, it is possible to prepare a… | CVE-2017-7672 | Medium | patch | manual-only | manual-only | No | 9.0% |
+| FIND-1903 | APP-0088 | In Apache Struts 2.5 through 2.5.5, if an application allows entering a URL in a form field and the built-in… | CVE-2016-8738 | Medium | patch | manual-only | manual-only | No | 3.2% |
+| FIND-1947 | APP-0132 | Spring Framework, versions 5.0 prior to 5.0.5 and versions 4.3 prior to 4.3.15 and older unsupported versions, allow… | CVE-2018-1271 | Medium | patch | manual-only | manual-only | No | 35.7% |
+| FIND-1952 | APP-0137 | Spring Framework (versions 5.0.x prior to 5.0.7, versions 4.3.x prior to 4.3.18, and older unsupported versions) allow… | CVE-2018-11039 | Medium | patch | manual-only | manual-only | No | 2.8% |
+| FIND-1989 | APP-0174 | Spring Framework MVC applications can be vulnerable to a “Path Traversal Vulnerability” when deployed on a… | CVE-2025-41242 | Medium | patch | manual-only | manual-only | No | 2.1% |
+| FIND-1993 | APP-0178 | Use of Java scripting engine enabled (e.g. JRuby, Jython) template views in Spring MVC and Spring WebFlux applications… | CVE-2026-22737 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-1997 | APP-0182 | Spring WebFlux applications are vulnerable to Denial of Service (DoS) attacks when processing multipart requests.… | CVE-2026-41840 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-1998 | APP-0183 | Spring MVC and WebFlux applications are vulnerable to Information Disclosure attacks when resolving static resources.… | CVE-2026-41841 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2000 | APP-0185 | Spring MVC and WebFlux applications are vulnerable to Path Traversal attacks when resolving static resources. Affected… | CVE-2026-41843 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2003 | APP-0188 | Spring MVC applications which accept user-supplied values in the cssClass, cssErrorClass, or cssStyle attributes of… | CVE-2026-41846 | Medium | patch | manual-only | manual-only | No | 0.1% |
+| FIND-2082 | APP-0267 | An exponential ReDoS (Regular Expression Denial of Service) can be triggered in the jquery-validation npm package,… | CVE-2021-43306 | Medium | patch | manual-only | manual-only | No | 1.4% |
+| FIND-2113 | APP-0298 | Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting') vulnerability in AppJetty WP… | CVE-2025-47605 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2114 | APP-0299 | The Firelight Lightbox WordPress plugin before 2.3.15 does not prevent users with post writing capabilities from… | CVE-2025-3597 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-62 | WEB-PORTAL-0047 | OpenSSL 0.9.8i and earlier does not properly check the return value from the EVP_VerifyFinal function, which allows… | CVE-2008-5077 | Medium | config-change | manual-only | manual-only | No | 5.1% |
+| FIND-93 | WEB-PORTAL-0078 | neon before 0.28.6, when OpenSSL or GnuTLS is used, does not properly handle a '\0' character in a domain name in the… | CVE-2009-2474 | Medium | config-change | manual-only | manual-only | No | 1.4% |
+| FIND-129 | WEB-PORTAL-0114 | crypto/bn/bn_nist.c in OpenSSL before 0.9.8h on 32-bit platforms, as used in stunnel and other products, in certain… | CVE-2011-4354 | Medium | config-change | manual-only | manual-only | No | 4.0% |
+| FIND-151 | WEB-PORTAL-0136 | The DTLS retransmission implementation in OpenSSL 1.0.0 before 1.0.0l and 1.0.1 before 1.0.1f does not properly… | CVE-2013-6450 | Medium | config-change | manual-only | manual-only | No | 14.5% |
+| FIND-160 | WEB-PORTAL-0145 | cURL and libcurl 7.1 before 7.36.0, when using the OpenSSL, axtls, qsossl or gskit libraries for TLS, recognize a… | CVE-2014-0139 | Medium | config-change | manual-only | manual-only | No | 4.9% |
+| FIND-161 | WEB-PORTAL-0146 | The openssl extension in Ruby 2.x does not properly maintain the state of process memory after a file is reopened,… | CVE-2014-2734 | Medium | config-change | manual-only | manual-only | No | 5.3% |
+| FIND-405 | CLOUD-0090 | Weave Net is open source software which creates a virtual network that connects Docker containers across multiple… | CVE-2020-26278 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-408 | CLOUD-0093 | Kubernetes Secrets Store CSI Driver versions v0.0.15 and v0.0.16 allow an attacker who can modify a… | CVE-2020-8568 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-524 | CLOUD-0209 | Fluid is an open source Kubernetes-native distributed dataset orchestrator and accelerator for data-intensive… | CVE-2023-30840 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1376 | FW-EDGE-0161 | An inconsistent interpretation of http requests ('http request smuggling') vulnerability in Fortinet FortiOS 7.6.0,… | CVE-2025-55018 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1446 | FW-EDGE-0231 | TechSupport files generated on Palo Alto Networks VM Series firewalls for Microsoft Azure platform configured with… | CVE-2020-1978 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1870 | APP-0055 | Apache Struts 2.0.0 through 2.3.15.1 allows remote attackers to bypass access controls via a crafted action: prefix. | CVE-2013-4310 | Medium | patch | manual-only | manual-only | No | 7.5% |
+| FIND-1877 | APP-0062 | CookieInterceptor in Apache Struts 2.x before 2.3.20, when a wildcard cookiesName value is used, does not properly… | CVE-2014-0116 | Medium | patch | manual-only | manual-only | No | 6.5% |
+| FIND-489 | CLOUD-0174 | containerd is an open source container runtime. A bug was found in containerd's CRI implementation where a user can… | CVE-2022-23471 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-513 | CLOUD-0198 | Jumpserver is a popular open source bastion host, and Koko is a Jumpserver component that is the Go version of coco,… | CVE-2023-28110 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-614 | CLOUD-0299 | Argo Workflows is an open source container-native workflow engine for orchestrating parallel jobs on Kubernetes. Due… | CVE-2024-47827 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-416 | CLOUD-0101 | A vulnerability was found in OVN Kubernetes in versions up to and including 0.3.0 where the Egress Firewall does not… | CVE-2021-3499 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1371 | FW-EDGE-0156 | An insufficient session expiration vulnerability [CWE-613] vulnerability in Fortinet FortiOS 7.4.0, FortiOS 7.2 all… | CVE-2025-62631 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-241 | WEB-PORTAL-0226 | The dsa_sign_setup function in crypto/dsa/dsa_ossl.c in OpenSSL through 1.0.2h does not properly ensure the use of… | CVE-2016-2178 | Medium | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-283 | WEB-PORTAL-0268 | A timing attack flaw was found in OpenSSL 1.0.1u and before that could allow a malicious user with local access to… | CVE-2016-7056 | Medium | config-change | manual-only | manual-only | No | 0.6% |
+| FIND-369 | CLOUD-0054 | kernel/sched/fair.c in the Linux kernel before 5.3.9, when cpu.cfs_quota_us is used (e.g., with Kubernetes), allows… | CVE-2019-19922 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-388 | CLOUD-0073 | The Kubernetes kubelet component in versions 1.1-1.16.12, 1.17.0-1.17.8 and 1.18.0-1.18.5 do not account for disk… | CVE-2020-8557 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-459 | CLOUD-0144 | containerd is an open source container runtime. A bug was found in the containerd's CRI implementation where programs… | CVE-2022-31030 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-506 | CLOUD-0191 | Redpanda before 22.3.12 discloses cleartext AWS credentials. The import functionality in the rpk binary logs an AWS… | CVE-2023-24619 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-995 | NET-RTSW-0080 | Cisco IOS before 12.3-7-JA2 on Aironet Wireless Access Points (WAP) allows remote authenticated users to cause a… | CVE-2006-0354 | Medium | firmware-update | manual-only | manual-only | No | 10.5% |
+| FIND-1273 | FW-EDGE-0058 | Improper permission or value checking in the CLI console may allow a non-privileged user to obtain Fortinet FortiOS… | CVE-2019-5593 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1390 | FW-EDGE-0175 | A improper limitation of a pathname to a restricted directory ('path traversal') vulnerability in Fortinet FortiOS… | CVE-2026-59839 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1494 | FW-EDGE-0279 | A vulnerability exists in Palo Alto Networks PAN-OS software that enables an authenticated administrator with the… | CVE-2023-38046 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1498 | FW-EDGE-0283 | An OS command injection vulnerability in the XML API of Palo Alto Networks PAN-OS software enables an authenticated… | CVE-2023-6792 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1500 | FW-EDGE-0285 | An arbitrary file upload vulnerability in Palo Alto Networks PAN-OS software enables an authenticated read-write… | CVE-2023-6794 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1501 | FW-EDGE-0286 | An OS command injection vulnerability in Palo Alto Networks PAN-OS software enables an authenticated administrator to… | CVE-2023-6795 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1531 | LNX-SRV-0016 | Off-by-one vulnerability in CPIA driver of Linux kernel before 2.2.19 allows users to modify kernel memory. | CVE-2001-1391 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1725 | WIN-SRV-0090 | The Server Message Block (SMB) driver (MRXSMB.SYS) in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1… | CVE-2006-2374 | Medium | patch | ansible-windows | auto-approvable | No | 1.7% |
+| FIND-1940 | APP-0125 | Pivotal Spring Framework before 3.2.14 and 4.x before 4.1.7 do not properly process inline DTD declarations when DTD… | CVE-2015-3192 | Medium | patch | manual-only | manual-only | No | 2.6% |
+| FIND-475 | CLOUD-0160 | An Insufficient Session Expiration issue was discovered in the Pinniped Supervisor (before v0.19.0). A user… | CVE-2022-31677 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-590 | CLOUD-0275 | A CSRF vulnerability exists within GitLab CE/EE from versions 13.11 before 16.10.6, from 16.11 before 16.11.3, from… | CVE-2023-7045 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-622 | WEBAPP-EMPLOYEE-HR-PORTAL | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-676 | WEBAPP-CHECKOUT-SERVICE | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-726 | WEBAPP-BILLING-API | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-737 | WEBAPP-ORDER-SERVICE | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-763 | WEBAPP-MOBILE-BACKEND-API | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-793 | WEBAPP-INTERNAL-WIKI | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-810 | WEBAPP-MARKETING-CMS | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-812 | WEBAPP-SEARCH-SERVICE | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-836 | WEBAPP-NOTIFICATION-SERVICE | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-840 | WEBAPP-CUSTOMER-PORTAL | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-848 | WEBAPP-PARTNER-EXTRANET | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-892 | WEBAPP-SUPPORT-TICKETING | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-896 | WEBAPP-REPORTING-DASHBOARD | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-898 | WEBAPP-LOYALTY-REWARDS | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-915 | WEBAPP-VENDOR-ONBOARDING | Open Redirect (CWE-601) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-1071 | NET-RTSW-0156 | The (1) Airline Product Set (aka ALPS), (2) Serial Tunnel Code (aka STUN), (3) Block Serial Tunnel Code (aka BSTUN),… | CVE-2009-0629 | Medium | firmware-update | manual-only | manual-only | No | 4.0% |
+| FIND-1079 | NET-RTSW-0164 | Cisco IOS 12.0(32)S12 through 12.0(32)S13 and 12.0(33)S3 through 12.0(33)S4, 12.0(32)SY8 through 12.0(32)SY9,… | CVE-2009-2049 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-1139 | NET-RTSW-0224 | Cisco IOS 12.2, 12.3, 12.4, 15.0, and 15.1, when the data-link switching (DLSw) feature is configured, allows remote… | CVE-2011-1625 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1177 | NET-RTSW-0262 | The HTTP client in Cisco IOS 12.4 and 15.0 allows user-assisted remote attackers to cause a denial of service (device… | CVE-2011-2586 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1180 | NET-RTSW-0265 | Cisco IOS 15.0 and 15.1 and IOS XE 3.x do not properly handle the "set mpls experimental imposition" command, which… | CVE-2011-4007 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1183 | NET-RTSW-0268 | The PPP implementation in Cisco IOS 12.2 and 15.0 through 15.2, when Point-to-Point Termination and Aggregation (PTA)… | CVE-2011-4016 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1187 | NET-RTSW-0272 | Memory leak in Cisco IOS 12.4 and 15.0 through 15.2, and Cisco Unified Communications Manager (CUCM) 7.x, allows… | CVE-2011-4019 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1212 | NET-RTSW-0297 | The HTTP server in Cisco IOS on Catalyst switches does not properly handle TCP socket events, which allows remote… | CVE-2013-1100 | Medium | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1226 | FW-EDGE-0011 | The FortiManager protocol service in Fortinet FortiOS before 4.3.16 and 5.x before 5.0.8 on FortiGate devices does not… | CVE-2014-0351 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1240 | FW-EDGE-0025 | A Cross-Site Scripting vulnerability in Fortinet FortiOS versions 5.4.0 through 5.4.4 and 5.6.0 allows attackers to… | CVE-2017-3131 | Medium | firmware-update | manual-only | manual-only | No | 7.7% |
+| FIND-1243 | FW-EDGE-0028 | A Cross-Site Scripting vulnerability in Fortinet FortiOS versions 5.4.0 through 5.4.4 allows attackers to execute… | CVE-2017-7734 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1244 | FW-EDGE-0029 | A Cross-Site Scripting vulnerability in Fortinet FortiOS versions 5.2.0 through 5.2.11 and 5.4.0 through 5.4.4 allows… | CVE-2017-7735 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1248 | FW-EDGE-0033 | A Cross-site Scripting (XSS) vulnerability in Fortinet FortiOS 6.0.0 to 6.0.4, 5.6.0 to 5.6.7, 5.4 and below versions… | CVE-2017-14186 | Medium | firmware-update | manual-only | manual-only | No | 3.7% |
+| FIND-1274 | FW-EDGE-0059 | A Stack-based Buffer Overflow vulnerability in the HTTPD daemon of FortiOS 6.0.10 and below, 6.2.2 and below and… | CVE-2019-17656 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1415 | FW-EDGE-0200 | Cross-site scripting (XSS) vulnerability in the management interface in Palo Alto Networks PAN-OS 7.x before 7.0.8… | CVE-2016-2219 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1421 | FW-EDGE-0206 | Cross-site scripting (XSS) vulnerability in the Management Web Interface in Palo Alto Networks PAN-OS 5.1, 6.x before… | CVE-2017-5584 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1493 | FW-EDGE-0278 | A reflected cross-site scripting (XSS) vulnerability in the Captive Portal feature of Palo Alto Networks PAN-OS… | CVE-2023-0010 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1956 | APP-0141 | The JavaScriptUtils.javaScriptEscape method in web/util/JavaScriptUtils.java in Spring MVC in Spring Framework before… | CVE-2013-6430 | Medium | patch | manual-only | manual-only | No | 3.2% |
+| FIND-2060 | APP-0245 | SimplCommerce 1.0.0-rc uses the Bootbox.js library, which allows creation of programmatic dialog boxes using Bootstrap… | CVE-2020-29587 | Medium | patch | manual-only | manual-only | No | 0.7% |
+| FIND-2087 | APP-0272 | The jQuery T(-) Countdown Widget WordPress plugin before 2.3.24 does not validate and escape some of its shortcode… | CVE-2023-0171 | Medium | patch | manual-only | manual-only | No | 0.6% |
+| FIND-215 | WEB-PORTAL-0200 | The ASN1_TFLG_COMBINE implementation in crypto/asn1/tasn_dec.c in OpenSSL before 0.9.8zh, 1.0.0 before 1.0.0t, 1.0.1… | CVE-2015-3195 | Medium | config-change | manual-only | manual-only | No | 38.7% |
+| FIND-258 | WEB-PORTAL-0243 | The OpenSSL address implementation in Socat 1.7.3.0 and 2.0.0-b8 does not use a prime number for the DH, which makes… | CVE-2016-2217 | Medium | config-change | manual-only | manual-only | No | 2.5% |
+| FIND-269 | WEB-PORTAL-0254 | While parsing an IPAddressFamily extension in an X.509 certificate, it is possible to do a one-byte overread. This… | CVE-2017-3735 | Medium | config-change | manual-only | manual-only | No | 17.7% |
+| FIND-299 | WEB-PORTAL-0284 | OpenSSL 1.1.1 introduced a rewritten random number generator (RNG). This was intended to include protection in the… | CVE-2019-1549 | Medium | config-change | manual-only | manual-only | No | 6.2% |
+| FIND-306 | WEB-PORTAL-0291 | There is an overflow bug in the x64_64 Montgomery squaring procedure used in exponentiation with 512-bit moduli. No EC… | CVE-2019-1551 | Medium | config-change | manual-only | manual-only | No | 14.3% |
+| FIND-307 | WEB-PORTAL-0292 | An issue was discovered in openfortivpn 1.11.0 when used with OpenSSL 1.0.2 or later. tunnel.c mishandles certificate… | CVE-2020-7041 | Medium | config-change | manual-only | manual-only | No | 1.7% |
+| FIND-308 | WEB-PORTAL-0293 | An issue was discovered in openfortivpn 1.11.0 when used with OpenSSL 1.0.2 or later. tunnel.c mishandles certificate… | CVE-2020-7042 | Medium | config-change | manual-only | manual-only | No | 1.6% |
+| FIND-318 | CLOUD-0003 | Kubernetes before 1.2.0-alpha.5 allows remote attackers to read arbitrary pod logs via a container name. | CVE-2015-7528 | Medium | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-346 | CLOUD-0031 | IBM Cloud Private Kubernetes API server 2.1.0, 3.1.0, 3.1.1, and 3.1.2 can be used as an HTTP proxy to not only… | CVE-2019-4119 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-370 | CLOUD-0055 | Versions < 1.5 of the Kubernetes ingress default backend, which handles invalid ingress traffic, exposed prometheus… | CVE-2018-1002104 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-375 | CLOUD-0060 | The Kubernetes API server component in versions prior to 1.15.9, 1.16.0-1.16.6, and 1.17.0-1.17.2 has been found to be… | CVE-2020-8552 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-382 | CLOUD-0067 | Kubernetes cluster token disclosure in GitLab CE/EE 10.3 and later through 13.0.1 allows other group maintainers to… | CVE-2020-13264 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-431 | CLOUD-0116 | Styra Open Policy Agent (OPA) Gatekeeper through 3.7.0 mishandles concurrency, sometimes resulting in incorrect access… | CVE-2021-43979 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-490 | CLOUD-0175 | Helm is a tool for managing Charts, pre-configured Kubernetes resources. Versions prior to 3.10.3 are subject to… | CVE-2022-23524 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-491 | CLOUD-0176 | Helm is a tool for managing Charts, pre-configured Kubernetes resources. Versions prior to 3.10.3 are subject to NULL… | CVE-2022-23525 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-492 | CLOUD-0177 | Helm is a tool for managing Charts, pre-configured Kubernetes resources. Versions prior to 3.10.3 are subject to NULL… | CVE-2022-23526 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-493 | CLOUD-0178 | aad-pod-identity assigns Azure Active Directory identities to Kubernetes applications and has now been deprecated as… | CVE-2022-23551 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-595 | CLOUD-0280 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. The vulnerability allows unauthorized access… | CVE-2024-37152 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-616 | WEBAPP-SEARCH-SERVICE | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-624 | WEBAPP-ORDER-SERVICE | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-637 | WEBAPP-BILLING-API | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-643 | WEBAPP-MOBILE-BACKEND-API | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-668 | WEBAPP-LOYALTY-REWARDS | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-669 | WEBAPP-PARTNER-EXTRANET | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-670 | WEBAPP-ORDER-SERVICE | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-679 | WEBAPP-LOYALTY-REWARDS | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-685 | WEBAPP-CHECKOUT-SERVICE | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-686 | WEBAPP-CHECKOUT-SERVICE | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-690 | WEBAPP-NOTIFICATION-SERVICE | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-697 | WEBAPP-EMPLOYEE-HR-PORTAL | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-712 | WEBAPP-EMPLOYEE-HR-PORTAL | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-718 | WEBAPP-BILLING-API | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-744 | WEBAPP-SEARCH-SERVICE | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-750 | WEBAPP-MOBILE-BACKEND-API | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-755 | WEBAPP-REPORTING-DASHBOARD | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-768 | WEBAPP-MARKETING-CMS | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-783 | WEBAPP-CUSTOMER-PORTAL | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-808 | WEBAPP-CUSTOMER-PORTAL | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-818 | WEBAPP-MARKETING-CMS | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-825 | WEBAPP-INTERNAL-WIKI | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-835 | WEBAPP-REPORTING-DASHBOARD | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-842 | WEBAPP-NOTIFICATION-SERVICE | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-867 | WEBAPP-VENDOR-ONBOARDING | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-882 | WEBAPP-VENDOR-ONBOARDING | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-888 | WEBAPP-PARTNER-EXTRANET | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-891 | WEBAPP-SUPPORT-TICKETING | Weak Password Policy Allows Trivial Brute Force (CWE-521) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-893 | WEBAPP-INTERNAL-WIKI | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-913 | WEBAPP-SUPPORT-TICKETING | Missing Rate Limiting on Authentication Endpoint (CWE-307) | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-1253 | FW-EDGE-0038 | An Information Disclosure vulnerability in Fortinet FortiOS 5.6.0 to 5.6.2, 5.4.0 to 5.4.8 and 5.2 all versions allows… | CVE-2017-14185 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1261 | FW-EDGE-0046 | An information disclosure vulnerability in Fortinet FortiOS 6.0.1, 5.6.7 and below allows attacker to reveals serial… | CVE-2018-13366 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1263 | FW-EDGE-0048 | An Information Exposure vulnerability in Fortinet FortiOS 6.0.1, 5.6.5 and below, allow attackers to learn private IP… | CVE-2018-13365 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1266 | FW-EDGE-0051 | A buffer overflow vulnerability in Fortinet FortiOS 6.0.0 through 6.0.4, 5.6.0 through 5.6.7, 5.4 and earlier versions… | CVE-2018-13381 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1287 | FW-EDGE-0072 | An exposure of sensitive information to an unauthorized actor vulnerability [CWE-200] in Fortinet FortiProxy version… | CVE-2022-41329 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1324 | FW-EDGE-0109 | An exposure of sensitive information to an unauthorized actor in Fortinet FortiOS at least version at least 7.4.0… | CVE-2024-23662 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1330 | FW-EDGE-0115 | An improper check or handling of exceptional conditions vulnerability [CWE-703] in Fortinet FortiOS version 7.4.1… | CVE-2024-26007 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1335 | FW-EDGE-0120 | A missing authentication for critical function in Fortinet FortiManager version 7.4.0 through 7.4.2, 7.2.0 through… | CVE-2024-26011 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1348 | FW-EDGE-0133 | A integer overflow or wraparound in Fortinet FortiOS versions 7.2.0 through 7.2.7, versions 7.0.0 through 7.0.14 may… | CVE-2025-47294 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1361 | FW-EDGE-0146 | An Improperly Implemented Security Check for Standard vulnerability [CWE-358] vulnerability in Fortinet FortiOS 7.6.0… | CVE-2025-25255 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1436 | FW-EDGE-0221 | The configuration file import for applications, spyware and vulnerability objects functionality in the web interface… | CVE-2017-15943 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-1450 | FW-EDGE-0235 | An open redirection vulnerability in the GlobalProtect component of Palo Alto Networks PAN-OS allows an attacker to… | CVE-2020-1997 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1461 | FW-EDGE-0246 | An uncontrolled resource consumption vulnerability in Palo Alto Networks PAN-OS allows for a remote unauthenticated… | CVE-2020-2039 | Medium | firmware-update | manual-only | manual-only | No | 46.4% |
+| FIND-1512 | FW-EDGE-0297 | An incorrect string comparison vulnerability in Palo Alto Networks PAN-OS software prevents Predefined Decryption… | CVE-2024-3386 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1886 | APP-0071 | Apache Struts 2.0.0 through 2.3.24.1 does not properly cache method references when used with OGNL before 3.0.12,… | CVE-2016-3093 | Medium | patch | manual-only | manual-only | No | 8.4% |
+| FIND-1894 | APP-0079 | The URLValidator class in Apache Struts 2 2.3.20 through 2.3.28.1 and 2.5.x before 2.5.1 allows remote attackers to… | CVE-2016-4465 | Medium | patch | manual-only | manual-only | No | 10.3% |
+| FIND-1945 | APP-0130 | Spring Security (Spring Security 4.1.x before 4.1.5, 4.2.x before 4.2.4, and 5.0.x before 5.0.1; and Spring Framework… | CVE-2018-1199 | Medium | patch | manual-only | manual-only | No | 2.9% |
+| FIND-1958 | APP-0143 | Spring Framework, versions 5.2.x prior to 5.2.3 are vulnerable to CSRF attacks through CORS preflight requests that… | CVE-2020-5397 | Medium | patch | manual-only | manual-only | No | 2.4% |
+| FIND-1967 | APP-0152 | In Spring Framework versions 5.3.0 - 5.3.18, 5.2.0 - 5.2.20, and older unsupported versions, the patterns for… | CVE-2022-22968 | Medium | patch | manual-only | manual-only | No | 5.7% |
+| FIND-1968 | APP-0153 | In spring framework versions prior to 5.3.20+ , 5.2.22+ and old unsupported versions, applications that handle file… | CVE-2022-22970 | Medium | patch | manual-only | manual-only | No | 2.0% |
+| FIND-1979 | APP-0164 | In Spring Framework versions 6.0.0 - 6.0.13, it is possible for a user to provide specially crafted HTTP requests that… | CVE-2023-34053 | Medium | patch | manual-only | manual-only | No | 1.1% |
+| FIND-1992 | APP-0177 | An authentication bypass vulnerability exists in Vaadin 14.0.0 through 14.14.0, 23.0.0 through 23.6.6, 24.0.0 through… | CVE-2026-2742 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2008 | APP-0193 | Applications which accept user-supplied Spring Expression Language (SpEL) expressions may be vulnerable to a Denial of… | CVE-2026-41851 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2010 | APP-0195 | Spring MVC and WebFlux applications are vulnerable to Multipart request smuggling attacks. Affected versions: Spring… | CVE-2026-41853 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2031 | APP-0216 | I, Librarian version <=4.6 & 4.7 is vulnerable to Directory Enumeration in the jqueryFileTree.php resulting in… | CVE-2017-1000234 | Medium | patch | manual-only | manual-only | No | 1.2% |
+| FIND-2050 | APP-0235 | In MediaWiki before 1.34.1, users can add various Cascading Style Sheets (CSS) classes (which can affect what content… | CVE-2020-10960 | Medium | patch | manual-only | manual-only | No | 1.1% |
+| FIND-2059 | APP-0244 | The jQuery Validation Plugin provides drop-in validation for your existing forms. It is published as an npm package… | CVE-2021-21252 | Medium | patch | manual-only | manual-only | No | 3.4% |
+| FIND-2099 | APP-0284 | Missing Authorization vulnerability in Mark Stockton Quicksand Post Filter jQuery Plugin.This issue affects Quicksand… | CVE-2024-24850 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-398 | CLOUD-0083 | containerd is an industry-standard container runtime and is available as a daemon for Linux and Windows. In containerd… | CVE-2020-15257 | Medium | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-473 | CLOUD-0158 | The GitOps Tools Extension for VSCode relies on kubeconfigs in order to communicate with Kubernetes clusters. A… | CVE-2022-35976 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-91 | WEB-PORTAL-0076 | The Network Security Services (NSS) library before 3.12.3, as used in Firefox; GnuTLS before 2.6.4 and 2.7.4; OpenSSL… | CVE-2009-2409 | Medium | config-change | manual-only | manual-only | No | 4.5% |
+| FIND-223 | WEB-PORTAL-0208 | The MOD_EXP_CTIME_COPY_FROM_PREBUF function in crypto/bn/bn_exp.c in OpenSSL 1.0.1 before 1.0.1s and 1.0.2 before… | CVE-2016-0702 | Medium | config-change | manual-only | manual-only | No | 1.9% |
+| FIND-588 | CLOUD-0273 | The source-controller is a Kubernetes operator, specialised in artifacts acquisition from external sources such as… | CVE-2024-31216 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1040 | NET-RTSW-0125 | Unspecified vulnerability in the Multicast Virtual Private Network (MVPN) implementation in Cisco IOS 12.0, 12.2,… | CVE-2008-1156 | Medium | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-1053 | NET-RTSW-0138 | A "logic error" in Cisco IOS 12.0 through 12.4, when a Multiprotocol Label Switching (MPLS) VPN with extended… | CVE-2008-3803 | Medium | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-1222 | FW-EDGE-0007 | Multiple cross-site request forgery (CSRF) vulnerabilities in Fortinet FortiOS on FortiGate firewall devices before… | CVE-2013-1414 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1667 | WIN-SRV-0032 | Help and Support Center in Microsoft Windows XP and Windows Server 2003 SP1 does not properly validate HCP URLs, which… | CVE-2004-0199 | Medium | patch | ansible-windows | auto-approvable | No | 26.1% |
+| FIND-1706 | WIN-SRV-0071 | Web View in Windows Explorer on Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 does not properly handle… | CVE-2005-2117 | Medium | patch | ansible-windows | auto-approvable | No | 37.0% |
+| FIND-1707 | WIN-SRV-0072 | Windows Shell for Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 allows remote user-assisted attackers to… | CVE-2005-2118 | Medium | patch | ansible-windows | auto-approvable | No | 47.4% |
+| FIND-1717 | WIN-SRV-0082 | Unspecified vulnerability in Windows Explorer in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1… | CVE-2006-0012 | Medium | patch | ansible-windows | auto-approvable | No | 24.8% |
+| FIND-1718 | WIN-SRV-0083 | Microsoft Internet Explorer before Windows XP Service Pack 2 and Windows Server 2003 Service Pack 1, when Prompt is… | CVE-2006-2094 | Medium | patch | ansible-windows | auto-approvable | No | 23.1% |
+| FIND-1741 | WIN-SRV-0106 | Argument injection vulnerability in the Windows Object Packager (packager.exe) in Microsoft Windows XP SP1 and SP2 and… | CVE-2006-4692 | Medium | patch | ansible-windows | auto-approvable | No | 27.7% |
+| FIND-17 | WEB-PORTAL-0002 | OpenSSL 0.9.4 and OpenSSH for FreeBSD do not properly check for the existence of the /dev/random or /dev/urandom… | CVE-2000-0535 | Medium | config-change | manual-only | manual-only | No | 1.4% |
+| FIND-18 | WEB-PORTAL-0003 | The Pseudo-Random Number Generator (PRNG) in SSLeay and OpenSSL before 0.9.6b allows attackers to use the output of… | CVE-2001-1141 | Medium | config-change | manual-only | manual-only | No | 5.0% |
+| FIND-22 | WEB-PORTAL-0007 | The ASN1 library in OpenSSL 0.9.6d and earlier, and 0.9.7-beta2 and earlier, allows remote attackers to cause a denial… | CVE-2002-0659 | Medium | config-change | manual-only | manual-only | No | 36.0% |
+| FIND-23 | WEB-PORTAL-0008 | ssl3_get_record in s3_pkt.c for OpenSSL before 0.9.7a and 0.9.6 before 0.9.6i does not perform a MAC computation if an… | CVE-2003-0078 | Medium | config-change | manual-only | manual-only | No | 13.7% |
+| FIND-25 | WEB-PORTAL-0010 | OpenSSL does not use RSA blinding by default, which allows local and remote attackers to obtain the server's private… | CVE-2003-0147 | Medium | config-change | manual-only | manual-only | No | 6.4% |
+| FIND-26 | WEB-PORTAL-0011 | OpenSSL 0.9.6e uses assertions when detecting buffer overflow attacks instead of less severe mechanisms, which allows… | CVE-2002-1568 | Medium | config-change | manual-only | manual-only | No | 2.7% |
+| FIND-27 | WEB-PORTAL-0012 | Integer overflow in OpenSSL 0.9.6 and 0.9.7 allows remote attackers to cause a denial of service (crash) via an SSL… | CVE-2003-0543 | Medium | config-change | manual-only | manual-only | No | 24.6% |
+| FIND-28 | WEB-PORTAL-0013 | OpenSSL 0.9.6 and 0.9.7 does not properly track the number of characters in certain ASN.1 inputs, which allows remote… | CVE-2003-0544 | Medium | config-change | manual-only | manual-only | No | 6.2% |
+| FIND-30 | WEB-PORTAL-0015 | OpenSSL 0.9.6k allows remote attackers to cause a denial of service (crash via large recursion) via malformed ASN.1… | CVE-2003-0851 | Medium | config-change | manual-only | manual-only | No | 5.4% |
+| FIND-31 | WEB-PORTAL-0016 | webadmin.exe in Novell Nsure Audit 1.0.1 allows remote attackers to cause a denial of service via malformed ASN.1… | CVE-2005-1247 | Medium | config-change | manual-only | manual-only | No | 1.6% |
+| FIND-33 | WEB-PORTAL-0018 | OpenSSL 0.9.6 before 0.9.6d does not properly handle unknown message types, which allows remote attackers to cause a… | CVE-2004-0081 | Medium | config-change | manual-only | manual-only | No | 7.2% |
+| FIND-34 | WEB-PORTAL-0019 | The SSL/TLS handshaking code in OpenSSL 0.9.7a, 0.9.7b, and 0.9.7c, when using Kerberos ciphersuites, does not… | CVE-2004-0112 | Medium | config-change | manual-only | manual-only | No | 10.4% |
+| FIND-36 | WEB-PORTAL-0021 | Soft3304 04WebServer before 1.41 allows remote attackers to cause a denial of service (resource consumption or crash)… | CVE-2004-2662 | Medium | config-change | manual-only | manual-only | No | 1.8% |
+| FIND-38 | WEB-PORTAL-0023 | OpenVPN before 2.0.1, when running with "verb 0" and without TLS authentication, does not properly flush the OpenSSL… | CVE-2005-2531 | Medium | config-change | manual-only | manual-only | No | 2.0% |
+| FIND-39 | WEB-PORTAL-0024 | OpenVPN before 2.0.1 does not properly flush the OpenSSL error queue when a packet can not be decrypted by the server,… | CVE-2005-2532 | Medium | config-change | manual-only | manual-only | No | 2.7% |
+| FIND-42 | WEB-PORTAL-0027 | The SSL/TLS server implementation in OpenSSL 0.9.7 before 0.9.7h and 0.9.8 before 0.9.8a, when using the… | CVE-2005-2969 | Medium | config-change | manual-only | manual-only | No | 4.9% |
+| FIND-45 | WEB-PORTAL-0030 | Tor before 0.1.1.20 uses OpenSSL pseudo-random bytes (RAND_pseudo_bytes) instead of cryptographically strong… | CVE-2006-3419 | Medium | config-change | manual-only | manual-only | No | 1.6% |
+| FIND-60 | WEB-PORTAL-0045 | Memory leak in the zlib_stateful_init function in crypto/comp/c_zlib.c in libssl in OpenSSL 0.9.8f through 0.9.8h… | CVE-2008-1678 | Medium | config-change | manual-only | manual-only | No | 5.3% |
+| FIND-63 | WEB-PORTAL-0048 | NTP 4.2.4 before 4.2.4p5 and 4.2.5 before 4.2.5p150 does not properly check the return value from the OpenSSL… | CVE-2009-0021 | Medium | config-change | manual-only | manual-only | No | 3.2% |
+| FIND-65 | WEB-PORTAL-0050 | Sun GridEngine 5.3 and earlier does not properly check the return value from the OpenSSL EVP_VerifyFinal function,… | CVE-2009-0046 | Medium | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-66 | WEB-PORTAL-0051 | Gale 0.99 and earlier does not properly check the return value from the OpenSSL EVP_VerifyFinal function, which allows… | CVE-2009-0047 | Medium | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-67 | WEB-PORTAL-0052 | OpenEvidence 1.0.6 and earlier does not properly check the return value from the OpenSSL EVP_VerifyFinal function,… | CVE-2009-0048 | Medium | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-68 | WEB-PORTAL-0053 | Belgian eID middleware (eidlib) 2.6.0 and earlier does not properly check the return value from the OpenSSL… | CVE-2009-0049 | Medium | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-70 | WEB-PORTAL-0055 | ZXID 0.29 and earlier does not properly check the return value from the OpenSSL DSA_verify function, which allows… | CVE-2009-0051 | Medium | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-71 | WEB-PORTAL-0056 | The tqsl_verifyDataBlock function in openssl_cert.cpp in American Radio Relay League (ARRL) tqsllib 2.0 does not… | CVE-2009-0124 | Medium | config-change | manual-only | manual-only | No | 1.3% |
+| FIND-72 | WEB-PORTAL-0057 | NOTE: this issue has been disputed by the upstream vendor. nasl/nasl_crypto2.c in the Nessus Attack Scripting Language… | CVE-2009-0125 | Medium | config-change | manual-only | manual-only | No | 1.5% |
+| FIND-73 | WEB-PORTAL-0058 | The decrypt_public function in lib/crypt.cpp in the client in Berkeley Open Infrastructure for Network Computing… | CVE-2009-0126 | Medium | config-change | manual-only | manual-only | No | 2.4% |
+| FIND-74 | WEB-PORTAL-0059 | M2Crypto does not properly check the return value from the OpenSSL EVP_VerifyFinal, DSA_verify, ECDSA_verify,… | CVE-2009-0127 | Medium | config-change | manual-only | manual-only | No | 1.4% |
+| FIND-75 | WEB-PORTAL-0060 | plugins/crypto/openssl/crypto_openssl.c in Simple Linux Utility for Resource Management (aka SLURM or slurm-llnl) does… | CVE-2009-0128 | Medium | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-76 | WEB-PORTAL-0061 | libcrypt-openssl-dsa-perl does not properly check the return value from the OpenSSL DSA_verify and DSA_do_verify… | CVE-2009-0129 | Medium | config-change | manual-only | manual-only | No | 1.1% |
+| FIND-80 | WEB-PORTAL-0065 | The ASN1_STRING_print_ex function in OpenSSL before 0.9.8k allows remote attackers to cause a denial of service… | CVE-2009-0590 | Medium | config-change | manual-only | manual-only | No | 6.2% |
+| FIND-82 | WEB-PORTAL-0067 | OpenSSL before 0.9.8k on WIN64 and certain other platforms does not properly handle a malformed ASN.1 structure, which… | CVE-2009-0789 | Medium | config-change | manual-only | manual-only | No | 2.6% |
+| FIND-85 | WEB-PORTAL-0070 | The dtls1_buffer_record function in ssl/d1_pkt.c in OpenSSL 0.9.8k and earlier 0.9.8 versions allows remote attackers… | CVE-2009-1377 | Medium | config-change | manual-only | manual-only | No | 11.3% |
+| FIND-86 | WEB-PORTAL-0071 | Multiple memory leaks in the dtls1_process_out_of_seq_message function in ssl/d1_both.c in OpenSSL 0.9.8k and earlier… | CVE-2009-1378 | Medium | config-change | manual-only | manual-only | No | 12.7% |
+| FIND-87 | WEB-PORTAL-0072 | Use-after-free vulnerability in the dtls1_retrieve_buffered_fragment function in ssl/d1_both.c in OpenSSL 1.0.0 Beta 2… | CVE-2009-1379 | Medium | config-change | manual-only | manual-only | No | 18.2% |
+| FIND-89 | WEB-PORTAL-0074 | The dtls1_retrieve_buffered_fragment function in ssl/d1_both.c in OpenSSL before 1.0.0 Beta 2 allows remote attackers… | CVE-2009-1387 | Medium | config-change | manual-only | manual-only | No | 10.3% |
+| FIND-98 | WEB-PORTAL-0083 | Martin Lambers mpop before 1.0.19, when OpenSSL is used, does not properly handle a '\0' character in a domain name in… | CVE-2009-3941 | Medium | config-change | manual-only | manual-only | No | 0.9% |
+| FIND-102 | WEB-PORTAL-0087 | Memory leak in the zlib_stateful_finish function in crypto/comp/c_zlib.c in OpenSSL 0.9.8l and earlier and 1.0.0 Beta… | CVE-2009-4355 | Medium | config-change | manual-only | manual-only | No | 8.9% |
+| FIND-106 | WEB-PORTAL-0091 | The ssl3_get_record function in ssl/s3_pkt.c in OpenSSL 0.9.8f through 0.9.8m allows remote attackers to cause a… | CVE-2010-0740 | Medium | config-change | manual-only | manual-only | No | 20.3% |
+| FIND-115 | WEB-PORTAL-0100 | ssl/t1_lib.c in OpenSSL 0.9.8h through 0.9.8q and 1.0.0 through 1.0.0c allows remote attackers to cause a denial of… | CVE-2011-0014 | Medium | config-change | manual-only | manual-only | No | 9.9% |
+| FIND-116 | WEB-PORTAL-0101 | The S/MIME feature in Open Ticket Request System (OTRS) before 2.2.5, and 2.3.x before 2.3.0-beta1, does not properly… | CVE-2008-7278 | Medium | config-change | manual-only | manual-only | No | 2.0% |
+| FIND-117 | WEB-PORTAL-0102 | The S/MIME feature in Open Ticket Request System (OTRS) before 2.3.4 does not configure the RANDFILE and HOME… | CVE-2009-5057 | Medium | config-change | manual-only | manual-only | No | 1.6% |
+| FIND-120 | WEB-PORTAL-0105 | crypto/x509/x509_vfy.c in OpenSSL 1.0.x before 1.0.0e does not initialize certain structure members, which makes it… | CVE-2011-3207 | Medium | config-change | manual-only | manual-only | No | 5.0% |
+| FIND-121 | WEB-PORTAL-0106 | The ephemeral ECDH ciphersuite functionality in OpenSSL 0.9.8 through 0.9.8r and 1.0.x before 1.0.0e does not ensure… | CVE-2011-3210 | Medium | config-change | manual-only | manual-only | No | 4.6% |
+| FIND-124 | WEB-PORTAL-0109 | The SSL 3.0 implementation in OpenSSL before 0.9.8s and 1.x before 1.0.0f does not properly initialize data structures… | CVE-2011-4576 | Medium | config-change | manual-only | manual-only | No | 14.5% |
+| FIND-126 | WEB-PORTAL-0111 | The Server Gated Cryptography (SGC) implementation in OpenSSL before 0.9.8s and 1.x before 1.0.0f does not properly… | CVE-2011-4619 | Medium | config-change | manual-only | manual-only | No | 16.6% |
+| FIND-127 | WEB-PORTAL-0112 | The GOST ENGINE in OpenSSL before 1.0.0f does not properly handle invalid parameters for the GOST block cipher, which… | CVE-2012-0027 | Medium | config-change | manual-only | manual-only | No | 5.0% |
+| FIND-128 | WEB-PORTAL-0113 | OpenSSL 0.9.8s and 1.0.0f does not properly support DTLS applications, which allows remote attackers to cause a denial… | CVE-2012-0050 | Medium | config-change | manual-only | manual-only | No | 13.9% |
+| FIND-130 | WEB-PORTAL-0115 | The mime_hdr_cmp function in crypto/asn1/asn_mime.c in OpenSSL 0.9.8t and earlier allows remote attackers to cause a… | CVE-2006-7250 | Medium | config-change | manual-only | manual-only | No | 7.0% |
+| FIND-131 | WEB-PORTAL-0116 | The implementation of Cryptographic Message Syntax (CMS) and PKCS #7 in OpenSSL before 0.9.8u and 1.x before 1.0.0h… | CVE-2012-0884 | Medium | config-change | manual-only | manual-only | No | 12.9% |
+| FIND-132 | WEB-PORTAL-0117 | The mime_param_cmp function in crypto/asn1/asn_mime.c in OpenSSL before 0.9.8u and 1.x before 1.0.0h allows remote… | CVE-2012-1165 | Medium | config-change | manual-only | manual-only | No | 6.8% |
+| FIND-139 | WEB-PORTAL-0124 | The openssl_encrypt function in ext/openssl/openssl.c in PHP 5.3.9 through 5.3.13 does not initialize a certain… | CVE-2012-6113 | Medium | config-change | manual-only | manual-only | No | 2.5% |
+| FIND-140 | WEB-PORTAL-0125 | crypto/evp/e_aes_cbc_hmac_sha1.c in the AES-NI functionality in the TLS 1.1 and 1.2 implementations in OpenSSL 1.0.1… | CVE-2012-2686 | Medium | config-change | manual-only | manual-only | No | 39.6% |
+| FIND-141 | WEB-PORTAL-0126 | OpenSSL before 0.9.8y, 1.0.0 before 1.0.0k, and 1.0.1 before 1.0.1d does not properly perform signature verification… | CVE-2013-0166 | Medium | config-change | manual-only | manual-only | No | 19.7% |
+| FIND-168 | WEB-PORTAL-0153 | Double free vulnerability in d1_both.c in the DTLS implementation in OpenSSL 0.9.8 before 0.9.8zb, 1.0.0 before… | CVE-2014-3505 | Medium | config-change | manual-only | manual-only | No | 43.3% |
+| FIND-169 | WEB-PORTAL-0154 | d1_both.c in the DTLS implementation in OpenSSL 0.9.8 before 0.9.8zb, 1.0.0 before 1.0.0n, and 1.0.1 before 1.0.1i… | CVE-2014-3506 | Medium | config-change | manual-only | manual-only | No | 44.2% |
+| FIND-182 | WEB-PORTAL-0167 | The ssl23_get_client_hello function in s23_srvr.c in OpenSSL 0.9.8zc, 1.0.0o, and 1.0.1j does not properly handle… | CVE-2014-3569 | Medium | config-change | manual-only | manual-only | No | 20.6% |
+| FIND-183 | WEB-PORTAL-0168 | The BN_sqr implementation in OpenSSL before 0.9.8zd, 1.0.0 before 1.0.0p, and 1.0.1 before 1.0.1k does not properly… | CVE-2014-3570 | Medium | config-change | manual-only | manual-only | No | 21.9% |
+| FIND-184 | WEB-PORTAL-0169 | OpenSSL before 0.9.8zd, 1.0.0 before 1.0.0p, and 1.0.1 before 1.0.1k allows remote attackers to cause a denial of… | CVE-2014-3571 | Medium | config-change | manual-only | manual-only | No | 23.0% |
+| FIND-185 | WEB-PORTAL-0170 | The ssl3_get_key_exchange function in s3_clnt.c in OpenSSL before 0.9.8zd, 1.0.0 before 1.0.0p, and 1.0.1 before… | CVE-2014-3572 | Medium | config-change | manual-only | manual-only | No | 6.6% |
+| FIND-186 | WEB-PORTAL-0171 | OpenSSL before 0.9.8zd, 1.0.0 before 1.0.0p, and 1.0.1 before 1.0.1k does not enforce certain constraints on… | CVE-2014-8275 | Medium | config-change | manual-only | manual-only | No | 16.5% |
+| FIND-188 | WEB-PORTAL-0173 | The ssl3_get_cert_verify function in s3_srvr.c in OpenSSL 1.0.0 before 1.0.0p and 1.0.1 before 1.0.1k accepts client… | CVE-2015-0205 | Medium | config-change | manual-only | manual-only | No | 24.6% |
+| FIND-190 | WEB-PORTAL-0175 | The dtls1_listen function in d1_lib.c in OpenSSL 1.0.2 before 1.0.2a does not properly isolate the state information… | CVE-2015-0207 | Medium | config-change | manual-only | manual-only | No | 7.3% |
+| FIND-194 | WEB-PORTAL-0179 | The ASN1_TYPE_cmp function in crypto/asn1/a_type.c in OpenSSL before 0.9.8zf, 1.0.0 before 1.0.0r, 1.0.1 before… | CVE-2015-0286 | Medium | config-change | manual-only | manual-only | No | 20.7% |
+| FIND-195 | WEB-PORTAL-0180 | The ASN1_item_ex_d2i function in crypto/asn1/tasn_dec.c in OpenSSL before 0.9.8zf, 1.0.0 before 1.0.0r, 1.0.1 before… | CVE-2015-0287 | Medium | config-change | manual-only | manual-only | No | 8.4% |
+| FIND-196 | WEB-PORTAL-0181 | The X509_to_X509_REQ function in crypto/x509/x509_req.c in OpenSSL before 0.9.8zf, 1.0.0 before 1.0.0r, 1.0.1 before… | CVE-2015-0288 | Medium | config-change | manual-only | manual-only | No | 8.5% |
+| FIND-197 | WEB-PORTAL-0182 | The PKCS#7 implementation in OpenSSL before 0.9.8zf, 1.0.0 before 1.0.0r, 1.0.1 before 1.0.1m, and 1.0.2 before 1.0.2a… | CVE-2015-0289 | Medium | config-change | manual-only | manual-only | No | 8.4% |
+| FIND-198 | WEB-PORTAL-0183 | The multi-block feature in the ssl3_write_bytes function in s3_pkt.c in OpenSSL 1.0.2 before 1.0.2a on 64-bit x86… | CVE-2015-0290 | Medium | config-change | manual-only | manual-only | No | 7.3% |
+| FIND-199 | WEB-PORTAL-0184 | The sigalgs implementation in t1_lib.c in OpenSSL 1.0.2 before 1.0.2a allows remote attackers to cause a denial of… | CVE-2015-0291 | Medium | config-change | manual-only | manual-only | No | 8.1% |
+| FIND-201 | WEB-PORTAL-0186 | The SSLv2 implementation in OpenSSL before 0.9.8zf, 1.0.0 before 1.0.0r, 1.0.1 before 1.0.1m, and 1.0.2 before 1.0.2a… | CVE-2015-0293 | Medium | config-change | manual-only | manual-only | No | 21.2% |
+| FIND-206 | WEB-PORTAL-0191 | The PKCS7_dataDecodefunction in crypto/pkcs7/pk7_doit.c in OpenSSL before 0.9.8zg, 1.0.0 before 1.0.0s, 1.0.1 before… | CVE-2015-1790 | Medium | config-change | manual-only | manual-only | No | 22.9% |
+| FIND-208 | WEB-PORTAL-0193 | The do_free_upto function in crypto/cms/cms_smime.c in OpenSSL before 0.9.8zg, 1.0.0 before 1.0.0s, 1.0.1 before… | CVE-2015-1792 | Medium | config-change | manual-only | manual-only | No | 22.5% |
+| FIND-212 | WEB-PORTAL-0197 | The ssl3_get_key_exchange function in ssl/s3_clnt.c in OpenSSL 1.0.2 before 1.0.2e allows remote servers to cause a… | CVE-2015-1794 | Medium | config-change | manual-only | manual-only | No | 5.0% |
+| FIND-345 | CLOUD-0030 | In Kubernetes v1.8.x-v1.14.x, schema info is cached by kubectl in the location specified by --cache-dir (defaulting to… | CVE-2019-11244 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-374 | CLOUD-0059 | A security flaw was found in Ansible Engine, all Ansible 2.7.x versions prior to 2.7.17, all Ansible 2.8.x versions… | CVE-2020-1753 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-433 | CLOUD-0118 | Istio is an open platform to connect, manage, and secure microservices. In versions 1.12.0 and 1.12.1 Istio is… | CVE-2022-21701 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-485 | CLOUD-0170 | Flux is an open and extensible continuous delivery solution for Kubernetes. Versions prior to 0.35.0 are subject to a… | CVE-2022-39272 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-544 | CLOUD-0229 | Argo CD is a declarative continuous deployment framework for Kubernetes. In Argo CD versions prior to 2.3 (starting at… | CVE-2023-40026 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-920 | NET-RTSW-0005 | The "established" keyword in some Cisco IOS software allowed an attacker to bypass filtering. | CVE-1999-0162 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-921 | NET-RTSW-0006 | Cisco IOS 12.0 and other versions can be crashed by malicious UDP packets to the syslog port. | CVE-1999-0063 | Medium | firmware-update | manual-only | manual-only | No | 8.2% |
+| FIND-922 | NET-RTSW-0007 | Denial of service in Cisco IOS web server allows attackers to reboot the router using a long URL. | CVE-1999-0222 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-923 | NET-RTSW-0008 | In Cisco routers under some versions of IOS 12.0 running NAT, some packets may not be filtered by input access list… | CVE-1999-0445 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-928 | NET-RTSW-0013 | Cisco IOS 11.x and 12.x allows remote attackers to cause a denial of service by sending the ENVIRON option to the… | CVE-2000-0268 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-930 | NET-RTSW-0015 | Cisco Gigabit Switch Routers (GSR) with Fast Ethernet / Gigabit Ethernet cards, from IOS versions 11.2(15)GS1A up to… | CVE-2000-0700 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-931 | NET-RTSW-0016 | The HTTP server in Cisco IOS 12.0 through 12.1 allows local users to cause a denial of service (crash and reload) via… | CVE-2000-0984 | Medium | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-932 | NET-RTSW-0017 | Cisco IOS 12.0(5)XU through 12.1(2) allows remote attackers to read system administration and topology information via… | CVE-2001-1434 | Medium | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-936 | NET-RTSW-0021 | PPTP implementation in Cisco IOS 12.1 and 12.2 allows remote attackers to cause a denial of service (crash) via a… | CVE-2001-1183 | Medium | firmware-update | manual-only | manual-only | No | 3.8% |
+| FIND-938 | NET-RTSW-0023 | Cisco routers and switches running IOS 12.0 through 12.2.1 allows a remote attacker to cause a denial of service via a… | CVE-2001-1097 | Medium | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-939 | NET-RTSW-0024 | Cisco IOS 11.x and 12.0 with ATM support allows attackers to cause a denial of service via the undocumented Interim… | CVE-2001-0711 | Medium | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-940 | NET-RTSW-0025 | Cisco devices IOS 12.0 and earlier allow a remote attacker to cause a crash, or bad route updates, via malformed BGP… | CVE-2001-0650 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-941 | NET-RTSW-0026 | Cisco IOS 12.2 and earlier running Cisco Discovery Protocol (CDP) allows remote attackers to cause a denial of service… | CVE-2001-1071 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-942 | NET-RTSW-0027 | Cisco IOS 12.1(2)T, 12.1(3)T allow remote attackers to cause a denial of service (reload) via a connection to TCP… | CVE-2001-0750 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-944 | NET-RTSW-0029 | Cisco 12000 with IOS 12.0 and line cards based on Engine 2 and earlier allows remote attackers to cause a denial of… | CVE-2001-0861 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-946 | NET-RTSW-0031 | Cisco 12000 with IOS 12.0 and line cards based on Engine 2 does not handle the "fragment" keyword in a compiled ACL… | CVE-2001-0863 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-951 | NET-RTSW-0036 | Cisco IOS 11.1CC through 12.2 with Cisco Express Forwarding (CEF) enabled includes portions of previous packets in the… | CVE-2002-0339 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-955 | NET-RTSW-0040 | Cisco IOS 11.1 through 12.2, when HSRP support is not enabled, allows remote attackers to cause a denial of service… | CVE-2002-1768 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-956 | NET-RTSW-0041 | Cisco 2611 router running IOS 12.1(6.5), possibly an interim release, allows remote attackers to cause a denial of… | CVE-2002-2052 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-957 | NET-RTSW-0042 | The design of the Hot Standby Routing Protocol (HSRP), as implemented on Cisco IOS 12.1, when using IRPAS, allows… | CVE-2002-2053 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-963 | NET-RTSW-0048 | The Service Assurance Agent (SAA) in Cisco IOS 12.0 through 12.2, aka Response Time Reporter (RTR), allows remote… | CVE-2003-0305 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-965 | NET-RTSW-0050 | The web server for Cisco Aironet AP1x00 Series Wireless devices running certain versions of IOS 12.2 allow remote… | CVE-2003-0511 | Medium | firmware-update | manual-only | manual-only | No | 9.0% |
+| FIND-966 | NET-RTSW-0051 | Cisco IOS 12.2 and earlier generates a "% Login invalid" message instead of prompting for a password when an invalid… | CVE-2003-0512 | Medium | firmware-update | manual-only | manual-only | No | 3.2% |
+| FIND-971 | NET-RTSW-0056 | IP Security VPN Services Module (VPNSM) in Cisco Catalyst 6500 Series Switch and the Cisco 7600 Series Internet… | CVE-2004-0710 | Medium | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-973 | NET-RTSW-0058 | Cisco IOS 12.0S, 12.2, and 12.3, with Open Shortest Path First (OSPF) enabled, allows remote attackers to cause a… | CVE-2004-1454 | Medium | firmware-update | manual-only | manual-only | No | 3.4% |
+| FIND-975 | NET-RTSW-0060 | Cisco VACM (View-based Access Control MIB) for Catalyst Operating Software (CatOS) 5.5 and 6.1 and IOS 12.0 and 12.1… | CVE-2004-1775 | Medium | firmware-update | manual-only | manual-only | No | 1.7% |
+| FIND-976 | NET-RTSW-0061 | Cisco IOS 2.2(18)EW, 12.2(18)EWA, 12.2(14)SZ, 12.2(18)S, 12.2(18)SE, 12.2(18)SV, 12.2(18)SW, and other versions… | CVE-2004-1111 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-977 | NET-RTSW-0062 | Cisco IOS 12.1YD, 12.2T, 12.3 and 12.3T, when configured for the IOS Telephony Service (ITS), CallManager Express… | CVE-2005-0186 | Medium | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-978 | NET-RTSW-0063 | Cisco IOS 12.0S through 12.3YH allows remote attackers to cause a denial of service (device restart) via a crafted… | CVE-2005-0195 | Medium | firmware-update | manual-only | manual-only | No | 3.7% |
+| FIND-979 | NET-RTSW-0064 | Cisco IOS 12.0 through 12.3YL, with BGP enabled and running the bgp log-neighbor-changes command, allows remote… | CVE-2005-0196 | Medium | firmware-update | manual-only | manual-only | No | 4.1% |
+| FIND-998 | NET-RTSW-0083 | Cisco IOS XR, when configured for Multi Protocol Label Switching (MPLS) and running on Cisco CRS-1 or Cisco 12000… | CVE-2006-1927 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-999 | NET-RTSW-0084 | Cisco IOS XR, when configured for Multi Protocol Label Switching (MPLS) and running on Cisco CRS-1 routers, allows… | CVE-2006-1928 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1002 | NET-RTSW-0087 | Internet Key Exchange (IKE) version 1 protocol, as implemented on Cisco IOS, VPN 3000 Concentrators, and PIX… | CVE-2006-3906 | Medium | firmware-update | manual-only | manual-only | No | 6.7% |
+| FIND-1003 | NET-RTSW-0088 | Unspecified vulnerability in Cisco IOS CallManager Express (CME) allows remote attackers to gain sensitive information… | CVE-2006-4032 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1009 | NET-RTSW-0094 | The Data-link Switching (DLSw) feature in Cisco IOS 11.0 through 12.4 allows remote attackers to cause a denial of… | CVE-2007-0199 | Medium | firmware-update | manual-only | manual-only | No | 2.5% |
+| FIND-1029 | NET-RTSW-0114 | Unspecified vulnerability in Cisco IOS 12.0 through 12.4 allows context-dependent attackers to cause a denial of… | CVE-2007-4430 | Medium | firmware-update | manual-only | manual-only | No | 13.3% |
+| FIND-1035 | NET-RTSW-0120 | Unspecified vulnerability in Cisco IOS allows remote attackers to obtain the IOS version via unspecified vectors… | CVE-2007-5550 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1121 | NET-RTSW-0206 | Memory leak in the gk_circuit_info_do_in_acf function in the H.323 implementation in Cisco IOS before 15.0(1)XA allows… | CVE-2009-5039 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1127 | NET-RTSW-0212 | STCAPP (aka the SCCP telephony control application) on Cisco IOS before 15.0(1)XA1 does not properly handle multiple… | CVE-2010-4687 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1135 | NET-RTSW-0220 | The Neighbor Discovery (ND) protocol implementation in Cisco IOS on unspecified switches allows remote attackers to… | CVE-2011-2395 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1161 | NET-RTSW-0246 | The ipv6 component in Cisco IOS before 15.1(4)M1.3 allows remote attackers to conduct fingerprinting attacks and… | CVE-2011-2059 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1182 | NET-RTSW-0267 | Cisco IOS 15.2S allows remote attackers to cause a denial of service (interface queue wedge) via malformed UDP traffic… | CVE-2011-4015 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1184 | NET-RTSW-0269 | Cisco IOS 12.2 through 12.4 and 15.0 does not recognize the vrf-also keyword during enforcement of access-class… | CVE-2012-0338 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1185 | NET-RTSW-0270 | Cisco IOS 12.2 through 12.4 and 15.0 does not recognize the vrf-also keyword during enforcement of access-class… | CVE-2012-0339 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-1192 | NET-RTSW-0277 | The MallocLite implementation in Cisco IOS 12.0, 12.2, 15.0, 15.1, and 15.2 allows remote attackers to cause a denial… | CVE-2012-1367 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1200 | NET-RTSW-0285 | The DMVPN tunnel implementation in Cisco IOS 15.2 allows remote attackers to cause a denial of service (persistent IKE… | CVE-2012-3915 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1213 | NET-RTSW-0298 | The traffic engineering (TE) processing subsystem in Cisco IOS XR allows remote attackers to cause a denial of service… | CVE-2013-1162 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1220 | FW-EDGE-0005 | The FTP proxy module in Fortinet FortiOS (FortiGate) before 2.80 MR12 and 3.0 MR2 allows remote attackers to bypass… | CVE-2006-3222 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1233 | FW-EDGE-0018 | The SSL-VPN feature in Fortinet FortiOS before 4.3.13 only checks the first byte of the TLS MAC in finished messages,… | CVE-2015-5965 | Medium | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1291 | FW-EDGE-0076 | An improper restriction of excessive authentication attempts vulnerability [CWE-307] in Fortinet FortiOS version 7.2.0… | CVE-2022-43947 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1328 | FW-EDGE-0113 | An insufficient verification of data authenticity vulnerability [CWE-345] in Fortinet FortiOS SSL-VPN tunnel mode… | CVE-2023-45586 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1336 | FW-EDGE-0121 | An origin validation error [CWE-346] vulnerability in Fortinet FortiOS IPSec VPN version 7.4.0 through 7.4.1 and… | CVE-2023-46715 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1398 | FW-EDGE-0183 | Palo Alto Networks PAN-OS 4.0.x before 4.0.9 and 4.1.x before 4.1.3 stores cleartext LDAP bind passwords in authd.log,… | CVE-2012-6596 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1516 | LNX-SRV-0001 | Windows NT 4.0 SP2 allows remote attackers to cause a denial of service (crash), possibly via malformed inputs or… | CVE-1999-1387 | Medium | patch | ansible-unix | auto-approvable | No | 20.8% |
+| FIND-1519 | LNX-SRV-0004 | Denial of service in Linux 2.2.x kernels via malformed ICMP packets containing unusual types, codes, and IP header… | CVE-1999-0804 | Medium | patch | ansible-unix | auto-approvable | No | 5.6% |
+| FIND-1525 | LNX-SRV-0010 | The knfsd NFS server in Linux kernel 2.2.x allows remote attackers to cause a denial of service via a negative size… | CVE-2000-0344 | Medium | patch | ansible-unix | auto-approvable | No | 1.9% |
+| FIND-1545 | LNX-SRV-0030 | Linux kernel 2.0, 2.2 and 2.4 with syncookies enabled allows remote attackers to bypass firewall rules by brute force… | CVE-2001-0851 | Medium | patch | ansible-unix | auto-approvable | No | 3.1% |
+| FIND-1546 | LNX-SRV-0031 | 2.4.3-12 kernel in Red Hat Linux 7.1 Korean installation program sets the setting default umask for init to 000, which… | CVE-2001-0859 | Medium | patch | ansible-unix | auto-approvable | No | 1.8% |
+| FIND-1549 | LNX-SRV-0034 | Linux kernel, and possibly other operating systems, allows remote attackers to read portions of memory via a series of… | CVE-2002-0046 | Medium | patch | ansible-unix | auto-approvable | No | 2.7% |
+| FIND-1553 | LNX-SRV-0038 | The UDP implementation in Linux 2.4.x kernels keeps the IP Identification field at 0 for all non-fragmented packets,… | CVE-2002-0510 | Medium | patch | ansible-unix | auto-approvable | No | 2.5% |
+| FIND-1568 | LNX-SRV-0053 | Unknown vulnerability in the TTY layer of the Linux kernel 2.4 allows attackers to cause a denial of service ("kernel… | CVE-2003-0247 | Medium | patch | ansible-unix | auto-approvable | No | 3.1% |
+| FIND-1570 | LNX-SRV-0055 | The TCP/IP fragment reassembly handling in the Linux kernel 2.4 allows remote attackers to cause a denial of service… | CVE-2003-0364 | Medium | patch | ansible-unix | auto-approvable | No | 3.5% |
+| FIND-1571 | LNX-SRV-0056 | The Linux 2.0 kernel IP stack does not properly calculate the size of an ICMP citation, which causes it to include… | CVE-2003-0418 | Medium | patch | ansible-unix | auto-approvable | No | 2.8% |
+| FIND-1572 | LNX-SRV-0057 | The kernel strncpy function in Linux 2.4 and 2.5 does not %NUL pad the buffer on architectures other than x86, as… | CVE-2003-0465 | Medium | patch | ansible-unix | auto-approvable | No | 1.9% |
+| FIND-1574 | LNX-SRV-0059 | Unknown vulnerability in ip_nat_sack_adjust of Netfilter in Linux kernels 2.4.20, and some 2.5.x, when… | CVE-2003-0467 | Medium | patch | ansible-unix | auto-approvable | No | 1.9% |
+| FIND-1575 | LNX-SRV-0060 | Integer signedness error in the decode_fh function of nfs3xdr.c in Linux kernel before 2.4.21 allows remote attackers… | CVE-2003-0619 | Medium | patch | ansible-unix | auto-approvable | No | 10.9% |
+| FIND-1581 | LNX-SRV-0066 | Multiple race conditions in Linux-VServer 1.22 with Linux kernel 2.4.23 and SMP allow local users to cause a denial of… | CVE-2003-1288 | Medium | patch | ansible-unix | auto-approvable | No | 1.9% |
+| FIND-1593 | LNX-SRV-0078 | The ext3 code in Linux 2.4.x before 2.4.26 does not properly initialize journal descriptor blocks, which causes an… | CVE-2004-0177 | Medium | patch | ansible-unix | auto-approvable | No | 2.6% |
+| FIND-1605 | LNX-SRV-0090 | The tcp_find_option function of the netfilter subsystem in Linux kernel 2.6, when using iptables and TCP options… | CVE-2004-0626 | Medium | patch | ansible-unix | auto-approvable | No | 2.8% |
+| FIND-1613 | LNX-SRV-0098 | The tcp_find_option function of the netfilter subsystem for IPv6 in the SUSE Linux 2.6.5 kernel with USAGI patches,… | CVE-2004-0592 | Medium | patch | ansible-unix | auto-approvable | No | 2.5% |
+| FIND-1637 | WIN-SRV-0002 | The WINS server in Microsoft Windows NT 4.0 before SP4 allows remote attackers to cause a denial of service (process… | CVE-1999-0288 | Medium | patch | ansible-windows | auto-approvable | No | 21.3% |
+| FIND-1638 | WIN-SRV-0003 | Microsoft Personal Web Server and FrontPage Personal Web Server in some Windows systems allows a remote attacker to… | CVE-1999-0386 | Medium | patch | ansible-windows | auto-approvable | No | 19.1% |
+| FIND-1642 | WIN-SRV-0007 | Buffer overflow in Microsoft FrontPage Server Extensions (PWS) 3.0.2.926 on Windows 95, and possibly other versions,… | CVE-1999-0681 | Medium | patch | ansible-windows | auto-approvable | No | 20.5% |
+| FIND-1643 | WIN-SRV-0008 | Microsoft Index Server 2.0 in Windows NT 4.0, and Indexing Service in Windows 2000, allows remote attackers to read… | CVE-2001-0245 | Medium | patch | ansible-windows | auto-approvable | No | 14.3% |
+| FIND-1645 | WIN-SRV-0010 | Vulnerabilities in RPC servers in (1) Microsoft Exchange Server 2000 and earlier, (2) Microsoft SQL Server 2000 and… | CVE-2001-0509 | Medium | patch | ansible-windows | auto-approvable | No | 17.0% |
+| FIND-1647 | WIN-SRV-0012 | The MSDTC (Microsoft Distributed Transaction Service Coordinator) for Microsoft Windows 2000, Microsoft IIS 5.0 and… | CVE-2002-0224 | Medium | patch | ansible-windows | auto-approvable | No | 20.9% |
+| FIND-1651 | WIN-SRV-0016 | The SMB signing capability in the Server Message Block (SMB) protocol in Microsoft Windows 2000 and Windows XP allows… | CVE-2002-1256 | Medium | patch | ansible-windows | auto-approvable | No | 5.4% |
+| FIND-1656 | WIN-SRV-0021 | The logging capability for unicast and multicast transmissions in the ISAPI extension for Microsoft Windows Media… | CVE-2003-0227 | Medium | patch | ansible-windows | auto-approvable | No | 34.4% |
+| FIND-1660 | WIN-SRV-0025 | Directory traversal vulnerability in the "Shell Folders" capability in Microsoft Windows Server 2003 allows remote… | CVE-2003-0839 | Medium | patch | ansible-windows | auto-approvable | No | 12.2% |
+| FIND-1664 | WIN-SRV-0029 | Buffer overflow in the COM Internet Services and in the RPC over HTTP Proxy components for Microsoft Windows NT Server… | CVE-2003-0807 | Medium | patch | ansible-windows | auto-approvable | No | 39.7% |
+| FIND-1670 | WIN-SRV-0035 | IDirectPlay4 Application Programming Interface (API) of Microsoft DirectPlay 7.0a thru 9.0b, as used in Windows Server… | CVE-2004-0202 | Medium | patch | ansible-windows | auto-approvable | No | 26.3% |
+| FIND-1692 | WIN-SRV-0057 | The Telnet client for Microsoft Windows XP, Windows Server 2003, and Windows Services for UNIX allows remote attackers… | CVE-2005-1205 | Medium | patch | ansible-windows | auto-approvable | No | 33.3% |
+| FIND-1702 | WIN-SRV-0067 | Distributed Transaction Controller in Microsoft Windows allows remote servers to cause a denial of service (MSDTC… | CVE-2005-1979 | Medium | patch | ansible-windows | auto-approvable | No | 32.8% |
+| FIND-1703 | WIN-SRV-0068 | Distributed Transaction Controller in Microsoft Windows allows remote servers to cause a denial of service (MSDTC… | CVE-2005-1980 | Medium | patch | ansible-windows | auto-approvable | No | 30.8% |
+| FIND-1710 | WIN-SRV-0075 | Microsoft Internet Explorer 6.0 on Windows NT 4.0 SP6a, Windows 2000 SP4, Windows XP SP1, Windows XP SP2, and Windows… | CVE-2005-4717 | Medium | patch | ansible-windows | auto-approvable | No | 16.2% |
+| FIND-1720 | WIN-SRV-0085 | Microsoft Distributed Transaction Coordinator (MSDTC) for Windows NT 4.0, 2000 SP4, XP SP1 and SP2, and Server 2003… | CVE-2006-1184 | Medium | patch | ansible-windows | auto-approvable | No | 29.8% |
+| FIND-1729 | WIN-SRV-0094 | Microsoft .NET framework 2.0 (ASP.NET) in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 up to SP1 allows… | CVE-2006-1300 | Medium | patch | ansible-windows | auto-approvable | No | 37.2% |
+| FIND-1731 | WIN-SRV-0096 | The Server Service (SRV.SYS driver) in Microsoft Windows 2000 SP4, XP SP1 and SP2, Server 2003 up to SP1, and other… | CVE-2006-1315 | Medium | patch | ansible-windows | auto-approvable | No | 49.0% |
+| FIND-1733 | WIN-SRV-0098 | Microsoft Windows NT 4.0, Windows 2000, Windows XP, and Windows Small Business Server 2003 allow remote attackers to… | CVE-2006-3880 | Medium | patch | ansible-windows | auto-approvable | No | 24.7% |
+| FIND-1745 | WIN-SRV-0110 | Unspecified vulnerability in the driver for the Client Service for NetWare (CSNW) in Microsoft Windows 2000 SP4, XP… | CVE-2006-4689 | Medium | patch | ansible-windows | auto-approvable | No | 34.5% |
+| FIND-1782 | WIN-SRV-0147 | Microsoft Windows 2000, XP, and Server 2003 allows remote attackers to cause a denial of service (cpu consumption) via… | CVE-2006-7210 | Medium | patch | ansible-windows | auto-approvable | No | 25.1% |
+| FIND-1787 | WIN-SRV-0152 | The LDAP service in Windows Active Directory in Microsoft Windows 2000 Server SP4 does not properly check "the number… | CVE-2007-3028 | Medium | patch | ansible-windows | auto-approvable | No | 39.7% |
+| FIND-1844 | APP-0029 | ParametersInterceptor in OpenSymphony XWork 2.0.x before 2.0.6 and 2.1.x before 2.1.2, as used in Apache Struts and… | CVE-2008-6504 | Medium | patch | manual-only | manual-only | No | 36.4% |
+| FIND-1852 | APP-0037 | XWork 2.2.1 in Apache Struts 2.2.1, and OpenSymphony XWork in OpenSymphony WebWork, allows remote attackers to obtain… | CVE-2011-2088 | Medium | patch | manual-only | manual-only | No | 6.1% |
+| FIND-1857 | APP-0042 | Apache Struts 2.3.1.2 and earlier, 2.3.19-2.3.23, provides interfaces that do not properly restrict access to… | CVE-2011-5057 | Medium | patch | manual-only | manual-only | No | 28.6% |
+| FIND-1862 | APP-0047 | Apache Struts 2.0.0 through 2.3.4 allows remote attackers to cause a denial of service (CPU consumption) via a long… | CVE-2012-4387 | Medium | patch | manual-only | manual-only | No | 8.1% |
+| FIND-1928 | APP-0113 | Algorithmic complexity vulnerability in the java.util.regex.Pattern.compile method in Sun Java Development Kit (JDK)… | CVE-2009-1190 | Medium | patch | manual-only | manual-only | No | 2.8% |
+| FIND-1937 | APP-0122 | Directory traversal vulnerability in Pivotal Spring Framework 3.0.4 through 3.2.x before 3.2.12, 4.0.x before 4.0.8,… | CVE-2014-3625 | Medium | patch | manual-only | manual-only | No | 10.1% |
+| FIND-1938 | APP-0123 | Directory traversal vulnerability in Pivotal Spring Framework 3.x before 3.2.9 and 4.0 before 4.0.5 allows remote… | CVE-2014-3578 | Medium | patch | manual-only | manual-only | No | 6.2% |
+| FIND-1939 | APP-0124 | The Java SockJS client in Pivotal Spring Framework 4.1.x before 4.1.5 generates predictable session ids, which allows… | CVE-2015-0201 | Medium | patch | manual-only | manual-only | No | 1.9% |
+| FIND-2013 | APP-0198 | The jQuery framework exchanges data using JavaScript Object Notation (JSON) without an associated protection scheme,… | CVE-2007-2379 | Medium | patch | manual-only | manual-only | No | 2.8% |
+| FIND-2025 | APP-0210 | jquery_ujs.js in jquery-rails before 3.1.3 and 4.x before 4.0.4 and rails.js in jquery-ujs before 1.0.4, as used with… | CVE-2015-1840 | Medium | patch | manual-only | manual-only | No | 4.4% |
+| FIND-55 | WEB-PORTAL-0040 | Unspecified vulnerability in OpenSSL before A.00.09.07l on HP-UX B.11.11, B.11.23, and B.11.31 allows local users to… | CVE-2007-5536 | Medium | config-change | manual-only | manual-only | No | 0.5% |
+| FIND-145 | WEB-PORTAL-0130 | strongSwan 4.3.5 through 5.0.3, when using the OpenSSL plugin for ECDSA signature verification, allows remote… | CVE-2013-2944 | Medium | config-change | manual-only | manual-only | No | 1.6% |
+| FIND-305 | WEB-PORTAL-0290 | An issue was discovered in tls_verify_crl in ProFTPD through 1.3.6b. A dereference of a NULL pointer may occur. This… | CVE-2019-19269 | Medium | config-change | manual-only | manual-only | No | 1.6% |
+| FIND-407 | CLOUD-0092 | Kubernetes Secrets Store CSI Driver Vault Plugin prior to v0.0.6, Azure Plugin prior to v0.0.10, and GCP Plugin prior… | CVE-2020-8567 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-608 | CLOUD-0293 | The Bare Metal Operator (BMO) implements a Kubernetes API for managing bare metal hosts in Metal3. The `BareMetalHost`… | CVE-2024-43803 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1237 | FW-EDGE-0022 | A read-only administrator on Fortinet devices with FortiOS 5.2.x before 5.2.10 GA and 5.4.x before 5.4.2 GA may have… | CVE-2016-7542 | Medium | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1300 | FW-EDGE-0085 | A loop with unreachable exit condition ('infinite loop') in Fortinet FortiOS version 7.2.0 through 7.2.4, FortiOS… | CVE-2023-33305 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1449 | FW-EDGE-0234 | A NULL pointer dereference vulnerability in Palo Alto Networks PAN-OS allows an authenticated administrator to send a… | CVE-2020-1995 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1471 | FW-EDGE-0256 | An OS command argument injection vulnerability in the Palo Alto Networks PAN-OS web interface enables an authenticated… | CVE-2021-3045 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1497 | FW-EDGE-0282 | A credential disclosure vulnerability in Palo Alto Networks PAN-OS software enables an authenticated read-only… | CVE-2023-6791 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1612 | LNX-SRV-0097 | The ELF loader in Linux kernel 2.4 before 2.4.25 allows local users to cause a denial of service (crash) via a crafted… | CVE-2004-0138 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1621 | LNX-SRV-0106 | Memory leak in direct-io.c in Linux kernel 2.6.x before 2.6.10 allows local users to cause a denial of service (memory… | CVE-2004-2660 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-366 | CLOUD-0051 | Improper input validation in Kubernetes CSI sidecar containers for external-provisioner (<v0.4.3, <v1.0.2, v1.1,… | CVE-2019-11255 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-372 | CLOUD-0057 | The Kubernetes kubectl cp command in versions 1.1-1.12, and versions prior to 1.13.11, 1.14.7, and 1.15.4 allows a… | CVE-2019-11251 | Medium | firmware-update | manual-only | manual-only | No | 2.6% |
+| FIND-516 | CLOUD-0201 | `cilium-cli` is the command line interface to install, manage, and troubleshoot Kubernetes clusters running Cilium.… | CVE-2023-28114 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-584 | CLOUD-0269 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. The API server does not enforce project… | CVE-2024-31990 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1238 | FW-EDGE-0023 | A stored XSS (Cross-Site-Scripting) vulnerability in Fortinet FortiOS allows attackers to execute unauthorized code or… | CVE-2017-3128 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1316 | FW-EDGE-0101 | An improper certificate validation vulnerability in Fortinet FortiOS 7.4.0 through 7.4.1, FortiOS 7.2.0 through 7.2.6,… | CVE-2023-47537 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1832 | APP-0017 | The Socket Appender in Apache Log4j Core versions 2.0-beta9 through 2.25.2 does not perform TLS hostname verification… | CVE-2025-68161 | Medium | patch | manual-only | manual-only | No | 0.8% |
+| FIND-1995 | APP-0180 | IDs for WebSocket sessions in the spring-websocket module are not cryptographically unpredictable, which may be… | CVE-2026-41838 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2004 | APP-0189 | Spring WebFlux applications may be vulnerable to a security bypass when using the Kotlin Router DSL. Affected… | CVE-2026-41847 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-298 | WEB-PORTAL-0283 | Normally in OpenSSL EC groups always have a co-factor present and this is used in side channel resistant code paths.… | CVE-2019-1547 | Medium | config-change | manual-only | manual-only | No | 1.2% |
+| FIND-396 | CLOUD-0081 | A vulnerability in the internal Kubernetes agent api in GitLab CE/EE version 13.3 and above allows unauthorized access… | CVE-2020-13358 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-399 | CLOUD-0084 | In Kubernetes clusters using VSphere as a cloud provider, with a logging level set to 4 or above, VSphere cloud… | CVE-2020-8563 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-400 | CLOUD-0085 | In Kubernetes clusters using a logging level of at least 4, processing a malformed docker config file will result in… | CVE-2020-8564 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-401 | CLOUD-0086 | In Kubernetes, if the logging level is set to at least 9, authorization and bearer tokens will be written to log… | CVE-2020-8565 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-402 | CLOUD-0087 | In Kubernetes clusters using Ceph RBD as a storage provisioner, with logging level of at least 4, Ceph RBD admin… | CVE-2020-8566 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-537 | CLOUD-0222 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All versions of Argo CD starting from… | CVE-2023-40025 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-603 | CLOUD-0288 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Argo CD has a Web-based terminal that allows… | CVE-2024-41666 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1362 | FW-EDGE-0147 | An Improper Neutralization of Input During Web Page Generation vulnerability [CWE-79] vulnerability in Fortinet… | CVE-2025-31366 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-525 | CLOUD-0210 | Kyverno is a policy engine designed for Kubernetes. Kyverno seccomp control can be circumvented. Users of the… | CVE-2023-33191 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-996 | NET-RTSW-0081 | The TCL shell in Cisco IOS 12.2(14)S before 12.2(14)S16, 12.2(18)S before 12.2(18)S11, and certain other releases… | CVE-2006-0485 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-997 | NET-RTSW-0082 | Certain Cisco IOS releases in 12.2S based trains with maintenance release number 25 and later, 12.3T based trains, and… | CVE-2006-0486 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1522 | LNX-SRV-0007 | Linux kernel before 2.3.18 or 2.2.13pre15, with SLIP and PPP options, allows local unprivileged users to forge IP… | CVE-1999-1341 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1541 | LNX-SRV-0026 | Linux kernel 2.4 and 2.2 allows local users to read kernel memory and possibly gain privileges via a negative argument… | CVE-2001-0316 | Medium | patch | ansible-unix | auto-approvable | No | 0.8% |
+| FIND-1559 | LNX-SRV-0044 | grsecurity 1.9.4 for Linux kernel 2.4.18 allows local users to bypass read-only permissions by using mmap to directly… | CVE-2002-1826 | Medium | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1573 | LNX-SRV-0058 | The RPC code in Linux kernel 2.4 sets the reuse flag when sockets are created, which could allow local users to bind… | CVE-2003-0464 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1582 | LNX-SRV-0067 | Real time clock (RTC) routines in Linux kernel 2.4.23 and earlier do not properly initialize their structures, which… | CVE-2003-0984 | Medium | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1586 | LNX-SRV-0071 | Unknown vulnerability in Linux kernel before 2.4.22 allows local users to gain privileges, related to "R128 DRI limits… | CVE-2004-0003 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1592 | LNX-SRV-0077 | Buffer overflow in the ISO9660 file system component for Linux kernel 2.4.x, 2.5.x and 2.6.x, allows local users with… | CVE-2004-0109 | Medium | patch | ansible-unix | auto-approvable | No | 0.6% |
+| FIND-1600 | LNX-SRV-0085 | The framebuffer driver in Linux kernel 2.6.x does not properly use the fb_copy_cmap function, with unknown impact. | CVE-2004-0229 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1609 | LNX-SRV-0094 | Certain USB drivers in the Linux 2.4 kernel use the copy_to_user function on uninitialized structures, which could… | CVE-2004-0685 | Medium | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1614 | LNX-SRV-0099 | Unspecified vulnerability in the ptrace MIPS assembly code in Linux kernel 2.4 before 2.4.17 allows local users to… | CVE-2004-0997 | Medium | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1701 | WIN-SRV-0066 | CHKDSK in Microsoft Windows 2000 before Update Rollup 1 for SP4, Windows XP, and Windows Server 2003, when running in… | CVE-2005-3177 | Medium | patch | ansible-windows | auto-approvable | No | 1.4% |
+| FIND-1757 | WIN-SRV-0122 | The ReadDirectoryChangesW API function on Microsoft Windows 2000, XP, Server 2003, and Vista does not check… | CVE-2007-0843 | Medium | patch | ansible-windows | auto-approvable | No | 3.3% |
+| FIND-552 | CLOUD-0237 | The affected versions of MongoDB Atlas Kubernetes Operator may print sensitive information like GCP service account… | CVE-2023-0436 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-356 | CLOUD-0041 | On version 1.9.0, If DEBUG logging is enable, F5 Container Ingress Service (CIS) for Kubernetes and Red Hat OpenShift… | CVE-2019-6648 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-514 | CLOUD-0199 | Cilium is a networking, observability, and security solution with an eBPF-based dataplane. Prior to versions 1.11.15,… | CVE-2023-27593 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-601 | CLOUD-0286 | The ops library is a Python framework for developing and testing Kubernetes and machine charms. The issue here is that… | CVE-2024-41129 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1468 | FW-EDGE-0253 | An information exposure through log file vulnerability exists in Palo Alto Networks PAN-OS software where… | CVE-2021-3032 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1469 | FW-EDGE-0254 | An information exposure through log file vulnerability exists in Palo Alto Networks PAN-OS software where secrets in… | CVE-2021-3036 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1492 | FW-EDGE-0277 | A file disclosure vulnerability in Palo Alto Networks PAN-OS software enables an authenticated read-write… | CVE-2023-0008 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1622 | LNX-SRV-0107 | Multiple integer overflows in Sbus PROM driver (drivers/sbus/char/openprom.c) for the Linux kernel 2.4.x up to 2.4.27,… | CVE-2004-2731 | Medium | patch | ansible-unix | auto-approvable | No | 0.6% |
+| FIND-46 | WEB-PORTAL-0031 | OpenSSL before 0.9.7, 0.9.7 before 0.9.7k, and 0.9.8 before 0.9.8c, when using an RSA key with exponent 3, removes… | CVE-2006-4339 | Medium | config-change | manual-only | manual-only | No | 5.0% |
+| FIND-50 | WEB-PORTAL-0035 | The get_server_hello function in the SSLv2 client code in OpenSSL 0.9.7 before 0.9.7l, 0.9.8 before 0.9.8d, and… | CVE-2006-4343 | Medium | config-change | manual-only | manual-only | No | 17.4% |
+| FIND-58 | WEB-PORTAL-0043 | Double free vulnerability in OpenSSL 0.9.8f and 0.9.8g, when the TLS server name extensions are enabled, allows remote… | CVE-2008-0891 | Medium | config-change | manual-only | manual-only | No | 4.6% |
+| FIND-59 | WEB-PORTAL-0044 | OpenSSL 0.9.8f and 0.9.8g allows remote attackers to cause a denial of service (crash) via a TLS handshake that omits… | CVE-2008-1672 | Medium | config-change | manual-only | manual-only | No | 5.0% |
+| FIND-69 | WEB-PORTAL-0054 | Lasso 2.2.1 and earlier does not properly check the return value from the OpenSSL DSA_verify function, which allows… | CVE-2009-0050 | Medium | config-change | manual-only | manual-only | No | 1.3% |
+| FIND-96 | WEB-PORTAL-0081 | libraries/libldap/tls_o.c in OpenLDAP 2.2 and 2.4, and possibly other versions, when OpenSSL is used, does not… | CVE-2009-3767 | Medium | config-change | manual-only | manual-only | No | 3.1% |
+| FIND-104 | WEB-PORTAL-0089 | The kssl_keytab_is_available function in ssl/kssl.c in OpenSSL before 0.9.8n, when Kerberos is enabled but Kerberos… | CVE-2010-0433 | Medium | config-change | manual-only | manual-only | No | 7.9% |
+| FIND-109 | WEB-PORTAL-0094 | Double free vulnerability in the ssl3_get_key_exchange function in the OpenSSL client (ssl/s3_clnt.c) in OpenSSL… | CVE-2010-2939 | Medium | config-change | manual-only | manual-only | No | 10.0% |
+| FIND-112 | WEB-PORTAL-0097 | OpenSSL before 0.9.8q, and 1.0.x before 1.0.0c, when SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG is enabled, does not… | CVE-2010-4180 | Medium | config-change | manual-only | manual-only | No | 9.5% |
+| FIND-114 | WEB-PORTAL-0099 | OpenSSL before 0.9.8j, when SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG is enabled, does not prevent modification of the… | CVE-2008-7270 | Medium | config-change | manual-only | manual-only | No | 3.4% |
+| FIND-118 | WEB-PORTAL-0103 | Multiple memory leaks in the OpenSSL extension in PHP before 5.3.6 might allow remote attackers to cause a denial of… | CVE-2011-1468 | Medium | config-change | manual-only | manual-only | No | 13.3% |
+| FIND-122 | WEB-PORTAL-0107 | The DTLS implementation in OpenSSL before 0.9.8s and 1.x before 1.0.0f performs a MAC check only if certain padding is… | CVE-2011-4108 | Medium | config-change | manual-only | manual-only | No | 15.8% |
+| FIND-125 | WEB-PORTAL-0110 | OpenSSL before 0.9.8s and 1.x before 1.0.0f, when RFC 3779 support is enabled, allows remote attackers to cause a… | CVE-2011-4577 | Medium | config-change | manual-only | manual-only | No | 9.3% |
+| FIND-143 | WEB-PORTAL-0128 | The QSslSocket::sslErrors function in Qt before 4.6.5, 4.7.x before 4.7.6, 4.8.x before 4.8.5, when using certain… | CVE-2012-6093 | Medium | config-change | manual-only | manual-only | No | 1.8% |
+| FIND-147 | WEB-PORTAL-0132 | The openssl_x509_parse function in openssl.c in the OpenSSL module in PHP before 5.4.18 and 5.5.x before 5.5.2 does… | CVE-2013-4248 | Medium | config-change | manual-only | manual-only | No | 3.6% |
+| FIND-148 | WEB-PORTAL-0133 | cURL and libcurl 7.18.0 through 7.32.0, when built with OpenSSL, disables the certificate CN and SAN name field… | CVE-2013-4545 | Medium | config-change | manual-only | manual-only | No | 3.1% |
+| FIND-150 | WEB-PORTAL-0135 | The ssl_get_algorithm2 function in ssl/s3_lib.c in OpenSSL before 1.0.2 obtains a certain version number from an… | CVE-2013-6449 | Medium | config-change | manual-only | manual-only | No | 21.2% |
+| FIND-152 | WEB-PORTAL-0137 | The ssl3_take_mac function in ssl/s3_both.c in OpenSSL 1.0.1 before 1.0.1f allows remote TLS servers to cause a denial… | CVE-2013-4353 | Medium | config-change | manual-only | manual-only | No | 11.9% |
+| FIND-156 | WEB-PORTAL-0141 | stunnel before 5.00, when using fork threading, does not properly update the state of the OpenSSL pseudo-random number… | CVE-2014-0016 | Medium | config-change | manual-only | manual-only | No | 2.2% |
+| FIND-163 | WEB-PORTAL-0148 | The do_ssl3_write function in s3_pkt.c in OpenSSL 1.x through 1.0.1g, when SSL_MODE_RELEASE_BUFFERS is enabled, does… | CVE-2014-0198 | Medium | config-change | manual-only | manual-only | No | 43.8% |
+| FIND-171 | WEB-PORTAL-0156 | The OBJ_obj2txt function in crypto/objects/obj_dat.c in OpenSSL 0.9.8 before 0.9.8zb, 1.0.0 before 1.0.0n, and 1.0.1… | CVE-2014-3508 | Medium | config-change | manual-only | manual-only | No | 23.3% |
+| FIND-173 | WEB-PORTAL-0158 | The ssl3_send_client_key_exchange function in s3_clnt.c in OpenSSL 0.9.8 before 0.9.8zb, 1.0.0 before 1.0.0n, and… | CVE-2014-3510 | Medium | config-change | manual-only | manual-only | No | 16.9% |
+| FIND-174 | WEB-PORTAL-0159 | The ssl23_get_client_hello function in s23_srvr.c in OpenSSL 1.0.1 before 1.0.1i allows man-in-the-middle attackers to… | CVE-2014-3511 | Medium | config-change | manual-only | manual-only | No | 13.3% |
+| FIND-176 | WEB-PORTAL-0161 | The ssl_set_client_disabled function in t1_lib.c in OpenSSL 1.0.1 before 1.0.1i allows remote SSL servers to cause a… | CVE-2014-5139 | Medium | config-change | manual-only | manual-only | No | 20.0% |
+| FIND-180 | WEB-PORTAL-0165 | OpenSSL before 0.9.8zc, 1.0.0 before 1.0.0o, and 1.0.1 before 1.0.1j does not properly enforce the no-ssl3 build… | CVE-2014-3568 | Medium | config-change | manual-only | manual-only | No | 14.0% |
+| FIND-191 | WEB-PORTAL-0176 | The ASN.1 signature-verification implementation in the rsa_item_verify function in crypto/rsa/rsa_ameth.c in OpenSSL… | CVE-2015-0208 | Medium | config-change | manual-only | manual-only | No | 33.5% |
+| FIND-193 | WEB-PORTAL-0178 | The ssl3_client_hello function in s3_clnt.c in OpenSSL 1.0.2 before 1.0.2a does not ensure that the PRNG is seeded… | CVE-2015-0285 | Medium | config-change | manual-only | manual-only | No | 5.7% |
+| FIND-204 | WEB-PORTAL-0189 | The BN_GF2m_mod_inv function in crypto/bn/bn_gf2m.c in OpenSSL before 0.9.8s, 1.0.0 before 1.0.0e, 1.0.1 before… | CVE-2015-1788 | Medium | config-change | manual-only | manual-only | No | 23.2% |
+| FIND-209 | WEB-PORTAL-0194 | Race condition in a certain Red Hat patch to the PRNG lock implementation in the ssleay_rand_bytes function in… | CVE-2015-3216 | Medium | config-change | manual-only | manual-only | No | 4.3% |
+| FIND-216 | WEB-PORTAL-0201 | ssl/s3_clnt.c in OpenSSL 1.0.0 before 1.0.0t, 1.0.1 before 1.0.1p, and 1.0.2 before 1.0.2d, when used for a… | CVE-2015-3196 | Medium | config-change | manual-only | manual-only | No | 12.8% |
+| FIND-350 | CLOUD-0035 | Jenkins Google Kubernetes Engine Plugin 0.6.2 and earlier created a temporary file containing a temporary access token… | CVE-2019-10365 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-360 | CLOUD-0045 | A missing permission check in Jenkins Google Kubernetes Engine Plugin 0.7.0 and earlier allowed attackers with… | CVE-2019-10445 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-393 | CLOUD-0078 | Jenkins Kubernetes Plugin 1.27.3 and earlier allows low-privilege users to access possibly sensitive Jenkins… | CVE-2020-2307 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-394 | CLOUD-0079 | A missing permission check in Jenkins Kubernetes Plugin 1.27.3 and earlier allows attackers with Overall/Read… | CVE-2020-2308 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-395 | CLOUD-0080 | A missing/An incorrect permission check in Jenkins Kubernetes Plugin 1.27.3 and earlier allows attackers with… | CVE-2020-2309 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-409 | CLOUD-0094 | Kubernetes CSI snapshot-controller prior to v2.1.3 and v3.0.2 could panic when processing a VolumeSnapshot custom… | CVE-2020-8569 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-419 | CLOUD-0104 | Jenkins Kubernetes CLI Plugin 1.10.0 and earlier does not perform permission checks in several HTTP endpoints,… | CVE-2021-21661 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-455 | CLOUD-0140 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Argo CD starting with version 0.7.0 and… | CVE-2022-24904 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-456 | CLOUD-0141 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. A vulnerability was found in Argo CD prior… | CVE-2022-24905 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-465 | CLOUD-0150 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. All versions of Argo CD starting with v1.3.0… | CVE-2022-31036 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-504 | CLOUD-0189 | Helm is a tool that streamlines installing and managing Kubernetes applications.`getHostByName` is a Helm template… | CVE-2023-25165 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-519 | CLOUD-0204 | An issue was discovered in GitLab Community and Enterprise Edition before 11.1.7, 11.2.x before 11.2.4, and 11.3.x… | CVE-2018-17450 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-551 | CLOUD-0236 | capsule-proxy is a reverse proxy for Capsule kubernetes multi-tenancy framework. A bug in the RoleBinding reflector… | CVE-2023-46254 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-594 | CLOUD-0279 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. It’s possible for authenticated users to… | CVE-2024-36106 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-972 | NET-RTSW-0057 | Cisco IOS 11.1(x) through 11.3(x) and 12.0(x) through 12.2(x), when configured for BGP routing, allows remote… | CVE-2004-0589 | Medium | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1030 | NET-RTSW-0115 | Cisco IOS 12.2E, 12.2F, and 12.2S places a "no login" line into the VTY configuration when an administrator makes… | CVE-2007-4632 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1032 | NET-RTSW-0117 | Cross-site scripting (XSS) vulnerability in Cisco IOS allows remote attackers to inject arbitrary web script or HTML,… | CVE-2007-5547 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1065 | NET-RTSW-0150 | Multiple cross-site scripting (XSS) vulnerabilities in the HTTP server in Cisco IOS 11.0 through 12.4 allow remote… | CVE-2008-3821 | Medium | firmware-update | manual-only | manual-only | No | 5.4% |
+| FIND-1066 | NET-RTSW-0151 | Multiple cross-site scripting (XSS) vulnerabilities in the HTTP server in Cisco IOS 12.4(23) allow remote attackers to… | CVE-2009-0470 | Medium | firmware-update | manual-only | manual-only | No | 4.4% |
+| FIND-1084 | NET-RTSW-0169 | The Object Groups for Access Control Lists (ACLs) feature in Cisco IOS 12.2XNB, 12.2XNC, 12.2XND, 12.4MD, 12.4T,… | CVE-2009-2862 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1186 | NET-RTSW-0271 | The extended ACL functionality in Cisco IOS 12.2(58)SE2 and 15.0(1)SE discards all lines that end with a log or time… | CVE-2012-0362 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1196 | NET-RTSW-0281 | Cisco IOS 15.1 and 15.2, when the Multicast Music-on-Hold (MMoH) feature of Cisco Unified Communications Manager… | CVE-2012-1361 | Medium | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-1223 | FW-EDGE-0008 | Cross-site scripting (XSS) vulnerability in user/ldap_user/add in Fortinet FortiOS 5.0.3 allows remote attackers to… | CVE-2013-7181 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-1224 | FW-EDGE-0009 | Cross-site scripting (XSS) vulnerability in firewall/schedule/recurrdlg in Fortinet FortiOS 5.0.5 allows remote… | CVE-2013-7182 | Medium | firmware-update | manual-only | manual-only | No | 2.4% |
+| FIND-1229 | FW-EDGE-0014 | The CAPWAP DTLS protocol implementation in Fortinet FortiOS 5.0 Patch 7 build 4457 uses the same certificate and… | CVE-2015-1571 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1230 | FW-EDGE-0015 | Multiple cross-site scripting (XSS) vulnerabilities in Fortinet FortiOS 5.2.x before 5.2.3 allow remote attackers to… | CVE-2014-8616 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-1231 | FW-EDGE-0016 | Cross-site scripting (XSS) vulnerability in the sslvpn login page in Fortinet FortiOS 5.2.x before 5.2.3 allows remote… | CVE-2015-1880 | Medium | firmware-update | manual-only | manual-only | No | 14.3% |
+| FIND-1232 | FW-EDGE-0017 | Cross-site scripting (XSS) vulnerability in the DHCP Monitor page in the Web User Interface (WebUI) in Fortinet… | CVE-2015-3626 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-1276 | FW-EDGE-0061 | A server-generated error message containing sensitive information in Fortinet FortiOS 7.0.0 through 7.0.3, 6.4.0… | CVE-2021-43206 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1299 | FW-EDGE-0084 | A access of uninitialized pointer vulnerability [CWE-824] in Fortinet FortiProxy version 7.2.0 through 7.2.3 and… | CVE-2023-29178 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1352 | FW-EDGE-0137 | An Exposure of Sensitive Information to an Unauthorized Actor vulnerability [CWE-200] vulnerability in Fortinet… | CVE-2025-25250 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1358 | FW-EDGE-0143 | A insertion of sensitive information into sent data vulnerability in Fortinet FortiMail 7.4.0 through 7.4.2, FortiMail… | CVE-2024-47569 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1365 | FW-EDGE-0150 | An improper authorization vulnerability [CWE-285] vulnerability in Fortinet FortiOS 7.4.0 through 7.4.1, FortiOS 7.2.0… | CVE-2025-54822 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1385 | FW-EDGE-0170 | A buffer over-read vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4.0 through 7.4.8, FortiOS 7.2 all… | CVE-2025-43892 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1391 | FW-EDGE-0176 | A buffer over-read vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4.0 through 7.4.8, FortiOS 7.2 all… | CVE-2026-59840 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1392 | FW-EDGE-0177 | The web-based management UI in Palo Alto Networks PAN-OS 4.0.x before 4.0.8 allows remote attackers to obtain verbose… | CVE-2012-6590 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-1408 | FW-EDGE-0193 | The App-ID cache feature in Palo Alto Networks PAN-OS before 4.0.14, 4.1.x before 4.1.11, and 5.0.x before 5.0.2… | CVE-2013-5663 | Medium | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1409 | FW-EDGE-0194 | Cross-site scripting (XSS) vulnerability in the web-based device-management API browser in Palo Alto Networks PAN-OS… | CVE-2013-5664 | Medium | firmware-update | manual-only | manual-only | No | 2.3% |
+| FIND-1410 | FW-EDGE-0195 | Cross-site scripting (XSS) vulnerability in the web-based device management interface in Palo Alto Networks PAN-OS… | CVE-2014-3764 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-1422 | FW-EDGE-0207 | The Management Web Interface in Palo Alto Networks PAN-OS before 7.0.14 and 7.1.x before 7.1.9 allows remote attackers… | CVE-2017-7217 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1442 | FW-EDGE-0227 | The PAN-OS Management Web Interface in Palo Alto Networks PAN-OS 8.1.2 and earlier may allow an authenticated user to… | CVE-2018-10140 | Medium | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-1495 | FW-EDGE-0280 | A cross-site scripting (XSS) vulnerability in Palo Alto Networks PAN-OS software enables a malicious authenticated… | CVE-2023-6789 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1505 | FW-EDGE-0290 | A reflected cross-site scripting (XSS) vulnerability in the GlobalProtect portal feature of Palo Alto Networks PAN-OS… | CVE-2024-0010 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1506 | FW-EDGE-0291 | A reflected cross-site scripting (XSS) vulnerability in the Captive Portal feature of Palo Alto Networks PAN-OS… | CVE-2024-0011 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1507 | FW-EDGE-0292 | An improper authorization vulnerability in Palo Alto Networks Panorama software enables an authenticated read-only… | CVE-2024-2433 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1653 | WIN-SRV-0018 | Cross-site scripting (XSS) vulnerability in the default ASP pages on Microsoft Site Server 3.0 on Windows NT 4.0… | CVE-2002-2073 | Medium | patch | ansible-windows | auto-approvable | No | 12.9% |
+| FIND-1728 | WIN-SRV-0093 | Microsoft Windows 2000 SP4 does not properly validate an RPC server during mutual authentication over SSL, which… | CVE-2006-2380 | Medium | patch | ansible-windows | auto-approvable | No | 17.8% |
+| FIND-1740 | WIN-SRV-0105 | Cross-site scripting (XSS) vulnerability in the Indexing Service in Microsoft Windows 2000, XP, and Server 2003, when… | CVE-2006-0032 | Medium | patch | ansible-windows | auto-approvable | No | 23.2% |
+| FIND-1775 | WIN-SRV-0140 | Multiple cross-site scripting (XSS) vulnerabilities in Microsoft Windows SharePoint Services 3.0 for Windows Server… | CVE-2007-2581 | Medium | patch | ansible-windows | auto-approvable | No | 36.2% |
+| FIND-1839 | APP-0024 | Cross-site scripting (XSS) vulnerability in Apache Struts 1.2.7, and possibly other versions allows remote attackers… | CVE-2005-3745 | Medium | patch | manual-only | manual-only | No | 25.7% |
+| FIND-1842 | APP-0027 | Cross-site scripting (XSS) vulnerability in (1) LookupDispatchAction and possibly (2) DispatchAction and (3)… | CVE-2006-1548 | Medium | patch | manual-only | manual-only | No | 5.3% |
+| FIND-1846 | APP-0031 | Multiple cross-site scripting (XSS) vulnerabilities in Dojo 0.4.1 and 0.4.2, as used in Apache Struts and other… | CVE-2007-6726 | Medium | patch | manual-only | manual-only | No | 3.4% |
+| FIND-1847 | APP-0032 | Cross-site scripting (XSS) vulnerability in Apache Struts before 1.2.9-162.31.1 on SUSE Linux Enterprise (SLE) 11,… | CVE-2008-2025 | Medium | patch | manual-only | manual-only | No | 7.9% |
+| FIND-1848 | APP-0033 | Multiple cross-site scripting (XSS) vulnerabilities in Apache Struts 2.0.x before 2.0.11.1 and 2.1.x before 2.1.1… | CVE-2008-6682 | Medium | patch | manual-only | manual-only | No | 5.6% |
+| FIND-1851 | APP-0036 | Multiple cross-site scripting (XSS) vulnerabilities in component handlers in the javatemplates (aka Java Templates)… | CVE-2011-2087 | Medium | patch | manual-only | manual-only | No | 6.1% |
+| FIND-1859 | APP-0044 | Multiple cross-site scripting (XSS) vulnerabilities in Apache Struts 1.3.10 allow remote attackers to inject arbitrary… | CVE-2012-1007 | Medium | patch | manual-only | manual-only | No | 33.9% |
+| FIND-1872 | APP-0057 | Multiple cross-site scripting (XSS) vulnerabilities in Apache Struts 2.3.15.3 allow remote attackers to inject… | CVE-2013-6348 | Medium | patch | manual-only | manual-only | No | 6.1% |
+| FIND-1920 | APP-0105 | Allocation of Resources Without Limits or Throttling vulnerability in Apache Software Foundation Apache Struts.This… | CVE-2023-34149 | Medium | patch | manual-only | manual-only | No | 5.4% |
+| FIND-1921 | APP-0106 | Allocation of Resources Without Limits or Throttling vulnerability in Apache Software Foundation Apache Struts.This… | CVE-2023-34396 | Medium | patch | manual-only | manual-only | No | 5.5% |
+| FIND-1935 | APP-0120 | Cross-site scripting (XSS) vulnerability in web/servlet/tags/form/FormTag.java in Spring MVC in Spring Framework 3.0.0… | CVE-2014-1904 | Medium | patch | manual-only | manual-only | No | 3.3% |
+| FIND-1964 | APP-0149 | In Spring Framework versions 5.3.0 - 5.3.10, 5.2.0 - 5.2.17, and older unsupported versions, it is possible for a user… | CVE-2021-22096 | Medium | patch | manual-only | manual-only | No | 1.3% |
+| FIND-1965 | APP-0150 | In Spring Framework versions 5.3.0 - 5.3.13, 5.2.0 - 5.2.18, and older unsupported versions, it is possible for a user… | CVE-2021-22060 | Medium | patch | manual-only | manual-only | No | 0.9% |
+| FIND-1984 | APP-0169 | In Spring Framework versions 5.3.0 - 5.3.38 and older unsupported versions, it is possible for a user to provide a… | CVE-2024-38808 | Medium | patch | manual-only | manual-only | No | 0.6% |
+| FIND-1991 | APP-0176 | STOMP over WebSocket applications may be vulnerable to a security bypass that allows an attacker to send unauthorized… | CVE-2025-41254 | Medium | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2014 | APP-0199 | Cross-site scripting (XSS) vulnerability in jQuery before 1.6.3, when using location.hash to select elements, allows… | CVE-2011-4969 | Medium | patch | manual-only | manual-only | No | 19.2% |
+| FIND-2016 | APP-0201 | Multiple cross-site scripting (XSS) vulnerabilities in actionscript/Jplayer.as in the Flash SWF component… | CVE-2013-1942 | Medium | patch | manual-only | manual-only | No | 5.5% |
+| FIND-2017 | APP-0202 | Multiple cross-site scripting (XSS) vulnerabilities in actionscript/Jplayer.as in the Flash SWF component… | CVE-2013-2022 | Medium | patch | manual-only | manual-only | No | 2.7% |
+| FIND-2018 | APP-0203 | Cross-site scripting (XSS) vulnerability in ThemeBeans Blooog theme 1.1 for WordPress allows remote attackers to… | CVE-2013-7129 | Medium | patch | manual-only | manual-only | No | 2.0% |
+| FIND-2021 | APP-0206 | Cross-site scripting (XSS) vulnerability in cattranslate.php in the CatTranslate JQuery plugin in BlackCat CMS 1.0.3… | CVE-2014-5259 | Medium | patch | manual-only | manual-only | No | 2.0% |
+| FIND-2023 | APP-0208 | Cross-site scripting (XSS) vulnerability in the default content option in jquery.ui.tooltip.js in the Tooltip widget… | CVE-2012-6662 | Medium | patch | manual-only | manual-only | No | 6.5% |
+| FIND-2026 | APP-0211 | Cross-site scripting (XSS) vulnerability in jquery.lightbox-0.5.min.js in PHP Kobo Photo Gallery CMS for PC,… | CVE-2015-2982 | Medium | patch | manual-only | manual-only | No | 1.2% |
+| FIND-2027 | APP-0212 | Cross-site scripting (XSS) vulnerability in the jQuery engine in Microsoft Lync Server 2013 and Skype for Business… | CVE-2015-2531 | Medium | patch | manual-only | manual-only | No | 10.9% |
+| FIND-2028 | APP-0213 | Cross-site scripting (XSS) vulnerability in the DataTables plugin 1.10.8 and earlier for jQuery allows remote… | CVE-2015-6584 | Medium | patch | manual-only | manual-only | No | 2.7% |
+| FIND-2084 | APP-0269 | The Jquery Validation For Contact Form 7 WordPress plugin before 5.3 does not have CSRF check in place when updating… | CVE-2022-2144 | Medium | patch | manual-only | manual-only | No | 0.4% |
+| FIND-2098 | APP-0283 | Cross-Site Request Forgery (CSRF) vulnerability in Mark Stockton Quicksand Post Filter jQuery Plugin.This issue… | CVE-2024-24849 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-328 | CLOUD-0013 | In Kubernetes versions 1.5.x, 1.6.x, 1.7.x, 1.8.x, and prior to version 1.9.6, the kubectl cp command insecurely… | CVE-2018-1002100 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-466 | CLOUD-0151 | KubeEdge is built upon Kubernetes and extends native containerized application orchestration and device management to… | CVE-2022-31076 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1275 | FW-EDGE-0060 | A Hidden Functionality in Fortinet FortiOS 7.x before 7.0.1, FortiOS 6.4.x before 6.4.7 allows attacker to Execute… | CVE-2021-36169 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1283 | FW-EDGE-0068 | An improper privilege management vulnerability [CWE-269] in Fortinet FortiOS version 7.2.0 and before 7.0.7 and… | CVE-2022-38378 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1285 | FW-EDGE-0070 | A improper neutralization of crlf sequences in http headers ('http response splitting') in Fortinet FortiOS versions… | CVE-2022-42472 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1354 | FW-EDGE-0139 | A heap-based buffer overflow vulnerability in Fortinet FortiOS 7.6.0 through 7.6.2, FortiOS 7.4.0 through 7.4.7,… | CVE-2025-24477 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1377 | FW-EDGE-0162 | An Improper Verification of Source of a Communication Channel vulnerability [CWE-940] vulnerability in Fortinet… | CVE-2025-62439 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-1473 | FW-EDGE-0258 | A cryptographically weak pseudo-random number generator (PRNG) is used during authentication to the Palo Alto Networks… | CVE-2021-3047 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1996 | APP-0181 | A WebFlux application with a compromised subdomain (for example, compromised via cross-site scripting (XSS)) is… | CVE-2026-41839 | Medium | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2001 | APP-0186 | A Spring MVC or Spring WebFlux application which configures a mapping for "/**" where the view name is not explicitly… | CVE-2026-41844 | Medium | patch | manual-only | manual-only | No | 0.1% |
+| FIND-2011 | APP-0196 | Due to incorrect host parsing, applications that rely on UriComponentsBuilder to parse and validate an externally… | CVE-2026-41854 | Medium | patch | manual-only | manual-only | No | 0.1% |
+| FIND-424 | CLOUD-0109 | A security issue was discovered in Kubernetes where actors that control the responses of MutatingWebhookConfiguration… | CVE-2020-8561 | Medium | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-1292 | FW-EDGE-0077 | A url redirection to untrusted site ('open redirect') in Fortinet FortiOS version 7.2.0 through 7.2.3, FortiOS version… | CVE-2023-22641 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1303 | FW-EDGE-0088 | An insufficient session expiration in Fortinet FortiOS 7.0.0 - 7.0.12 and 7.2.0 - 7.2.4 allows an attacker to execute… | CVE-2023-28001 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1484 | FW-EDGE-0269 | Usage of a weak cryptographic algorithm in Palo Alto Networks PAN-OS software where the password hashes of… | CVE-2022-0022 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-1490 | FW-EDGE-0275 | A vulnerability in Palo Alto Networks PAN-OS software enables an authenticated administrator to expose the plaintext… | CVE-2023-0005 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1513 | FW-EDGE-0298 | A vulnerability in the GlobalProtect Gateway in Palo Alto Networks PAN-OS software enables an authenticated attacker… | CVE-2024-3388 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-105 | WEB-PORTAL-0090 | OpenSSL 0.9.8i on the Gaisler Research LEON3 SoC on the Xilinx Virtex-II Pro FPGA uses a Fixed Width Exponentiation… | CVE-2010-0928 | Medium | config-change | manual-only | manual-only | No | 0.5% |
+| FIND-137 | WEB-PORTAL-0122 | The Diffie-Hellman key-exchange implementation in OpenSSL 0.9.8, when FIPS mode is enabled, does not properly validate… | CVE-2011-5095 | Medium | config-change | manual-only | manual-only | No | 2.1% |
+| FIND-153 | WEB-PORTAL-0138 | Tor before 0.2.4.20, when OpenSSL 1.x is used in conjunction with a certain HardwareAccel setting on Intel Sandy… | CVE-2013-7295 | Medium | config-change | manual-only | manual-only | No | 1.8% |
+| FIND-159 | WEB-PORTAL-0144 | Race condition in the ssl3_read_bytes function in s3_pkt.c in OpenSSL through 1.0.1g, when SSL_MODE_RELEASE_BUFFERS is… | CVE-2010-5298 | Medium | config-change | manual-only | manual-only | No | 34.1% |
+| FIND-467 | CLOUD-0152 | KubeEdge is built upon Kubernetes and extends native containerized application orchestration and device management to… | CVE-2022-31077 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-573 | CLOUD-0258 | Fluid is an open source Kubernetes-native Distributed Dataset Orchestrator and Accelerator for data-intensive… | CVE-2023-51699 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1125 | NET-RTSW-0210 | Cisco IOS before 15.0(1)XA1 does not clear the public key cache upon a change to a certificate map, which allows… | CVE-2010-4685 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-1281 | FW-EDGE-0066 | A improper neutralization of input during web page generation ('cross-site scripting') in Fortinet FortiOS 6.0.7 -… | CVE-2022-40680 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-9 | MDM-IPHONE-J-SMITH | Outdated OS Version | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-13 | WEB-PORTAL01 | SSL Certificate Expiry | — | Medium | config-change | manual-only | manual-only | — | — |
-| FIND-14 | WEB-PORTAL01 | Deprecated TLSv1.0/1.1 Protocol | — | Medium | config-change | manual-only | manual-only | — | — |
-| FIND-9 | MDM-IPHONE-J-SMITH | Outdated iOS Version | — | Medium | manual-investigation | manual-only | manual-only | — | — |
+| FIND-14 | WEB-PORTAL01 | Deprecated TLSv1.0 and TLSv1.1 Protocol Detected | — | Medium | config-change | manual-only | manual-only | — | — |
+| FIND-2131 | OT-IOT-0016 | Buffer overflow in 7-Technologies (7T) Interactive Graphical SCADA System (IGSS) 9.0.0.11200 allows remote attackers… | CVE-2011-4050 | Medium | firmware-update | manual-only | manual-only | No | 21.1% |
+| FIND-2134 | OT-IOT-0019 | Buffer overflow in TurboPower Abbrevia before 4.0, as used in ScadaTEC ScadaPhone 5.3.11.1230 and earlier, ScadaTEC… | CVE-2011-4535 | Medium | firmware-update | manual-only | manual-only | No | 27.0% |
+| FIND-2135 | OT-IOT-0020 | Unspecified vulnerability in AdAstrA TRACE MODE Data Center allows remote attackers to read arbitrary files via… | CVE-2011-5087 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2141 | OT-IOT-0026 | Multiple directory traversal vulnerabilities in Sielco Sistemi Winlog Pro SCADA before 2.07.17 and Winlog Lite SCADA… | CVE-2012-4356 | Medium | firmware-update | manual-only | manual-only | No | 27.5% |
+| FIND-2145 | OT-IOT-0030 | Buffer overflow in an unspecified third-party component in the Batch module for Schneider Electric CitectSCADA before… | CVE-2011-5163 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2149 | OT-IOT-0034 | Schneider Electric Vijeo Citect 7.20 and earlier, CitectSCADA 7.20 and earlier, and PowerLogic SCADA 7.20 and earlier… | CVE-2013-2796 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2152 | OT-IOT-0037 | Triangle MicroWorks SCADA Data Gateway 2.50.0309 through 3.00.0616, DNP3 .NET Protocol components 3.06.0.171 through… | CVE-2013-2794 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2154 | OT-IOT-0039 | DNP3Driver.exe in the DNP3 driver in Schneider Electric ClearSCADA 2010 R2 through 2010 R3.1 and SCADA Expert… | CVE-2013-6142 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-2156 | OT-IOT-0041 | The CIMPLICITY Web-based access component, CimWebServer, does not check the location of shell files being loaded into… | CVE-2014-0751 | Medium | firmware-update | manual-only | manual-only | No | 2.7% |
+| FIND-2159 | OT-IOT-0044 | The PLC driver in ServerMain.exe in the Kepware KepServerEX 4 component in Schneider Electric StruxureWare SCADA… | CVE-2014-0779 | Medium | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-2160 | OT-IOT-0045 | Triangle MicroWorks SCADA Data Gateway before 3.00.0635 allows remote attackers to cause a denial of service… | CVE-2014-2342 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-2164 | OT-IOT-0049 | Ecava IntegraXor SCADA Server Stable 4.1.4360 and earlier and Beta 4.1.4392 and earlier allows remote attackers to… | CVE-2014-2377 | Medium | firmware-update | manual-only | manual-only | No | 1.8% |
+| FIND-2165 | OT-IOT-0050 | Multiple cross-site scripting (XSS) vulnerabilities in Schneider Electric StruxureWare SCADA Expert ClearSCADA 2010 R3… | CVE-2014-5411 | Medium | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-2166 | OT-IOT-0051 | Schneider Electric StruxureWare SCADA Expert ClearSCADA 2010 R3 through 2014 R1 allows remote attackers to read… | CVE-2014-5412 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2167 | OT-IOT-0052 | Schneider Electric StruxureWare SCADA Expert ClearSCADA 2010 R3 through 2014 R1 uses the MD5 algorithm for an X.509… | CVE-2014-5413 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2169 | OT-IOT-0054 | DNP Master Driver 3.02 and earlier in Elipse SCADA 2.29 build 141 and earlier, E3 1.0 through 4.6, and Elipse Power… | CVE-2014-5429 | Medium | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-2173 | OT-IOT-0058 | Untrusted search path vulnerability in Ecava IntegraXor SCADA Server before 4.2.4488 allows local users to gain… | CVE-2015-0990 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2174 | OT-IOT-0059 | Multiple cross-site scripting (XSS) vulnerabilities in the Wind Farm Portal application in Nordex Control 2 (NC2)… | CVE-2015-6477 | Medium | firmware-update | manual-only | manual-only | No | 12.0% |
+| FIND-2178 | OT-IOT-0063 | A Cross-Site Scripting issue was discovered in Certec EDV GmbH atvise scada prior to Version 3.0. This may allow… | CVE-2017-6029 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2185 | OT-IOT-0070 | A Cross-site Scripting issue was discovered in Geovap Reliance SCADA Version 4.7.3 Update 2 and prior. This… | CVE-2017-16721 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2189 | OT-IOT-0074 | Leao Consultoria e Desenvolvimento de Sistemas (LCDS) LTDA ME LAquis SCADA software versions prior to version… | CVE-2017-6020 | Medium | firmware-update | manual-only | manual-only | No | 8.7% |
+| FIND-2192 | OT-IOT-0077 | In Advantech WebAccess versions V8.2_20170817 and prior, WebAccess versions V8.3.0 and prior, WebAccess Dashboard… | CVE-2018-10591 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2209 | OT-IOT-0094 | Reliance 4 SCADA/HMI, Version 4.7.3 Update 3 and prior. This vulnerability could allow an unauthorized attacker to… | CVE-2018-17904 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2210 | OT-IOT-0095 | Reflected cross-site scripting (non-persistent) in SCADA WebServer (Versions prior to 2.03.0001) could allow an… | CVE-2018-18991 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2211 | OT-IOT-0096 | A URL redirection vulnerability exists in Power Monitoring Expert, Energy Expert (formerly Power Manager) -… | CVE-2018-7797 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2216 | OT-IOT-0101 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows a user-supplied path in file operations prior to proper… | CVE-2018-18990 | Medium | firmware-update | manual-only | manual-only | No | 39.5% |
+| FIND-2220 | OT-IOT-0105 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows an authentication bypass, which may allow an attacker access to… | CVE-2018-19000 | Medium | firmware-update | manual-only | manual-only | No | 8.8% |
+| FIND-2229 | OT-IOT-0114 | ScadaBR 1.0CE, and 1.1.x through 1.1.0-RC, has XSS via a request for a nonexistent resource, as demonstrated by the… | CVE-2019-16321 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2230 | OT-IOT-0115 | A cross-site scripting (XSS) vulnerability in the login form (/ScadaBR/login.htm) in ScadaBR 1.0CE allows a remote… | CVE-2019-16344 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2237 | OT-IOT-0122 | For the Central Licensing Server component used in ABB products ABB Ability™ System 800xA and related system… | CVE-2020-8475 | Medium | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-2238 | OT-IOT-0123 | For the Central Licensing Server component used in ABB products ABB Ability™ System 800xA and related system… | CVE-2020-8476 | Medium | firmware-update | manual-only | manual-only | No | 1.5% |
+| FIND-2240 | OT-IOT-0125 | LCDS LAquis SCADA Versions 4.3.1 and prior. The affected product is vulnerable to sensitive information exposure by… | CVE-2020-10618 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2244 | OT-IOT-0129 | A CWE-22 Improper Limitation of a Pathname to a Restricted Directory ('Path Transversal') vulnerability exists in… | CVE-2020-7529 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2250 | OT-IOT-0135 | A CWE-79: Improper Neutralization of Input During Web Page Generation vulnerability exists in EcoStruxureª and… | CVE-2020-7546 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2257 | OT-IOT-0142 | Use of Password Hash with Insufficient Computational Effort vulnerability exists in ClearSCADA (all versions),… | CVE-2021-22741 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2263 | OT-IOT-0148 | Insufficiently Protected Credentials vulnerability exists in EcoStruxure Control Expert (all versions prior to V15.0… | CVE-2021-22781 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2264 | OT-IOT-0149 | Missing Encryption of Sensitive Data vulnerability exists in EcoStruxure Control Expert (all versions prior to V15.0… | CVE-2021-22782 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-2266 | OT-IOT-0151 | An authenticated user using Advantech WebAccess SCADA in versions 9.0.3 and prior can use API functions to disclose… | CVE-2021-38431 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-2278 | OT-IOT-0163 | A CWE-295: Improper Certificate Validation vulnerability exists that could allow a Man-in-theMiddle attack when… | CVE-2022-24319 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2279 | OT-IOT-0164 | A CWE-295: Improper Certificate Validation vulnerability exists that could allow a Man-in-theMiddle attack when… | CVE-2022-24320 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2290 | OT-IOT-0175 | A CWE-611: Improper Restriction of XML External Entity Reference vulnerability exists that could result in information… | CVE-2022-0221 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2293 | OT-IOT-0178 | xArrow SCADA versions 7.2 and prior is vulnerable to cross-site scripting due to parameter ‘bdate’ of the resource… | CVE-2021-33001 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2294 | OT-IOT-0179 | xArrow SCADA versions 7.2 and prior is vulnerable to cross-site scripting due to parameter ‘edate’ of the resource… | CVE-2021-33021 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-2295 | OT-IOT-0180 | xArrow SCADA versions 7.2 and prior permits unvalidated registry keys to be run with application-level privileges. | CVE-2021-33025 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2298 | OT-IOT-0183 | A CWE-668 Exposure of Resource to Wrong Sphere vulnerability exists that could cause users to be misled, hiding… | CVE-2022-32530 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2304 | OT-IOT-0189 | Measuresoft ScadaPro Server and Client (All Versions) do not properly resolve links before file access; this could… | CVE-2022-2898 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2306 | OT-IOT-0191 | Rapid Software LLC Rapid SCADA 5.8.4 is vulnerable to Cross Site Scripting (XSS). | CVE-2022-44153 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2309 | OT-IOT-0194 | A CWE-117: Improper Output Neutralization for Logs vulnerability exists that could cause the misinterpretation of log… | CVE-2023-0595 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2314 | OT-IOT-0199 | On Triangle MicroWorks' SCADA Data Gateway version <= v5.01.03, an unauthenticated attacker can send broadcast events… | CVE-2023-2187 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2316 | OT-IOT-0201 | SpiderControl SCADA Webserver versions 2.08 and prior are vulnerable to path traversal. An attacker with… | CVE-2023-3329 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2319 | OT-IOT-0204 | A vulnerability classified as critical has been found in Supcon InPlant SCADA up to 20230901. Affected is an unknown… | CVE-2023-4985 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2331 | OT-IOT-0216 | In Rapid Software LLC's Rapid SCADA versions prior to Version 5.8.4, an attacker can redirect users to malicious pages… | CVE-2024-21794 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2332 | OT-IOT-0217 | In Rapid Software LLC's Rapid SCADA versions prior to Version 5.8.4, the affected product responds back with an error… | CVE-2024-21866 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2333 | OT-IOT-0218 | In Rapid Software LLC's Rapid SCADA versions prior to Version 5.8.4, the affected product stores plaintext credentials… | CVE-2024-21869 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2335 | OT-IOT-0220 | In Rapid Software LLC's Rapid SCADA versions prior to Version 5.8.4, an attacker can append path traversal characters… | CVE-2024-22096 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2337 | OT-IOT-0222 | Triangle MicroWorks SCADA Data Gateway Use of Hard-coded Credentials Authentication Bypass Vulnerability. This… | CVE-2023-39458 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2340 | OT-IOT-0225 | Triangle MicroWorks SCADA Data Gateway Event Log Improper Output Neutralization For Logs Arbitrary File Write… | CVE-2023-39461 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-2341 | OT-IOT-0226 | Triangle MicroWorks SCADA Data Gateway Workspace Unrestricted Upload Vulnerability. This vulnerability allows remote… | CVE-2023-39462 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-2345 | OT-IOT-0230 | Triangle MicroWorks SCADA Data Gateway get_config Missing Authentication Information Disclosure Vulnerability. This… | CVE-2023-39466 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2346 | OT-IOT-0231 | Triangle MicroWorks SCADA Data Gateway certificate Information Disclosure Vulnerability. This vulnerability allows… | CVE-2023-39467 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2354 | OT-IOT-0239 | The DIOT SCADA with MQTT plugin for WordPress is vulnerable to Stored Cross-Site Scripting via the plugin's 'diot'… | CVE-2025-4216 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2361 | OT-IOT-0246 | A vulnerability was determined in Scada-LTS 2.7.8.1. Affected by this vulnerability is an unknown functionality of the… | CVE-2025-9139 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2372 | OT-IOT-0257 | A vulnerability was determined in Scada-LTS up to 2.7.8.1. This impacts an unknown function. This manipulation causes… | CVE-2025-13790 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2373 | OT-IOT-0258 | A vulnerability was identified in Scada-LTS up to 2.7.8.1. Affected is the function Common.getHomeDir of the file… | CVE-2025-13791 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-2374 | OT-IOT-0259 | The vulnerability affects Ignition SCADA applications where Python scripting is utilized for automation purposes. The… | CVE-2025-13911 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2376 | OT-IOT-0261 | ScadaBR 1.12.4 is vulnerable to Session Fixation. The application assigns a JSESSIONID session cookie to… | CVE-2025-70973 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2381 | OT-IOT-0266 | ITS Intelligent SCADA System developed by ITP Technology has a Stored Cross-Site Scripting vulnerability, allowing… | CVE-2026-10057 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2382 | OT-IOT-0267 | ITS Intelligent SCADA System developed by ITP Technology has a Stored Cross-Site Scripting vulnerability, allowing… | CVE-2026-10058 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2388 | OT-IOT-0273 | Symantec Industrial Control System Protection (ICSP), versions 6.x.x, may be susceptible to an unauthorized access… | CVE-2019-18380 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-2397 | OT-IOT-0282 | Cybersecurity Nozomi Networks Labs, a specialized security company focused on Industrial Control Systems (ICS) and… | CVE-2025-52599 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2400 | OT-IOT-0285 | Cybersecurity Nozomi Networks Labs, a specialized security company focused on Industrial Control Systems (ICS) and… | CVE-2025-8075 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2403 | OT-IOT-0288 | A spoofing vulnerability exists when the Azure IoT Device Provisioning AMQP Transport library improperly validates… | CVE-2018-8119 | Medium | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-2408 | OT-IOT-0293 | A spoofing vulnerability exists for the Azure IoT Device Provisioning for the C SDK library using the HTTP protocol on… | CVE-2018-8479 | Medium | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-2410 | OT-IOT-0295 | Recently it was discovered as a part of the research on IoT devices in the most recent firmware for Shekar Endoscope… | CVE-2017-10718 | Medium | firmware-update | manual-only | manual-only | No | 1.9% |
+| FIND-2411 | OT-IOT-0296 | Recently it was discovered as a part of the research on IoT devices in the most recent firmware for Shekar Endoscope… | CVE-2017-10719 | Medium | firmware-update | manual-only | manual-only | No | 2.1% |
+| FIND-2413 | OT-IOT-0298 | Recently it was discovered as a part of the research on IoT devices in the most recent firmware for Shekar Endoscope… | CVE-2017-10721 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
+| FIND-2415 | OT-IOT-0300 | It was discovered as a part of the research on IoT devices in the most recent firmware for Blipcare device that the… | CVE-2017-11578 | Medium | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-1308 | FW-EDGE-0093 | An improper neutralization of script-related html tags in a web page (basic xss) in Fortinet FortiOS 7.2.0 - 7.2.4… | CVE-2023-36555 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-257 | WEB-PORTAL-0242 | Versions 1.17 and 1.18 of the Python urllib3 library suffer from a vulnerability that can cause them, in certain… | CVE-2016-9015 | Low | config-change | manual-only | manual-only | No | 0.8% |
+| FIND-300 | WEB-PORTAL-0285 | In situations where an attacker receives automated notification of the success or failure of a decryption attempt an… | CVE-2019-1563 | Low | config-change | manual-only | manual-only | No | 3.8% |
+| FIND-597 | CLOUD-0282 | Linkerd is an open source, ultralight, security-first service mesh for Kubernetes. In affected versions when the… | CVE-2024-40632 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-625 | WEBAPP-REPORTING-DASHBOARD | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-655 | WEBAPP-MOBILE-BACKEND-API | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-684 | WEBAPP-VENDOR-ONBOARDING | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-688 | WEBAPP-ORDER-SERVICE | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-716 | WEBAPP-CUSTOMER-PORTAL | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-733 | WEBAPP-EMPLOYEE-HR-PORTAL | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-749 | WEBAPP-NOTIFICATION-SERVICE | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-751 | WEBAPP-MARKETING-CMS | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-780 | WEBAPP-SEARCH-SERVICE | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-790 | WEBAPP-CHECKOUT-SERVICE | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-817 | WEBAPP-PARTNER-EXTRANET | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-822 | WEBAPP-BILLING-API | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-838 | WEBAPP-LOYALTY-REWARDS | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-857 | WEBAPP-SUPPORT-TICKETING | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-884 | WEBAPP-INTERNAL-WIKI | Verbose Error Message Discloses Stack Trace (CWE-209) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-1339 | FW-EDGE-0124 | A out-of-bounds write in Fortinet FortiOS versions 7.6.0, 7.4.0 through 7.4.6, 7.2.0 through 7.2.10, 7.0.0 through… | CVE-2024-52963 | Low | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1349 | FW-EDGE-0134 | A buffer over-read in Fortinet FortiOS versions 7.4.0 through 7.4.3, versions 7.2.0 through 7.2.7, and versions 7.0.0… | CVE-2025-47295 | Low | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1542 | LNX-SRV-0027 | Race condition in ptrace in Linux kernel 2.4 and 2.2 allows local users to gain privileges by using ptrace to track… | CVE-2001-0317 | Low | patch | ansible-unix | auto-approvable | No | 0.7% |
+| FIND-1818 | APP-0003 | Improper validation of certificate with host mismatch in Apache Log4j SMTP appender. This could allow an SMTPS… | CVE-2020-9488 | Low | patch | manual-only | manual-only | No | 8.1% |
+| FIND-2005 | APP-0190 | Applications may be vulnerable to a Regular Expression Denial of Service (ReDoS) attack if an attacker is able to… | CVE-2026-41848 | Low | patch | manual-only | manual-only | No | 0.3% |
+| FIND-2009 | APP-0194 | A vulnerability in Spring Expression Language (SpEL) evaluation logic allows for arbitrary zero-argument method… | CVE-2026-41852 | Low | patch | manual-only | manual-only | No | 0.2% |
+| FIND-2072 | APP-0257 | jQuery Terminal Emulator is a plugin for creating command line interpreters in your applications. Versions prior to… | CVE-2021-43862 | Low | patch | manual-only | manual-only | No | 1.0% |
+| FIND-41 | WEB-PORTAL-0026 | bacula 1.36.3 and earlier allows local users to modify or read sensitive files via symlink attacks on (1) the… | CVE-2005-2995 | Low | config-change | manual-only | manual-only | No | 0.4% |
+| FIND-609 | CLOUD-0294 | runc is a CLI tool for spawning and running containers according to the OCI specification. runc 1.1.13 and earlier, as… | CVE-2024-45310 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1178 | NET-RTSW-0263 | Cisco IOS 12.4 and 15.0 through 15.2 allows physically proximate attackers to bypass the No Service Password-Recovery… | CVE-2011-3289 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1535 | LNX-SRV-0020 | Unknown vulnerability in sockfilter for Linux kernel before 2.2.19 related to "boundary cases," with unknown impact. | CVE-2001-1395 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1536 | LNX-SRV-0021 | Unknown vulnerabilities in strnlen_user for Linux kernel before 2.2.19, with unknown impact. | CVE-2001-1396 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1551 | LNX-SRV-0036 | The iBCS routines in arch/i386/kernel/traps.c for Linux kernels 2.4.18 and earlier on x86 systems allow local users to… | CVE-2002-0429 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1564 | LNX-SRV-0049 | Linux kernel 2.4.10 through 2.4.21-pre4 does not properly handle the O_DIRECT feature, which allows local attackers… | CVE-2003-0018 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1567 | LNX-SRV-0052 | The ioperm system call in Linux kernel 2.4.20 and earlier does not properly restrict privileges, which allows local… | CVE-2003-0246 | Low | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1699 | WIN-SRV-0064 | Unknown vulnerability in the PKINIT Protocol for Microsoft Windows 2000, Windows XP, and Windows Server 2003 could… | CVE-2005-1982 | Low | patch | ansible-windows | auto-approvable | No | 1.7% |
+| FIND-919 | NET-RTSW-0004 | Attackers can crash a Cisco IOS router or device, provided they can get to an interactive prompt (such as a login).… | CVE-1999-0159 | Low | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-1194 | NET-RTSW-0279 | Cisco IOS 15.1 and 15.2, when a clientless SSL VPN is configured, allows remote authenticated users to cause a denial… | CVE-2012-1344 | Low | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1201 | NET-RTSW-0286 | The SSLVPN implementation in Cisco IOS 12.4, 15.0, 15.1, and 15.2, when DTLS is not enabled, does not properly handle… | CVE-2012-3923 | Low | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1202 | NET-RTSW-0287 | The SSLVPN implementation in Cisco IOS 15.1 and 15.2, when DTLS is enabled, does not properly handle certain outbound… | CVE-2012-3924 | Low | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-1227 | FW-EDGE-0012 | Multiple cross-site scripting (XSS) vulnerabilities in Fortinet FortiOS 5.0 Patch 7 build 4457 allow remote… | CVE-2015-1451 | Low | firmware-update | manual-only | manual-only | No | 1.0% |
+| FIND-530 | CLOUD-0215 | Cilium is a networking, observability, and security solution with an eBPF-based dataplane. Prior to version 1.13.4,… | CVE-2023-34242 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1386 | FW-EDGE-0171 | An Improper Neutralization of CRLF Sequences in HTTP Headers ('HTTP Response Splitting') vulnerability [CWE-113]… | CVE-2025-62675 | Low | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-293 | WEB-PORTAL-0278 | OpenSSL has internal defaults for a directory tree where it can find a configuration file as well as certificates used… | CVE-2019-1552 | Low | config-change | manual-only | manual-only | No | 0.7% |
+| FIND-1081 | NET-RTSW-0166 | Cisco IOS XR 3.8.1 and earlier allows remote attackers to cause a denial of service (process crash) via a long BGP… | CVE-2009-1154 | Low | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1082 | NET-RTSW-0167 | Cisco IOS XR 3.8.1 and earlier allows remote authenticated users to cause a denial of service (process crash) via… | CVE-2009-2056 | Low | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-1282 | FW-EDGE-0067 | A missing cryptographic steps vulnerability [CWE-325] in the functions that encrypt the DHCP and DNS keys in Fortinet… | CVE-2022-29054 | Low | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1298 | FW-EDGE-0083 | An insertion of sensitive information into log file vulnerability in Fortinet FortiOS 7.2.0 through 7.2.4 and… | CVE-2023-26207 | Low | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-1463 | FW-EDGE-0248 | An information exposure through log file vulnerability where sensitive fields are recorded in the configuration log… | CVE-2020-2043 | Low | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1464 | FW-EDGE-0249 | An information exposure through log file vulnerability where an administrator's password or other sensitive… | CVE-2020-2044 | Low | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-1466 | FW-EDGE-0251 | An information exposure through log file vulnerability exists where the password for the configured system proxy… | CVE-2020-2048 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1375 | FW-EDGE-0160 | Fortinet FortiOS through 7.6.6 allows attackers to decrypt LDAP credentials stored in device configuration files, as… | CVE-2026-25815 | Low | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-321 | CLOUD-0006 | Kubernetes in OpenShift3 allows remote authenticated users to use the private images of other users should they know… | CVE-2015-7561 | Low | firmware-update | manual-only | manual-only | No | 1.2% |
+| FIND-425 | CLOUD-0110 | A security issue was discovered with Kubernetes that could enable users to send network traffic to locations they… | CVE-2021-25740 | Low | firmware-update | manual-only | manual-only | No | 2.0% |
+| FIND-554 | CLOUD-0239 | Kyverno is a policy engine designed for Kubernetes. A security vulnerability was found in Kyverno where an attacker… | CVE-2023-42814 | Low | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-555 | CLOUD-0240 | Kyverno is a policy engine designed for Kubernetes. A security vulnerability was found in Kyverno where an attacker… | CVE-2023-42815 | Low | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-636 | WEBAPP-VENDOR-ONBOARDING | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-659 | WEBAPP-EMPLOYEE-HR-PORTAL | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-671 | WEBAPP-MARKETING-CMS | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-682 | WEBAPP-INTERNAL-WIKI | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-691 | WEBAPP-SUPPORT-TICKETING | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-710 | WEBAPP-ORDER-SERVICE | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-715 | WEBAPP-SEARCH-SERVICE | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-722 | WEBAPP-REPORTING-DASHBOARD | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-742 | WEBAPP-MOBILE-BACKEND-API | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-795 | WEBAPP-PARTNER-EXTRANET | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-807 | WEBAPP-CUSTOMER-PORTAL | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-823 | WEBAPP-CHECKOUT-SERVICE | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-859 | WEBAPP-BILLING-API | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-871 | WEBAPP-LOYALTY-REWARDS | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-874 | WEBAPP-NOTIFICATION-SERVICE | Directory Listing Enabled (CWE-200) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-1346 | FW-EDGE-0131 | A improper restriction of communication channel to intended endpoints vulnerability [CWE-923] in Fortinet FortiOS… | CVE-2024-50565 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1387 | FW-EDGE-0172 | An Improper Neutralization of CRLF Sequences in HTTP Headers ('HTTP Response Splitting') vulnerability [CWE-113]… | CVE-2025-62826 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1987 | APP-0172 | CVE-2024-38820 ensured Locale-independent, lowercase conversion for both the configured disallowedFields patterns and… | CVE-2025-22233 | Low | patch | manual-only | manual-only | No | 0.4% |
+| FIND-638 | WEBAPP-CUSTOMER-PORTAL | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-639 | WEBAPP-ORDER-SERVICE | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-654 | WEBAPP-MARKETING-CMS | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-693 | WEBAPP-CHECKOUT-SERVICE | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-702 | WEBAPP-NOTIFICATION-SERVICE | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-713 | WEBAPP-MOBILE-BACKEND-API | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-721 | WEBAPP-SUPPORT-TICKETING | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-729 | WEBAPP-EMPLOYEE-HR-PORTAL | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-741 | WEBAPP-SEARCH-SERVICE | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-747 | WEBAPP-INTERNAL-WIKI | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-785 | WEBAPP-BILLING-API | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-813 | WEBAPP-LOYALTY-REWARDS | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-824 | WEBAPP-PARTNER-EXTRANET | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-852 | WEBAPP-VENDOR-ONBOARDING | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-879 | WEBAPP-REPORTING-DASHBOARD | Session Cookie Missing 'HttpOnly' Attribute (CWE-1004) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-1460 | FW-EDGE-0245 | When SSL/TLS Forward Proxy Decryption mode has been configured to decrypt the web transactions, the PAN-OS URL… | CVE-2020-2035 | Low | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-423 | CLOUD-0108 | A security issue was discovered in Kubernetes where a user may be able to redirect pod traffic to private networks on… | CVE-2021-25737 | Low | firmware-update | manual-only | manual-only | No | 1.3% |
+| FIND-585 | CLOUD-0270 | A security issue was discovered in Kubernetes where users may be able to launch containers that bypass the mountable… | CVE-2024-3177 | Low | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-615 | CLOUD-0300 | Kyverno is a policy engine designed for Kubernetes. A kyverno ClusterPolicy, ie. "disallow-privileged-containers," can… | CVE-2024-48921 | Low | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1363 | FW-EDGE-0148 | A insertion of sensitive information into log file vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3, FortiOS 7.4… | CVE-2025-31514 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-1366 | FW-EDGE-0151 | An Unchecked Return Value vulnerability [CWE-252] in Fortinet FortiOS version 7.6.0 through 7.6.3 and before 7.4.8 API… | CVE-2025-58903 | Low | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-1499 | FW-EDGE-0284 | An improper privilege management vulnerability in Palo Alto Networks PAN-OS software enables an authenticated… | CVE-2023-6793 | Low | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-81 | WEB-PORTAL-0066 | The CMS_verify function in OpenSSL 0.9.8h through 0.9.8j, when CMS is enabled, does not properly handle errors… | CVE-2009-0591 | Low | config-change | manual-only | manual-only | No | 2.7% |
+| FIND-119 | WEB-PORTAL-0104 | The elliptic curve cryptography (ECC) subsystem in OpenSSL 1.0.0d and earlier, when the Elliptic Curve Digital… | CVE-2011-1945 | Low | config-change | manual-only | manual-only | No | 3.4% |
+| FIND-142 | WEB-PORTAL-0127 | The TLS protocol 1.1 and 1.2 and the DTLS protocol 1.0 and 1.2, as used in OpenSSL, OpenJDK, PolarSSL, and other… | CVE-2013-0169 | Low | config-change | manual-only | manual-only | No | 35.6% |
+| FIND-202 | WEB-PORTAL-0187 | The ssl3_get_client_key_exchange function in s3_srvr.c in OpenSSL 1.0.2 before 1.0.2a, when client authentication and… | CVE-2015-1787 | Low | config-change | manual-only | manual-only | No | 7.4% |
+| FIND-365 | CLOUD-0050 | Improper validation of URL redirection in the Kubernetes API server in versions prior to v1.14.0 allows an… | CVE-2018-1002102 | Low | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-470 | CLOUD-0155 | Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. Argo CD starting with 2.3.0 and prior to… | CVE-2022-31102 | Low | firmware-update | manual-only | manual-only | No | 0.6% |
+| FIND-621 | WEBAPP-LOYALTY-REWARDS | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-635 | WEBAPP-PARTNER-EXTRANET | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-652 | WEBAPP-VENDOR-ONBOARDING | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-661 | WEBAPP-MOBILE-BACKEND-API | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-665 | WEBAPP-CUSTOMER-PORTAL | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-675 | WEBAPP-SUPPORT-TICKETING | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-701 | WEBAPP-MARKETING-CMS | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-709 | WEBAPP-BILLING-API | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-775 | WEBAPP-NOTIFICATION-SERVICE | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-796 | WEBAPP-SEARCH-SERVICE | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-800 | WEBAPP-INTERNAL-WIKI | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-814 | WEBAPP-ORDER-SERVICE | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-834 | WEBAPP-REPORTING-DASHBOARD | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-851 | WEBAPP-CHECKOUT-SERVICE | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-911 | WEBAPP-EMPLOYEE-HR-PORTAL | Session Cookie Missing 'Secure' Attribute (CWE-614) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-990 | NET-RTSW-0075 | Cross-site scripting (XSS) vulnerability in Cisco IOS Web Server for IOS 12.0(2a) allows remote attackers to inject… | CVE-2005-3921 | Low | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-1004 | NET-RTSW-0089 | Cisco IOS 12.0, 12.1, and 12.2, when GRE IP tunneling is used and the RFC2784 compliance fixes are missing, does not… | CVE-2006-4650 | Low | firmware-update | manual-only | manual-only | No | 3.0% |
+| FIND-1364 | FW-EDGE-0149 | An URL Redirection to Untrusted Site vulnerabilities [CWE-601] vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3,… | CVE-2025-47890 | Low | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1577 | LNX-SRV-0062 | Multiple race conditions in the handling of O_DIRECT in Linux kernel prior to version 2.4.22 could cause stale data to… | CVE-2003-0956 | Low | patch | ansible-unix | auto-approvable | No | 0.3% |
+| FIND-1617 | LNX-SRV-0102 | Race condition in the sysfs_read_file and sysfs_write_file functions in Linux kernel before 2.6.10 allows local users… | CVE-2004-2302 | Low | patch | ansible-unix | auto-approvable | No | 0.3% |
+| FIND-1640 | WIN-SRV-0005 | Race condition in Microsoft Windows Media server allows remote attackers to cause a denial of service in the Windows… | CVE-2000-0849 | Low | patch | ansible-windows | auto-approvable | No | 15.0% |
+| FIND-1666 | WIN-SRV-0031 | The DCOM RPC interface for Microsoft Windows NT 4.0, 2000, XP, and Server 2003 allows remote attackers to cause… | CVE-2004-0124 | Low | patch | ansible-windows | auto-approvable | No | 22.0% |
+| FIND-1739 | WIN-SRV-0104 | Sign extension vulnerability in the createBrushIndirect function in the GDI library (gdi32.dll) in Microsoft Windows… | CVE-2006-4071 | Low | patch | ansible-windows | auto-approvable | No | 24.0% |
+| FIND-1850 | APP-0035 | Multiple cross-site scripting (XSS) vulnerabilities in XWork in Apache Struts 2.x before 2.2.3, and OpenSymphony XWork… | CVE-2011-1772 | Low | patch | manual-only | manual-only | No | 33.1% |
+| FIND-2019 | APP-0204 | Cross-site scripting (XSS) vulnerability in Drupal 6.x before 6.28 and 7.x before 7.19, when running with older… | CVE-2013-0244 | Low | patch | manual-only | manual-only | No | 2.1% |
+| FIND-617 | WEBAPP-LOYALTY-REWARDS | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-631 | WEBAPP-NOTIFICATION-SERVICE | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-645 | WEBAPP-VENDOR-ONBOARDING | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-653 | WEBAPP-BILLING-API | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-656 | WEBAPP-EMPLOYEE-HR-PORTAL | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-700 | WEBAPP-ORDER-SERVICE | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-708 | WEBAPP-SUPPORT-TICKETING | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-717 | WEBAPP-MOBILE-BACKEND-API | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-811 | WEBAPP-SEARCH-SERVICE | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-829 | WEBAPP-MARKETING-CMS | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-830 | WEBAPP-CHECKOUT-SERVICE | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-832 | WEBAPP-REPORTING-DASHBOARD | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-883 | WEBAPP-PARTNER-EXTRANET | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-901 | WEBAPP-INTERNAL-WIKI | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-910 | WEBAPP-CUSTOMER-PORTAL | Missing HTTP Security Headers (CWE-693) | — | Low | config-change | manual-only | manual-only | — | — |
+| FIND-349 | CLOUD-0034 | OpenShift Container Platform before version 4.1.3 writes OAuth tokens in plaintext to the audit logs for the… | CVE-2019-10165 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1345 | FW-EDGE-0130 | A storing passwords in a recoverable format in Fortinet FortiOS 7.4.0 through 7.4.8, FortiOS 7.2 all versions, FortiOS… | CVE-2024-32122 | Low | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-1470 | FW-EDGE-0255 | An information exposure through log file vulnerability exists in Palo Alto Networks PAN-OS software where the… | CVE-2021-3037 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-435 | CLOUD-0120 | As mitigations to a report from 2019 and CVE-2020-8555, Kubernetes attempts to prevent proxied connections from… | CVE-2020-8562 | Low | firmware-update | manual-only | manual-only | No | 1.1% |
+| FIND-37 | WEB-PORTAL-0022 | The der_chop script in the openssl package in Trustix Secure Linux 1.5 through 2.1 and other operating systems allows… | CVE-2004-0975 | Low | config-change | manual-only | manual-only | No | 0.4% |
+| FIND-52 | WEB-PORTAL-0037 | HP System Management Homepage (SMH) for Windows, when used in conjunction with HP Version Control Agent or Version… | CVE-2007-4931 | Low | config-change | manual-only | manual-only | No | 0.5% |
+| FIND-934 | NET-RTSW-0019 | Classic Cisco IOS 9.1 and later allows attackers with access to the login prompt to obtain portions of the command… | CVE-2000-0368 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-986 | NET-RTSW-0071 | Cisco IOS 12.0 through 12.4 and IOS XR before 3.2, with IPv6 enabled, allows remote attackers on a local network… | CVE-2005-2451 | Low | firmware-update | manual-only | manual-only | No | 1.4% |
+| FIND-988 | NET-RTSW-0073 | The Cisco Management Center (MC) for IPS Sensors (IPS MC) 2.1 can omit port field values while generating the Cisco… | CVE-2005-3427 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1034 | NET-RTSW-0119 | Unspecified vulnerability in Command EXEC in Cisco IOS allows local users to bypass command restrictions and obtain… | CVE-2007-5549 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-1518 | LNX-SRV-0003 | dumpreg in Red Hat Linux 5.1 opens /dev/mem with O_RDWR access, which allows local users to cause a denial of service… | CVE-1999-1406 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1523 | LNX-SRV-0008 | The Linux 2.2.x kernel does not restrict the number of Unix domain sockets as defined by the wmem_max parameter, which… | CVE-2000-0227 | Low | patch | ansible-unix | auto-approvable | No | 0.8% |
+| FIND-1524 | LNX-SRV-0009 | The Linux trustees kernel patch allows attackers to cause a denial of service by accessing a file or directory with a… | CVE-2000-0274 | Low | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1529 | LNX-SRV-0014 | The "mxcsr P4" vulnerability in the Linux kernel before 2.2.17-14, when running on certain Intel CPUs, allows local… | CVE-2001-1273 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1532 | LNX-SRV-0017 | The Linux kernel before 2.2.19 does not have unregister calls for (1) CPUID and (2) MSR drivers, which could cause a… | CVE-2001-1392 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1533 | LNX-SRV-0018 | Unknown vulnerability in classifier code for Linux kernel before 2.2.19 could result in denial of service (hang). | CVE-2001-1393 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1534 | LNX-SRV-0019 | Signedness error in (1) getsockopt and (2) setsockopt for Linux kernel before 2.2.19 allows local users to cause a… | CVE-2001-1394 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1537 | LNX-SRV-0022 | The System V (SYS5) shared memory implementation for Linux kernel before 2.2.19 could allow attackers to modify… | CVE-2001-1397 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1539 | LNX-SRV-0024 | Certain operations in Linux kernel before 2.2.19 on the x86 architecture copy the wrong number of bytes, which might… | CVE-2001-1399 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1540 | LNX-SRV-0025 | Unknown vulnerabilities in the UDP port allocation for Linux kernel before 2.2.19 could allow local users to cause a… | CVE-2001-1400 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1543 | LNX-SRV-0028 | Linux kernel 2.2.1 through 2.2.19, and 2.4.1 through 2.4.10, allows local users to cause a denial of service via a… | CVE-2001-0907 | Low | patch | ansible-unix | auto-approvable | No | 0.8% |
+| FIND-1544 | LNX-SRV-0029 | Linux kernel before 2.4.11pre3 in multiple Linux distributions allows local users to cause a denial of service (crash)… | CVE-2001-0914 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1547 | LNX-SRV-0032 | Linux kernel 2.2.19 enables CAP_SYS_RESOURCE for setuid processes, which allows local users to exceed disk quota… | CVE-2001-1551 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1550 | LNX-SRV-0035 | The encrypted loop device in Linux kernel 2.4.10 and earlier does not authenticate the entity that is encrypting data,… | CVE-2002-0570 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1552 | LNX-SRV-0037 | The d_path function in Linux kernel 2.2.20 and earlier, and 2.4.18 and earlier, truncates long pathnames without… | CVE-2002-0499 | Low | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1554 | LNX-SRV-0039 | The Linux kernel 2.4.20 and earlier, and 2.5.x, when running on x86 systems, allows local users to cause a denial of… | CVE-2002-1319 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1555 | LNX-SRV-0040 | Linux kernel 2.2.x allows local users to cause a denial of service (crash) by using the mmap() function with a… | CVE-2002-1380 | Low | patch | ansible-unix | auto-approvable | No | 0.9% |
+| FIND-1556 | LNX-SRV-0041 | The linux 2.4 kernel before 2.4.19 assumes that the fninit instruction clears all registers, which could lead to an… | CVE-2002-1571 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1560 | LNX-SRV-0045 | Linux kernel 2.4.1 through 2.4.19 sets root's NR_RESERVED_FILES limit to 10 files, which allows local users to cause a… | CVE-2002-1963 | Low | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1561 | LNX-SRV-0046 | ifconfig, when used on the Linux kernel 2.2 and later, does not report when the network interface is in promiscuous… | CVE-2002-1976 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1563 | LNX-SRV-0048 | The experimental IP packet queuing feature in Netfilter / IPTables in Linux kernel 2.4 up to 2.4.19 and 2.5 up to… | CVE-2002-2254 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1585 | LNX-SRV-0070 | dm-crypt on Linux kernel 2.6.x, when used on certain file systems with a block size 1024 or greater, has certain "IV… | CVE-2004-2136 | Low | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1588 | LNX-SRV-0073 | The Vicam USB driver in Linux before 2.4.25 does not use the copy_from_user function when copying data from userspace… | CVE-2004-0075 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1589 | LNX-SRV-0074 | kmod in the Linux kernel does not set its uid, suid, gid, or sgid to 0, which allows local users to cause a denial of… | CVE-2003-1040 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1590 | LNX-SRV-0075 | The arch_get_unmapped_area function in mmap.c in the PaX patches for Linux kernel 2.6, when Address Space Layout… | CVE-2004-1983 | Low | patch | ansible-unix | auto-approvable | No | 0.9% |
+| FIND-1591 | LNX-SRV-0076 | cryptoloop on Linux kernel 2.6.x, when used on certain file systems with a block size 1024 or greater, has certain "IV… | CVE-2004-2135 | Low | patch | ansible-unix | auto-approvable | No | 1.2% |
+| FIND-1596 | LNX-SRV-0081 | The e1000 driver for Linux kernel 2.4.26 and earlier does not properly initialize memory before using it, which allows… | CVE-2004-0535 | Low | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1597 | LNX-SRV-0082 | Linux kernel 2.4.x and 2.6.x for x86 allows local users to cause a denial of service (system crash), possibly via an… | CVE-2004-0554 | Low | patch | ansible-unix | auto-approvable | No | 0.9% |
+| FIND-1598 | LNX-SRV-0083 | The Equalizer Load-balancer for serial network interfaces (eql.c) in Linux kernel 2.6.x up to 2.6.7 allows local users… | CVE-2004-0596 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1601 | LNX-SRV-0086 | Linux kernel does not properly convert 64-bit file offset pointers to 32 bits, which allows local users to access… | CVE-2004-0415 | Low | patch | ansible-unix | auto-approvable | No | 0.8% |
+| FIND-1603 | LNX-SRV-0088 | Unknown vulnerability in Linux kernel 2.x may allow local users to modify the group ID of files, such as NFS exported… | CVE-2004-0497 | Low | patch | ansible-unix | auto-approvable | No | 0.8% |
+| FIND-1604 | LNX-SRV-0089 | The binary compatibility mode for FreeBSD 4.x and 5.x does not properly handle certain Linux system calls, which could… | CVE-2004-0602 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-1606 | LNX-SRV-0091 | Integer overflow in the vc_resize function in the Linux kernel 2.4 and 2.6 before 2.6.10 allows local users to cause a… | CVE-2004-1333 | Low | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1607 | LNX-SRV-0092 | Integer overflow in the ip_options_get function in the Linux kernel before 2.6.10 allows local users to cause a denial… | CVE-2004-1334 | Low | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1608 | LNX-SRV-0093 | Memory leak in the ip_options_get function in the Linux kernel before 2.6.10 allows local users to cause a denial of… | CVE-2004-1335 | Low | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1619 | LNX-SRV-0104 | A numeric casting discrepancy in sdla_xfer in Linux kernel 2.6.x up to 2.6.5 and 2.4 up to 2.4.29-rc1 allows local… | CVE-2004-2607 | Low | patch | ansible-unix | auto-approvable | No | 0.5% |
+| FIND-1625 | LNX-SRV-0110 | The scm_send function in the scm layer for Linux kernel 2.4.x up to 2.4.28, and 2.6.x up to 2.6.9, allows local users… | CVE-2004-1016 | Low | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1631 | LNX-SRV-0116 | The open_exec function in the execve functionality (exec.c) in Linux kernel 2.4.x up to 2.4.27, and 2.6.x up to 2.6.8,… | CVE-2004-1073 | Low | patch | ansible-unix | auto-approvable | No | 0.8% |
+| FIND-1632 | LNX-SRV-0117 | The binfmt functionality in the Linux kernel, when "memory overcommit" is enabled, allows local users to cause a… | CVE-2004-1074 | Low | patch | ansible-unix | auto-approvable | No | 1.0% |
+| FIND-1639 | WIN-SRV-0004 | The rdisk utility in Microsoft Terminal Server Edition and Windows NT 4.0 stores registry hive information in a… | CVE-2000-0089 | Low | patch | ansible-windows | auto-approvable | No | 2.3% |
+| FIND-1672 | WIN-SRV-0037 | "Shatter" style vulnerability in the Window Management application programming interface (API) for Microsoft Windows… | CVE-2004-0207 | Low | patch | ansible-windows | auto-approvable | No | 1.8% |
+| FIND-1675 | WIN-SRV-0040 | The kernel for Microsoft Windows Server 2003 does not reset certain values in CPU data structures, which allows local… | CVE-2004-0211 | Low | patch | ansible-windows | auto-approvable | No | 1.9% |
+| FIND-1680 | WIN-SRV-0045 | Memory leak in Microsoft Windows XP and Windows Server 2003 allows local users to cause a denial of service (memory… | CVE-2004-2365 | Low | patch | ansible-windows | auto-approvable | No | 1.7% |
+| FIND-1690 | WIN-SRV-0055 | Buffer overflow in Microsoft Windows 2000, Windows XP SP1 and SP2, and Windows Server 2003 allows local users to cause… | CVE-2005-0550 | Low | patch | ansible-windows | auto-approvable | No | 2.1% |
+| FIND-1698 | WIN-SRV-0063 | Unknown vulnerability in Microsoft Windows 2000 Server and Windows Server 2003 domain controllers allows remote… | CVE-2005-1981 | Low | patch | ansible-windows | auto-approvable | No | 6.6% |
+| FIND-2020 | APP-0205 | Cross-site scripting (XSS) vulnerability in the jQuery Countdown module 7.x-1.x before 7.x-1.1 for Drupal allows… | CVE-2013-4383 | Low | patch | manual-only | manual-only | No | 0.9% |
+| FIND-155 | WEB-PORTAL-0140 | The RAND_bytes function in libssh before 0.6.3, when forking is enabled, does not properly reset the state of the… | CVE-2014-0017 | Low | config-change | manual-only | manual-only | No | 0.4% |
+| FIND-157 | WEB-PORTAL-0142 | The Montgomery ladder implementation in OpenSSL through 1.0.0l does not ensure that certain swap operations have a… | CVE-2014-0076 | Low | config-change | manual-only | manual-only | No | 0.9% |
+| FIND-1368 | FW-EDGE-0153 | An Improper Privilege Management vulnerability [CWE-269] vulnerability in Fortinet FortiOS 7.6.0 through 7.6.3,… | CVE-2025-54821 | Low | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-1778 | WIN-SRV-0143 | Microsoft Windows Server 2003, when time restrictions are in effect for user accounts, generates different error… | CVE-2007-2999 | Low | patch | ansible-windows | auto-approvable | No | 1.6% |
+| FIND-1579 | LNX-SRV-0064 | Various routines for the ppc64 architecture on Linux kernel 2.6 prior to 2.6.2 and 2.4 prior to 2.4.24 do not use the… | CVE-2003-0986 | Low | patch | ansible-unix | auto-approvable | No | 0.3% |
+| FIND-1816 | APP-0001 | Apache CloudStack 4.0.0-incubating and Citrix CloudPlatform (formerly Citrix CloudStack) before 3.0.6 stores sensitive… | CVE-2012-5616 | Low | patch | manual-only | manual-only | No | 0.6% |
+| FIND-51 | WEB-PORTAL-0036 | The BN_from_montgomery function in crypto/bn/bn_mont.c in OpenSSL 0.9.8e and earlier does not properly perform… | CVE-2007-3108 | Low | config-change | manual-only | manual-only | No | 0.4% |
+| FIND-1610 | LNX-SRV-0095 | Multiple race conditions in the terminal layer in Linux 2.4.x, and 2.6.x before 2.6.9, allow (1) local users to obtain… | CVE-2004-0814 | Low | patch | ansible-unix | auto-approvable | No | 0.7% |
+| FIND-1627 | LNX-SRV-0112 | Race condition in Linux kernel 2.6 allows local users to read the environment variables of another process that is… | CVE-2004-1058 | Low | patch | ansible-unix | auto-approvable | No | 0.4% |
+| FIND-2161 | OT-IOT-0046 | Triangle MicroWorks SCADA Data Gateway before 3.00.0635 allows physically proximate attackers to cause a denial of… | CVE-2014-2343 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2214 | OT-IOT-0099 | LCDS Laquis SCADA prior to version 4.1.0.4150 allows out of bounds read when opening a specially crafted project file,… | CVE-2018-19004 | Low | firmware-update | manual-only | manual-only | No | 3.7% |
+| FIND-2228 | OT-IOT-0113 | Processing a specially crafted project file in LAquis SCADA 4.3.1.71 may trigger an out-of-bounds read, which may… | CVE-2019-10994 | Low | firmware-update | manual-only | manual-only | No | 0.9% |
+| FIND-2320 | OT-IOT-0205 | A vulnerability classified as problematic was found in Supcon InPlant SCADA up to 20230901. Affected by this… | CVE-2023-4986 | Low | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-2350 | OT-IOT-0235 | A vulnerability has been found in Scada-LTS 2.7.8 and classified as problematic. Affected by this vulnerability is an… | CVE-2024-7901 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2355 | OT-IOT-0240 | A vulnerability classified as problematic has been found in Scada-LTS up to 2.7.8.1. Affected is an unknown function… | CVE-2025-7728 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2356 | OT-IOT-0241 | A vulnerability classified as problematic was found in Scada-LTS up to 2.7.8.1. Affected by this vulnerability is an… | CVE-2025-7729 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2358 | OT-IOT-0243 | A vulnerability classified as problematic has been found in Scada-LTS up to 2.7.8.1. This affects an unknown part of… | CVE-2025-8743 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2359 | OT-IOT-0244 | A vulnerability has been found in Scada-LTS 2.7.8.1. This impacts an unknown function of the file… | CVE-2025-9137 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2360 | OT-IOT-0245 | A vulnerability was found in Scada-LTS 2.7.8.1. Affected is an unknown function of the file pointHierarchy/new/.… | CVE-2025-9138 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2362 | OT-IOT-0247 | A security flaw has been discovered in Scada-LTS 2.7.8.1. This affects an unknown part of the file mailing_lists.shtm.… | CVE-2025-9143 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2363 | OT-IOT-0248 | A weakness has been identified in Scada-LTS 2.7.8.1. This vulnerability affects unknown code of the file… | CVE-2025-9144 | Low | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-2364 | OT-IOT-0249 | A security vulnerability has been detected in Scada-LTS 2.7.8.1. This issue affects some unknown processing of the… | CVE-2025-9145 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2365 | OT-IOT-0250 | A security vulnerability has been detected in Scada-LTS up to 2.7.8.1. Impacted is an unknown function of the file… | CVE-2025-9233 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2366 | OT-IOT-0251 | A vulnerability was detected in Scada-LTS up to 2.7.8.1. The affected element is an unknown function of the file… | CVE-2025-9234 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2367 | OT-IOT-0252 | A flaw has been found in Scada-LTS up to 2.7.8.1. The impacted element is an unknown function of the file… | CVE-2025-9235 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2368 | OT-IOT-0253 | A vulnerability was determined in Scada-LTS up to 2.7.8.1. This impacts an unknown function of the file… | CVE-2025-9388 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2369 | OT-IOT-0254 | A vulnerability was identified in Scada-LTS up to 2.7.8.1. The affected element is an unknown function of the file… | CVE-2025-9404 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2370 | OT-IOT-0255 | A vulnerability was detected in Scada-LTS up to 2.7.8.1. This vulnerability affects unknown code of the file… | CVE-2025-10234 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2371 | OT-IOT-0256 | A flaw has been found in Scada-LTS up to 2.7.8.1. This issue affects some unknown processing of the file /reports.shtm… | CVE-2025-10235 | Low | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-2396 | OT-IOT-0281 | Cybersecurity Nozomi Networks Labs, a specialized security company focused on Industrial Control Systems (ICS) and… | CVE-2025-52598 | Low | firmware-update | manual-only | manual-only | No | 0.2% |
 
-## Per-finding detail
+## Per-finding detail (top 60 by priority)
 
-### FIND-15 — PAN-OS GlobalProtect Command Injection — **CRITICAL** (CVE-2024-3400)
-**Priority: High — escalated by CISA KEV** (listed 2024-04-12, known ransomware campaign
-use) **and EPSS 100.0%** (99.999th+ percentile) — an unauthenticated, root-level RCE on an
-internet/perimeter-facing firewall, about as urgent as findings get. **Rationale for risk
-tier:** no fixer exists for `network-security-device` findings yet, and this is the
-network perimeter regardless — every remediation step here must be a human-run, reviewed
-change on the firewall. **Rollback:** roll back to the previous PAN-OS version via the
-firewall's saved config/software rollback feature, or re-enable GlobalProtect telemetry
-and restore the prior firewall config from backup if it was disabled as an interim
-mitigation.
+Showing the 60 highest-priority findings of 2415 total - full detail for every finding at this scale would not be practically readable as a document; every finding is still in the queue table above, and in full (with live SLA/KEV/EPSS) at `/queue`.
 
 ### FIND-6 — Cisco IOS XE Web UI Privilege Escalation — **CRITICAL** (CVE-2023-20198)
-**Priority: High — escalated by CISA KEV**, EPSS 99.6%, CVSS 10.0 (maximum). **Rationale
-for risk tier:** no network-device fixer exists yet, and this is core switching
-infrastructure regardless — disabling the web UI or applying the vendor fix must be done
-and verified by a human. **Rollback:** re-enable the HTTP/HTTPS server feature (or restore
-the prior IOS XE image/config) from the device's saved configuration backup if the fix
-breaks a dependent management workflow (verify none exist first).
+- Asset: CSW-CORE01 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: escalated to High priority: actively exploited per CISA KEV since 2023-10-16; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
 
-### FIND-12 — Apache Log4j2 RCE (Log4Shell) — **CRITICAL** (CVE-2021-44228)
-**Priority: High — escalated by CISA KEV** (listed 2021-12-10, known ransomware campaign
-use) **and EPSS 100.0%** (99.9998th percentile) — this is about as close to "certain to be
-targeted" as a CVE gets. **Rationale for risk tier:** no fixer exists for `application`
-findings yet — a library upgrade needs to go through the app's own build/release process,
-not a generic Ansible playbook, and a human must validate the upgrade doesn't break
-logging behavior. **Rollback:** roll back the application deployment to the previous
-build/artifact (pre-upgrade Log4j2 version) via the CI/CD release history if the upgrade
-breaks the app.
+### FIND-12 — Apache Log4j2 Remote Code Execution (Log4Shell) — **CRITICAL** (CVE-2021-44228)
+- Asset: APP-ORDERS01 (application)
+- Action: patch | Automation: manual-only | Risk tier: manual-only
+- Rationale: escalated to High priority: actively exploited per CISA KEV since 2021-12-10; manual-only: no remediation-fixer subagent exists yet for `application`
 
-### FIND-1 — PrintNightmare RCE — **CRITICAL** (CVE-2021-34527)
-**Priority: High — escalated by CISA KEV** (listed 2021-11-03, known ransomware campaign
-use), EPSS 99.8%. **Rationale for risk tier:** `WIN-DC01` is a domain controller — change
-approval required regardless of how routine the fix looks. **Rollback:** restore from
-pre-patch VM/system-state snapshot, or re-enable the Print Spooler service if disabling it
-breaks a dependent print workflow.
+### FIND-15 — Palo Alto Networks PAN-OS GlobalProtect Command Injection — **CRITICAL** (CVE-2024-3400)
+- Asset: FW-EDGE01 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: escalated to High priority: actively exploited per CISA KEV since 2024-04-12; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
 
-### FIND-2 — EternalBlue (SMBv1 RCE) — **CRITICAL** (CVE-2017-0144)
-**Priority: High — escalated by CISA KEV** (known ransomware campaign use — this is the
-CVE WannaCry and NotPetya used), EPSS 99.2%. **Rationale for risk tier:** `WIN-FS02` is a
-file server — legacy clients/scripts may still depend on SMBv1, so this needs a change
-window to confirm before disabling. **Rollback:** re-enable the SMB1Protocol Windows
-feature via `Enable-WindowsOptionalFeature` (and/or uninstall the MS17-010 patch from the
-system-state snapshot) if legacy clients break.
+### FIND-35 — The eay_check_x509cert function in KAME Racoon successfully verifies certificates even when OpenSSL validation fails,… — **CRITICAL** (CVE-2004-0607)
+- Asset: WEB-PORTAL-0020 (certificate)
+- Action: config-change | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `certificate`
 
-### FIND-4 — Sudo Heap Overflow (Baron Samedit) — **CRITICAL** (CVE-2021-3156)
-**Priority: High — escalated by CISA KEV**, EPSS 99.3%. **Rationale for risk tier:**
-single-package upgrade, no service restart required, widely-deployed and well-tested
-vendor fix — low blast radius even on a database host. **Rollback:** downgrade the `sudo`
-package via the distro's package cache if unexpected issues arise (extremely unlikely).
+### FIND-49 — Buffer overflow in the SSL_get_shared_ciphers function in OpenSSL 0.9.7 before 0.9.7l, 0.9.8 before 0.9.8d, and… — **CRITICAL** (CVE-2006-3738)
+- Asset: WEB-PORTAL-0034 (certificate)
+- Action: config-change | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `certificate`
 
-### FIND-11 — OpenSSH Auth Bypass Regression — **CRITICAL** (CVE-2024-6387)
-**Priority: High — escalated by EPSS 99.5%** despite not (yet) being KEV-listed — exactly
-the case EPSS exists for: very high near-term exploitation probability ahead of confirmed
-in-the-wild use. **Rationale for risk tier:** `LNX-AUTH01` handles internal authentication
-traffic — needs approval even though the fix itself is narrow. **Rollback:** downgrade
-`openssh-server` to the previous version via the distro package cache/repo if the upgrade
-causes issues.
+### FIND-103 — OpenSSL before 0.9.8m does not check for a NULL return value from bn_wexpand function calls in (1) crypto/bn/bn_div.c,… — **CRITICAL** (CVE-2009-3245)
+- Asset: WEB-PORTAL-0088 (certificate)
+- Action: config-change | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `certificate`
 
-### FIND-8 — Unauthenticated Management Interface — **CRITICAL** (CVE-2019-7592)
-**Priority: High — not KEV-listed, no EPSS score available, escalated by asset
-criticality**: building-automation controller, where a misconfiguration carries
-physical-safety-adjacent risk (HVAC) regardless of exploitation-likelihood signals.
-**Rationale for risk tier:** no OT/IoT fixer exists yet, and this specific vendor's fix
-(enable auth + restrict to an OT VLAN) needs a human to implement and verify against the
-device's own management console. **Rollback:** revert to the prior device config backup if
-enabling authentication (or the VLAN restriction) disrupts a dependent integration.
+### FIND-325 — A vulnerability in the container management subsystem of Cisco Digital Network Architecture (DNA) Center could allow… — **CRITICAL** (CVE-2018-0268)
+- Asset: CLOUD-0010 (cloud-infrastructure)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `cloud-infrastructure`
 
-### FIND-5 — OpenSSL Infinite Loop DoS — **HIGH** (CVE-2022-0778)
-**Priority: High — escalated by EPSS 70.6%** despite not being KEV-listed. **Rationale
-for risk tier:** the package upgrade itself is mechanical, but `LNX-WEB05` is a live web
-server and the OpenSSL upgrade likely requires restarting the web service — brief downtime
-risk means a maintenance window should be scheduled. **Rollback:** downgrade the OpenSSL
-package and restart the web service if the new version causes compatibility issues.
+### FIND-334 — The Kubernetes integration in GitLab Enterprise Edition 11.x before 11.2.8, 11.3.x before 11.3.9, and 11.4.x before… — **CRITICAL** (CVE-2018-18843)
+- Asset: CLOUD-0019 (cloud-infrastructure)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `cloud-infrastructure`
 
-### FIND-3 — MSHTML Security Feature Bypass — **HIGH** (CVE-2024-30040)
-**Priority: High — KEV-listed** (2024-05-14) despite a low EPSS score (3.9%) — a good
-example of the two signals disagreeing: KEV confirms this has been used in a real attack
-chain, even though EPSS's predictive model doesn't rate broad near-term reuse as highly.
-When they disagree, KEV (confirmed fact) takes precedence over EPSS (prediction).
-**Rationale for risk tier:** routine monthly-cycle Windows Update on a non-DC application
-server — auto-approvable within a normal patch window. **Rollback:** uninstall the
-applicable update via Windows Update history if it causes a regression.
+### FIND-403 — OneDev is an all-in-one devops platform. In OneDev before version 4.0.3, a Kubernetes REST endpoint exposes two… — **CRITICAL** (CVE-2021-21243)
+- Asset: CLOUD-0088 (cloud-infrastructure)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: escalated to High priority: EPSS 54.5% (near-term exploitation likelihood); manual-only: no remediation-fixer subagent exists yet for `cloud-infrastructure`
 
-### FIND-10 — Internet-facing RDP on Bastion Host — **HIGH**
-**Priority: High — no CVE/KEV/EPSS signal (this is a threat-intel/config finding, not a
-CVE), escalated by asset criticality**: `WIN-BASTION02` is a critical remote-access entry
-point and RDP exposure is a top ransomware initial-access vector. **Rationale for risk
-tier:** the fix is mechanical, but a misconfigured rule risks locking out legitimate admin
-access — needs a human to confirm the approved source range. **Rollback:** revert the
-firewall/NSG rule to its prior scope if legitimate access is blocked.
+### FIND-457 — Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. A critical vulnerability has been discovered… — **CRITICAL** (CVE-2022-29165)
+- Asset: CLOUD-0142 (cloud-infrastructure)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `cloud-infrastructure`
 
-### FIND-7 — Telnet Service Exposed — **MEDIUM (priority)** / High severity
-**Priority: Medium** — no CVE/KEV/EPSS signal; falls back to severity + asset criticality,
-and this is a single non-critical lobby camera, not core infrastructure, so it's tempered
-down from the High severity label. **Rationale for risk tier:** no IoT/OT device fixer
-exists yet; disabling Telnet on this camera requires its vendor-specific management
-interface, so a human must apply and verify the change even though the change itself
-(switch to SSH/HTTPS, no known dependents on Telnet) is low-risk. **Rollback:** re-enable
-Telnet temporarily if the encrypted management alternative isn't reachable, then
-re-investigate connectivity before re-disabling.
+### FIND-483 — Microsoft has identified a vulnerability affecting the cluster connect feature of Azure Arc-enabled Kubernetes… — **CRITICAL** (CVE-2022-37968)
+- Asset: CLOUD-0168 (cloud-infrastructure)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `cloud-infrastructure`
 
-### FIND-13 — SSL Certificate Expiry — **MEDIUM**
-**Priority: Medium** — no CVE, so no KEV/EPSS signal applies; falls back to the Medium
-severity label. This is time-sensitive to schedule promptly (expires within 30 days) even
-though it isn't classified as urgent by the KEV/EPSS heuristics. **Rationale for risk
-tier:** no fixer exists yet — renewal needs integration with the org's CA/ACME tooling, not
-a generic config change, so a human must run the renewal today. **Rollback:** re-install
-the previous (still-valid) certificate and key from backup if the new certificate causes
-TLS handshake failures.
+### FIND-598 — JumpServer is an open-source Privileged Access Management (PAM) tool that provides DevOps and IT teams with on-demand… — **CRITICAL** (CVE-2024-40628)
+- Asset: CLOUD-0283 (cloud-infrastructure)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `cloud-infrastructure`
 
-### FIND-14 — Deprecated TLSv1.0/1.1 Protocol — **MEDIUM**
-**Priority: Medium** — no CVE, no KEV/EPSS signal; falls back to the Medium severity
-label. **Rationale for risk tier:** no TLS-config fixer exists yet, and disabling old TLS
-versions carries a small compatibility risk (very old clients that only support TLS
-1.0/1.1 would break), so it needs a human to check the client population and apply the
-change. **Rollback:** re-enable the deprecated protocol versions in the web server's TLS
-configuration from the pre-change config backup if a legacy client breaks.
+### FIND-599 — JumpServer is an open-source Privileged Access Management (PAM) tool that provides DevOps and IT teams with on-demand… — **CRITICAL** (CVE-2024-40629)
+- Asset: CLOUD-0284 (cloud-infrastructure)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `cloud-infrastructure`
 
-### FIND-9 — Outdated iOS Version — **LOW**
-**Priority: Low** — no CVE, no KEV/EPSS signal, lowest-criticality asset (a single user's
-phone). **Rationale for risk/action:** this is the textbook "vague outdated OS version"
-alert with no specific CVE or patch identified — a human needs to determine the correct
-iOS update and enforce it via MDM policy; there's no fixer for mobile/MDM-managed
-endpoints either way. **Rollback:** not applicable until a specific update path is chosen;
-relax the MDM compliance policy back to its prior state via the MDM console if enforcement
-causes issues.
+### FIND-924 — Cisco Gigabit Switch routers running IOS allow remote attackers to forward unauthorized packets due to improper… — **CRITICAL** (CVE-1999-0775)
+- Asset: NET-RTSW-0009 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1008 — Cisco IOS 12.2 through 12.4 before 20060920, as used by Cisco IAD2430, IAD2431, and IAD2432 Integrated Access Devices,… — **CRITICAL** (CVE-2006-4950)
+- Asset: NET-RTSW-0093 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1011 — Cisco IOS 9.x, 10.x, 11.x, and 12.x and IOS XR 2.0.x, 3.0.x, and 3.2.x allows remote attackers to cause a denial of… — **CRITICAL** (CVE-2007-0480)
+- Asset: NET-RTSW-0096 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1045 — SNMPv3 HMAC verification in (1) Net-SNMP 5.2.x before 5.2.4.1, 5.3.x before 5.3.2.1, and 5.4.x before 5.4.1.1; (2)… — **CRITICAL** (CVE-2008-0960)
+- Asset: NET-RTSW-0130 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: escalated to High priority: EPSS 68.8% (near-term exploitation likelihood); manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1100 — Unspecified vulnerability in the SIP implementation in Cisco IOS 12.3 and 12.4 allows remote attackers to execute… — **CRITICAL** (CVE-2010-0580)
+- Asset: NET-RTSW-0185 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1101 — Unspecified vulnerability in the SIP implementation in Cisco IOS 12.3 and 12.4 allows remote attackers to execute… — **CRITICAL** (CVE-2010-0581)
+- Asset: NET-RTSW-0186 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1107 — IOS 12.2(52)SE and 12.2(52)SE1 on Cisco Industrial Ethernet (IE) 3000 series switches has (1) a community name of… — **CRITICAL** (CVE-2010-1574)
+- Asset: NET-RTSW-0192 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1131 — The PKI functionality in Cisco IOS 15.0 and 15.1 does not prevent permanent caching of certain public keys, which… — **CRITICAL** (CVE-2011-0935)
+- Asset: NET-RTSW-0216 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1146 — Unspecified vulnerability in the Smart Install functionality in Cisco IOS 12.2 and 15.1 allows remote attackers to… — **CRITICAL** (CVE-2011-3271)
+- Asset: NET-RTSW-0231 (network-routing-switching)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-routing-switching`
+
+### FIND-1218 — The FTP component in FortiGate 2.8 running FortiOS 2.8MR10 and v3beta, and other versions before 3.0 MR1, allows… — **CRITICAL** (CVE-2005-3057)
+- Asset: FW-EDGE-0003 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
+
+### FIND-1394 — Palo Alto Networks PAN-OS before 3.1.10 and 4.0.x before 4.0.5 allows remote attackers to execute arbitrary commands… — **CRITICAL** (CVE-2012-6592)
+- Asset: FW-EDGE-0179 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
+
+### FIND-1395 — Palo Alto Networks PAN-OS before 3.1.10 and 4.0.x before 4.0.4 allows remote attackers to execute arbitrary commands… — **CRITICAL** (CVE-2012-6593)
+- Asset: FW-EDGE-0180 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
+
+### FIND-1403 — The device-management command-line interface in Palo Alto Networks PAN-OS before 3.1.12, 4.0.x before 4.0.10, and… — **CRITICAL** (CVE-2012-6601)
+- Asset: FW-EDGE-0188 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
+
+### FIND-1405 — The web management UI in Palo Alto Networks PAN-OS before 3.1.12, 4.0.x before 4.0.10, and 4.1.x before 4.1.4 allows… — **CRITICAL** (CVE-2012-6603)
+- Asset: FW-EDGE-0190 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: High priority: Critical severity; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
+
+### FIND-1459 — When Security Assertion Markup Language (SAML) authentication is enabled and the 'Validate Identity Provider… — **CRITICAL** (CVE-2020-2021)
+- Asset: FW-EDGE-0244 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: escalated to High priority: actively exploited per CISA KEV since 2022-03-25; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
+
+### FIND-1514 — A command injection as a result of arbitrary file creation vulnerability in the GlobalProtect feature of Palo Alto… — **CRITICAL** (CVE-2024-3400)
+- Asset: FW-EDGE-0299 (network-security-device)
+- Action: firmware-update | Automation: manual-only | Risk tier: manual-only
+- Rationale: escalated to High priority: actively exploited per CISA KEV since 2024-04-12; manual-only: no remediation-fixer subagent exists yet for `network-security-device`
+
+### FIND-1526 — The "capabilities" feature in Linux before 2.2.16 allows local users to cause a denial of service or gain privileges… — **CRITICAL** (CVE-2000-0506)
+- Asset: LNX-SRV-0011 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1527 — The logrotate script for OpenLDAP before 1.2.11 in Conectiva Linux sends an improper signal to the kernel log daemon… — **CRITICAL** (CVE-2000-0747)
+- Asset: LNX-SRV-0012 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1557 — Signed integer overflow in the bttv_read function in the bttv driver (bttv-driver.c) in Linux kernel before 2.4.20 has… — **CRITICAL** (CVE-2002-1572)
+- Asset: LNX-SRV-0042 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1558 — Unspecified vulnerability in the pcilynx ieee1394 firewire driver (pcilynx.c) in Linux kernel before 2.4.20 has… — **CRITICAL** (CVE-2002-1573)
+- Asset: LNX-SRV-0043 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1569 — The mxcsr code in Linux kernel 2.4 allows attackers to modify CPU state registers via a malformed address. — **CRITICAL** (CVE-2003-0248)
+- Asset: LNX-SRV-0054 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1578 — Multiple integer overflows in the 32bit emulation for AMD64 architectures in Linux 2.4 kernel before 2.4.21 allows… — **CRITICAL** (CVE-2003-0959)
+- Asset: LNX-SRV-0063 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1615 — Multiple "overflows" in the io_edgeport driver for Linux kernel 2.4.x have unknown impact and unknown attack vectors. — **CRITICAL** (CVE-2004-1017)
+- Asset: LNX-SRV-0100 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1620 — Unspecified vulnerability in procfs in the Linux-VServer stable branch for the 2.4 kernel before 1.23 and… — **CRITICAL** (CVE-2004-2613)
+- Asset: LNX-SRV-0105 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1633 — Multiple vulnerabilities in the IGMP functionality for Linux kernel 2.4.22 to 2.4.28, and 2.6.x to 2.6.9, allow local… — **CRITICAL** (CVE-2004-1137)
+- Asset: LNX-SRV-0118 (unix-server)
+- Action: patch | Automation: ansible-unix | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1669 — Heap-based buffer overflow in the HtmlHelp program (hh.exe) in HTML Help for Microsoft Windows 98, Me, NT 4.0, 2000,… — **CRITICAL** (CVE-2004-0201)
+- Asset: WIN-SRV-0034 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1674 — Unknown vulnerability in the Graphics Rendering Engine processes of Microsoft Windows 2000, Windows XP, and Windows… — **CRITICAL** (CVE-2004-0209)
+- Asset: WIN-SRV-0039 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 57.4% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1676 — Buffer overflow in Microsoft Internet Explorer and Explorer on Windows XP SP1, WIndows 2000, Windows 98, and Windows… — **CRITICAL** (CVE-2004-0214)
+- Asset: WIN-SRV-0041 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1677 — The Network News Transfer Protocol (NNTP) component of Microsoft Windows NT Server 4.0, Windows 2000 Server, Windows… — **CRITICAL** (CVE-2004-0574)
+- Asset: WIN-SRV-0042 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 64.4% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1678 — Integer overflow in DUNZIP32.DLL for Microsoft Windows XP, Windows XP 64-bit Edition, Windows Server 2003, and Windows… — **CRITICAL** (CVE-2004-0575)
+- Asset: WIN-SRV-0043 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 60.3% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1679 — The SMTP (Simple Mail Transfer Protocol) component of Microsoft Windows XP 64-bit Edition, Windows Server 2003,… — **CRITICAL** (CVE-2004-0840)
+- Asset: WIN-SRV-0044 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1682 — The DHCP Server service for Microsoft Windows NT 4.0 Server and Terminal Server Edition does not properly validate the… — **CRITICAL** (CVE-2004-0900)
+- Asset: WIN-SRV-0047 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1683 — The WINS service (wins.exe) on Microsoft Windows NT Server 4.0, Windows 2000 Server, and Windows Server 2003 allows… — **CRITICAL** (CVE-2004-1080)
+- Asset: WIN-SRV-0048 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 79.8% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1684 — The Indexing Service for Microsoft Windows XP and Server 2003 does not properly validate the length of a message,… — **CRITICAL** (CVE-2004-0897)
+- Asset: WIN-SRV-0049 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1691 — Stack-based buffer overflow in WINSRV.DLL in the Client Server Runtime System (CSRSS) process of Microsoft Windows… — **CRITICAL** (CVE-2005-0551)
+- Asset: WIN-SRV-0056 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1695 — Integer overflow in Microsoft Windows 98, 2000, XP SP2 and earlier, and Server 2003 SP1 and earlier allows remote… — **CRITICAL** (CVE-2005-1208)
+- Asset: WIN-SRV-0060 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1708 — Windows Shell for Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 allows remote attackers to execute… — **CRITICAL** (CVE-2005-2122)
+- Asset: WIN-SRV-0073 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1724 — The Server Message Block (SMB) driver (MRXSMB.SYS) in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1… — **CRITICAL** (CVE-2006-2373)
+- Asset: WIN-SRV-0089 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1732 — Buffer overflow in the DHCP Client service for Microsoft Windows 2000 SP4, Windows XP SP1 and SP2, and Server 2003 up… — **CRITICAL** (CVE-2006-2372)
+- Asset: WIN-SRV-0097 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 90.2% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1735 — Buffer overflow in the Server Service in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1 allows remote… — **CRITICAL** (CVE-2006-3439)
+- Asset: WIN-SRV-0100 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 85.0% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1736 — Buffer overflow in the Winsock API in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1 allows remote… — **CRITICAL** (CVE-2006-3440)
+- Asset: WIN-SRV-0101 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 57.3% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1737 — Buffer overflow in the DNS Client service in Microsoft Windows 2000 SP4, XP SP1 and SP2, and Server 2003 SP1 allows… — **CRITICAL** (CVE-2006-3441)
+- Asset: WIN-SRV-0102 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 62.0% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1747 — Buffer overflow in the SNMP Service in Microsoft Windows 2000 SP4, XP SP2, Server 2003, Server 2003 SP1, and possibly… — **CRITICAL** (CVE-2006-5583)
+- Asset: WIN-SRV-0112 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 53.5% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1758 — Stack-based buffer overflow in the AfxOleSetEditMenu function in the MFC component in Microsoft Windows 2000 SP4, XP… — **CRITICAL** (CVE-2007-1512)
+- Asset: WIN-SRV-0123 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1759 — The dynamic DNS update mechanism in the DNS Server service on Microsoft Windows does not properly authenticate clients… — **CRITICAL** (CVE-2007-1644)
+- Asset: WIN-SRV-0124 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1760 — Buffer overflow in FutureSoft TFTP Server 2000 on Microsoft Windows 2000 SP4 allows remote attackers to execute… — **CRITICAL** (CVE-2007-1645)
+- Asset: WIN-SRV-0125 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: High priority: Critical severity; auto-approvable: well-understood single-finding fix on a non-critical-named asset
+
+### FIND-1767 — Stack-based buffer overflow in the RPC interface in the Domain Name System (DNS) Server Service in Microsoft Windows… — **CRITICAL** (CVE-2007-1748)
+- Asset: WIN-SRV-0132 (windows-server)
+- Action: patch | Automation: ansible-windows | Risk tier: auto-approvable
+- Rationale: escalated to High priority: EPSS 77.7% (near-term exploitation likelihood); auto-approvable: well-understood single-finding fix on a non-critical-named asset
 
 ## Findings with no automated remediation path today
 
-- **FIND-6** (network-routing-switching) and **FIND-15** (network-security-device) need a
-  `remediation-fixer-network` subagent generating vendor CLI/API config diffs — e.g. Cisco
-  IOS/IOS XE CLI (via Ansible's `cisco.ios` collection) for switches/routers, and PAN-OS
-  CLI/XML API for Palo Alto firewalls. These are different enough (routing/switching vs.
-  security-appliance policy) that this realistically needs multiple vendor templates
-  rather than one shared mechanism.
-- **FIND-7, FIND-8, FIND-9** (iot-ot-device) need a `remediation-fixer-iot-ot` subagent —
-  given how fragmented IoT/OT vendor management APIs are (Axis cameras, Johnson Controls
-  building-management systems, and MDM platforms), this is realistically a per-vendor
-  integration effort rather than one generic fixer. FIND-9 specifically routes through an
-  MDM platform's compliance policies (Intune/Jamf API), a different integration entirely
-  from infra automation.
-- **FIND-12** (application) needs a `remediation-fixer-application` subagent: a
-  library/dependency upgrade goes through the application's own build and release pipeline
-  (Maven/Gradle for a JVM app, npm for Node, pip for Python, etc.) — a fundamentally
-  different mechanism per language/package manager, unlike the OS-level fixers' shared
-  Ansible approach.
-- **FIND-13, FIND-14** (certificate) need integration with the org's CA/ACME tooling for
-  renewal (FIND-13) and a TLS-config fixer for protocol/cipher hardening (FIND-14) —
-  mechanically simple individually, but organization-specific enough (which CA, which ACME
-  client, which web server config format) that no generic fixer exists yet.
+- **application** (601 findings) — needs a `remediation-fixer-application` subagent for library/dependency upgrades (SCA) or a code fix (DAST) - a different mechanism per language/package manager, unlike the OS-level fixers
+- **iot-ot-device** (303 findings) — needs vendor-specific firmware tooling - no general-purpose fixer exists across IoT/OT vendors
+- **certificate** (302 findings) — needs integration with the org's CA/ACME tooling for renewal, and a TLS-config fixer for protocol/cipher hardening
+- **network-routing-switching** (301 findings) — needs a `remediation-fixer-network` subagent generating vendor CLI config diffs
+- **network-security-device** (301 findings) — needs a `remediation-fixer-network` subagent generating vendor CLI config diffs
+- **cloud-infrastructure** (300 findings) — needs a `remediation-fixer-cloud` subagent generating Terraform/CloudFormation/ARM diffs per provider
