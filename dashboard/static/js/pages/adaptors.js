@@ -1,10 +1,12 @@
-// Consolidated Adaptors hub: one page, one dropdown/filter selector, instead of six
-// separate sidebar entries spread across four different "Adaptors — X" group headings.
-// Selecting a connector dynamically renders its existing settings/preview panel below -
-// reuses each connector's existing page module as-is (servicenow.js, jira.js, etc.),
-// no changes to those modules. New "reference" catalog entries (no live preview yet)
-// render a documented-facts panel instead of a form - see adaptorCatalog.js.
-import { escapeHtml } from "../dom.js";
+// Connectors/Adaptors hub: a category sidebar + card grid (the same real pattern most
+// connector-management pages use - a category list on the left, cards with a status
+// badge on the right, click a card for its detail) instead of six separate sidebar
+// entries or a single dropdown selector. Clicking a card opens the app's existing
+// modal (dom.js) with real connection/settings info, then either the connector's
+// existing preview/send page module (servicenow.js, jira.js, etc. - reused as-is, no
+// changes to those modules) for "live" entries, or a documented-facts panel for
+// "reference" catalog entries with no working code yet - see adaptorCatalog.js.
+import { escapeHtml, openModal } from "../dom.js";
 import { icon } from "../icons.js";
 import { CATEGORIES, CONNECTORS, connectorByKey } from "../adaptorCatalog.js";
 
@@ -42,8 +44,7 @@ function connectionSettingsHtml(c) {
     return `
       <div class="callout callout-warn">
         ⚠️ No connection settings to show - <strong>${escapeHtml(c.label)}</strong> has no
-        working code in this repo yet (see the Reference panel below for its real,
-        researched API facts).
+        working code in this repo yet (see the facts below for its real, researched API).
       </div>`;
   }
   const credNote = c.credentialShape === "none"
@@ -59,87 +60,135 @@ function connectionSettingsHtml(c) {
     </table>`;
 }
 
-function optionsHtml(selectedKey) {
-  return CATEGORIES.map((category) => {
-    const items = CONNECTORS.filter((c) => c.category === category);
-    if (!items.length) return "";
-    const opts = items.map((c) =>
-      `<option value="${c.key}" ${c.key === selectedKey ? "selected" : ""}>` +
-      `${escapeHtml(c.label)} ${c.status === "live" ? "" : "(reference)"}</option>`).join("");
-    return `<optgroup label="${escapeHtml(category)}">${opts}</optgroup>`;
-  }).join("");
+function categoryListHtml(activeCategory) {
+  const withCounts = CATEGORIES
+    .map((cat) => ({ cat, count: CONNECTORS.filter((c) => c.category === cat).length }))
+    .filter((c) => c.count > 0);
+  const item = (value, label, count) => `
+    <button type="button" class="adaptor-category-item ${activeCategory === value ? "active" : ""}" data-category="${escapeHtml(value)}">
+      <span>${escapeHtml(label)}</span><span class="adaptor-category-count">${count}</span>
+    </button>`;
+  return item("all", "All Integrations", CONNECTORS.length) +
+    withCounts.map(({ cat, count }) => item(cat, cat, count)).join("");
+}
+
+function cardHtml(c) {
+  return `
+    <div class="adaptor-card" data-key="${escapeHtml(c.key)}" tabindex="0" role="button" aria-label="${escapeHtml(c.label)}">
+      <div class="adaptor-card-header">
+        <span class="adaptor-card-icon">${icon(c.iconName, 22)}</span>
+        <div>
+          <strong>${escapeHtml(c.label)}</strong><br>
+          <span class="adaptor-category-badge">${escapeHtml(c.category)}</span>
+        </div>
+      </div>
+      <p class="adaptor-card-blurb">${escapeHtml(c.blurb)}</p>
+      <div class="adaptor-card-footer">
+        <span class="adaptor-option-status adaptor-status-${c.status}">${c.status === "live" ? "Preview available" : "Reference"}</span>
+        <span class="link-button">${c.status === "live" ? "Configure / Preview →" : "View facts →"}</span>
+      </div>
+    </div>`;
+}
+
+function cardGridHtml(items) {
+  if (!items.length) return `<p class="empty-state">No connectors in this category.</p>`;
+  return `<div class="adaptor-card-grid">${items.map(cardHtml).join("")}</div>`;
+}
+
+async function openConnectorModal(c) {
+  const body = openModal(`
+    <div class="adaptor-modal-header">
+      <span class="adaptor-card-icon">${icon(c.iconName, 24)}</span>
+      <div>
+        <h2 style="margin:0 0 2px">${escapeHtml(c.label)}</h2>
+        <span class="adaptor-option-status adaptor-status-${c.status}">${c.status === "live" ? "Preview available" : "Reference"}</span>
+      </div>
+    </div>
+    <p class="filter-count">${escapeHtml(c.blurb)}</p>
+    <h3 style="margin-top:18px">Connection &amp; settings</h3>
+    ${connectionSettingsHtml(c)}
+    <div id="adaptor-modal-panel-heading"></div>
+    <div id="adaptor-modal-panel"><div class="empty-state">Loading…</div></div>`);
+
+  const panelHeadingEl = body.querySelector("#adaptor-modal-panel-heading");
+  const panelEl = body.querySelector("#adaptor-modal-panel");
+
+  if (c.status === "live") {
+    panelHeadingEl.innerHTML = `
+      <h3 style="margin-top:22px">Preview / test this connector</h3>
+      <p class="filter-count" style="margin:-4px 0 8px">
+        Findings-based preview - builds the exact payload real findings would produce,
+        without sending anything unless you enter real credentials above and confirm.
+      </p>`;
+    const mod = await c.module();
+    await mod.render(panelEl);
+  } else {
+    panelHeadingEl.innerHTML = "";
+    panelEl.innerHTML = referencePanelHtml(c);
+  }
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("connector", c.key);
+  window.history.replaceState({}, "", url.pathname + url.search);
 }
 
 export async function render(container) {
-  const requestedKey = new URLSearchParams(window.location.search).get("connector");
-  const initial = connectorByKey(requestedKey) || CONNECTORS[0];
+  let activeCategory = "all";
 
   container.innerHTML = `
     <p class="subtitle">
       Every external system VulnHunter talks to (or has a documented, real API contract
-      researched for), in one place - pick a connector below instead of hunting across
-      separate sidebar entries. "Preview available" connectors have a working page
-      (form, results, or usage reference); "Reference" entries are real, researched API
-      facts with no working preview/send wired up yet.
+      researched for) - browse by category, click a card for its real connection
+      settings and (for "Preview available" connectors) a working preview/send form.
     </p>
+    <div class="adaptor-layout">
+      <div class="adaptor-categories" id="adaptor-categories">${categoryListHtml(activeCategory)}</div>
+      <div class="adaptor-main">
+        <h2 style="margin-top:0">Live connectors</h2>
+        <p class="filter-count" style="margin:-4px 0 8px">Have a real, working preview/send page - click a card for its connection settings.</p>
+        <div id="adaptor-live-grid"></div>
+        <h2 style="margin-top:28px">Reference catalog</h2>
+        <p class="filter-count" style="margin:-4px 0 8px">Real, researched API facts - no working preview/send wired up yet.</p>
+        <div id="adaptor-reference-grid"></div>
+      </div>
+    </div>`;
 
-    <div class="adaptor-picker">
-      <label for="adaptor-select">Connector</label>
-      <select id="adaptor-select">${optionsHtml(initial.key)}</select>
-      <span class="adaptor-count">${CONNECTORS.length} connectors cataloged
-        (${CONNECTORS.filter((c) => c.status === "live").length} with a live preview)</span>
-    </div>
+  const categoriesEl = container.querySelector("#adaptor-categories");
+  const liveGridEl = container.querySelector("#adaptor-live-grid");
+  const referenceGridEl = container.querySelector("#adaptor-reference-grid");
 
-    <div class="adaptor-summary" id="adaptor-summary"></div>
-
-    <h2 style="margin-top:20px">Connection &amp; settings</h2>
-    <div id="adaptor-connection-settings"></div>
-
-    <div id="adaptor-panel-heading"></div>
-    <div id="adaptor-panel"><div class="empty-state">Loading…</div></div>`;
-
-  const select = container.querySelector("#adaptor-select");
-  const summaryEl = container.querySelector("#adaptor-summary");
-  const connectionSettingsEl = container.querySelector("#adaptor-connection-settings");
-  const panelHeadingEl = container.querySelector("#adaptor-panel-heading");
-  const panelEl = container.querySelector("#adaptor-panel");
-
-  async function showConnector(key, { pushState = true } = {}) {
-    const c = connectorByKey(key);
-    if (!c) return;
-
-    summaryEl.innerHTML = `
-      <span class="adaptor-option-icon">${icon(c.iconName, 20)}</span>
-      <div>
-        <strong>${escapeHtml(c.label)}</strong>
-        <span class="adaptor-option-status adaptor-status-${c.status}">${c.status === "live" ? "Preview available" : "Reference"}</span>
-        <p class="filter-count" style="margin:2px 0 0">${escapeHtml(c.blurb)}</p>
-      </div>`;
-
-    connectionSettingsEl.innerHTML = connectionSettingsHtml(c);
-
-    if (pushState) {
-      const url = new URL(window.location.href);
-      url.searchParams.set("connector", key);
-      window.history.replaceState({}, "", url.pathname + url.search);
-    }
-
-    if (c.status === "live") {
-      panelHeadingEl.innerHTML = `
-        <h2 style="margin-top:28px">Preview / test this connector</h2>
-        <p class="filter-count" style="margin:-4px 0 8px">
-          Findings-based preview - builds the exact payload real findings would produce,
-          without sending anything unless you enter real credentials above and confirm.
-        </p>`;
-      panelEl.innerHTML = "";
-      const mod = await c.module();
-      await mod.render(panelEl);
-    } else {
-      panelHeadingEl.innerHTML = "";
-      panelEl.innerHTML = referencePanelHtml(c);
-    }
+  function renderGrids() {
+    const inCategory = (c) => activeCategory === "all" || c.category === activeCategory;
+    liveGridEl.innerHTML = cardGridHtml(CONNECTORS.filter((c) => c.status === "live" && inCategory(c)));
+    referenceGridEl.innerHTML = cardGridHtml(CONNECTORS.filter((c) => c.status !== "live" && inCategory(c)));
   }
 
-  select.addEventListener("change", (e) => showConnector(e.target.value));
-  await showConnector(initial.key, { pushState: false });
+  categoriesEl.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-category]");
+    if (!btn) return;
+    activeCategory = btn.dataset.category;
+    categoriesEl.innerHTML = categoryListHtml(activeCategory);
+    renderGrids();
+  });
+
+  container.addEventListener("click", (e) => {
+    const card = e.target.closest(".adaptor-card");
+    if (!card) return;
+    const c = connectorByKey(card.dataset.key);
+    if (c) openConnectorModal(c);
+  });
+  container.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const card = e.target.closest(".adaptor-card");
+    if (!card) return;
+    e.preventDefault();
+    const c = connectorByKey(card.dataset.key);
+    if (c) openConnectorModal(c);
+  });
+
+  renderGrids();
+
+  const requestedKey = new URLSearchParams(window.location.search).get("connector");
+  const requested = requestedKey && connectorByKey(requestedKey);
+  if (requested) openConnectorModal(requested);
 }
