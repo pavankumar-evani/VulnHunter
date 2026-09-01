@@ -468,7 +468,8 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
   // genuinely different key-casing convention than /api/queue's lowercase f.severity)
   // - normalized here before merging into one combined severity count.
   const sastAsSeverity = vh.available ? vh.findings.map((f) => ({ severity: f.Severity })) : [];
-  const severityData = countBy([...findings, ...sastAsSeverity], (f) => f.severity);
+  const severityData = countBy([...findings, ...sastAsSeverity], (f) => f.severity)
+    .map((d) => ({ ...d, href: `/queue?severity=${encodeURIComponent(d.label)}` }));
 
   // eol_status is asset-OS-derived, so every finding on a given asset shares the same
   // value - dedupe per distinct asset name rather than double-counting per finding, and
@@ -479,12 +480,14 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
     if (name && !eolByAsset.has(name) && f.eol_status) eolByAsset.set(name, f.eol_status.status);
   }
   const eolExposedCount = [...eolByAsset.values()].filter((s) => s === "eol" || s === "eol-soon").length;
-  const eolData = countBy([...eolByAsset.values()], (s) => s);
+  const eolData = countBy([...eolByAsset.values()], (s) => s)
+    .map((d) => ({ ...d, href: `/queue?eolStatus=${encodeURIComponent(d.label)}` }));
 
   // No historical-snapshot storage exists in this app (only a live snapshot plus each
   // finding's own first_seen/last_seen) - this is the honest substitute for a "KEV
   // trend," not a disguised one.
-  const kevData = countBy(findings.filter((f) => f.kev && f.kev.listed), (f) => f.asset && f.asset.type);
+  const kevData = countBy(findings.filter((f) => f.kev && f.kev.listed), (f) => f.asset && f.asset.type)
+    .map((d) => ({ ...d, href: `/queue?kevOnly=true&assetType=${encodeURIComponent(d.label)}` }));
 
   // Same honest-substitute pattern as kevData above: buckets by each finding's own real
   // first_seen month, answering "when did today's findings originate" - NOT "what did

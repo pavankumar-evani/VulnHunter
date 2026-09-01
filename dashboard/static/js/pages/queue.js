@@ -227,6 +227,9 @@ function applyFilters(findings, filters) {
     if (filters.severity && f.severity !== filters.severity) return false;
     if (filters.team && f.team !== filters.team) return false;
     if (filters.ageBucket && ageBucketFor(f.first_seen, new Date()) !== filters.ageBucket) return false;
+    if (filters.cloudProvider && (f.cloud_provider || "Not attributed") !== filters.cloudProvider) return false;
+    if (filters.assetOs && (f.asset && f.asset.os) !== filters.assetOs) return false;
+    if (filters.eolStatus && (f.eol_status && f.eol_status.status) !== filters.eolStatus) return false;
     return true;
   });
   if (filters.dateRange && filters.dateRange.preset) {
@@ -286,13 +289,27 @@ export async function render(container) {
   // The "Open-finding age" chart's bars deep-link here with ?ageBucket=0-30|31-60|
   // 61-90|90+ - silent, no dropdown, same pattern as severity/team above.
   const initialAgeBucket = new URLSearchParams(window.location.search).get("ageBucket") || null;
+  // Overview's "Assets by risk tier"/"KEV-listed findings by asset type" charts
+  // deep-link here with ?assetType=<type> - the filter bar's own existing dropdown
+  // just never read its initial value from the URL before now, same gap `priority`
+  // had until it was fixed.
+  const initialAssetType = new URLSearchParams(window.location.search).get("assetType") || "all";
+  // Infrastructure's "Cloud findings by provider" and the OT page's "By device type"
+  // pies deep-link here with ?cloudProvider=<provider>/?assetOs=<os> - silent, no
+  // dropdown, same exact-match pattern as severity/team/ageBucket above.
+  const initialCloudProvider = new URLSearchParams(window.location.search).get("cloudProvider") || null;
+  const initialAssetOs = new URLSearchParams(window.location.search).get("assetOs") || null;
+  // Overview's "EOL/EOS exposure" chart deep-links here with ?eolStatus=<status> -
+  // same silent exact-match pattern.
+  const initialEolStatus = new URLSearchParams(window.location.search).get("eolStatus") || null;
   // Overview's SLA breached/at-risk/on-track KPI tiles deep-link here with
   // ?slaStatus=breached|at_risk|on_track.
   const initialSlaStatus = new URLSearchParams(window.location.search).get("slaStatus") || "all";
   let filters = {
-    priority: initialPriority, assetType: "all", environment: "all", category: initialCategory, infraType: initialInfraType,
+    priority: initialPriority, assetType: initialAssetType, environment: "all", category: initialCategory, infraType: initialInfraType,
     kevOnly: initialKevOnly, highEpssOnly: initialHighEpssOnly, slaStatus: initialSlaStatus, cve: initialCve, title: initialTitle, assetName: initialAssetName,
     severity: initialSeverity, team: initialTeam, ageBucket: initialAgeBucket,
+    cloudProvider: initialCloudProvider, assetOs: initialAssetOs, eolStatus: initialEolStatus,
     dateRange: { preset: "", customFrom: "", customTo: "" },
   };
   // A global-search result (search.js) deep-links here with ?highlight=<id> - the
@@ -377,7 +394,7 @@ export async function render(container) {
 
   function assetTypeOptions() {
     const types = [...new Set(allFindings.map((f) => f.asset && f.asset.type).filter(Boolean))].sort();
-    return types.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+    return types.map((t) => `<option value="${escapeHtml(t)}" ${t === filters.assetType ? "selected" : ""}>${escapeHtml(t)}</option>`).join("");
   }
 
   function infraTypeOptions() {
@@ -461,7 +478,7 @@ export async function render(container) {
         </label>
         ${hideAssetCategoryFilters ? "" : `
         <label>Asset type
-          <select id="f-asset-type"><option value="all">All</option>${assetTypeOptions()}</select>
+          <select id="f-asset-type"><option value="all" ${filters.assetType === "all" ? "selected" : ""}>All</option>${assetTypeOptions()}</select>
         </label>
         <label>Category
           <select id="f-category"><option value="all" ${filters.category === "all" ? "selected" : ""}>All</option>${categoryOptions()}</select>

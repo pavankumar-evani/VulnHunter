@@ -40,7 +40,8 @@ export async function render(container) {
   // scripted infra_category rollup) since these values are already specific and
   // real; a long tail of single-instance device models is expected and honest, not
   // hidden.
-  const deviceTypeData = countBy(otFindings, (f) => (f.asset && f.asset.os) || "Unknown device");
+  const deviceTypeData = countBy(otFindings, (f) => (f.asset && f.asset.os) || "Unknown device")
+    .map((d) => (d.label === "Unknown device" ? d : { ...d, href: `/queue?assetOs=${encodeURIComponent(d.label)}` }));
 
   let dateRange = { preset: "", customFrom: "", customTo: "" };
   const rankings = buildTopRankings(otFindings, ownerByAssetName, teamByAssetName);

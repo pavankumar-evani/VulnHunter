@@ -117,10 +117,13 @@ export async function render(container) {
       ${severityChartBlockHtml(infraFindings)}
       <div class="chart-block">
         <h3>By sub-category</h3>
-        ${pieChartSvg(INFRA_CATEGORIES.filter((c) => counts[c] > 0).map((c) => ({ label: INFRA_CATEGORY_LABELS[c], value: counts[c] })))}
+        ${pieChartSvg(INFRA_CATEGORIES.filter((c) => counts[c] > 0).map((c) => ({
+          label: INFRA_CATEGORY_LABELS[c], value: counts[c],
+          href: `/queue?category=infra-vm&infraType=${encodeURIComponent(c)}`,
+        })))}
       </div>
       ${counts.cloud ? `
-      <div class="chart-block">
+      <div class="chart-block" style="max-width:380px">
         <h3>Cloud findings by provider</h3>
         <p class="filter-count" style="margin:-4px 0 8px">
           Derived from each cloud asset's own real platform description
@@ -129,7 +132,8 @@ export async function render(container) {
           generic Docker host, or Terraform-provisioned resource honestly has no single
           provider to attribute and is grouped as "Not attributed" rather than guessed.
         </p>
-        ${pieChartSvg(countBy(findingsByCategory.cloud, (f) => f.cloud_provider || "Not attributed"))}
+        ${pieChartSvg(countBy(findingsByCategory.cloud, (f) => f.cloud_provider || "Not attributed")
+          .map((d) => ({ ...d, href: `/queue?cloudProvider=${encodeURIComponent(d.label)}` })))}
       </div>` : ""}
     </div>
 

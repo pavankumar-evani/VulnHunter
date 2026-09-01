@@ -621,7 +621,12 @@ a.notif-item:hover { background: var(--bg); }
    with it, the whole .chart-block - wide enough to push a sibling chart onto its own
    row in a .chart-row. Without this, two normally-side-by-side charts silently stack
    as soon as any pie slice's label is long, on any moderate/laptop-width viewport. */
-.chart-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--text); max-width: 150px; }
+/* max-height + scroll caps how TALL a many-category legend can grow - without this,
+   an 11-category pie's chart-block ends up visibly taller than every bar-chart block
+   beside it (a real reported "one pie chart is too big" complaint), since a legend's
+   height was otherwise unbounded. Matches the pie's own default size (180px) so a
+   pie's block reads about as tall as a bar chart's, not conspicuously longer. */
+.chart-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--text); max-width: 150px; max-height: 180px; overflow-y: auto; padding-right: 4px; }
 .chart-legend-row { display: flex; align-items: flex-start; gap: 6px; }
 .chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; display: inline-block; margin-top: 3px; }
 .chart-legend-label { min-width: 0; overflow-wrap: break-word; }
