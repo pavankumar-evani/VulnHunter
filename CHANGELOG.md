@@ -31,6 +31,17 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   `severityChartBlockHtml`'s bar chart from its 420px default to 340px.
 
 ### Added
+- **[docs/GOING_LIVE.md](docs/GOING_LIVE.md)**: the operational checklist for actually
+  connecting a real account - exact credentials needed per connector, exact commands/
+  steps, and an honest split between what's ready today with zero code changes
+  (ServiceNow/Jira/Splunk - real credentials typed into that connector's own page,
+  never stored) versus what needs a script or Python session run outside the dashboard
+  (Tenable/Armis via the existing `fetch_live_data.py`; CrowdStrike/Infoblox/Axonius,
+  which have no such script yet - noted as a real, bounded next step once real
+  credentials for any of them exist). States plainly, up front, that no connector in
+  this repo has ever been exercised against a real account, and that going live
+  requires real credentials this project has never had - not something further code
+  changes alone can substitute for.
 - **Word-wrap sweep** across ~35 table columns app-wide (Threat Intel Feed/Zero-Days/
   Matched Exploit Criteria, Certificate Vulnerabilities Title, Remediation Queue/Plan,
   and others) via a new opt-in `.wrap-cell` class - the shared `.data-table` `nowrap`
