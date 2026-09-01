@@ -1,2 +1,2 @@
-requests>=2.31
+requests>=2.34.2
 scikit-learn>=1.9  # real unsupervised ML (ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer
