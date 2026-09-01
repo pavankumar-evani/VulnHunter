@@ -1,0 +1,28 @@
+# Configurable weights for the fleet-wide Aggregate Exposure Score.
+#
+# Read by remediation/enrichment/exposure_score.py, which the dashboard uses to compute
+# a live 0-100 score for the whole fleet, shown as a KPI tile on the Overview page.
+#
+# IMPORTANT - read remediation/enrichment/exposure_score.py's module docstring before
+# treating this as a reproduction of any named product or standard. There is no public,
+# named "industry-standard" aggregate exposure score to reproduce (Tenable's Cyber
+# Exposure Score is proprietary and unpublished); this is an ORIGINAL, DISCLOSED rollup
+# of this app's own already-real signals (per-asset Risk Score, real CISA KEV listings,
+# real FIRST.org EPSS scores) - not a certified or industry-standard formula.
+#
+# Edit this file directly to retune the weights.
+
+# The three real, already-computed signals this score combines, and how much each
+# contributes. Must sum to 1.0.
+component_weights:
+  avg_risk_score: 0.5    # mean of every asset's own Risk Score (remediation/config/risk_scoring_rules.yaml)
+  kev_prevalence: 0.3    # % of all findings that are CISA KEV-listed (confirmed actively exploited)
+  avg_epss: 0.2          # mean FIRST.org EPSS score across findings that have one
+
+# Plain-English labels for the score's overall band - purely for display, doesn't
+# affect the numeric score itself.
+score_bands:
+  Critical: 75
+  High: 50
+  Medium: 25
+  Low: 0

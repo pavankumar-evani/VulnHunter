@@ -61,7 +61,7 @@ export async function render(container) {
     await api.authLogout();
     setCurrentUser(null);
     window.dispatchEvent(new CustomEvent("vulnhunter-auth-changed"));
-    window.history.pushState({}, "", "/login");
+    window.history.pushState({}, "", "/logout");
     window.dispatchEvent(new PopStateEvent("popstate"));
   });
 }

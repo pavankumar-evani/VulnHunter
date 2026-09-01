@@ -53,6 +53,24 @@ def action_type_for(f):
         return "firmware-update" if has_cve else "config-change"
     if asset_type == "iot-ot-device":
         return "firmware-update" if has_cve else "manual-investigation"
+    if asset_type == "client-application":
+        return "patch" if has_cve else "manual-investigation"
+    if asset_type == "iac-resource":
+        return "config-change"  # a Terraform/CloudFormation attribute fix, not a patch
+    if asset_type == "code-repository":
+        return "patch" if has_cve else "config-change"  # dependency bump vs. credential rotation
+    if asset_type == "container-runtime":
+        return "manual-investigation"  # a behavioral detection alert, not a patchable CVE
+    if asset_type == "ai-ml-system":
+        return "manual-investigation"  # a prompt-injection/agent-design-shaped finding, not a patchable CVE
+    if asset_type == "windows-endpoint":
+        return "patch" if has_cve else "config-change"  # SCCM's own real job: OS/app patch deployment
+    if asset_type == "mobile-device":
+        return "patch" if has_cve else "manual-investigation"  # MDM-pushed OS update vs. a device-config review
+    if asset_type == "printer":
+        return "firmware-update"  # same physical-device convention as iot-ot-device/network gear
+    if asset_type == "virtualization-host":
+        return "patch" if has_cve else "config-change"  # hypervisor patch vs. host/vSwitch config hardening
     return "manual-investigation"
 
 
@@ -201,6 +219,15 @@ def build_plan(findings, detail_limit):
         "application": "needs a `remediation-fixer-application` subagent for library/dependency upgrades (SCA) or a code fix (DAST) - a different mechanism per language/package manager, unlike the OS-level fixers",
         "certificate": "needs integration with the org's CA/ACME tooling for renewal, and a TLS-config fixer for protocol/cipher hardening",
         "cloud-infrastructure": "needs a `remediation-fixer-cloud` subagent generating Terraform/CloudFormation/ARM diffs per provider",
+        "client-application": "needs an endpoint-management/patch-deployment integration (e.g. Intune, SCCM, Jamf) to push app updates - different from the OS-level Ansible fixers",
+        "iac-resource": "needs a `remediation-fixer-iac` subagent generating Terraform/CloudFormation diffs to correct the flagged resource attribute",
+        "code-repository": "needs a `remediation-fixer-repo` subagent - bump the flagged dependency version via a PR for CVE-bearing (Dependabot-style) alerts, or purge history and rotate the credential for secret-scanning alerts; two different fix mechanisms under one asset type, same split `application`'s SCA/DAST distinction already documents",
+        "container-runtime": "needs security-team triage - a runtime detection alert (Falco-style) flags anomalous in-container behavior, not a patchable CVE or a config drift; response is investigative, not automatable",
+        "ai-ml-system": "needs AI/ML security team triage - a prompt-injection, agent-design, or model-supply-chain finding requires a design/code change specific to that system, not a general-purpose patch or config diff",
+        "windows-endpoint": "needs a real SCCM/Microsoft Configuration Manager API integration to push the patch - `remediation_mechanism` names the real tool, but no working integration exists in this app yet",
+        "mobile-device": "needs a real MDM API integration (e.g. Microsoft Intune) to push the OS/app update - `remediation_mechanism` names the real tool, but no working integration exists in this app yet",
+        "printer": "needs vendor-specific firmware tooling (HP/Xerox/Canon/Lexmark/Ricoh each ship their own) - no general-purpose fixer exists across printer vendors, same reasoning as `iot-ot-device`",
+        "virtualization-host": "needs a real vendor hypervisor-patching integration (e.g. VMware Update Manager's API) - `remediation_mechanism` names the real tool, but no working integration exists in this app yet",
     }
     for t, ids in sorted(by_type.items(), key=lambda kv: -len(kv[1])):
         note = notes.get(t, "no fixer subagent exists yet for this asset class")

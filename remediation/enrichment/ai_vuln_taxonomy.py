@@ -18,13 +18,19 @@ tactic/technique ID against https://atlas.mitre.org/ before citing it in a compl
 report or incident writeup. Same reasoning applies to `map_finding_to_ai_vuln()`'s
 keyword heuristic below: it's a rough categorization aid, not a certified detection.
 
-Honest scope note: VulnHunter's scanner does not currently analyze AI/ML-specific
-code paths (prompt construction, model loading, agent tool-calling) the way it
-analyzes SQL/command injection - see .claude/agents/vuln-scanner.md's "AI/ML
-security" guidance for what it *does* look for. This repo's own demo app has no
-AI/ML component, so don't expect this taxonomy to show real findings against it -
-see docs/FAQ.md for the same honest treatment already applied to DAST and API
-Vulnerabilities (a real, wired-up category with 0 sample findings, not faked).
+Honest scope note: VulnHunter's scanner does analyze AI/ML-specific code paths
+(prompt construction, model loading, agent tool-calling) - see
+.claude/agents/vuln-scanner.md's "AI/ML security" guidance for exactly what it looks
+for. This is demonstrated against real code, not just documented: the demo app's
+vulnerable-demo-app/ai_assistant.py plants a hardcoded LLM API key, an insecure
+`pickle.load` on an uploaded model file, a prompt-injection-shaped string
+concatenation, and an excessive-agency LLM-to-shell path, and a real vuln-scanner run
+found all four (VULN-10 through VULN-13) - see vulnerable-demo-app/SECURITY_REPORT.md.
+`map_finding_to_ai_vuln()`'s keyword heuristic correctly tags 3 of those 4 against this
+taxonomy (prompt-injection, supply-chain, excessive-agency; the hardcoded-API-key
+finding is a generic secrets issue, not AI/ML-specific, so it correctly does not tag).
+See docs/FAQ.md for how this compares to the still-genuinely-zero-findings categories
+(API Vulnerabilities, DAST) - those stay honestly at zero, this one no longer is.
 """
 import re
 
@@ -213,12 +219,12 @@ _PATTERNS = [
     (r"\bprompt injection\b|\bjailbreak(ing)?\b", "prompt-injection"),
     (r"\bsystem prompt\b.*\bleak", "sensitive-info-disclosure"),
     (r"\btraining data\b.*\bpoison|\bmodel poisoning\b|\bdata poisoning\b|\bbackdoor(ed)? model\b", "training-data-model-poisoning"),
-    (r"\bmalicious (pre-trained )?model\b|\bunsafe (pickle|deserializ)", "supply-chain"),
+    (r"\bmalicious (pre-trained )?model\b|\b(unsafe|insecure) (pickle|deserializ)", "supply-chain"),
     (r"\bllm output\b.*\b(unsanitized|unescaped)|\bmodel output\b.*\beval\b", "improper-output-handling"),
     (r"\bexcessive agency\b|\bagent\b.*\bunrestricted tool\b|\bagent\b.*\bno human\b", "excessive-agency"),
     (r"\bmodel (denial of service|dos)\b|\bunbounded (context|consumption)\b|\btoken flood", "unbounded-consumption"),
     (r"\bmodel extraction\b|\bmodel theft\b|\bmodel stealing\b", "model-theft"),
-    (r"\bhallucinat|\bmisinformation\b.*\bmodel\b|\bovereliance\b", "misinformation"),
+    (r"\bhallucinat|\bmisinformation\b.*\bmodel\b|\boverreliance\b", "misinformation"),
     (r"\bplugin\b.*\b(llm|agent)\b.*\bunvalidated\b|\btool.calling\b.*\bunvalidated\b", "insecure-plugin-tool-design"),
 ]
 _COMPILED = [(re.compile(pattern, re.IGNORECASE), vid) for pattern, vid in _PATTERNS]

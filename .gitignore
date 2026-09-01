@@ -15,3 +15,8 @@ remediation/live-data/
 # a local speed-up for re-running the generator, not meaningful data itself. The derived
 # bulk_*.csv/json fixture files (committed) are what matters.
 remediation/sample-data/bulk/_nvd_cache/
+
+# Real activity audit log (remediation/audit/activity_log.py) - runtime output from
+# actually using the app (who did what, when), not seed/reference data - same reasoning
+# as .vulnhunter/ above. The activity_log.py module itself is still committed.
+remediation/audit/activity_log.json

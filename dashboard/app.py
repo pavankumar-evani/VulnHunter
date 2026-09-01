@@ -7,7 +7,9 @@ what a production version would add on top of this.
 Run with: python dashboard/app.py
 Then open http://127.0.0.1:5050
 """
+import asyncio
 import json
+import os
 import secrets
 import subprocess
 import sys
@@ -28,8 +30,9 @@ import ai_assist  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import reports  # noqa: E402
 import vulnhunter as cli  # noqa: E402
-from auth import oidc, rbac, sessions  # noqa: E402
+from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
+from remediation.audit import activity_log  # noqa: E402
 from remediation.connectors.generic_connector import (  # noqa: E402
     normalize_generic_finding, validate_generic_payload,
 )
@@ -46,12 +49,64 @@ from remediation.enrichment.ai_vuln_taxonomy import (  # noqa: E402
     AI_VULNERABILITIES, build_ai_atlas_heatmap, tag_findings as tag_ai_vulnerabilities,
 )
 from remediation.enrichment.attack_mapping import build_attack_heatmap  # noqa: E402
+from remediation.enrichment import exploit_criteria  # noqa: E402
+from remediation.enrichment import exposure_score  # noqa: E402
+from remediation.enrichment import kev_epss  # noqa: E402
+from remediation.enrichment import quantum_readiness  # noqa: E402
+from remediation.enrichment import risk_scoring  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, cmdb_import, pattern_recognition  # noqa: E402
+from remediation.notifications import alert_checker, email_sender, report_scheduler  # noqa: E402
+from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="VulnHunter Dashboard API", version="1.0.0")
+
+
+@app.middleware("http")
+async def _no_cache_static_assets(request: Request, call_next):
+    """Forces every /static/* response to revalidate (a real network round-trip
+    checking If-None-Match against the file's current ETag) rather than let the
+    browser silently reuse a cached copy for however long its own heuristic freshness
+    lifetime decides - StaticFiles sends an ETag/Last-Modified but no Cache-Control at
+    all by default, and this dev server has repeatedly hit real, hard-to-diagnose bugs
+    from a browser serving stale JS after an edit. `no-cache` (not `no-store`) keeps
+    the fast path: an unchanged file still gets a cheap 304, only a genuinely changed
+    one pays for a real re-fetch."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+# In-process notification scheduler - checks scheduled reports (report_schedule_rules.yaml)
+# and team alert subscriptions (alert_rules.yaml) on a timer, for as long as this server
+# process stays running. Explicitly NOT a durable/guaranteed-delivery scheduler: a
+# restart resets this timer (though never double-sends - see report_scheduler.py's own
+# state-file dedup), and there is no retry-with-backoff beyond "try again next tick." For
+# delivery that doesn't depend on server uptime, point a real external cron/Task
+# Scheduler at POST /api/notification-settings/run-checks-now instead - same underlying
+# check, callable on demand. Interval is configurable (mainly for tests) via
+# NOTIFICATION_CHECK_INTERVAL_SECONDS; defaults to hourly, which is frequent enough for
+# the shortest real cadence here (weekly) without hammering the SMTP relay.
+_NOTIFICATION_CHECK_INTERVAL_SECONDS = int(os.environ.get("NOTIFICATION_CHECK_INTERVAL_SECONDS", "3600"))
+
+
+async def _notification_scheduler_loop():
+    while True:
+        await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
+        try:
+            report_scheduler.check_and_send_due_reports(dashboard_data, reports, email_sender)
+            alert_checker.check_and_send_alerts(dashboard_data, email_sender)
+        except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
+            import traceback
+            traceback.print_exc()
+
+
+@app.on_event("startup")
+async def _start_notification_scheduler():
+    asyncio.create_task(_notification_scheduler_loop())
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +115,17 @@ app = FastAPI(title="VulnHunter Dashboard API", version="1.0.0")
 # them contain business logic of their own (same rule the old Flask routes
 # followed).
 # ---------------------------------------------------------------------------
+
+def _fast_json(payload):
+    """Returning a plain dict/list from a route handler routes it through FastAPI's
+    jsonable_encoder() before serializing - a recursive isinstance-check walk meant to
+    coerce things like datetime/Enum into JSON-safe values. This dashboard's largest
+    payloads are already 100% plain-JSON-safe (str/int/float/bool/None/list/dict, built
+    from json.loads() plus arithmetic), so that walk is pure overhead - profiled at
+    over 1s on /api/queue's ~14MB response alone. Building the Response directly with
+    json.dumps() skips it. Only worth using on the few endpoints whose payload size
+    actually makes the difference measurable; most routes stay plain dicts."""
+    return Response(content=json.dumps(payload), media_type="application/json")
 
 @app.get("/api/overview")
 def api_overview():
@@ -70,6 +136,13 @@ def api_overview():
     eligible = [f for f in findings if f.get("remediation_domain")]
     manual_only = [f for f in findings if not f.get("remediation_domain")]
     live_queue = dashboard_data.load_live_queue()
+
+    # Shared, short-TTL-cached scoring pipeline (dashboard_data._load_scored_assets()) -
+    # also used by /api/assets and load_live_queue(), so a single Overview page load
+    # (which fetches all three) pays for this real computation once, not 2-3x
+    # redundantly - see that function's own docstring for why sharing it here is safe.
+    exploit_tagged, scored_assets = dashboard_data._load_scored_assets()
+    exposure = exposure_score.compute_exposure_score(scored_assets, exploit_tagged)
 
     return {
         "sla": dashboard_data.sla_summary(live_queue),
@@ -88,6 +161,12 @@ def api_overview():
         },
         "asset_type_breakdown": dashboard_data.asset_type_breakdown(findings),
         "priority_rules": dashboard_data.sla_and_priority_definitions(),
+        # Live, not hardcoded - same "an admin who retunes this file sees the page
+        # update too" rule priority_rules already gets above (risk_scoring.load_rules()
+        # reads remediation/config/risk_scoring_rules.yaml fresh on every call).
+        "risk_scoring_rules": risk_scoring.load_rules(),
+        "exposure_score": exposure,
+        "exposure_score_rules": exposure_score.load_rules(),
     }
 
 
@@ -102,7 +181,7 @@ def api_remediate():
     plan = dashboard_data.load_remediation_plan()
     playbooks = dashboard_data.load_playbooks()
     playbooks_by_finding = {p["finding_id"]: p["filename"] for p in playbooks if p["finding_id"]}
-    return {"findings": findings, "plan": plan, "playbooks_by_finding": playbooks_by_finding}
+    return _fast_json({"findings": findings, "plan": plan, "playbooks_by_finding": playbooks_by_finding})
 
 
 @app.get("/api/playbooks/{filename}")
@@ -117,7 +196,54 @@ def api_playbook_detail(filename: str):
 @app.get("/api/queue")
 def api_queue():
     scored = dashboard_data.load_live_queue()
-    return {"findings": scored, "sla": dashboard_data.sla_summary(scored)}
+    return _fast_json({"findings": scored, "sla": dashboard_data.sla_summary(scored)})
+
+
+@app.get("/api/threat-intel/freshness")
+def api_threat_intel_freshness():
+    return {
+        **dashboard_data.load_threat_intel_freshness(),
+        "recommended_cadence": yaml.safe_load(
+            (dashboard_data.REPO_ROOT / "remediation" / "config" / "threat_intel_refresh_rules.yaml").read_text(encoding="utf-8"),
+        ).get("recommended_cadence", {}),
+    }
+
+
+class ThreatIntelRefreshBody(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/api/threat-intel/refresh-now")
+def api_threat_intel_refresh_now(body: ThreatIntelRefreshBody, request: Request):
+    """Re-fetches CISA KEV + FIRST.org EPSS live and re-enriches the real
+    normalized-findings.json in place (remediation/enrichment/kev_epss.py's own
+    enrich_file()) - the same real logic /remediate's enrichment stage runs, available
+    on demand without re-running the whole pipeline. Unlike the AI-assist/run-pipeline
+    confirm actions, this never spends Claude API usage - it's two free, public REST
+    calls - but it's still a real network call and a real file mutation, so it keeps
+    the same preview-then-confirm, admin-gated shape as every other one in this app."""
+    findings = dashboard_data.load_remediation_findings()
+    cve_count = sum(1 for f in findings if f.get("cve"))
+
+    if not body.confirm:
+        return {
+            "dry_run": True,
+            "message": (
+                f"Dry run only (nothing fetched). Would re-fetch CISA KEV + FIRST.org EPSS "
+                f"for {cve_count} CVE(s) and update remediation/output/normalized-findings.json. "
+                f"Set confirm to actually run it."
+            ),
+        }
+
+    user = rbac.require_admin(request)
+    try:
+        kev_epss.enrich_file(dashboard_data.REPO_ROOT / "remediation" / "output" / "normalized-findings.json")
+    except Exception as exc:  # noqa: BLE001 - a real fetch failure must surface honestly, not look like success
+        raise HTTPException(status_code=502, detail=f"Threat-intel refresh failed: {exc}") from exc
+
+    activity_log.record_activity(user["email"], "threat_intel.refresh_now", None, {"cve_count": cve_count})
+    freshness = dashboard_data.load_threat_intel_freshness()
+    return {"dry_run": False, "message": f"Refreshed KEV/EPSS for {cve_count} CVE(s).", "freshness": freshness}
 
 
 @app.get("/api/notifications")
@@ -145,6 +271,347 @@ def api_save_priority_rules(body: PriorityRulesBody, user: dict = Depends(rbac.r
         "message": "Priority rules saved. The live queue and SLA dashboard now reflect "
                     "these weights.",
     }
+
+
+@app.get("/api/remediation-policy")
+def api_get_remediation_policy():
+    return {"rules_text": dashboard_data.load_remediation_policy_text()}
+
+
+class RemediationPolicyBody(BaseModel):
+    rules_text: str
+
+
+@app.post("/api/remediation-policy")
+def api_save_remediation_policy(body: RemediationPolicyBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        dashboard_data.save_remediation_policy_text(body.rules_text)
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Not saved - invalid YAML: {exc}") from exc
+    return {"message": "Remediation policy saved. The live queue now reflects these cadence/approval/window rules."}
+
+
+@app.get("/api/remediation-approvals")
+def api_list_remediation_approvals():
+    # Joins in each finding's real generated-playbook rollback procedure (ISO/IEC
+    # 27002:2022 §8.32) - a real "# Rollback: ..." comment the fixer subagent wrote for
+    # that specific fix (see dashboard_data.load_playbooks()'s _parse_rollback_plan()),
+    # surfaced where the approval decision actually happens instead of only inside the
+    # generated playbook file. None when no playbook has been generated for this
+    # finding yet - stays honest rather than fabricating a procedure.
+    approvals = remediation_approvals_store.list_approvals_with_status()
+    playbooks_by_finding = {p["finding_id"]: p for p in dashboard_data.load_playbooks() if p["finding_id"]}
+    for a in approvals:
+        playbook = playbooks_by_finding.get(a["finding_id"])
+        a["rollback_plan"] = playbook["rollback_plan"] if playbook else None
+    return {"approvals": approvals}
+
+
+class RemediationApprovalRequestBody(BaseModel):
+    finding_id: str
+    requested_by: str
+
+
+@app.post("/api/remediation-approvals")
+def api_create_remediation_approval(body: RemediationApprovalRequestBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    findings = {f["id"]: f for f in dashboard_data.load_live_queue()}
+    finding = findings.get(body.finding_id)
+    if not finding:
+        raise HTTPException(status_code=404, detail=f"No finding with id {body.finding_id!r}")
+    scheduled_window = finding["remediation_policy"]["next_window"]
+    try:
+        return remediation_approvals_store.create_approval_request(body.finding_id, body.requested_by, scheduled_window)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class RemediationApprovalDecisionBody(BaseModel):
+    decided_by: str
+    reason: str = ""
+
+
+@app.post("/api/remediation-approvals/{approval_id}/approve")
+def api_approve_remediation(approval_id: str, body: RemediationApprovalDecisionBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    approvals = {a["id"]: a for a in remediation_approvals_store.load_approvals()}
+    approval = approvals.get(approval_id)
+    if not approval:
+        raise HTTPException(status_code=404, detail=f"No approval request with id {approval_id!r}")
+
+    findings = {f["id"]: f for f in dashboard_data.load_live_queue()}
+    finding = findings.get(approval["finding_id"])
+    required_group = ((finding or {}).get("remediation_policy") or {}).get("requires_approval_group")
+
+    ad_group_validated = None
+    if required_group and ad_directory.is_configured():
+        try:
+            ad_group_validated = ad_directory.is_member_of_group(body.decided_by, required_group)
+        except Exception as exc:  # noqa: BLE001 - a real AD failure must not silently look like "validated"
+            raise HTTPException(status_code=502, detail=f"AD group lookup failed: {exc}") from exc
+
+    try:
+        result = remediation_approvals_store.approve(approval_id, body.decided_by, ad_group_validated)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "approval": result,
+        "ad_configured": ad_directory.is_configured(),
+        "message": (
+            "Approved." if not required_group else
+            "Approved - AD not configured, group membership not validated." if not ad_directory.is_configured() else
+            f"Approved - verified member of {required_group}." if ad_group_validated else
+            f"Approved - WARNING: {body.decided_by} is NOT a verified member of {required_group}."
+        ),
+    }
+
+
+@app.post("/api/remediation-approvals/{approval_id}/reject")
+def api_reject_remediation(approval_id: str, body: RemediationApprovalDecisionBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        result = remediation_approvals_store.reject(approval_id, body.decided_by, body.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"approval": result, "message": "Rejected."}
+
+
+class StagingValidatedBody(BaseModel):
+    validated_by: str
+
+
+@app.post("/api/remediation-approvals/{approval_id}/staging-validated")
+def api_mark_staging_validated(approval_id: str, body: StagingValidatedBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    try:
+        result = remediation_approvals_store.mark_staging_validated(approval_id, body.validated_by)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"approval": result, "message": "Staging validation recorded."}
+
+
+class RemediationSendCommunicationBody(BaseModel):
+    recipient: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/remediation-approvals/{approval_id}/send-communication")
+def api_send_remediation_communication(approval_id: str, body: RemediationSendCommunicationBody, request: Request):
+    """Sends the finding's already-rendered downtime-communication text (see
+    remediation_policy_engine.render_communication(), merged onto every finding in
+    load_live_queue() as remediation_policy.rendered_communication) to a real recipient -
+    same dry-run-preview-then-confirm shape as /api/notification-settings/send-test,
+    reusing the same real SMTP sender, no new email-sending code."""
+    approvals = {a["id"]: a for a in remediation_approvals_store.load_approvals()}
+    approval = approvals.get(approval_id)
+    if not approval:
+        raise HTTPException(status_code=404, detail=f"No approval request with id {approval_id!r}")
+
+    findings = {f["id"]: f for f in dashboard_data.load_live_queue()}
+    finding = findings.get(approval["finding_id"])
+    if not finding:
+        raise HTTPException(status_code=404, detail=f"No finding with id {approval['finding_id']!r}")
+
+    policy = finding.get("remediation_policy") or {}
+    subject = f"Remediation communication: {finding.get('title', finding['id'])} ({finding['id']})"
+    body_text = policy.get("rendered_communication") or ""
+
+    if not body.confirm:
+        return {"preview_only": True, "message": "Preview only (no email sent). Check confirm and provide a real recipient to actually send.", "subject": subject, "body_text": body_text}
+
+    rbac.require_admin(request)
+    if not email_sender.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="SMTP is not configured on this server (set SMTP_HOST/SMTP_PORT/SMTP_FROM_ADDRESS "
+                   "environment variables).",
+        )
+    if not body.recipient:
+        raise HTTPException(status_code=400, detail="recipient is required to actually send.")
+
+    try:
+        email_sender.send_email([body.recipient], subject, body_text)
+    except Exception as exc:  # noqa: BLE001 - surface any real SMTP failure to the caller
+        raise HTTPException(status_code=502, detail=f"Send failed: {exc}") from exc
+
+    return {"preview_only": False, "message": f"Communication sent to {body.recipient}.", "subject": subject, "body_text": body_text}
+
+
+@app.get("/api/exploit-criteria")
+def api_get_exploit_criteria():
+    return {"rules_text": dashboard_data.load_exploit_criteria_rules_text()}
+
+
+class ExploitCriteriaRulesBody(BaseModel):
+    rules_text: str
+
+
+@app.post("/api/exploit-criteria")
+def api_save_exploit_criteria(body: ExploitCriteriaRulesBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        dashboard_data.save_exploit_criteria_rules_text(body.rules_text)
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Not saved - invalid YAML: {exc}") from exc
+    return {
+        "message": "Exploit criteria rules saved. Every CVE-bearing finding's "
+                    "exploit_criteria_matches now reflects these rules.",
+    }
+
+
+@app.post("/api/exploit-criteria/preview")
+def api_preview_exploit_criteria(body: ExploitCriteriaRulesBody):
+    """Read-only: how many CURRENT findings would match each rule in the submitted
+    (not-yet-saved) YAML text - lets the /exploit-criteria editor show a live match
+    count as an admin edits a rule, before committing it with Save."""
+    try:
+        parsed = yaml.safe_load(body.rules_text) or {}
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {exc}") from exc
+    rules = parsed.get("rules", [])
+    findings = dashboard_data.load_remediation_findings()
+    return {"counts": exploit_criteria.count_matches_per_rule(findings, rules)}
+
+
+# ---------------------------------------------------------------------------
+# Notification Settings - scheduled reports (sub-domain/team-wise, weekly through
+# yearly) and critical/zero-day/threat-intel team email alerts. Same
+# YAML-text-editor-plus-admin-gated-save pattern as priority-rules/exploit-criteria
+# above; same dry-run-preview-by-default/explicit-confirm-to-spend pattern as
+# ai-assist/servicenow/jira for the actual send. Real SMTP delivery
+# (remediation/notifications/email_sender.py) is env-var-configured and optional - every
+# route below still works (as preview/config-only) without it configured.
+# ---------------------------------------------------------------------------
+
+@app.get("/api/report-schedule")
+def api_get_report_schedule():
+    return {"rules_text": dashboard_data.load_report_schedule_text()}
+
+
+class ReportScheduleBody(BaseModel):
+    rules_text: str
+
+
+@app.post("/api/report-schedule")
+def api_save_report_schedule(body: ReportScheduleBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        dashboard_data.save_report_schedule_text(body.rules_text)
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Not saved - invalid YAML: {exc}") from exc
+    return {"message": "Report schedule saved."}
+
+
+@app.get("/api/alert-rules")
+def api_get_alert_rules():
+    return {"rules_text": dashboard_data.load_alert_rules_text()}
+
+
+class AlertRulesBody(BaseModel):
+    rules_text: str
+
+
+@app.post("/api/alert-rules")
+def api_save_alert_rules(body: AlertRulesBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        dashboard_data.save_alert_rules_text(body.rules_text)
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Not saved - invalid YAML: {exc}") from exc
+    return {"message": "Alert rules saved."}
+
+
+@app.get("/api/notification-settings/status")
+def api_notification_settings_status():
+    return {
+        "smtp_configured": email_sender.is_configured(),
+        "from_address": email_sender.from_address() if email_sender.is_configured() else None,
+        "check_interval_seconds": _NOTIFICATION_CHECK_INTERVAL_SECONDS,
+    }
+
+
+class NotificationPreviewBody(BaseModel):
+    kind: str  # "report" | "alert"
+    scope: str = "all"
+    team: str = ""
+    period: str = "weekly"       # report only
+    alert_type: str = "critical"  # alert only
+
+
+def _build_preview(body: NotificationPreviewBody):
+    if body.kind == "report":
+        report = reports.generate_report_data(
+            body.period, dashboard_data, scope=body.scope, team=body.team or None,
+        )
+        return {
+            "subject": reports.report_title(report),
+            "body_text": reports.render_report_text(report),
+            "body_html": reports.render_report_html(report),
+        }
+    if body.kind == "alert":
+        findings = dashboard_data.load_live_queue()
+        ownership = asset_inventory.load_ownership()
+        sub = {"alert_type": body.alert_type, "scope": body.scope, "team": body.team or None}
+        matched = alert_checker.matching_findings(sub, findings, ownership)
+        return {
+            "subject": alert_checker.build_subject(sub),
+            "body_text": alert_checker.build_alert_body_text(sub, matched),
+            "body_html": alert_checker.build_alert_body_html(sub, matched),
+            "matched_count": len(matched),
+        }
+    raise HTTPException(status_code=400, detail='kind must be "report" or "alert"')
+
+
+@app.post("/api/notification-settings/preview")
+def api_notification_preview(body: NotificationPreviewBody):
+    try:
+        return _build_preview(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class NotificationSendTestBody(NotificationPreviewBody):
+    recipient: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/notification-settings/send-test")
+def api_notification_send_test(body: NotificationSendTestBody, request: Request):
+    try:
+        preview = _build_preview(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not body.confirm:
+        return {"preview_only": True, "message": "Preview only (no email sent). Check confirm and provide a real recipient to actually send.", **preview}
+
+    rbac.require_admin(request)
+    if not email_sender.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="SMTP is not configured on this server (set SMTP_HOST/SMTP_PORT/SMTP_FROM_ADDRESS "
+                   "environment variables).",
+        )
+    if not body.recipient:
+        raise HTTPException(status_code=400, detail="recipient is required to actually send a test email.")
+
+    try:
+        email_sender.send_email([body.recipient], preview["subject"], preview["body_text"], preview["body_html"])
+    except Exception as exc:  # noqa: BLE001 - surface any real SMTP failure to the caller
+        raise HTTPException(status_code=502, detail=f"Send failed: {exc}") from exc
+
+    return {"preview_only": False, "message": f"Test email sent to {body.recipient}.", **preview}
+
+
+@app.post("/api/notification-settings/run-checks-now")
+def api_notification_run_checks_now(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """The real, cron-callable alternative to the in-process scheduler loop below - an
+    external Task Scheduler/cron job can POST here on its own real schedule for delivery
+    that doesn't depend on this server process staying up. Runs both scheduled-report
+    and alert checks immediately and returns what happened (sent/skipped/error per
+    subscription), same as the background loop does silently."""
+    report_results = report_scheduler.check_and_send_due_reports(dashboard_data, reports, email_sender)
+    alert_results = alert_checker.check_and_send_alerts(dashboard_data, email_sender)
+    return {"report_results": report_results, "alert_results": alert_results}
 
 
 @app.get("/api/servicenow/preview")
@@ -339,6 +806,12 @@ class RunBody(BaseModel):
     path: str = "vulnerable-demo-app"
     max_budget_usd: str = cli.DEFAULT_MAX_BUDGET_USD
     confirm: bool = False
+    # Scopes a "remediate" run to one already-approved finding instead of the full
+    # batch pipeline - see cli/vulnhunter.py's remediate_prompt() and
+    # .claude/commands/remediate.md's own --finding-id handling. Used by the
+    # "Trigger Remediation" button on an approved finding in
+    # dashboard/static/js/pages/remediationApprovals.js.
+    finding_id: str | None = None
 
 
 @app.post("/api/run")
@@ -347,14 +820,15 @@ def api_run_post(body: RunBody, request: Request):
         prompt = cli.scan_prompt(body.path, fix=body.fix_or_generate)
         pipeline_name = "vulnhunt"
     elif body.pipeline == "remediate":
-        prompt = cli.remediate_prompt(generate=body.fix_or_generate)
+        prompt = cli.remediate_prompt(generate=body.fix_or_generate, finding_id=body.finding_id)
         pipeline_name = "remediate"
     else:
         raise HTTPException(status_code=400, detail="Unknown pipeline selected.")
 
     dry_run = not body.confirm
+    user = None
     if not dry_run:
-        rbac.require_admin(request)
+        user = rbac.require_admin(request)
     exit_code = cli.run(prompt, pipeline_name, dry_run=dry_run, max_budget_usd=body.max_budget_usd)
 
     if dry_run:
@@ -362,6 +836,14 @@ def api_run_post(body: RunBody, request: Request):
                     "Set confirm to actually run it.")
     elif exit_code == 0:
         message = f"{pipeline_name} run completed. Reload the relevant page to see updated results."
+        if body.finding_id:
+            approval = remediation_approvals_store.approvals_by_finding().get(body.finding_id)
+            if approval:
+                try:
+                    remediation_approvals_store.mark_remediation_triggered(approval["id"], actor=user["email"])
+                    message += f" Approval {approval['id']} marked as remediation-triggered."
+                except ValueError as exc:
+                    message += f" (Approval status not updated: {exc})"
     else:
         message = f"{pipeline_name} run failed (exit code {exit_code}). Check the audit log for details."
 
@@ -440,18 +922,62 @@ def api_ai_assist(body: AiAssistBody, request: Request):
     return {"dry_run": False, "prompt": prompt, "response": result.stdout.strip()}
 
 
-@app.get("/api/reports/generate")
-def api_generate_report(period: str = "weekly"):
+class AiTrendAnalysisBody(BaseModel):
+    scope: str
+    stats: dict
+    confirm: bool = False
+
+
+@app.post("/api/ai-trend-analysis")
+def api_ai_trend_analysis(body: AiTrendAnalysisBody, request: Request):
+    """Same dry-run-preview-by-default / explicit-confirm-to-spend pattern as
+    /api/ai-assist above - a real Claude Code call over a real, already-computed
+    stats snapshot the calling dashboard page passes in (never re-fetched or
+    invented server-side), not a fabricated "AI insight". No caching/budget cap here
+    either, matching /api/ai-assist - each click is a genuine, confirm-gated spend,
+    same as that endpoint."""
+    prompt = ai_assist.build_trend_analysis_prompt(body.scope, body.stats)
+
+    if not body.confirm:
+        return {
+            "dry_run": True,
+            "prompt": prompt,
+            "message": "Preview only (no API call made). Set confirm to actually ask "
+                       "the AI - this spends real API usage/credits.",
+        }
+
+    rbac.require_admin(request)
+
     try:
-        return reports.generate_report_data(period, dashboard_data)
+        claude_bin = cli.find_claude_binary()
+    except cli.ClaudeBinaryNotFound as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    command = [claude_bin, "-p", prompt, "--output-format", "text"]
+    result = subprocess.run(  # noqa: S603 - fixed binary + a prompt string, no shell
+        command, cwd=cli.REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
+    )
+    if result.returncode != 0:
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI trend analysis call failed: {result.stderr.strip()[:500]}",
+        )
+
+    return {"dry_run": False, "prompt": prompt, "response": result.stdout.strip()}
+
+
+@app.get("/api/reports/generate")
+def api_generate_report(period: str = "weekly", scope: str = "all", team: str = ""):
+    try:
+        return reports.generate_report_data(period, dashboard_data, scope=scope, team=team or None)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/reports/generate.html", response_class=HTMLResponse)
-def api_generate_report_html(period: str = "weekly", download: bool = False):
+def api_generate_report_html(period: str = "weekly", scope: str = "all", team: str = "", download: bool = False):
     try:
-        data = reports.generate_report_data(period, dashboard_data)
+        data = reports.generate_report_data(period, dashboard_data, scope=scope, team=team or None)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     html_body = reports.render_report_html(data)
@@ -486,17 +1012,22 @@ def api_create_exception(body: ExceptionCreateBody, user: dict = Depends(rbac.re
 
 
 @app.post("/api/exceptions/{exception_id}/revoke")
-def api_revoke_exception(exception_id: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+def api_revoke_exception(exception_id: str, user: dict = Depends(rbac.require_admin)):
     try:
-        return exceptions_store.revoke_exception(exception_id)
+        return exceptions_store.revoke_exception(exception_id, revoked_by=user["email"])
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/api/assets")
 def api_list_assets():
-    findings = dashboard_data.load_remediation_findings()
-    rows = asset_inventory.build_asset_inventory(findings)
+    # Shared, short-TTL-cached scoring pipeline (see dashboard_data._load_scored_assets()'s
+    # own docstring) - also used by /api/overview and load_live_queue().
+    _, cached_rows = dashboard_data._load_scored_assets()
+    # Shallow-copy each row before mutating it below - `cached_rows` is the shared
+    # cache's own list, and writing `suggestion` directly onto it would leak this
+    # route-specific field into every other caller's view of the same cached rows.
+    rows = [dict(r) for r in cached_rows]
     # A pattern-matching (not ML - see pattern_recognition.py's module docstring)
     # suggested owner/team for assets that don't have one yet, so the "Edit owner"
     # form isn't always starting from a blank slate. `known` only ever includes
@@ -504,7 +1035,32 @@ def api_list_assets():
     known = [r for r in rows if r.get("owner")]
     for row in rows:
         row["suggestion"] = None if row.get("owner") else pattern_recognition.suggest_owner_team(row, known)
-    return {"assets": rows}
+    return _fast_json({"assets": rows})
+
+
+@app.get("/api/ml-insights/anomalies")
+def api_ml_asset_anomalies():
+    rows = dashboard_data.load_asset_anomalies()
+    anomalies = [r for r in rows if r.get("is_anomaly")]
+    anomalies.sort(key=lambda r: r.get("anomaly_score", 0))
+    return _fast_json({"anomalies": anomalies, "total_assets": len(rows)})
+
+
+@app.get("/api/ml-insights/clusters")
+def api_ml_finding_clusters():
+    tagged, summaries = dashboard_data.load_finding_clusters()
+    return _fast_json({"clusters": summaries, "total_findings": len(tagged)})
+
+
+@app.get("/api/ml-insights/clusters/{cluster_id}/members")
+def api_ml_finding_cluster_members(cluster_id: int):
+    members, total = dashboard_data.load_finding_cluster_members(cluster_id)
+    return _fast_json({"members": members, "total": total})
+
+
+@app.get("/api/ml-insights/similar/{finding_id}")
+def api_ml_similar_findings(finding_id: str):
+    return _fast_json({"similar": dashboard_data.find_similar_findings(finding_id)})
 
 
 class AssetOwnerBody(BaseModel):
@@ -513,8 +1069,8 @@ class AssetOwnerBody(BaseModel):
 
 
 @app.post("/api/assets/{asset_name}/owner")
-def api_set_asset_owner(asset_name: str, body: AssetOwnerBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
-    return asset_inventory.set_owner(asset_name, body.owner, body.team)
+def api_set_asset_owner(asset_name: str, body: AssetOwnerBody, user: dict = Depends(rbac.require_login)):
+    return asset_inventory.set_owner(asset_name, body.owner, body.team, actor=user["email"])
 
 
 class AssetFacingBody(BaseModel):
@@ -522,9 +1078,36 @@ class AssetFacingBody(BaseModel):
 
 
 @app.post("/api/assets/{asset_name}/facing")
-def api_set_asset_facing(asset_name: str, body: AssetFacingBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+def api_set_asset_facing(asset_name: str, body: AssetFacingBody, user: dict = Depends(rbac.require_login)):
     try:
-        return asset_inventory.set_facing(asset_name, body.facing)
+        return asset_inventory.set_facing(asset_name, body.facing, actor=user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class AssetEnvironmentBody(BaseModel):
+    environment: str
+
+
+@app.post("/api/assets/{asset_name}/environment")
+def api_set_asset_environment(asset_name: str, body: AssetEnvironmentBody, user: dict = Depends(rbac.require_login)):
+    try:
+        return asset_inventory.set_environment(asset_name, body.environment, actor=user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class AssetRemediationScheduleBody(BaseModel):
+    cadence: str | None = None
+    maintenance_window: dict | None = None
+
+
+@app.post("/api/assets/{asset_name}/remediation-schedule")
+def api_set_asset_remediation_schedule(asset_name: str, body: AssetRemediationScheduleBody, user: dict = Depends(rbac.require_login)):
+    try:
+        return asset_inventory.set_remediation_schedule(
+            asset_name, body.cadence, body.maintenance_window, actor=user["email"],
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -555,6 +1138,58 @@ def api_cmdb_import_apply(body: CmdbImportApplyBody, user: dict = Depends(rbac.r
     return cmdb_import.apply_import(body.entries)
 
 
+@app.get("/api/asset-policy")
+def api_get_asset_policy():
+    return {"rules_text": dashboard_data.load_asset_policy_text()}
+
+
+class AssetPolicyRulesBody(BaseModel):
+    rules_text: str
+
+
+@app.post("/api/asset-policy")
+def api_save_asset_policy(body: AssetPolicyRulesBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        dashboard_data.save_asset_policy_text(body.rules_text)
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Not saved - invalid YAML: {exc}") from exc
+    return {"message": "Asset policy rules saved. Use Preview & Apply below to run them against the current real asset inventory."}
+
+
+@app.post("/api/asset-policy/preview")
+def api_preview_asset_policy(body: AssetPolicyRulesBody):
+    """Read-only: which REAL assets each rule in the submitted (not-yet-saved) YAML
+    text would match, and what it would set - writes nothing. Same
+    preview-before-you-commit pattern as /api/exploit-criteria/preview."""
+    try:
+        return {"rules": dashboard_data.preview_asset_policy(body.rules_text)}
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {exc}") from exc
+
+
+@app.post("/api/asset-policy/apply")
+def api_apply_asset_policy(user: dict = Depends(rbac.require_admin)):
+    """Applies the real, currently-SAVED asset_policy_rules.yaml (not an unsaved edit -
+    save first, then apply) against the current real asset inventory. Every changed
+    field is written through asset_inventory.py's own real setters and recorded in the
+    real activity log with this admin as the actor."""
+    return dashboard_data.apply_asset_policy(actor=user["email"])
+
+
+@app.get("/api/activity-log")
+def api_activity_log(actor: str | None = None, action: str | None = None, limit: int = 500):
+    """Real, unified who/what/when feed (remediation/audit/activity_log.py) - every
+    asset edit, exception revocation, approval decision, login attempt, bulk-policy
+    apply, and remediation trigger elsewhere in this app writes here. `limit` defaults
+    to 500 (newest first) so a long-running demo doesn't ship an unbounded response."""
+    return {"entries": activity_log.list_activity(actor=actor, action=action, limit=limit)}
+
+
+@app.get("/api/activity-log/insights")
+def api_activity_log_insights():
+    return dashboard_data.load_activity_insights()
+
+
 @app.get("/api/risk/attack-heatmap")
 def api_risk_attack_heatmap():
     queue = dashboard_data.load_live_queue()
@@ -566,10 +1201,47 @@ def api_ai_vulnerabilities():
     """Real findings tagged against the AI/ML vulnerability taxonomy (illustrative
     MITRE ATLAS cross-reference - see ai_vuln_taxonomy.py's module docstring), plus
     the full taxonomy reference (summary/remediation per category) regardless of
-    whether any finding matched it. Honest expectation: this repo's demo data has no
-    AI/ML component, so `heatmap` will show all zero counts - not faked."""
-    findings = tag_ai_vulnerabilities(dashboard_data.load_remediation_findings())
+    whether any finding matched it. Checks both pipelines' findings: the remediation
+    queue (Tenable/Armis-style asset scanning - never AI/ML-specific) and /vulnhunt's
+    own SAST findings, where vulnerable-demo-app/ai_assistant.py's genuinely planted
+    AI/ML issues (hardcoded LLM key, insecure model deserialization, prompt injection,
+    excessive agency) actually live."""
+    remediation_findings = dashboard_data.load_remediation_findings()
+    vh = dashboard_data.load_vulnhunt_data()
+    # vulnhunt findings come from a parsed markdown table (capitalized column names:
+    # "Title", not "title") - normalize just the two fields map_finding_to_ai_vuln()
+    # actually reads, rather than changing that function's contract for one caller.
+    vulnhunt_findings = [
+        {"id": f.get("ID"), "title": f.get("Title", ""), "description": ""}
+        for f in (vh.get("findings") or [])
+    ] if vh.get("available") else []
+    findings = tag_ai_vulnerabilities(remediation_findings + vulnhunt_findings)
     return {"vulnerabilities": AI_VULNERABILITIES, "heatmap": build_ai_atlas_heatmap(findings)}
+
+
+@app.get("/api/quantum-readiness")
+def api_quantum_readiness():
+    """Real findings already tagged by remediation/enrichment/quantum_readiness.py
+    (via load_live_queue()'s content-enrichment pass) whose title names classical
+    asymmetric crypto (RSA/ECDSA/Diffie-Hellman - the genuinely quantum-relevant case)
+    or a legacy TLS/cipher weakness. Every finding here is real, already-normalized
+    data - nothing generated for this endpoint specifically."""
+    scored = dashboard_data.load_live_queue()
+    matched = [f for f in scored if f.get("quantum_readiness")]
+    asymmetric = [f for f in matched if f["quantum_readiness"]["category"] == "asymmetric-crypto"]
+    legacy = [f for f in matched if f["quantum_readiness"]["category"] == "legacy-protocol"]
+    return {
+        "findings": matched,
+        "summary": {
+            "total": len(matched),
+            "asymmetric_crypto": len(asymmetric),
+            "legacy_protocol": len(legacy),
+        },
+        "nist_ir_8547": {
+            "deprecated_by": quantum_readiness.NIST_IR_8547_DEPRECATED_BY,
+            "disallowed_by": quantum_readiness.NIST_IR_8547_DISALLOWED_BY,
+        },
+    }
 
 
 class GenericIngestBody(BaseModel):
@@ -642,7 +1314,9 @@ class LoginBody(BaseModel):
 def api_auth_login(body: LoginBody, response: Response):
     user = auth_users.verify_login(body.email, body.password)
     if not user:
+        login_audit.record_login_attempt(body.email, success=False)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    login_audit.record_login_attempt(body.email, success=True)
     cookie_value = sessions.create_session_cookie(user, rbac.SESSION_SECRET)
     response.set_cookie(
         rbac.SESSION_COOKIE_NAME, cookie_value, httponly=True, samesite="lax",
@@ -682,6 +1356,15 @@ def api_auth_oidc_config():
     credentials are configured via environment variables."""
     configured = oidc.is_configured()
     return {"enabled": configured, "provider_name": oidc.provider_name() if configured else None}
+
+
+@app.get("/api/directory/status")
+def api_directory_status():
+    """Tells the Remediation Approvals page whether AD group-membership validation is
+    actually available - see ad_directory.py's module docstring for why this stays
+    disabled (read-only, never fabricated as validated) until a real AD_SERVER/
+    AD_BASE_DN are configured via environment variables."""
+    return {"configured": ad_directory.is_configured()}
 
 
 # state -> PKCE code_verifier, in-memory only. Fine for a single-process dev server;
@@ -741,6 +1424,7 @@ def api_status():
     findings = dashboard_data.load_remediation_findings()
     return {
         "status": "ok",
+        "app_version": app.version,
         "vulnhunt_available": vh.get("available", False),
         "vulnhunt_findings": vh.get("total", 0),
         "remediation_findings": len(findings),
@@ -765,7 +1449,9 @@ for _route in (
     "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
     "/jira", "/splunk", "/xdr", "/infoblox", "/axonius", "/ai-assist", "/reports", "/support", "/faq",
     "/exceptions", "/assets", "/appsec", "/infrastructure", "/inbox", "/risk", "/ai-vulnerabilities", "/login", "/profile",
-    "/adaptors",
+    "/adaptors", "/vulnerability-mapping", "/asset-mapping", "/exploit-criteria",
+    "/compensating-controls", "/threat-intel", "/notification-settings",
+    "/remediation-policy", "/remediation-approvals",
 ):
     app.api_route(_route, methods=["GET", "HEAD"], include_in_schema=False)(_serve_shell)
 

@@ -1,9 +1,10 @@
 """
 Infrastructure Vulnerability Management sub-classification: splits the single
 "infra-vm" scan-type bucket (see scan_type_mapping.py) into the asset-type groupings
-a real infra/security team would actually organize around - OS-level patching,
-network hardware, network security appliances, OT/IoT devices, and cloud
-infrastructure - rather than one flat "Infrastructure Vulnerabilities" list.
+a real infra/security team would actually organize around - server OS patching,
+end-user device management, network hardware, network security appliances, OT/IoT
+devices, virtualization/hypervisor platforms, printers, and cloud infrastructure -
+rather than one flat "Infrastructure Vulnerabilities" list.
 
 Classification is a lookup against `asset.type` (see
 remediation/schema/normalized-finding-schema.md for the full vocabulary), the same
@@ -12,29 +13,56 @@ Tenable/Armis/etc. themselves report this grouping.
 
 "cloud" is a real, supported category (cloud security posture findings are a
 standard part of real vulnerability management - Tenable and Armis both cover
-AWS/Azure/GCP asset scanning) but has **no sample finding in this repo's demo data
-yet**, same "listed for completeness, not faked" treatment scan_type_mapping.py
-already gives DAST.
+AWS/Azure/GCP asset scanning) and has real, NVD-sourced sample findings covering
+Kubernetes/Docker/container-runtime CVEs plus AWS/Azure/GCP provider-specific service
+CVEs (Amazon S3/Lambda/IAM/RDS, Azure AD/Storage, Google Cloud Storage/SDK, etc.) - see
+remediation/sample-data/generate_bulk_findings.py's "cloud" category.
+
+"endpoint" (added alongside "os" so `windows-endpoint` moves OUT of the server
+bucket) is real, well-established vulnerability-management territory: laptops/
+desktops patched via SCCM (Microsoft Configuration Manager) and mobile devices
+patched via an MDM platform (e.g. Microsoft Intune) are managed on a genuinely
+different patch cycle/tooling than server OS patching - see bulk_normalize.py's
+_REMEDIATION_MECHANISM for the honest disclosure that this app has no working
+SCCM/Intune API integration, only this informational field naming the real-world
+tool that would normally handle it.
+
+"printer" and "virtualization" are likewise real, standard vulnerability-management
+categories (networked printer firmware, and hypervisor/VM-platform CVEs - VMware
+ESXi/vCenter, Microsoft Hyper-V, Proxmox VE, Citrix Hypervisor all have real,
+well-documented CVE histories) that simply didn't have their own bucket before.
 """
 
-INFRA_CATEGORIES = ("os", "network", "network-security", "ot", "cloud")
+INFRA_CATEGORIES = ("os", "endpoint", "network", "network-security", "ot", "virtualization", "cloud", "apps", "printer", "iac", "runtime")
 
 INFRA_CATEGORY_LABELS = {
-    "os": "OS Vulnerabilities",
+    "os": "Server Vulnerabilities (Windows, Linux/Unix)",
+    "endpoint": "End-User Devices (SCCM/MDM-managed)",
     "network": "Network",
     "network-security": "Network Security",
     "ot": "OT / IoT",
+    "virtualization": "Virtualization (Hypervisor/VM Platform)",
     "cloud": "Cloud Infrastructure",
+    "apps": "OS Applications",
+    "printer": "Printers",
+    "iac": "Infrastructure-as-Code",
+    "runtime": "Container/Host Runtime Security",
 }
 
 _ASSET_TYPE_TO_INFRA_CATEGORY = {
     "windows-server": "os",
-    "windows-endpoint": "os",
     "unix-server": "os",
+    "windows-endpoint": "endpoint",
+    "mobile-device": "endpoint",
     "network-routing-switching": "network",
     "network-security-device": "network-security",
     "iot-ot-device": "ot",
+    "virtualization-host": "virtualization",
     "cloud-infrastructure": "cloud",
+    "client-application": "apps",
+    "printer": "printer",
+    "iac-resource": "iac",
+    "container-runtime": "runtime",
 }
 
 

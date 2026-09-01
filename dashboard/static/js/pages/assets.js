@@ -1,20 +1,71 @@
 import { api } from "../api.js";
 import { escapeHtml, flash, openModal, closeModal } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
+import { columnPickerHtml, loadVisibleColumns, applyColumnVisibility, wireColumnPicker } from "../columnPicker.js";
+import { paginate, paginationHtml, wirePagination } from "../pagination.js";
 
 export const title = "Asset Inventory";
+
+const PAGE_SIZE = 20;
+
+// Order matches the header row/assetRow() below - see columnPicker.js. This table is
+// more modest than Queue/Findings (12 columns, not 22+), so most stay visible by
+// default - only the two least immediately-actionable-at-a-glance columns start hidden.
+const ASSET_COLUMNS = [
+  { id: "asset", label: "Asset" },
+  { id: "type", label: "Type" },
+  { id: "findings", label: "Findings" },
+  { id: "severity", label: "Highest Severity" },
+  { id: "kev", label: "KEV Exposure", defaultVisible: false },
+  { id: "risk", label: "Risk Score" },
+  { id: "environment", label: "Environment" },
+  { id: "schedule", label: "Remediation Schedule" },
+  { id: "owner", label: "Owner" },
+  { id: "team", label: "Team" },
+  { id: "eol", label: "EOL/EOS", defaultVisible: false },
+  { id: "edit", label: "Edit" },
+];
 
 const EXPORT_COLUMNS = [
   { label: "Asset", value: (a) => a.name },
   { label: "Type", value: (a) => a.type },
+  { label: "OS", value: (a) => a.os },
   { label: "Findings", value: (a) => a.finding_count },
   { label: "Critical Findings", value: (a) => a.critical_count },
   { label: "Highest Severity", value: (a) => a.highest_severity },
   { label: "KEV Exposure", value: (a) => a.kev_count },
+  { label: "Impact Score", value: (a) => a.impact_score },
+  { label: "Likelihood Score", value: (a) => a.likelihood_score },
+  { label: "Risk Score", value: (a) => a.risk_score },
+  { label: "Risk Tier", value: (a) => a.risk_tier },
   { label: "Facing", value: (a) => a.facing },
+  { label: "Environment", value: (a) => a.environment },
+  { label: "Remediation Schedule Override", value: (a) => (a.remediation_schedule && a.remediation_schedule.cadence) || "" },
   { label: "Owner", value: (a) => a.owner },
   { label: "Team", value: (a) => a.team },
+  { label: "EOL/EOS Status", value: (a) => a.eol_status && a.eol_status.status },
+  { label: "EOL/EOS Date", value: (a) => a.eol_status && a.eol_status.eol_date },
 ];
+
+// Same badge-class convention as priority/severity everywhere else in this app -
+// risk_tier reuses the Critical/High/Medium/Low scale, not a separate one.
+function riskTierBadgeHtml(a) {
+  if (typeof a.risk_score !== "number") return `<span class="muted">—</span>`;
+  return `<span class="badge badge-${(a.risk_tier || "").toLowerCase()}" data-tooltip="Impact ${a.impact_score} × Likelihood ${a.likelihood_score} (NIST SP 800-30-inspired, not a certified assessment - see the FAQ)">${a.risk_score}</span>`;
+}
+
+// Real, dated vendor-lifecycle lookup (remediation/enrichment/eol_lookup.py) - never a
+// guessed date. "unknown" means this asset's OS string didn't match anything in that
+// small reference table, not that it's confirmed still supported.
+const EOL_BADGE_CLASS = { eol: "badge-critical", "eol-soon": "badge-medium", supported: "badge-auto_approvable" };
+const EOL_LABEL = { eol: "EOL", "eol-soon": "EOL soon", supported: "Supported" };
+
+function eolCellHtml(a) {
+  const eol = a.eol_status;
+  if (!eol || eol.status === "unknown") return `<span class="muted">Unknown</span>`;
+  const tooltip = `${eol.vendor} lifecycle - ${eol.eol_date} (${eol.source})`;
+  return `<span class="badge ${EOL_BADGE_CLASS[eol.status]}" data-tooltip="${escapeHtml(tooltip)}">${EOL_LABEL[eol.status]}</span>`;
+}
 
 // Pattern-matched (NOT machine learning - see pattern_recognition.py's module
 // docstring) owner/team suggestion for an unowned asset, based on hostname naming
@@ -34,6 +85,32 @@ function ownerCellHtml(a) {
     </div>`;
 }
 
+// Same manually-set, never-guessed convention as Risk's own facing classification -
+// drives the remediation policy engine's "dev" domain override (see
+// remediation/config/remediation_policy.yaml).
+const ENVIRONMENT_LABELS = { prod: "Production", staging: "Staging", dev: "Dev", unknown: "Unknown" };
+const ENVIRONMENT_BADGE_CLASS = { prod: "badge-critical", staging: "badge-medium", dev: "badge-auto_approvable", unknown: "badge-outline" };
+
+function environmentCellHtml(a) {
+  const env = a.environment || "unknown";
+  return `<span class="badge ${ENVIRONMENT_BADGE_CLASS[env] || "badge-outline"}">${escapeHtml(ENVIRONMENT_LABELS[env] || env)}</span>`;
+}
+
+// Same string-enum convention remediation_policy.yaml's own per-domain `cadence`
+// field already uses - an asset-level override (set here or in bulk via
+// /asset-policy) is directly interchangeable with a domain's default, shown on
+// /queue's own Cadence column with an "override" badge when this is set.
+const CADENCE_LABELS = {
+  weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly",
+  "half-yearly": "Half-yearly", yearly: "Yearly", "on-demand": "On-demand",
+};
+
+function scheduleCellHtml(a) {
+  const cadence = a.remediation_schedule && a.remediation_schedule.cadence;
+  if (!cadence) return `<span class="muted">Domain default</span>`;
+  return `<span class="badge badge-medium" data-tooltip="Overrides this asset's remediation-domain default cadence - see /asset-policy">${escapeHtml(CADENCE_LABELS[cadence] || cadence)}</span>`;
+}
+
 function assetRow(a) {
   const kev = a.kev_count > 0
     ? `<span class="badge badge-critical">${a.kev_count} KEV</span>`
@@ -42,15 +119,19 @@ function assetRow(a) {
     ? `<span class="badge badge-${a.highest_severity.toLowerCase()}">${escapeHtml(a.highest_severity)}</span>`
     : `<span class="muted">—</span>`;
   return `
-    <tr>
-      <td>${escapeHtml(a.name)}</td>
-      <td class="asset-type-cell">${escapeHtml(a.type)}</td>
-      <td>${a.finding_count}</td>
-      <td>${severity}</td>
-      <td>${kev}</td>
-      <td>${ownerCellHtml(a)}</td>
-      <td>${a.team ? escapeHtml(a.team) : `<span class="muted">—</span>`}</td>
-      <td><button type="button" class="link-button" data-edit-owner="${escapeHtml(a.name)}">Edit</button></td>
+    <tr data-asset-name="${escapeHtml(a.name)}">
+      <td data-col="asset">${escapeHtml(a.name)}</td>
+      <td data-col="type" class="asset-type-cell">${escapeHtml(a.type)}</td>
+      <td data-col="findings">${a.finding_count}</td>
+      <td data-col="severity">${severity}</td>
+      <td data-col="kev">${kev}</td>
+      <td data-col="risk">${riskTierBadgeHtml(a)}</td>
+      <td data-col="environment">${environmentCellHtml(a)}</td>
+      <td data-col="schedule">${scheduleCellHtml(a)}</td>
+      <td data-col="owner">${ownerCellHtml(a)}</td>
+      <td data-col="team">${a.team ? escapeHtml(a.team) : `<span class="muted">—</span>`}</td>
+      <td data-col="eol">${eolCellHtml(a)}</td>
+      <td data-col="edit"><button type="button" class="link-button" data-edit-owner="${escapeHtml(a.name)}">Edit</button></td>
     </tr>`;
 }
 
@@ -74,9 +155,57 @@ function reconciledRow(entry, groupLabel) {
     </tr>`;
 }
 
+// Reads ?risk_tier=Critical,High and/or ?owner=unassigned from the URL (the deep-link
+// Overview's own risk-scoring tiles/charts use via wireChartLinks()) and filters the
+// real assets list client-side - not a new data source, just a pre-applied view over
+// the same /api/assets response this page always shows. No dropdown UI yet (a bigger,
+// separate feature); "Clear filter" always returns to the full unfiltered list.
+function filtersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const riskTierParam = params.get("risk_tier");
+  return {
+    riskTiers: riskTierParam ? riskTierParam.split(",").map((t) => t.trim()).filter(Boolean) : null,
+    ownerFilter: params.get("owner"), // "unassigned" is the only real value used today
+  };
+}
+
+function applyUrlFilters(assets, filters) {
+  return assets.filter((a) => {
+    if (filters.riskTiers && !filters.riskTiers.includes(a.risk_tier)) return false;
+    if (filters.ownerFilter === "unassigned" && a.owner) return false;
+    return true;
+  });
+}
+
+function activeFilterBannerHtml(filters, shownCount, totalCount) {
+  if (!filters.riskTiers && !filters.ownerFilter) return "";
+  const parts = [];
+  if (filters.riskTiers) parts.push(`risk tier: ${filters.riskTiers.join(" or ")}`);
+  if (filters.ownerFilter === "unassigned") parts.push("no owner assigned");
+  return `
+    <div class="callout callout-warn" style="margin-bottom:12px">
+      Showing ${shownCount} of ${totalCount} asset(s) - filtered by ${escapeHtml(parts.join(", "))}
+      (from a link elsewhere in the app).
+      <a href="/assets" data-link>Clear filter</a>
+    </div>`;
+}
+
 export async function render(container) {
   container.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const { assets } = await api.assetsList();
+  const { assets: allAssets } = await api.assetsList();
+  const filters = filtersFromUrl();
+  const assets = applyUrlFilters(allAssets, filters);
+  const visibleColumns = loadVisibleColumns("assets", ASSET_COLUMNS);
+  let page = 1;
+  // A global-search asset match (search.js) or any other link elsewhere in this app
+  // deep-links here with ?highlight=<asset-name> - jump to that asset's real page (same
+  // one-time scroll-and-mark pattern queue.js uses for findings) if it's not on page 1.
+  const highlightName = new URLSearchParams(window.location.search).get("highlight");
+  if (highlightName) {
+    const idx = assets.findIndex((a) => a.name === highlightName);
+    if (idx !== -1) page = Math.floor(idx / PAGE_SIZE) + 1;
+  }
+  let hasScrolledToHighlight = false;
 
   container.innerHTML = `
     <p class="subtitle">
@@ -84,6 +213,8 @@ export async function render(container) {
       <code>remediation/output/normalized-findings.json</code> - not a separate CMDB, a
       real live query over the same data the Queue and Overview pages already read.
     </p>
+
+    ${activeFilterBannerHtml(filters, assets.length, allAssets.length)}
 
     <details class="cmdb-import">
       <summary>Import owner/team from a CMDB export (CSV)</summary>
@@ -99,19 +230,24 @@ export async function render(container) {
       <div id="cmdb-preview"></div>
     </details>
 
-    ${exportButtonsHtml("assets")}
+    <div class="table-toolbar">
+      ${exportButtonsHtml("assets")}
+      ${columnPickerHtml("assets", ASSET_COLUMNS, visibleColumns)}
+    </div>
 
+    <p class="filter-count" id="assets-count" style="margin:-4px 0 8px"></p>
     <div class="table-scroll">
-      <table class="data-table">
+      <table class="data-table" id="assets-table">
         <thead>
           <tr>
-            <th>Asset</th><th>Type</th><th>Findings</th><th>Highest Severity</th>
-            <th>KEV Exposure</th><th>Owner</th><th>Team</th><th></th>
+            <th data-col="asset">Asset</th><th data-col="type">Type</th><th data-col="findings">Findings</th><th data-col="severity">Highest Severity</th>
+            <th data-col="kev">KEV Exposure</th><th data-col="risk">Risk Score</th><th data-col="environment">Environment</th><th data-col="schedule">Remediation Schedule</th><th data-col="owner">Owner</th><th data-col="team">Team</th><th data-col="eol">EOL/EOS</th><th data-col="edit"></th>
           </tr>
         </thead>
-        <tbody id="assets-body">${assets.map(assetRow).join("")}</tbody>
+        <tbody id="assets-body"></tbody>
       </table>
     </div>
+    <div id="assets-pagination"></div>
 
     <div class="callout">
       Ownership is stored locally in
@@ -123,13 +259,145 @@ export async function render(container) {
       with an already-owned asset) - a transparent heuristic, not machine learning
       (the dataset here is far too small to train anything real on), never applied
       automatically. Hover a suggestion to see exactly why it was made.
+      <strong>EOL/EOS</strong> status comes from a small, real table of publicly
+      documented vendor lifecycle dates
+      (<code>remediation/enrichment/eol_lookup.py</code>), matched against the asset's
+      OS string - "Unknown" means no confident match, never a guessed date.
+      <strong>Risk Score</strong> (hover a badge for its Impact/Likelihood breakdown) is
+      a NIST SP 800-30-inspired Impact × Likelihood score computed from this asset's
+      real severity/CVSS, asset criticality, CISA KEV listing, EPSS, exploit-criteria
+      matches, and EOL/EOS status (<code>remediation/enrichment/risk_scoring.py</code>,
+      configurable in <code>remediation/config/risk_scoring_rules.yaml</code>) - an
+      illustrative, disclosed simplification, not a certified RMF/800-30 assessment.
     </div>`;
+
+  let visibleColumnsState = visibleColumns;
+
+  function renderRows() {
+    const paged = paginate(assets, page, PAGE_SIZE);
+    page = paged.page;
+    const tbody = container.querySelector("#assets-body");
+    tbody.innerHTML = paged.rows.length
+      ? paged.rows.map(assetRow).join("")
+      : `<tr><td colspan="${ASSET_COLUMNS.length}" class="empty-state">No assets match the current filter.</td></tr>`;
+    applyColumnVisibility(container.querySelector("#assets-table"), visibleColumnsState);
+    const paginationEl = container.querySelector("#assets-pagination");
+    if (paginationEl) paginationEl.innerHTML = paginationHtml(paged.page, paged.totalPages);
+    const countEl = container.querySelector("#assets-count");
+    if (countEl) countEl.textContent = `${assets.length} asset(s)`;
+
+    // A global-search asset match (search.js) or any other link elsewhere in this app
+    // deep-links here with ?highlight=<asset-name> - same one-time scroll-and-mark
+    // pattern queue.js/exceptions.js already use for findings; page was already jumped
+    // to this asset's real page above, before the first render.
+    if (highlightName && !hasScrolledToHighlight) {
+      const row = container.querySelector(`[data-asset-name="${CSS.escape(highlightName)}"]`);
+      if (row) {
+        row.classList.add("row-highlight");
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        hasScrolledToHighlight = true;
+      }
+    }
+  }
 
   wireExportButtons(container, "assets", {
     getRows: () => assets,
     columns: EXPORT_COLUMNS,
     filenameBase: "vulnhunter-asset-inventory",
   });
+  wireColumnPicker(container, "assets", (visible) => {
+    visibleColumnsState = visible;
+    applyColumnVisibility(container.querySelector("#assets-table"), visibleColumnsState);
+  });
+  wirePagination(container, (p) => { page = p; renderRows(); });
+  renderRows();
+
+  // Delegated on the outer container (survives renderRows()'s tbody replacement on
+  // every page change) - same "wire once, works for rows created later" pattern
+  // queue.js's finding-id-link listener already uses. Both actions below can call
+  // render(container) again on success (a full re-fetch+re-render), which would
+  // otherwise stack a duplicate copy of this same listener on the persistent #app node
+  // every time - apply-suggestion fires api.assetSetOwner directly with no modal gate
+  // in between, so a stacked duplicate would mean a real duplicate API call per click,
+  // not just harmless DOM churn. Stashing the handler on the container and removing any
+  // previous copy first keeps exactly one attached.
+  if (container._assetsClickHandler) {
+    container.removeEventListener("click", container._assetsClickHandler);
+  }
+  const onAssetsClick = (e) => {
+    const suggestBtn = e.target.closest("[data-apply-suggestion]");
+    if (suggestBtn) {
+      const name = suggestBtn.dataset.applySuggestion;
+      const asset = assets.find((a) => a.name === name);
+      if (!asset || !asset.suggestion) return;
+      api.assetSetOwner(name, { owner: asset.suggestion.owner, team: asset.suggestion.team })
+        .then(() => {
+          flash(`Applied suggested owner for ${name}.`, "success");
+          render(container);
+        })
+        .catch((err) => flash(err.message, "error"));
+      return;
+    }
+    const editBtn = e.target.closest("[data-edit-owner]");
+    if (editBtn) openEditModal(editBtn.dataset.editOwner);
+  };
+  container._assetsClickHandler = onAssetsClick;
+  container.addEventListener("click", onAssetsClick);
+
+  function openEditModal(name) {
+    const asset = assets.find((a) => a.name === name);
+    const body = openModal(`
+        <h2>Edit owner - ${escapeHtml(name)}</h2>
+        <form class="run-form" id="owner-form">
+          <label>Owner
+            <input type="text" name="owner" value="${escapeHtml(asset.owner || "")}">
+          </label>
+          <label>Team
+            <input type="text" name="team" value="${escapeHtml(asset.team || "")}">
+          </label>
+          <label>Environment
+            <select name="environment">
+              ${Object.keys(ENVIRONMENT_LABELS).map((v) =>
+                `<option value="${v}" ${v === (asset.environment || "unknown") ? "selected" : ""}>${ENVIRONMENT_LABELS[v]}</option>`).join("")}
+            </select>
+          </label>
+          <p class="filter-count" style="margin:-4px 0 8px">
+            Environment drives the remediation policy engine's auto-remediate-without-
+            approval treatment for non-production assets - see Remediation Policy.
+          </p>
+          <label>Remediation schedule override
+            <select name="cadence">
+              <option value="">(none - use domain default)</option>
+              ${Object.keys(CADENCE_LABELS).map((v) =>
+                `<option value="${v}" ${v === ((asset.remediation_schedule || {}).cadence || "") ? "selected" : ""}>${CADENCE_LABELS[v]}</option>`).join("")}
+            </select>
+          </label>
+          <p class="filter-count" style="margin:-4px 0 8px">
+            Overrides this asset's remediation-domain default cadence (see
+            <a href="/remediation-policy" data-link>Remediation Policy</a>) - shown with an
+            "override" badge on /queue. To bulk-set this across many assets at once, see
+            <a href="/asset-policy" data-link>Asset Policy</a>.
+          </p>
+          <button type="submit">Save</button>
+        </form>`);
+    body.querySelector("#owner-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        await api.assetSetOwner(name, {
+          owner: event.target.owner.value,
+          team: event.target.team.value,
+        });
+        await api.assetSetEnvironment(name, event.target.environment.value);
+        const cadence = event.target.cadence.value || null;
+        await api.setAssetRemediationSchedule(name, cadence, null);
+        closeModal();
+        flash(`Updated owner/environment/schedule for ${name}.`, "success");
+        render(container);
+      } catch (err) {
+        flash(err.message, "error");
+      }
+    });
+  }
 
   let lastCsvText = "";
 
@@ -219,53 +487,4 @@ export async function render(container) {
     reader.readAsText(file);
   });
 
-  container.querySelectorAll("[data-apply-suggestion]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const name = btn.dataset.applySuggestion;
-      const asset = assets.find((a) => a.name === name);
-      if (!asset || !asset.suggestion) return;
-      try {
-        await api.assetSetOwner(name, {
-          owner: asset.suggestion.owner,
-          team: asset.suggestion.team,
-        });
-        flash(`Applied suggested owner for ${name}.`, "success");
-        render(container);
-      } catch (err) {
-        flash(err.message, "error");
-      }
-    });
-  });
-
-  container.querySelectorAll("[data-edit-owner]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const name = btn.dataset.editOwner;
-      const asset = assets.find((a) => a.name === name);
-      const body = openModal(`
-        <h2>Edit owner - ${escapeHtml(name)}</h2>
-        <form class="run-form" id="owner-form">
-          <label>Owner
-            <input type="text" name="owner" value="${escapeHtml(asset.owner || "")}">
-          </label>
-          <label>Team
-            <input type="text" name="team" value="${escapeHtml(asset.team || "")}">
-          </label>
-          <button type="submit">Save</button>
-        </form>`);
-      body.querySelector("#owner-form").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        try {
-          await api.assetSetOwner(name, {
-            owner: event.target.owner.value,
-            team: event.target.team.value,
-          });
-          closeModal();
-          flash(`Updated owner for ${name}.`, "success");
-          render(container);
-        } catch (err) {
-          flash(err.message, "error");
-        }
-      });
-    });
-  });
 }

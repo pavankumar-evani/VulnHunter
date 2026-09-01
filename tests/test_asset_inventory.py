@@ -7,10 +7,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from remediation.audit import activity_log  # noqa: E402
 from remediation.inventory import asset_inventory  # noqa: E402
 
 
@@ -102,11 +104,19 @@ class BuildAssetInventory(unittest.TestCase):
 
 
 class OwnershipStore(unittest.TestCase):
+    """Every set_* call here also writes to the real, shared activity log (see
+    remediation/audit/activity_log.py) unless redirected - patch its default path to a
+    temp file too so this suite never pollutes the real, committed-empty log."""
+
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.path = Path(self.tmpdir.name) / "asset_ownership.json"
+        self.activity_log_path = Path(self.tmpdir.name) / "activity_log.json"
+        self.activity_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", self.activity_log_path)
+        self.activity_patcher.start()
 
     def tearDown(self):
+        self.activity_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_load_from_missing_file_returns_empty_dict(self):
@@ -144,6 +154,29 @@ class OwnershipStore(unittest.TestCase):
     def test_set_facing_rejects_an_invalid_value(self):
         with self.assertRaises(ValueError):
             asset_inventory.set_facing("WIN-DC01", "space-station", path=self.path)
+
+    def test_set_remediation_schedule_persists_cadence_and_window(self):
+        window = {"day_of_week": "sunday", "start_time": "01:00", "end_time": "02:00", "timezone": "UTC"}
+        asset_inventory.set_remediation_schedule("WIN-DC01", "weekly", window, path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["remediation_schedule"], {"cadence": "weekly", "maintenance_window": window})
+
+    def test_set_remediation_schedule_rejects_an_invalid_cadence(self):
+        with self.assertRaises(ValueError):
+            asset_inventory.set_remediation_schedule("WIN-DC01", "biannually", path=self.path)
+
+    def test_set_remediation_schedule_with_no_args_clears_an_existing_override(self):
+        asset_inventory.set_remediation_schedule("WIN-DC01", "weekly", path=self.path)
+        asset_inventory.set_remediation_schedule("WIN-DC01", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertNotIn("remediation_schedule", loaded["WIN-DC01"])
+
+    def test_set_remediation_schedule_does_not_clobber_owner(self):
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
+        asset_inventory.set_remediation_schedule("WIN-DC01", "monthly", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
+        self.assertEqual(loaded["WIN-DC01"]["remediation_schedule"]["cadence"], "monthly")
 
     def test_set_facing_requires_an_asset_name(self):
         with self.assertRaises(ValueError):

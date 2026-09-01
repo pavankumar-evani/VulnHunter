@@ -156,10 +156,11 @@ variable, or dropping container root privileges. Anything needing a real design 
 (replacing `eval()` where the app's behavior depends on it, migrating password storage) is
 explicitly left for a human, with a stated reason.
 
-**Validated result** (against the included `vulnerable-demo-app/`): 9 findings (4
-Critical, 2 High, 2 Medium, 1 Low), 6 auto-fixed on branch
-`vulnhunter/auto-fixes-20260803` and pushed, 3 flagged for manual review. See
-`vulnerable-demo-app/SECURITY_REPORT.md` on that branch for the full generated report.
+**Validated result** (against the included `vulnerable-demo-app/`): 18 findings (9
+Critical, 6 High, 2 Medium, 1 Low) — the original 9 in `app.py`/`Dockerfile` plus 9 more
+added later in `ai_assistant.py` (AI/ML) and `admin_api.py` (secrets/API-authorization) —
+11 auto-fixed on branch `vulnhunter/auto-fixes-20260803`, 7 flagged for manual review.
+See `vulnerable-demo-app/SECURITY_REPORT.md` on that branch for the full generated report.
 
 ### 4.2 `/remediate` — Infrastructure Remediation Pipeline
 
@@ -236,16 +237,29 @@ finding, 2 certificate/TLS findings) are fully planned but correctly left `manua
 since no fixer exists yet for those asset classes — see
 [`REMEDIATION_PLAN.md`](REMEDIATION_PLAN.md) for the full generated report.
 
-**Separately**, `remediation/sample-data/generate_bulk_findings.py` sources ~300
-additional real, distinct CVEs per category from NVD's public CVE API (not fabricated) -
-OS, Network, Network Security, Cloud Infrastructure, Certificate, SCA, DAST (real
-CWE/OWASP classes, since dynamic-testing bugs aren't CVE-numbered), and OT/IoT - bringing
-the shipped `normalized-findings.json`/`REMEDIATION_PLAN.md` in this repo to **2,415
-findings total**, still real-enriched (41 KEV-listed, 152 EPSS ≥ 50%, 307 auto-remediable
-by asset type). At that volume, normalization and planning use scripts implementing the
-same documented rules (`bulk_normalize.py`, `bulk_plan.py`) rather than an LLM-subagent
-pass per finding - see those scripts' docstrings for exactly what's disclosed as a
-uniform heuristic versus individually researched.
+**Separately**, `remediation/sample-data/generate_bulk_findings.py` sources real,
+distinct CVEs per category from NVD's public CVE API (not fabricated) - ~1,100 each for
+OS Windows, OS Linux, Network, Network Security, and Cloud Infrastructure; ~1,100 for a
+sixth, newer category, "OS Applications" (browsers, PDF readers, dev tools, media/utility
+software, drivers on end-user workstations - Chrome, Firefox, Adobe Acrobat Reader, VS
+Code, Notepad++, VLC, and more); ~300 each for Certificate and SCA; DAST (~300, real
+CWE/OWASP classes, since dynamic-testing bugs aren't CVE-numbered); OT/IoT (~1,100, via
+Armis-shaped data); and three more recently-added categories, each hand-authored from
+real, independently-verified rule sets rather than CVE-fetched (same reasoning DAST
+already documents): Infrastructure-as-Code misconfigurations (~220, real Checkov rule
+IDs), GitHub/GitLab repository vulnerabilities (~219, a real-CVE Dependabot-style half
+plus a CWE-798 secret-scanning half), and runtime/container security (~218, real Falco
+default rule names) - bringing the shipped `normalized-findings.json`/
+`REMEDIATION_PLAN.md` in this repo to **8,096 findings total**, still real-enriched (112
+KEV-listed, 253 EPSS ≥ 50%, 1,099 auto-remediable by asset type - the three newest
+categories have no remediation-fixer subagent yet, so they widen manual-only rather
+than the automated count). At that volume, normalization and planning use scripts
+implementing the same documented rules (`bulk_normalize.py`, `bulk_plan.py`) rather
+than an LLM-subagent pass per finding - see those scripts' docstrings for exactly
+what's disclosed as a uniform heuristic versus individually researched. IDs are
+CVE-hash-derived (`_stable_id()`), not a per-process counter, so re-running the
+generator with a higher target for any category is safe to re-merge without creating
+duplicates (`bulk_normalize.py --reset-asset-types`).
 
 ### 4.3 The Safety Model (the single most important design decision)
 
@@ -838,9 +852,16 @@ dashboard nav.
   more times (Jira, Splunk, CrowdStrike Falcon — see §13 below); adding Sentinel, QRadar,
   Defender, or Qualys adapters is the same pattern again, gated on picking one and having
   its API docs (or better, a real sandbox) to build against.
-- **"AI-based anomaly/behavioral detection"** — a distinct, open-ended ML engineering
-  effort (model selection, training data, false-positive tuning), not something to bolt
-  on alongside everything else here without its own dedicated scope discussion.
+- ~~**"AI-based anomaly/behavioral detection"**~~ — **built** (see `/ml-insights`,
+  `remediation/enrichment/ml_insights.py`): real scikit-learn `IsolationForest` asset
+  anomaly detection, `KMeans` finding risk-archetype clustering, and TF-IDF +
+  cosine-similarity "Similar findings" search, all genuinely fit at request time against
+  this app's real finding/asset data. Scoped deliberately to **unsupervised** learning
+  only — this repo's real labeled data (asset ownership, ~a dozen entries) is still too
+  small for supervised prediction or remediation-outcome forecasting (no real
+  resolved/fixed_at field exists anywhere to learn from), and it never replaces or feeds
+  into the deterministic `remediation_policy_engine.py`/`priority_engine.py` scoring —
+  see `ml_insights.py`'s own module docstring and `docs/FAQ.md` for the full reasoning.
 - **Multi-tenant MSSP architecture** — requires the database + auth foundation from Tier
   3 above *first*. Building tenant isolation on top of a filesystem-reading MVP (FastAPI
   or not) would mean rebuilding it twice.

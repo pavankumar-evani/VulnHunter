@@ -28,6 +28,15 @@ no probability distribution, just a small weighted vote whose reasoning is retur
 alongside the suggestion so a human can see exactly why it was made and reject it if
 it's wrong. Suggestions are never auto-applied - same "suggestion, not a determination"
 posture as attack_mapping.py's ATT&CK tagging and compensating_controls.py.
+
+Does that mean this app has NO real ML? Not anymore - see remediation/enrichment/
+ml_insights.py (asset anomaly detection, finding clustering, similar-finding search),
+which genuinely does use scikit-learn, fit at request time. It doesn't contradict
+anything above: it answers an unsupervised question (needs no labels, just a large real
+feature population - this repo's finding data has thousands of real rows) rather than
+this module's supervised one (needs labeled owner/team examples - this repo's real label
+pool is on the order of a dozen assets, still nowhere near enough). Read that module's
+own docstring for the full reasoning; this one's conclusion is unchanged.
 """
 import re
 from collections import Counter

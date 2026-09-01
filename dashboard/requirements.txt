@@ -3,3 +3,5 @@ uvicorn>=0.32
 httpx>=0.27  # not used at runtime - only by fastapi.testclient.TestClient in tests/test_dashboard.py
 pyyaml>=6.0
 requests>=2.31
+ldap3>=2.9  # real Active Directory/LDAP group-membership lookups (dashboard/auth/ad_directory.py) - a genuinely new dependency, added because there is no honest way to speak LDAP from stdlib alone
+scikit-learn>=1.9  # real unsupervised ML (remediation/enrichment/ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer; no honest way to do real anomaly detection/clustering/text-similarity from stdlib alone; pulls in numpy/scipy

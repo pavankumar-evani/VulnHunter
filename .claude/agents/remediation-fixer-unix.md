@@ -51,6 +51,21 @@ An Ansible playbook targeting Unix/Linux hosts via SSH. Common patterns:
 - If you are not confident a safe, mechanical playbook exists for a finding, do not
   generate one — note it in your summary as needing manual engineering instead.
 
+## Referencing a real PAM credential broker (only if the finding's resolved policy names one)
+
+If a finding's `remediation_policy` field (from `remediation/config/remediation_policy_engine.py`)
+names a `pam_backend` other than `"none"`, include the matching real Ansible
+credential-lookup snippet in the playbook's `vars:`/`tasks:` block instead of a
+hardcoded credential or a bare `{{ admin_password }}` placeholder — call
+`remediation_policy_engine.pam_vars_snippet(pam_backend, pam_credential_path)` to get the
+exact real text (`community.hashi_vault.vault_kv2_get` for `"vault"`,
+`cyberark.pas.cyberark_credential` for `"cyberark-pas"`,
+`cyberark.conjur.conjur_variable` for `"cyberark-conjur"`), and paste it in as-is. This
+does not change any rule above: you still never execute this playbook, and the actual
+credential fetch only ever happens later, on whatever machine an approved human/
+change-management process uses to run it - your job is only to name the real collection
+to use.
+
 ## Output
 
 After generating all playbooks, output a short plain-text summary: which finding IDs got a

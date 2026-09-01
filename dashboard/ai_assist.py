@@ -26,6 +26,37 @@ _ASK_BY_ACTION = {
 }
 
 
+def build_trend_analysis_prompt(scope, stats):
+    """Builds the prompt for /api/ai-trend-analysis - same pure-function, no-side-effect
+    contract as build_ai_assist_prompt() above. `stats` is a flat dict of REAL,
+    already-computed numbers the calling dashboard page passes in (severity/team/
+    priority breakdowns, KPI totals, month-over-month first-seen counts, etc.) - this
+    function only formats them into a prompt, it never invents or looks up data of its
+    own. The instruction explicitly tells the model not to fabricate numbers beyond what
+    was given, since a real, already-computed snapshot is genuinely all the grounding
+    this call has - there is no live database/API access from inside the `claude -p`
+    call this feeds into."""
+    lines = [
+        f"You are a security operations analyst reviewing a real, current snapshot of "
+        f"{scope} security findings data from a vulnerability management dashboard "
+        f"(not simulated, not historical - this is what the data looks like right now):",
+        "",
+    ]
+    for key, value in stats.items():
+        lines.append(f"- {key}: {value}")
+    lines.append("")
+    lines.append(
+        "Based ONLY on the real numbers above, write a concise (4-6 sentence) trend "
+        "analysis: what stands out, which team/priority combination needs the most "
+        "attention right now, and one concrete, specific recommendation. Do not invent "
+        "any number not listed above. If asked to comment on a trend over time, use "
+        "only whatever month-over-month figures were actually given, and say "
+        "explicitly if the data provided doesn't support a longer-term trend claim - "
+        "do not imply a trend the numbers don't actually show."
+    )
+    return "\n".join(lines)
+
+
 def build_ai_assist_prompt(finding, action):
     """Builds the exact prompt text that would be sent to `claude -p`. Pure function -
     same finding + action always produces the same prompt, no side effects."""

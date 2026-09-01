@@ -313,7 +313,7 @@ Jira, Splunk, CrowdStrike) and asset-inventory connectors (Infoblox, Axonius), p
 generic webhook adapter above for anything that can push data to VulnHunter rather than
 needing VulnHunter to pull from it.
 
-The 14 entries below are the same idea one stage earlier: real, researched facts about
+The 29 entries below are the same idea one stage earlier: real, researched facts about
 each product's actual public API (auth model, real endpoint/data shape, what would flow)
 — visible on the dashboard's consolidated **Adaptors** hub (`/adaptors`, pick "Reference"
 from the dropdown) via `dashboard/static/js/adaptorCatalog.js` — but with **no working
@@ -329,20 +329,44 @@ rather than attempted alongside everything else.
 
 | Connector | Category | Auth model | Integration shape |
 |---|---|---|---|
+| Microsoft Entra ID | Identity / IAM | Azure AD (Entra ID) OAuth2 app registration (client-credentials) | Pull: Graph riskyUsers/riskDetections + app-registration endpoints → identity-risk findings |
+| AWS IAM Access Analyzer | Identity / IAM | AWS IAM (SigV4-signed requests) | Pull: `ListFindings` → over-permissive resource policies/unused access |
 | Qualys VMDR | Vulnerability Scanners | API key + Basic Auth per Cloud Platform pod | Pull: host-based findings, same schema as Tenable |
 | Rapid7 InsightVM | Vulnerability Scanners | API key (`X-Api-Key`) | Pull: assets/vulnerabilities endpoints |
+| Black Duck (Synopsys) | Application Security Testing (SAST/SCA) | API token (Bearer) | Pull: vulnerable-BOM-components → `scan_type=sca` findings |
+| Polaris (Synopsys) | Application Security Testing (SAST/SCA) | API token (Bearer) | Pull: issues API for latest analysis run → SAST findings |
+| SonarQube | Application Security Testing (SAST/SCA) | User token (Bearer or Basic) | Pull: `/api/issues/search?types=VULNERABILITY` → SAST findings with real CWE |
+| Snyk | Application Security Testing (SAST/SCA) | API token (`Authorization: token`) | Pull: org/project/issues → sca/iac/container findings |
 | Wiz | Cloud Security (CNAPP) | OAuth2 client-credentials (GraphQL API) | Pull: issues/vulnerabilities → `asset.type=cloud-infrastructure` |
 | Prisma Cloud | Cloud Security (CNAPP) | API key + secret → exchanged token | Pull: alerts/compliance API → cloud-infrastructure findings |
 | AWS Security Hub | Cloud Security (CNAPP) | AWS IAM (SigV4-signed requests) | Pull: `GetFindings` (AWS Security Finding Format, a published schema) |
 | Microsoft Defender for Cloud | Cloud Security (CNAPP) | Azure AD (Entra ID) service principal | Pull: assessments/alerts APIs → cloud-infrastructure findings |
+| GCP Security Command Center | Cloud Security (CNAPP) | GCP service account (OAuth2 JSON key / WIF) | Pull: SCC `ListFindings` → cloud-infrastructure findings |
 | IBM QRadar | SIEM / SOAR | SEC token (API key) | Push: offenses/events, same direction as Splunk HEC |
 | Microsoft Sentinel | SIEM / SOAR | Azure AD service principal | Push (Log Analytics Data Collector) or pull (incidents API) |
 | Palo Alto Cortex XSOAR | SIEM / SOAR | API key | Push: create an Incident per finding, triggers org playbooks |
+| Palo Alto Cortex XSIAM | SIEM / SOAR | API key + API key ID | Pull: incidents/alerts API → correlated-detection findings |
+| Elastic / ELK SIEM | SIEM / SOAR | API key (base64 `id:api_key`) | Push: index findings via the `_bulk` API |
 | SentinelOne | XDR / EDR | API token | Pull: threats API → behavioral findings (cve/cvss/kev/epss null, same as CrowdStrike) |
 | Microsoft Defender for Endpoint | XDR / EDR | Azure AD app registration (Graph Security API) | Pull: alerts endpoint → behavioral findings |
+| BishopFox (Cosmos) | External Risk / Attack Surface Management | API key | Pull: discovered-asset/finding endpoints → external-exposure findings |
+| BitSight | External Risk / Attack Surface Management | API token (Bearer or Basic) | Pull: outside-in observations for a company GUID |
+| Palo Alto Panorama | Network Security Management | API key (PAN-OS XML API) | Push: commit a policy/address-object change (remediation-actuation) |
+| Cisco Firepower Management Center | Network Security Management | Token-based (`X-auth-access-token`) | Push: commit an access-control-policy/network-object change |
+| Fortinet FortiManager | Network Security Management | JSON-RPC session token (or API key) | Push: commit a policy/address-object change |
+| F5 BIG-IP | Network Security Management | Basic Auth or `/mgmt/shared/authn/login` token | Push: commit a WAF (ASM) policy/virtual-server change |
 | Slack | Communication / On-Call | Bot token (OAuth2) or Incoming Webhook | Push: post notification-worthy events to a channel |
 | Microsoft Teams | Communication / On-Call | Incoming Webhook, or Graph API for adaptive cards | Push: same notification events as Slack |
 | PagerDuty | Communication / On-Call | Events API v2 routing key | Push: page only the highest-urgency subset (confirmed KEV + SLA-breached Critical) |
+
+The four **Network Security Management** entries above are the first
+**remediation-actuation** connectors in this catalog — every entry before them either pulls
+findings in or pushes a notification/ticket about a finding already known, while these push
+an actual firewall/WAF policy or config change out. Treated with the same
+reviewable-artifact-first safety posture as this repo's own playbook generation (see
+[REMEDIATION_WORKFLOWS.md](REMEDIATION_WORKFLOWS.md)) — a generated config diff for human
+review, never an unattended push — and directly foreshadows the still-open "Remediation
+Engine: honest scheduling/policy/playbook visualization" roadmap item.
 
 ---
 

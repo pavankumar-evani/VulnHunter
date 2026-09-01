@@ -100,18 +100,22 @@ empty state with instructions instead of erroring.
 | `/` | KPI overview across both pipelines, SLA/KEV/EPSS summary, risk-tier + asset-class breakdown, live-refreshed every 20s |
 | `/ai-assist` | Ask Claude to explain/remediate/summarize a finding - dry-run preview by default, explicit confirm to spend real API usage |
 | `/inbox` | Real system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not person-to-person messaging; also a bell icon + dropdown in the topbar on every page |
-| `/appsec` | Application Vulnerabilities hub - rolls up SAST/DAST/SCA/Secrets/Container/API counts with links into each pre-filtered view. These six are sidebar-menu-only reachable through this hub, not separate top-level nav entries |
-| `/infrastructure` | Infrastructure Vulnerabilities hub - rolls up OS/Network/Network Security/OT-IoT/Cloud counts (`remediation/enrichment/infra_classification.py`) with links into each pre-filtered `/queue` view |
+| `/appsec` | Application Vulnerabilities hub - rolls up SAST/DAST/SCA/Secrets/Container/API/Repository-Secret-Scanning counts with links into each pre-filtered view (plus a by-category pie chart) and a date-range filter (real first-seen date) on the SCA/DAST/Secrets findings table. These are sidebar-menu-only reachable through this hub, not separate top-level nav entries |
+| `/infrastructure` | Infrastructure Vulnerabilities hub - rolls up OS/Network/Network Security/OT-IoT/Cloud/OS Applications/Infrastructure-as-Code/Runtime counts (`remediation/enrichment/infra_classification.py`) with links into each pre-filtered `/queue` view; a severity bar chart and sub-category pie chart (`charts.js`, hand-rolled SVG, no dependency), plus a date-range filter (by real first-seen date, honestly caveated - see the FAQ) on the findings table below |
 | `/queue?category=infra-vm` / `?category=dast` / `?category=sca` / `?category=cert-mgmt` | The Security Domains menu's deep links into `/queue`, pre-filtered by category |
 | `/vulnhunt` / `/vulnhunt?category=Secrets` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category; also serves as the SAST and Secrets Management nav entries |
-| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK), sortable and filterable client-side (priority, asset type, category, infra sub-category, KEV-only), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link, CSV/JSON/MD export |
+| `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK/Owner/Team), sortable and filterable client-side (priority, asset type, category, infra sub-category, KEV-only, date range by real first-seen date), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link, CSV/JSON/MD export. Also accepts `?cve=`/`?title=`/`?asset=` deep-links from the Vulnerability/Asset Mapping dashboards for pre-filtered drill-down |
 | `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target, CSV/JSON/MD export |
 | `/playbooks/<filename>` | Full content of one generated Ansible playbook |
-| `/risk` | Risk Management dashboard - MITRE ATT&CK heat map, top vulnerabilities by type (with affected-asset count and owner), top assets by critical findings, an editable internal/external-facing classification per asset, and a CVSS v3.1 severity-definitions reference |
-| `/ai-vulnerabilities` | AI Vulnerabilities - ten real AI/ML security categories (prompt injection, model poisoning, supply-chain compromise, etc.) with summary/remediation guidance and an illustrative MITRE ATLAS heat map; 0 findings against this repo's demo data (no AI/ML component), same honest "real category, 0 findings, not faked" treatment as API Vulnerabilities |
+| `/risk` | Risk Management dashboard - MITRE ATT&CK heat map, a condensed top-5 preview of vulnerabilities-by-affected-asset-count and assets-by-critical-findings (each linking to its full dashboard below), an editable internal/external-facing classification per asset, and a CVSS v3.1 severity-definitions reference |
+| `/vulnerability-mapping` | Full ranked dashboard (top 25) of real vulnerabilities by how many distinct assets they affect - click one to jump to a pre-filtered `/queue` view of every affected finding (`rankings.js`) |
+| `/asset-mapping` | Full ranked dashboard (top 25) of real assets by how many distinct vulnerabilities they carry, including each asset's EOL/EOS status - click one to jump to a pre-filtered `/queue` view of every one of its findings (`rankings.js`) |
+| `/compensating-controls` | Findings that can't be remediated right now - Critical + EOL/EOS, actively-exploited (CISA KEV) findings matching a configured exploit-criteria rule, or ones already covered by an approved exception - with each one's compensating controls listed inline (not click-to-reveal), owner/team, and drill-down/exception-request actions |
+| `/ai-vulnerabilities` | AI Vulnerabilities - ten real AI/ML security categories (prompt injection, model poisoning, supply-chain compromise, etc.) with summary/remediation guidance and an illustrative MITRE ATLAS heat map; `vulnerable-demo-app/ai_assistant.py` plants 4 real AI/ML findings and 3 tag against this taxonomy for genuine non-zero counts (Prompt Injection, AI Supply Chain Compromise, Excessive Agency) - other categories stay honestly at 0, same treatment API Vulnerabilities gets |
 | `/exceptions` | Request/approve/revoke time-boxed risk-acceptance waivers per finding, with keyword-suggested compensating controls on the request form, CSV/JSON/MD export |
-| `/assets` | Every asset with findings against it, aggregated, with an editable owner/team, CSV/JSON/MD export, and a "CMDB import" panel to bulk-assign owner/team from an uploaded CSV export (see below) |
+| `/assets` | Every asset with findings against it, aggregated, with an editable owner/team, a real, dated End-of-Life/End-of-Support status (`remediation/enrichment/eol_lookup.py` - a small table of real public vendor lifecycle dates, "Unknown" when nothing matches rather than a guess), CSV/JSON/MD export, and a "CMDB import" panel to bulk-assign owner/team from an uploaded CSV export (see below) |
 | `/priority-rules` | Live YAML editor for `remediation/config/priority_rules.yaml`, with one-click presets for a pure-CVSS/severity model vs. the shipped VPR-style (threat-intel-aware) model - both are the same underlying weighted-score engine, just with the KEV/EPSS overrides toggled |
+| `/exploit-criteria` | Live YAML editor for `remediation/config/exploit_criteria_rules.yaml` - defines which combinations of real signals (CISA KEV, NVD-derived `poc_available`/`user_interaction_required`, FIRST.org EPSS) count as a customizable "exploit criteria" match; shows a live match-count preview per rule before saving |
 | `/servicenow`, `/jira`, `/splunk` | Ticketing/SIEM Incident/Issue/Event preview (no credentials needed) and send form, one page per connector |
 | `/xdr` | CrowdStrike Falcon reference page - a pull connector like Tenable/Armis, so no send form; shows what the connector does and how to use it from Python |
 | `/infoblox`, `/axonius` | Infoblox NIOS and Axonius asset-discovery/IPAM reference pages - pull connectors like Tenable/Armis/CrowdStrike, so no send form; normalize into asset-inventory records, not vulnerability findings |
@@ -121,7 +125,7 @@ empty state with instructions instead of erroring.
 | `/faq` | Direct answers about what this product does and doesn't do |
 | `/login` | Local email/password sign-in; shows a "Sign in with SSO" button only when real OIDC provider env vars are configured |
 | `/profile` | Current user's name/email/role, change-password form, log out |
-| `/api/status` | JSON health/status endpoint |
+| `/api/status` | JSON health/status endpoint (also surfaces `app_version`, shown in the page footer alongside a copyright line and informational-only compliance-framework references linking to `docs/COMPLIANCE_MAPPING.md`'s own disclaimer) |
 
 ## The `/run`, `/servicenow`, `/jira`, and `/splunk` safety design
 
@@ -160,6 +164,33 @@ docstrings for the full design. Summary:
   `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URI` are all set as real
   environment variables, since this code can't register a real OAuth application on
   anyone's behalf.
+- **Email notifications** (`remediation/notifications/email_sender.py`): real SMTP
+  sending via Python's stdlib `smtplib` - no new dependency. Set `SMTP_HOST`,
+  `SMTP_PORT`, and `SMTP_FROM_ADDRESS` (optionally `SMTP_USERNAME`/`SMTP_PASSWORD`/
+  `SMTP_USE_TLS`) as real environment variables to enable it; `/notification-settings`
+  shows configured/not-configured honestly. Same "built against the standard protocol,
+  not exercised against a real server" caveat as every other connector here - send a
+  real test email yourself before relying on it. Scheduled reports and team alerts both
+  run on an in-process timer (hourly by default, `NOTIFICATION_CHECK_INTERVAL_SECONDS`
+  to change it) that only ticks while this server process stays running - for delivery
+  independent of server uptime, point a real external cron at
+  `POST /api/notification-settings/run-checks-now` instead.
+- **Active Directory group validation** (`dashboard/auth/ad_directory.py`): real,
+  **read-only** LDAP group-membership lookups via `ldap3` (a genuinely new dependency -
+  no honest stdlib way to speak LDAP) - used only to validate a Remediation Approval's
+  approver against the policy's configured `requires_approval_group`; never creates,
+  modifies, or resets an AD object. Set `AD_SERVER` and `AD_BASE_DN` (optionally
+  `AD_BIND_USER`/`AD_BIND_PASSWORD`) as real environment variables to enable it;
+  `/remediation-approvals` shows configured/not-configured honestly (`GET
+  /api/directory/status`), and an approval proceeds either way - `ad_group_validated`
+  is `null` ("not checked") when AD isn't configured, never fabricated as pass/fail.
+  Same "built against the standard protocol, not exercised against a real directory"
+  caveat as every other connector here - point it at a real test AD environment and
+  verify a real lookup manually before relying on it. See
+  `remediation/config/remediation_policy_engine.py` and
+  [docs/REMEDIATION_WORKFLOWS.md](../docs/REMEDIATION_WORKFLOWS.md) for how this fits
+  into the Remediation Policy/Approvals workflow, including the PAM (Vault/CyberArk)
+  side, which never involves this application holding a live credential at all.
 - **RBAC scope decision (stated plainly)**: only sensitive *mutation* routes are
   gated - real ServiceNow/Jira/Splunk sends, a real (paid) pipeline run, a real (paid)
   AI-assist call, priority-rule edits (admin), exception create (any logged-in user) and

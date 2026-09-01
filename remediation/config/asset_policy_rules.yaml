@@ -1,0 +1,58 @@
+# Bulk asset-metadata policy for VulnHunter.
+#
+# Editing owner/team/environment/facing/remediation-schedule one asset at a time on
+# /assets works, but doesn't scale past a handful of assets. This file declares
+# match-and-set rules instead: match a group of real assets (by hostname prefix/regex,
+# real asset type, environment, or facing), then set one or more fields on all of them
+# in one action. Read by remediation/inventory/asset_policy.py, via the dashboard's
+# /asset-policy page (same real preview-then-apply flow as remediation/inventory/
+# cmdb_import.py's CSV import and /exploit-criteria's preview) - nothing here is ever
+# applied without first showing exactly which real assets matched.
+#
+# IMPORTANT - what a rule can NOT set: `type`. An asset's type reflects what its real
+# finding/scan data actually says (windows-server, application, certificate, ...) -
+# never an administratively-declared value that could silently disagree with reality.
+# See asset_policy.py's module docstring for why this boundary is enforced in code, not
+# just documented here.
+#
+# Each rule:
+#   name    - a short, human-readable label shown in the preview (not used for matching)
+#   match   - one or more of: name_prefix (string), name_regex (a Python regex string,
+#             matched with re.search against the asset name), type (must equal one of
+#             this app's real asset.type values), environment (prod|staging|dev|unknown),
+#             facing (external|internal|unknown). Multiple keys under `match` are AND'd
+#             together - an asset must satisfy every key present to match.
+#   set     - one or more of: owner, team, environment, facing, remediation_schedule
+#             ({cadence: <see remediation_policy.yaml's cadence enum>, maintenance_window:
+#             {day_of_week, start_time, end_time, timezone} } or null to clear an
+#             asset-level override and revert to its domain's default schedule).
+#             A rule only needs to name the fields it actually wants to change - owner/
+#             team must be set together (matches asset_inventory.py's set_owner()
+#             signature); a rule setting only one of the two keeps the asset's existing
+#             value for the other, never blanks it.
+#
+# This file ships with zero active rules (an empty list) - there's nothing here to
+# accidentally apply to the real seed asset data. The two examples below are commented
+# out, illustrating real, valid rule shapes against this repo's own real seed asset
+# names - uncomment (and adjust) to actually use them.
+
+rules: []
+
+# Example (commented out) - tag every WEB-PORTAL-prefixed asset as external-facing:
+# rules:
+#   - name: "Public-facing web portals"
+#     match:
+#       name_prefix: "WEB-PORTAL"
+#     set:
+#       facing: "external"
+#
+# Example (commented out) - assign real network hardware to the Network Engineering
+# team and put it on a weekly patch cadence:
+#   - name: "Network hardware ownership + weekly cadence"
+#     match:
+#       type: "network-routing-switching"
+#     set:
+#       owner: "Network Engineering"
+#       team: "Infrastructure"
+#       remediation_schedule:
+#         cadence: "weekly"

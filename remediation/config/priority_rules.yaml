@@ -19,6 +19,21 @@ sla_days:
   Medium: 30
   Low: 90
 
+# CIS Controls v8 §7.2 ("Establish and Maintain a Remediation Process") calls for
+# prioritizing patching by asset criticality, not severity alone - this multiplies the
+# sla_days above by the REMEDIATION TARGET ASSET's risk_tier (see
+# remediation/enrichment/risk_scoring.py - a real, disclosed Impact x Likelihood score,
+# not a certified assessment), tightening the window for a finding on a Critical-risk
+# asset and loosening it for one on a Low-risk asset, even at the same severity. An
+# asset with no computed risk_tier (or a tier missing from this map) falls back to 1.0 -
+# unchanged from the sla_days value above. Applied to whichever days_remaining/due_date
+# is actually shown; the result is rounded to a whole day and floored at 1.
+sla_risk_tier_multiplier:
+  Critical: 0.5
+  High: 0.75
+  Medium: 1.0
+  Low: 1.25
+
 # A CISA KEV-listed finding (confirmed actively exploited) is escalated straight to
 # Critical priority, regardless of any other weight below. This mirrors
 # remediation-planner's own hardcoded rule - set enabled: false to disable the override
@@ -55,6 +70,14 @@ asset_type_weights:
   iot-ot-device: 1
   application: 1
   certificate: 0
+  client-application: 1
+  windows-endpoint: 1
+  mobile-device: 1
+  printer: 0
+  # Deliberately higher than every other weight above: a compromised hypervisor
+  # exposes every VM it hosts, a real blast-radius difference from a single
+  # network device or server - not a copy/paste of network-security-device's 2.
+  virtualization-host: 3
 
 severity_weights:
   Critical: 3

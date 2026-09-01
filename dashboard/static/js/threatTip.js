@@ -11,7 +11,16 @@ import { getCurrentUser } from "./auth.js";
 
 const DISMISS_KEY = "vulnhunter-tip-dismissed";
 
-function buildTipText(queueData) {
+// Plain, precise date - not a relative "Xm ago" (dom.js's timeAgo() only makes sense
+// for values that are fresh within minutes; this can honestly be days/weeks old).
+function formatFreshnessDate(isoString) {
+  const d = new Date(isoString);
+  return d.toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+  });
+}
+
+function buildTipText(queueData, freshness) {
   const findings = queueData.findings || [];
   const kevFindings = findings.filter((f) => f.kev && f.kev.listed);
   const breachedKev = kevFindings.filter((f) => f.sla && f.sla.breached);
@@ -29,6 +38,12 @@ function buildTipText(queueData) {
     facts.push(`highest exploit-probability finding: <code>${escapeHtml(topEpss.id)}</code> — ${escapeHtml(topEpss.title)} (${(topEpss.epss.score * 100).toFixed(1)}% EPSS)`);
   }
   if (!facts.length) return null;
+  // Real, from normalized-findings.json's own last-modified time (see
+  // dashboard_data.load_threat_intel_freshness()) - honest about how current the
+  // KEV/EPSS data behind the facts above actually is, not just the facts themselves.
+  if (freshness && freshness.available) {
+    facts.push(`threat intel last refreshed ${escapeHtml(formatFreshnessDate(freshness.last_refreshed))} - <a href="/threat-intel" data-link>refresh now</a>`);
+  }
   return `Live threat intel (CISA KEV + FIRST.org EPSS): ${facts.join(" &middot; ")}.`;
 }
 
@@ -47,7 +62,10 @@ export function initThreatTip() {
     } catch {
       return; // not logged in yet, or the call failed - just show nothing
     }
-    const text = buildTipText(queueData);
+    // A freshness-fetch hiccup shouldn't hide the (already-fetched, working) KEV/EPSS
+    // facts above it - degrade to just those facts instead of the whole banner.
+    const freshness = await api.threatIntelFreshness().catch(() => null);
+    const text = buildTipText(queueData, freshness);
     if (!text) return;
 
     root.innerHTML = `

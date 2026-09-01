@@ -85,14 +85,52 @@ class KeywordMatching(unittest.TestCase):
         result = map_finding_to_ai_vuln(f)
         self.assertIsNone(result)
 
-    def test_no_ai_findings_in_this_repos_real_demo_data(self):
-        """Honest scope check: this repo's demo app isn't an AI/ML system, so real
-        sample findings should never match this taxonomy - see the module docstring."""
+    def test_almost_no_incidental_matches_in_the_bulk_infra_findings(self):
+        """Honest scope check: EXCLUDING the `ai-ml-system` asset type (100 findings
+        deliberately hand-authored to match this taxonomy - see
+        generate_bulk_findings.py's AI_ML_CLASSES), the rest of this file
+        (remediation/output/normalized-findings.json) is infra/asset-scan/appsec data,
+        not an AI/ML system, so it should produce close to zero matches against this
+        taxonomy - see the module docstring. Not asserted as an absolute zero: at
+        ~9,400 real bulk CVE findings sourced from NVD, keyword matching can
+        incidentally find a genuinely on-topic one (e.g. a real CVE in an actual ML
+        tool about unsafe pickle deserialization of untrusted input - a textbook AI
+        supply-chain issue that legitimately belongs in this taxonomy, not a false
+        positive - the Round 13 AWS/Azure/GCP CVE expansion added a few more real ones,
+        including one in Amazon Braket, AWS's own ML/quantum SDK). Asserts a ceiling on
+        incidental matches (structural, not an exact count/ID - those shift as bulk
+        data is regenerated) rather than a strict zero. (This repo's own planted AI/ML
+        SAST findings, VULN-10 through VULN-13 in vulnerable-demo-app/ai_assistant.py,
+        live in a separate pipeline/file and aren't covered by this findings_path at
+        all - see test_dashboard.py's ApiAiVulnerabilities class for those.)"""
         import json
         findings_path = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
         findings = json.loads(findings_path.read_text(encoding="utf-8"))
-        for f in findings:
-            self.assertIsNone(map_finding_to_ai_vuln(f), f.get("id"))
+        non_ai_ml = [f for f in findings if (f.get("asset") or {}).get("type") != "ai-ml-system"]
+        matches = [f["id"] for f in non_ai_ml if map_finding_to_ai_vuln(f) is not None]
+        self.assertLessEqual(len(matches), 10, matches)
+
+    def test_every_ai_ml_asset_finding_matches_the_taxonomy(self):
+        """The inverse check: every one of the 100 hand-authored `ai-ml-system`
+        findings should tag against exactly one of this taxonomy's 10 categories with
+        no untagged stragglers - each was written specifically to contain that
+        category's own tagging keywords (see AI_ML_CLASSES in
+        generate_bulk_findings.py). A regression here means a finding's wording
+        stopped matching its intended category (e.g. an edited description dropped
+        the key phrase, or an earlier-ordered pattern's keyword leaked into a
+        different category's text and stole the match)."""
+        import json
+        from collections import Counter
+        findings_path = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
+        findings = json.loads(findings_path.read_text(encoding="utf-8"))
+        ai_ml = [f for f in findings if (f.get("asset") or {}).get("type") == "ai-ml-system"]
+        self.assertEqual(len(ai_ml), 100)
+        tagged = tag_findings(ai_ml)
+        untagged = [f["title"] for f in tagged if not f.get("ai_vulnerability")]
+        self.assertEqual(untagged, [])
+        counts = Counter(f["ai_vulnerability"] for f in tagged)
+        for v in AI_VULNERABILITIES:
+            self.assertEqual(counts.get(v["id"], 0), 10, f"{v['id']}: {counts.get(v['id'], 0)}")
 
 
 class TagFindingsBatch(unittest.TestCase):

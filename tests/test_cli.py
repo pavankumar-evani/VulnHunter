@@ -33,6 +33,15 @@ class PromptConstruction(unittest.TestCase):
     def test_remediate_prompt_with_generate(self):
         self.assertEqual(cli.remediate_prompt(generate=True), "/remediate --generate")
 
+    def test_remediate_prompt_with_finding_id(self):
+        self.assertEqual(cli.remediate_prompt(finding_id="FIND-12"), "/remediate --finding-id FIND-12")
+
+    def test_remediate_prompt_with_generate_and_finding_id(self):
+        self.assertEqual(
+            cli.remediate_prompt(generate=True, finding_id="FIND-12"),
+            "/remediate --generate --finding-id FIND-12",
+        )
+
 
 class CommandConstruction(unittest.TestCase):
     def test_build_command_includes_print_and_prompt(self):

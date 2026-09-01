@@ -4,9 +4,18 @@
   --border: #e2e4e8;
   --text: #14171a;
   --text-muted: #6b7280;
-  --brand: #0f5132;
-  --brand-dark: #0a3a24;
-  --brand-accent: #16a34a;
+  /* Corporate banking-blue brand palette (was a green palette before this round's
+     rebrand) - a deep navy for chrome (sidebar/topbar), a vivid cobalt accent for
+     links/highlights/the live-data indicator. Not modeled on any one real bank's
+     trademarked brand color - an original palette in the same family. */
+  --brand: #123a6b;
+  --brand-dark: #0a2647;
+  --brand-accent: #2f6fed;
+  /* "Positive/approved/live" status color - was green; shifted to teal rather than
+     reusing --brand-accent's blue so it stays visually distinct from --info-* below
+     (both would otherwise read as the same hue at a glance). */
+  --success: #0f6f66;
+  --success-bg: #d7f3ef;
   --danger: #b91c1c;
   --danger-bg: #fee2e2;
   --warn: #92400e;
@@ -14,6 +23,24 @@
   --info-bg: #e0f2fe;
   --info-text: #075985;
   --sidebar-w: 232px;
+  /* Categorical chart palette (nominal data only - team names, asset types, months,
+     sub-categories: series with no inherent order) - 8 hues, fixed order, CVD-validated
+     (protanopia/deuteranopia simulated, OKLab ΔE) against this app's own light/dark
+     chart-card surfaces (#ffffff / #171b1e) via dataviz skill's validate_palette.js -
+     worst adjacent ΔE 9.1 light / 8.4 dark (target ≥8), normal-vision floor 19.6 light /
+     19.3 dark (floor ≥15). Never reorder these slots - the order IS the CVD-safety
+     mechanism, not a cosmetic choice. Severity/priority (Critical/High/Medium/Low) are
+     ordinal/status data, not nominal - they reuse the existing --badge-critical/high/
+     medium/low-* colors instead (see charts.js), so a chart's Critical bar matches every
+     Critical badge elsewhere on the same page. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #4a3aa7;
+  --chart-8: #e34948;
 }
 
 * { box-sizing: border-box; }
@@ -125,6 +152,22 @@ body {
 .tenant-location .icon { flex-shrink: 0; }
 
 .side-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
+/* Click-to-scroll chevrons (sidebarScroll.js) - hidden by default, shown only while
+   .side-nav genuinely overflows and only for the direction with room left to scroll. */
+.side-nav-scroll {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 100%;
+  padding: 3px 0;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+}
+.side-nav-scroll:hover { color: white; background: rgba(255,255,255,0.06); }
+.side-nav-scroll.visible { display: flex; }
 .nav-group { margin-bottom: 18px; }
 .nav-group-label {
   font-size: 0.7rem;
@@ -175,10 +218,110 @@ body {
    width-collapse fix elsewhere in this file). */
 .main-column { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
-.topbar {
+/* --- Right-hand Insights panel (insightsPanel.js) --- */
+/* Page-specific tips/definitions/highlighted alerts, set by each page's own render()
+   via setInsightsContent() - a persistent sibling of .main-column (not part of the
+   router-controlled #app region), so it survives route changes without re-mounting;
+   app.js resets it to a generic default before each new page loads, and pages override
+   that with their own content afterward. Width is user-resizable (drag
+   .insights-resize-handle) and persisted the same way sidebarToggle.js persists the
+   left sidebar's collapsed state - a plain localStorage key, not a server preference. */
+.insights-panel {
+  width: var(--insights-w, 300px);
+  min-width: 220px;
+  max-width: 480px;
+  flex-shrink: 0;
+  position: relative;
   background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.insights-resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+}
+.insights-resize-handle:hover, .insights-resize-handle.dragging { background: var(--brand-accent); opacity: 0.4; }
+.insights-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
-  padding: 18px 32px;
+  flex-shrink: 0;
+}
+.insights-panel-title { font-weight: 600; font-size: 0.95rem; }
+.insights-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+.insights-toggle:hover { background: var(--bg); color: var(--text); }
+.insights-toggle:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 1px; }
+.insights-panel-body { overflow-y: auto; padding: 16px; flex: 1; min-height: 0; }
+.insight-section { margin-bottom: 20px; }
+.insight-section:last-child { margin-bottom: 0; }
+.insight-section h4 {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.insight-tip-list { margin: 0; padding-left: 18px; font-size: 0.86rem; line-height: 1.55; }
+.insight-tip-list li { margin-bottom: 6px; }
+.insight-alert {
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.insight-alert:last-child { margin-bottom: 0; }
+.insight-alert-info { background: var(--info-bg); color: var(--info-text); }
+.insight-alert-warn { background: var(--warn-bg); color: var(--warn); }
+.insight-alert-danger { background: var(--danger-bg); color: var(--danger); }
+.insight-glossary dt { font-weight: 600; font-size: 0.86rem; margin-top: 10px; }
+.insight-glossary dt:first-child { margin-top: 0; }
+.insight-glossary dd { margin: 2px 0 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; }
+
+/* Collapsed state: shrink to a slim strip showing only the toggle button, same
+   `inert`-on-content pattern sidebarToggle.js uses for keyboard/screen-reader safety. */
+.app-shell.insights-collapsed .insights-panel { width: 40px; min-width: 40px; }
+.app-shell.insights-collapsed .insights-panel-title,
+.app-shell.insights-collapsed .insights-panel-body,
+.app-shell.insights-collapsed .insights-resize-handle { display: none; }
+.app-shell.insights-collapsed .insights-panel-header { justify-content: center; padding: 14px 6px; }
+
+@media (max-width: 900px) {
+  .insights-panel { display: none; }
+}
+
+/* The topbar is a continuous brand-green bar (left to right, matching the sidebar's
+   own --brand-dark) rather than a plain white strip - hosts the sidebar toggle, page
+   title, search, notifications, account menu, and (at the far right) the tenant
+   switcher, all restyled below for contrast against the dark background. The amber
+   "Live threat intel" banner (threatTip.js) is unrelated to this and stays exactly as
+   it is - a separate rounded card inside .content, not part of this bar. */
+.topbar {
+  background: var(--brand-dark);
+  padding: 14px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -187,6 +330,7 @@ body {
 }
 .page-title {
   margin: 0; font-size: 1.3rem; letter-spacing: -0.01em;
+  color: white;
   flex-shrink: 1; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .topbar-extra { flex-shrink: 0; }
@@ -201,13 +345,13 @@ body {
   width: 34px;
   height: 34px;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
+  border: 1px solid rgba(255,255,255,0.25);
+  background: transparent;
+  color: rgba(255,255,255,0.8);
   cursor: pointer;
   padding: 0;
 }
-.sidebar-toggle:hover { background: var(--bg); color: var(--text); }
+.sidebar-toggle:hover { background: rgba(255,255,255,0.1); color: white; }
 .sidebar-toggle:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 1px; }
 .sidebar-toggle[aria-pressed="true"] { color: var(--brand-accent); border-color: var(--brand-accent); }
 .sidebar-toggle .icon { display: block; }
@@ -220,9 +364,9 @@ body {
   gap: 8px;
   width: 100%;
   min-width: 0;
-  max-width: 420px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  max-width: 640px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 8px;
   padding: 7px 12px;
   color: var(--text-muted);
@@ -263,6 +407,9 @@ body {
 }
 .search-result:last-child { border-bottom: none; }
 .search-result:hover { background: var(--bg); }
+/* Keyboard navigation (ArrowUp/ArrowDown in search.js) - same visual treatment as
+   :hover so keyboard and mouse selection look consistent. */
+.search-result-active { background: var(--bg); }
 .search-result-source {
   flex-shrink: 0;
   font-size: 0.7rem;
@@ -273,6 +420,15 @@ body {
 }
 .search-result-id { flex-shrink: 0; font-weight: 600; }
 .search-result-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-title mark { background: #fde68a; color: inherit; border-radius: 2px; padding: 0 1px; }
+.search-source-header {
+  padding: 8px 12px 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
 
 /* Row a global-search result linked to - a brief, distinct highlight so it's obvious
    which row was jumped to, without a fading/animated effect that could feel gimmicky. */
@@ -288,13 +444,13 @@ body {
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid var(--border);
-  background: var(--bg);
+  border: 1px solid rgba(255,255,255,0.25);
+  background: transparent;
   border-radius: 8px;
-  color: var(--text-muted);
+  color: rgba(255,255,255,0.8);
   cursor: pointer;
 }
-.notif-bell:hover { color: var(--text); }
+.notif-bell:hover { background: rgba(255,255,255,0.1); color: white; }
 .notif-badge {
   position: absolute;
   top: -5px;
@@ -397,6 +553,29 @@ a.notif-item:hover { background: var(--bg); }
 .heat-3 { background: #fca5a5; color: #7f1d1d; border-color: #f87171; }
 .heat-4 { background: var(--danger); color: white; border-color: var(--danger); }
 
+/* --- Hand-rolled charts (charts.js) - bar/pie, no charting library --- */
+.chart-row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin: 14px 0 20px; }
+.chart-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.chart-block h3 { margin: 0 0 8px; font-size: 0.92rem; }
+.chart-svg { display: block; overflow: visible; }
+.chart-bar-value { font-size: 10px; fill: var(--text); font-weight: 600; }
+.chart-bar-label { font-size: 9px; fill: var(--text-muted); }
+.chart-pie-wrap { display: flex; align-items: center; gap: 16px; }
+.chart-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--text); }
+.chart-legend-row { display: flex; align-items: center; gap: 6px; }
+.chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; display: inline-block; }
+
+/* Clickable chart elements (charts.js's optional data.href -> wireChartLinks()) -
+   drill-down affordance, same brand-accent focus ring as the rest of the app. */
+.chart-bar-clickable, .chart-slice-clickable, .chart-legend-row-clickable { cursor: pointer; }
+.chart-bar-clickable rect, .chart-slice-clickable { transition: opacity 0.12s ease; }
+.chart-bar-clickable:hover rect, .chart-slice-clickable:hover { opacity: 0.8; }
+.chart-legend-row-clickable:hover { text-decoration: underline; }
+.chart-bar-clickable:focus-visible, .chart-slice-clickable:focus-visible, .chart-legend-row-clickable:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
 .facing-select {
   font-size: 0.82rem;
   padding: 4px 6px;
@@ -406,13 +585,23 @@ a.notif-item:hover { background: var(--bg); }
   color: var(--text);
 }
 
-/* --- Auth: account chip, login page --- */
-.account-chip { display: flex; align-items: center; text-decoration: none; }
+/* --- Auth: account chip/dropdown, login page --- */
+.account-chip-wrap { position: relative; }
+.account-chip {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
 .account-avatar {
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: var(--brand);
+  background: var(--brand-accent);
+  border: 2px solid rgba(255,255,255,0.4);
   color: white;
   font-size: 0.78rem;
   font-weight: 700;
@@ -420,11 +609,104 @@ a.notif-item:hover { background: var(--bg); }
   align-items: center;
   justify-content: center;
 }
+/* The account popover reuses .search-dropdown's panel styling (shadow/border/radius) -
+   see notifications.js's identical reuse of that same class for the bell dropdown. */
+.account-dropdown { left: auto; right: 0; width: 240px; padding: 4px 0; }
+.account-dropdown-header { padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
+.account-dropdown-name { font-weight: 600; font-size: 0.9rem; }
+.account-dropdown-email { color: var(--text-muted); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-dropdown-role { color: var(--text-muted); font-size: 0.75rem; text-transform: capitalize; margin-top: 2px; }
+.account-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.account-dropdown-item:hover { background: var(--bg); }
+.account-dropdown-item.danger { color: var(--danger); }
+
+/* --- Tenant switcher pill + dropdown (topbar, far right - see topbarTenant.js) ---
+   A custom popover, not a native <select> - a native select's own dropdown can't be
+   styled (rounded corners, hover highlight, per-row avatar) beyond plain option text,
+   which is exactly the "looks like a generic OS menu" limitation this replaces. */
+.topbar-tenant { flex-shrink: 0; }
+.tenant-pill-wrap { position: relative; }
+.tenant-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 999px;
+  padding: 4px 12px 4px 4px;
+  color: rgba(255,255,255,0.92);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.tenant-pill:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.32); }
+.tenant-pill-label { font-size: 0.78rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tenant-pill-caret { display: flex; opacity: 0.7; }
+.tenant-pill-caret .icon { width: 12px; height: 12px; }
+.tenant-pill .tenant-avatar { width: 22px; height: 22px; font-size: 0.6rem; border-radius: 6px; }
+
+.tenant-dropdown { left: auto; right: 0; width: 260px; padding: 6px; flex-direction: column; gap: 2px; }
+/* `display: flex` must be gated behind :not([hidden]) - an unconditional `display: flex`
+   here has the same specificity as the browser's default `[hidden] { display: none }`
+   rule, and an author-stylesheet rule beats a user-agent one at equal specificity, so
+   an unconditional rule would render the dropdown open regardless of its `hidden`
+   attribute (the actual root cause of the tenant switcher appearing to never close). */
+.tenant-dropdown:not([hidden]) { display: flex; }
+.tenant-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.tenant-dropdown-item:hover { background: var(--bg); }
+.tenant-dropdown-item.active { background: var(--bg); border-left: 3px solid var(--brand-accent); padding-left: 7px; }
+.tenant-dropdown-item-label { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- Column picker (shared "Columns ▾" control for wide data tables) --- */
+/* A native <details>/<summary> disclosure - the browser's own default open/close
+   marker (a triangle) is suppressed since the "▾" is already part of the label text. */
+.column-picker { position: relative; display: inline-block; }
+.column-picker summary { list-style: none; }
+.column-picker summary::-webkit-details-marker { display: none; }
+.column-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  padding: 10px 12px;
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+  min-width: 220px;
+}
+.column-picker-menu .checkbox-label { padding: 4px 0; white-space: nowrap; }
 
 /* On the login page, hide the sidebar/topbar chrome for a distraction-free screen -
    app.js toggles this class based on the current route. */
 .app-shell.auth-page .sidebar,
-.app-shell.auth-page .topbar {
+.app-shell.auth-page .topbar,
+.app-shell.auth-page .insights-panel {
   display: none;
 }
 .app-shell.auth-page .content {
@@ -432,6 +714,61 @@ a.notif-item:hover { background: var(--bg); }
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  /* The sidebar is display:none (not just width:0) on this page, so .main-column IS
+     the full viewport - .content's own margin-left formula below assumes a
+     --sidebar-w-wide sidebar is actually consuming space, which isn't true here. */
+  margin-left: auto;
+  /* .content's base rule (below) adds page padding meant for ordinary pages' content -
+     the auth-page split hero (.auth-shell) needs to run truly edge-to-edge instead. */
+  padding: 0;
+}
+/* #app is a plain flex item inside .content (a sibling of #flash-container/
+   #threat-tip-banner/#page-footer - see index.html), sized by the default flex
+   shrink-to-fit algorithm - fine for the old single centered card (which naturally
+   centered regardless via .content's justify-content:center), but the full-bleed split
+   hero below needs #app itself to actually span the whole viewport width, not just
+   shrink-wrap its own content. */
+.app-shell.auth-page .content #app { width: 100%; }
+
+/* --- Auth screens (login/logout) - split hero + form panel, in the same spirit as
+   the branded split-screen sign-in pages common across enterprise security products
+   (CrowdStrike, Prisma Cloud, Palo Alto XSIAM, etc.): a dark branded panel with an
+   illustrative graphic on one side, the actual form in a plain card on the other.
+   This is an original illustration/palette (this app's own shield mark + brand-blue
+   network motif), not a copy of any one product's proprietary design. */
+.auth-shell { display: flex; width: 100%; min-height: 100vh; }
+.auth-hero {
+  position: relative;
+  flex: 1 1 56%;
+  min-width: 0;
+  background: linear-gradient(160deg, var(--brand-dark), var(--brand) 70%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  overflow: hidden;
+}
+.auth-hero-art { width: 100%; max-width: 420px; height: auto; }
+.auth-hero-sweep { transform-origin: 240px 230px; animation: vh-radar-sweep 6s linear infinite; }
+@keyframes vh-radar-sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.auth-hero-node { animation: vh-pulse 2.4s ease-in-out infinite; }
+.auth-hero-node:nth-of-type(2) { animation-delay: 0.4s; }
+.auth-hero-node:nth-of-type(3) { animation-delay: 0.8s; }
+.auth-hero-node:nth-of-type(4) { animation-delay: 1.2s; }
+.auth-hero-node:nth-of-type(5) { animation-delay: 1.6s; }
+.auth-hero-node:nth-of-type(6) { animation-delay: 2s; }
+.auth-hero-copy { text-align: center; color: #eaf0fe; margin-top: -12px; max-width: 380px; }
+.auth-hero-brand { font-size: 1.4rem; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
+.auth-hero-tagline { color: #c9d8fb; font-size: 1rem; line-height: 1.5; margin: 0 0 18px; }
+.auth-hero-points { list-style: none; padding: 0; margin: 0; text-align: left; display: inline-flex; flex-direction: column; gap: 8px; }
+.auth-hero-points li { color: #c9d8fb; font-size: 0.85rem; padding-left: 20px; position: relative; }
+.auth-hero-points li::before { content: "✓"; position: absolute; left: 0; color: #7ea6f5; font-weight: 700; }
+.auth-form-panel { flex: 1 1 44%; display: flex; align-items: center; justify-content: center; padding: 32px; }
+.logout-icon { display: flex; justify-content: center; margin-bottom: 16px; }
+@media (max-width: 860px) {
+  .auth-hero { display: none; }
+  .auth-form-panel { flex: 1 1 100%; }
 }
 
 .login-card {
@@ -470,24 +807,45 @@ a.notif-item:hover { background: var(--bg); }
   animation: vh-pulse 1.6s ease-in-out infinite;
 }
 @keyframes vh-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(22,163,74,0.35); }
-  50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(22,163,74,0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(47,111,237,0.35); }
+  50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(47,111,237,0); }
 }
 
 /* `.main-column` is a column-direction flex container, so `.content` (a flex item)
    defaults to `align-items: stretch` - when its own `max-width` caps it below the
-   available width (any viewport wider than 1600px), a stretched-but-capped item sits
-   flush against the cross-start (left) edge rather than centering, unless given its
-   own auto margins. Without this, both regular pages AND the login/logout screen (see
-   `.app-shell.auth-page .content` above, which centers the *card* within `.content`'s
-   own box) visibly sit left-biased on any wide monitor - the login card in particular
-   ends up centered somewhere in the left ~1600px of the screen instead of the actual
-   viewport center. */
+   available width (any viewport wider than 1600px + the sidebar), a stretched-but-capped
+   item needs its own margins to center, not just fill flush against the cross-start
+   (left) edge.
+   Plain `margin: 0 auto` (the previous rule here) centers `.content` within
+   `.main-column` ALONE - it has no way to know `.main-column` itself starts
+   `--sidebar-w` (232px) in from the true left edge of the browser window. On any
+   monitor wide enough for the 1600px cap to actually bind (viewport width beyond
+   1600px + 232px = 1832px), that produces a real, measurable rightward bias: the
+   leftover space splits evenly on both sides of `.content`'s own box, but that box's
+   box is already offset right by the sidebar, so the whole block of content (and, on
+   the login/logout screen, the centered card inside it - see `.app-shell.auth-page
+   .content` above) ends up centered somewhere in the space to the RIGHT of the
+   sidebar, not in the true center of the browser window - a real, reported "content
+   looks pushed right" bug, not a false alarm.
+   Fix: use one fixed `margin-left` (computed so the FINAL box is centered on the true
+   viewport, by subtracting the sidebar's own width up front) and let `margin-right`
+   stay `auto` to absorb whatever's left - the standard, well-defined single-auto-margin
+   centering algorithm (unlike two independently-computed fixed margins, which risk the
+   CSS spec's "over-constrained" fallback silently discarding one of them). `max(0px, ...)`
+   clamps both formulas to the old, correct edge-to-edge behavior on any viewport where
+   the cap doesn't bind at all (verified: at 1728px wide, main-column is 1496px < 1600px,
+   so this still resolves to margin-left: 0, unchanged from before). */
 .content {
   padding: 24px 32px 60px;
-  max-width: 1600px;
-  margin: 0 auto;
-  width: 100%;
+  /* An explicit width formula (not `max-width` + `width:auto`) - relying on max-width
+     alone to clamp an auto-width flex item combined with one non-auto margin hits a
+     real cross-browser quirk where the item's cross-size resolves against max-width
+     itself rather than the smaller of max-width/container size, causing genuine
+     horizontal overflow. `min()` sidesteps that entirely - it's a plain value
+     computation, not dependent on the auto-margin resolution algorithm. */
+  width: min(100%, 1600px);
+  margin-left: max(0px, calc(50vw - 800px - var(--sidebar-w)));
+  margin-right: auto;
   /* This is the one scrollable region in the whole app shell - the topbar above it is
      flex-shrink:0 (fixed), and .main-column's min-height:0 lets this flex:1 item
      actually resolve to a bounded height instead of growing forever, so overflow-y
@@ -499,8 +857,10 @@ a.notif-item:hover { background: var(--bg); }
 }
 /* Collapsing the sidebar (sidebarToggle.js) is meant to give a genuine full-screen
    content view - a fixed max-width would defeat that on a wide monitor, so drop the
-   cap entirely while collapsed instead of just widening it. */
-.app-shell.sidebar-collapsed .content { max-width: none; }
+   cap entirely while collapsed instead of just widening it. The margin-left formula
+   above assumes a present, --sidebar-w-wide sidebar, so it's reset to 0 here too -
+   with no sidebar there's nothing to compensate for. */
+.app-shell.sidebar-collapsed .content { width: 100%; margin-left: 0; margin-right: auto; }
 
 h1 { font-size: 1.5rem; margin-bottom: 4px; }
 h2 { font-size: 1.15rem; margin-top: 32px; }
@@ -589,7 +949,7 @@ h2 { font-size: 1.15rem; margin-top: 32px; }
   margin-left: 8px;
   vertical-align: middle;
 }
-.adaptor-status-live { background: #dcfce7; color: #166534; }
+.adaptor-status-live { background: var(--success-bg); color: var(--success); }
 .adaptor-status-reference { background: var(--info-bg); color: var(--info-text); }
 
 .table-scroll {
@@ -630,13 +990,17 @@ code {
   font-size: 0.78rem;
   font-weight: 600;
 }
+a.badge { text-decoration: none; }
+a.badge:hover { text-decoration: underline; }
 .badge-critical { background: #fee2e2; color: #991b1b; }
 .badge-high { background: #ffedd5; color: #9a3412; }
 .badge-medium { background: #fef3c7; color: #92400e; }
 .badge-low { background: #dbeafe; color: #1e40af; }
-.badge-auto_approvable { background: #dcfce7; color: #166534; }
+.badge-auto_approvable { background: var(--success-bg); color: var(--success); }
 .badge-needs_change_approval { background: #fef3c7; color: #92400e; }
 .badge-manual_only { background: #f1f3f5; color: #4b5563; }
+.badge-outline { background: transparent; border: 1px solid var(--border); color: var(--text-muted); margin-left: 6px; }
+.badge-outline.muted { font-weight: 400; font-style: italic; }
 
 .callout {
   background: var(--info-bg);
@@ -647,6 +1011,7 @@ code {
   font-size: 0.92rem;
 }
 .callout-warn { background: var(--warn-bg); color: var(--warn); }
+.callout-danger { background: var(--danger-bg); color: var(--danger); }
 
 .empty-state { color: var(--text-muted); font-style: italic; }
 .muted { color: var(--text-muted); }
@@ -674,14 +1039,41 @@ code {
 }
 .run-form label { display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; color: var(--text-muted); }
 .run-form input[type=text], .run-form input[type=password], .run-form input[type=email],
-.run-form input[type=search], .run-form input[type=number], .run-form select {
+.run-form input[type=search], .run-form input[type=number], .run-form input[type=date],
+.run-form select, .run-form textarea {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.9rem;
   background: var(--surface);
   color: var(--text);
+  font-family: inherit;
 }
+/* Fieldset groupings inside a .run-form (e.g. the Exceptions request form's numbered
+   sections) - the browser default fieldset/legend styling (chunky inset border, legend
+   overlapping it) reads as unstyled/broken next to this app's flat card look. */
+.run-form fieldset.exception-form-section {
+  border: none;
+  border-top: 1px solid var(--border);
+  padding: 14px 0 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.run-form fieldset.exception-form-section:first-of-type { border-top: none; padding-top: 0; }
+.run-form legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.exception-expiry-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.exception-expiry-picker .secondary-button { margin-bottom: 0; padding: 6px 12px; font-size: 0.85rem; }
+.exception-expiry-picker label { flex: 1 1 160px; }
 .checkbox-label { flex-direction: row !important; align-items: center; gap: 8px !important; }
 .checkbox-danger { color: var(--danger); font-weight: 600; }
 .run-form button {
@@ -694,7 +1086,7 @@ code {
   cursor: pointer;
   align-self: flex-start;
 }
-.run-form button:hover { background: #0b3d26; }
+.run-form button:hover { background: #081c33; }
 
 .secondary-button {
   background: var(--surface);
@@ -708,13 +1100,15 @@ code {
 }
 .secondary-button:hover { background: var(--bg); }
 
-.export-buttons { display: flex; gap: 8px; margin: 10px 0; }
+.export-buttons { display: flex; gap: 8px; margin: 10px 0; justify-content: flex-end; }
+.table-toolbar { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin: 10px 0; justify-content: flex-end; }
+.table-toolbar .export-buttons { margin: 0; }
 .export-buttons .secondary-button { margin-bottom: 0; }
 
 .flash-container { margin-bottom: 18px; }
 .flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-size: 0.9rem; }
 .flash-info { background: var(--info-bg); color: var(--info-text); }
-.flash-success { background: #dcfce7; color: #166534; }
+.flash-success { background: var(--success-bg); color: var(--success); }
 .flash-error { background: var(--danger-bg); color: var(--danger); }
 
 /* --- Top-of-page threat-intel tip banner (threatTip.js) --- */
@@ -763,6 +1157,17 @@ code {
 .page-footer-links { display: flex; gap: 14px; flex-wrap: wrap; }
 .page-footer-links a { color: var(--text-muted); }
 .page-footer-links a:hover { color: var(--brand-accent); }
+.page-footer-meta { display: flex; flex-direction: column; gap: 6px; width: 100%; order: 3; }
+.page-footer-version { font-size: 0.78rem; color: var(--text-muted); }
+.footer-compliance-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.footer-compliance-badges a.badge {
+  text-decoration: none;
+  background: #f1f3f5;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.footer-compliance-badges a.badge:hover { color: var(--text); border-color: var(--text-muted); }
+.footer-compliance-note { font-size: 0.72rem; color: var(--text-muted); }
 
 /* --- SLA / priority badges --- */
 .badge-priority-critical { background: #7f1d1d; color: white; }
@@ -818,7 +1223,7 @@ code {
   font-size: 0.92rem;
   cursor: pointer;
 }
-.config-form button:hover { background: #0b3d26; }
+.config-form button:hover { background: #081c33; }
 
 /* --- Progress / trend bar (for KPI cards) --- */
 .progress-track {
@@ -836,8 +1241,44 @@ code {
 .kpi-card { transition: box-shadow 0.15s ease, transform 0.15s ease; }
 .kpi-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); transform: translateY(-1px); }
 
+/* Clickable KPI tile / chart-block drill-down (Overview's own domain totals, risk
+   scoring, and methodology tiles) - same hover lift as any .kpi-card, just an <a>
+   instead of a <div> so it needs display/color/text-decoration reset. */
+.kpi-card-link, .chart-block-link { display: block; color: inherit; text-decoration: none; cursor: pointer; }
+.chart-block-link { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+.chart-block-link:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.06); transform: translateY(-1px); }
+
 .data-table tr { transition: background 0.1s ease; }
 .data-table tbody tr:hover { background: #fafbfc; }
+.data-table tr.table-section-row { background: var(--bg); font-weight: 600; }
+.data-table tr.table-section-row td { padding: 8px 12px; color: var(--text-muted); }
+.data-table tr.table-section-row:hover { background: var(--bg); }
+
+/* Sticky-left column(s) for wide tables (Threat Intel's group/zero-day tables) - the
+   first column (or first few) stay pinned to the left edge of .table-scroll's own
+   horizontal scrollbox while the rest of the row scrolls underneath, so it's still
+   obvious which group/finding a far-right cell belongs to. Each caller sets its own
+   `left`/`width` inline (columns vary per table) - this class only owns the
+   positioning/background/z-index/overflow behavior shared by all of them. */
+.data-table td.sticky-col, .data-table th.sticky-col {
+  position: sticky;
+  z-index: 2;
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: 2px 0 4px -2px rgba(0,0,0,0.08);
+}
+/* Single-line sticky columns (Zero-days' Priority/ID/CVE-Title) truncate with an
+   ellipsis rather than wrapping - Group (multi-line: name + aliases) deliberately
+   doesn't get this modifier, so its own 2 short lines just fit the fixed width as-is. */
+.data-table td.sticky-col-truncate, .data-table th.sticky-col-truncate { text-overflow: ellipsis; white-space: nowrap; }
+.data-table th.sticky-col { background: #fafbfc; z-index: 3; }
+.data-table tbody tr:hover td.sticky-col { background: #fafbfc; }
+.data-table tr.table-section-row td.sticky-col { background: var(--bg); box-shadow: none; }
+.group-row-clickable { cursor: pointer; }
+@media (prefers-color-scheme: dark) {
+  .data-table th.sticky-col { background: #1c2124; }
+  .data-table tbody tr:hover td.sticky-col { background: #1c2124; }
+}
 
 th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover { color: var(--text); }
@@ -855,6 +1296,17 @@ th.sortable:hover { color: var(--text); }
     --info-text: #7dd3fc;
     --danger-bg: #3a1414;
     --warn-bg: #3a2a0d;
+    /* Same 8 hues, stepped for the dark chart-card surface (#171b1e) - re-validated
+       separately (worst adjacent ΔE 8.4, normal-vision floor 19.3), not a raw flip of
+       the light values. */
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-6: #008300;
+    --chart-7: #9085e9;
+    --chart-8: #e66767;
   }
   .data-table th { background: #1c2124; }
   .data-table tbody tr:hover { background: #1c2124; }
@@ -908,7 +1360,7 @@ th.sortable:hover { color: var(--text); }
   font-size: 0.85rem;
 }
 .filter-bar label { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
-.filter-bar select {
+.filter-bar select, .filter-bar input[type="date"], .filter-bar input[type="search"] {
   padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -916,6 +1368,7 @@ th.sortable:hover { color: var(--text); }
   color: var(--text);
   font-size: 0.85rem;
 }
+.filter-bar input[type="search"] { width: 130px; }
 .filter-bar .checkbox-label { flex-direction: row; gap: 6px; }
 .filter-count { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; }
 
@@ -1071,4 +1524,6 @@ th.sortable:hover { color: var(--text); }
   font-size: 0.72rem;
   font-weight: 600;
   margin-top: 3px;
+  text-decoration: none;
 }
+.exception-tag:hover { text-decoration: underline; }

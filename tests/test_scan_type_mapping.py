@@ -54,6 +54,30 @@ class ClassifyFinding(unittest.TestCase):
         finding = {"asset": {"type": "some-future-asset-type"}}
         self.assertEqual(classify_finding(finding), "infra-vm")
 
+    def test_iac_resource_is_iac(self):
+        finding = {"asset": {"type": "iac-resource"}}
+        self.assertEqual(classify_finding(finding), "iac")
+
+    def test_container_runtime_is_runtime(self):
+        finding = {"asset": {"type": "container-runtime"}}
+        self.assertEqual(classify_finding(finding), "runtime")
+
+    def test_code_repository_with_a_cve_is_sca(self):
+        """A Dependabot-style dependency alert has a real CVE - same SCA bucket as any
+        other vulnerable-dependency finding."""
+        finding = {"asset": {"type": "code-repository"}, "cve": "CVE-2023-1234"}
+        self.assertEqual(classify_finding(finding), "sca")
+
+    def test_code_repository_without_a_cve_is_secrets(self):
+        """A secret-scanning alert has no CVE - a distinct methodology from both SCA
+        and application's own DAST bucket."""
+        finding = {"asset": {"type": "code-repository"}, "cve": None}
+        self.assertEqual(classify_finding(finding), "secrets")
+
+    def test_code_repository_missing_cve_key_entirely_is_secrets(self):
+        finding = {"asset": {"type": "code-repository"}}
+        self.assertEqual(classify_finding(finding), "secrets")
+
 
 class TagScanTypes(unittest.TestCase):
     def test_adds_scan_type_and_label_without_mutating_input(self):

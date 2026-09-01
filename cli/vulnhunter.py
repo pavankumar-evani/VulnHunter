@@ -15,7 +15,7 @@ Nothing in this module runs automatically - see cli/README.md before using it fo
 
 Usage:
     python cli/vulnhunter.py scan <path> [--fix] [--dry-run]
-    python cli/vulnhunter.py remediate [--generate] [--dry-run]
+    python cli/vulnhunter.py remediate [--generate] [--finding-id FIND-N] [--dry-run]
 """
 import argparse
 import datetime
@@ -85,8 +85,15 @@ def scan_prompt(path, fix=False):
     return f"/vulnhunt {path}" + (" --fix" if fix else "")
 
 
-def remediate_prompt(generate=False):
-    return "/remediate" + (" --generate" if generate else "")
+def remediate_prompt(generate=False, finding_id=None):
+    """`finding_id`, when given, scopes the run to a single already-known finding
+    (skipping full re-ingest/normalize/enrich/plan - see .claude/commands/remediate.md's
+    own `--finding-id` handling) - this is what the dashboard's "Trigger Remediation"
+    button on an already-approved finding uses, via /api/run."""
+    prompt = "/remediate" + (" --generate" if generate else "")
+    if finding_id:
+        prompt += f" --finding-id {finding_id}"
+    return prompt
 
 
 def write_audit_log(pipeline, command, result):
@@ -165,6 +172,9 @@ def main(argv=None):
     remediate_parser = subparsers.add_parser("remediate", help="Run /remediate.")
     remediate_parser.add_argument("--generate", action="store_true",
                                    help="Also generate remediation playbooks for automatable findings.")
+    remediate_parser.add_argument("--finding-id", default=None,
+                                   help="Scope this run to a single already-known finding ID "
+                                        "(e.g. FIND-12) instead of the full batch pipeline.")
 
     args = parser.parse_args(argv)
 
@@ -178,7 +188,7 @@ def main(argv=None):
         prompt = scan_prompt(args.path, fix=args.fix)
         return run(prompt, "vulnhunt", dry_run=args.dry_run, **build_kwargs)
     elif args.command == "remediate":
-        prompt = remediate_prompt(generate=args.generate)
+        prompt = remediate_prompt(generate=args.generate, finding_id=args.finding_id)
         return run(prompt, "remediate", dry_run=args.dry_run, **build_kwargs)
 
     parser.print_help()

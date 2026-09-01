@@ -1,0 +1,40 @@
+# Team alert subscriptions for VulnHunter's dashboard - real-time-ish (polling-interval)
+# email alerts for critical vulnerabilities, zero-day-style findings, and threat-intel
+# (MITRE ATT&CK threat-actor-group) correlated findings, scoped to one team.
+#
+# "Real-time-ish" because there is no live event stream in this pipeline - findings are
+# computed on request/on a polling interval (remediation/notifications/alert_checker.py),
+# same honest framing this app already uses for Overview/Queue's own 20s auto-refresh.
+# An alert fires once per finding per subscription (tracked in
+# remediation/notifications/alert_state.json), not once per poll.
+#
+# Alert types:
+#   critical      - a finding's real CVSS-based severity is Critical
+#   zero_day      - a finding is BOTH CISA KEV-listed (confirmed actively exploited) AND
+#                   matches a configured Exploit Criteria rule (remediation/config/
+#                   exploit_criteria_rules.yaml) - the same "zero-day" definition already
+#                   used on the /threat-intel dashboard, not a separate one invented here
+#   threat_intel  - a finding's MITRE ATT&CK technique(s) correlate to at least one real,
+#                   MITRE-documented threat-actor group (remediation/enrichment/
+#                   threat_actor_groups.py) - the same correlation /threat-intel already
+#                   shows, just pushed as an alert instead of requiring someone to check
+#                   the page
+#
+# Fields per subscription (same shape/conventions as report_schedule_rules.yaml):
+#   id            - unique string
+#   alert_type    - critical | zero_day | threat_intel
+#   scope         - all | infra-vm | sca | cert-mgmt | dast | iac | secrets | runtime | ai-ml
+#   team          - a team name from remediation/inventory/asset_ownership.json
+#   recipients    - list of email addresses
+#   enabled       - true/false
+#
+# Example (disabled, for reference - copy and edit to add a real one):
+# subscriptions:
+#   - id: "infra-critical-identity"
+#     alert_type: "critical"
+#     scope: "all"
+#     team: "Identity & Domain Services"
+#     recipients: ["identity-team@example.com"]
+#     enabled: false
+
+subscriptions: []

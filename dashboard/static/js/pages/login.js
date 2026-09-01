@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, flash } from "../dom.js";
 import { setCurrentUser } from "../auth.js";
+import { authHeroHtml } from "../authHero.js";
 
 export const title = "Sign in";
 
@@ -19,29 +20,34 @@ export async function render(container) {
   }
 
   container.innerHTML = `
-    <div class="login-card">
-      <div class="login-brand">
-        <svg viewBox="0 0 64 64" width="40" height="40" xmlns="http://www.w3.org/2000/svg">
-          <path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#16a34a"/>
-          <circle cx="27" cy="27" r="11" fill="none" stroke="#ffffff" stroke-width="3.6"/>
-          <line x1="35.2" y1="35.2" x2="45" y2="45" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
-        </svg>
-        <span>VulnHunter</span>
-      </div>
+    <div class="auth-shell">
+      ${authHeroHtml()}
+      <div class="auth-form-panel">
+        <div class="login-card">
+          <div class="login-brand">
+            <svg viewBox="0 0 64 64" width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+              <path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#2f6fed"/>
+              <circle cx="27" cy="27" r="11" fill="none" stroke="#ffffff" stroke-width="3.6"/>
+              <line x1="35.2" y1="35.2" x2="45" y2="45" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+            <span>VulnHunter</span>
+          </div>
 
-      <form class="run-form" id="login-form">
-        <label>Email<input type="email" name="email" required autocomplete="username"></label>
-        <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
-        <button type="submit">Sign in</button>
-      </form>
+          <form class="run-form" id="login-form">
+            <label>Email<input type="email" name="email" required autocomplete="username"></label>
+            <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+            <button type="submit">Sign in</button>
+          </form>
 
-      ${oidc.enabled
-        ? `<a class="secondary-button" style="display:block;text-align:center;text-decoration:none" href="/api/auth/oidc/login">Sign in with ${escapeHtml(oidc.provider_name)}</a>`
-        : `<p class="filter-count" data-tooltip="Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URI to enable SSO">SSO is not configured on this server.</p>`}
+          ${oidc.enabled
+            ? `<a class="secondary-button" style="display:block;text-align:center;text-decoration:none" href="/api/auth/oidc/login">Sign in with ${escapeHtml(oidc.provider_name)}</a>`
+            : `<p class="filter-count" data-tooltip="Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URI to enable SSO">SSO is not configured on this server.</p>`}
 
-      <div class="callout" style="margin-top:18px">
-        Demo credentials (this is a local demo seed, not a real secret) - see
-        <code>dashboard/README.md</code>. Change or remove these before any real deployment.
+          <div class="callout" style="margin-top:18px">
+            Demo credentials (this is a local demo seed, not a real secret) - see
+            <code>dashboard/README.md</code>. Change or remove these before any real deployment.
+          </div>
+        </div>
       </div>
     </div>`;
 

@@ -1,5 +1,6 @@
 {
   "APP-ORDERS01": {
+    "environment": "dev",
     "owner": "Order Platform Squad",
     "team": "Application Engineering"
   },
@@ -16,6 +17,7 @@
     "team": "Platform"
   },
   "WIN-DC01": {
+    "environment": "prod",
     "owner": "Priya Nair",
     "team": "Identity & Domain Services"
   }

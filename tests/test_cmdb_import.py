@@ -7,10 +7,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from remediation.audit import activity_log  # noqa: E402
 from remediation.inventory import asset_inventory, cmdb_import  # noqa: E402
 
 
@@ -92,11 +94,20 @@ class ReconcileRows(unittest.TestCase):
 
 
 class ApplyImport(unittest.TestCase):
+    """apply_import() calls asset_inventory.set_owner(), which also writes to the real,
+    shared activity log (see remediation/audit/activity_log.py) unless redirected -
+    patch its default path to a temp file too so this suite never pollutes the real,
+    committed-empty log."""
+
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.path = Path(self.tmpdir.name) / "asset_ownership.json"
+        self.activity_log_path = Path(self.tmpdir.name) / "activity_log.json"
+        self.activity_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", self.activity_log_path)
+        self.activity_patcher.start()
 
     def tearDown(self):
+        self.activity_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_applies_owner_and_team_for_each_entry(self):

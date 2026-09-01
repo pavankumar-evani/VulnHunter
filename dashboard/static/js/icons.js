@@ -26,6 +26,7 @@ const ICONS = {
   dast: '<line x1="12" y1="19" x2="12" y2="8.5"/><path d="M6.5 19a5.5 5.5 0 0111 0"/><path d="M3 19a9 9 0 0118 0"/><circle cx="12" cy="19" r="1.1" fill="currentColor" stroke="none"/>',
   search: '<circle cx="10.5" cy="10.5" r="7"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/>',
   bell: '<path d="M6 10.5a6 6 0 0112 0v4.2l1.6 2.6H4.4L6 14.7z"/><path d="M9.6 19a2.4 2.4 0 004.8 0"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5L12 13l8.5-6.5"/>',
   jira: '<rect x="4" y="4" width="7" height="7" rx="1.3"/><rect x="13" y="4" width="7" height="7" rx="1.3"/><rect x="8.5" y="13" width="7" height="7" rx="1.3"/>',
   splunk: '<path d="M4 19V9M9.5 19V5M15 19v-8M20 19v-4"/>',
   xdr: '<path d="M4 12h4l2-6 4 12 2-6h4"/>',
@@ -39,6 +40,13 @@ const ICONS = {
   api: '<polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/>',
   aiVuln: '<circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="17" r="2.2"/><circle cx="19" cy="17" r="2.2"/><line x1="12" y1="7.2" x2="6.3" y2="15.3"/><line x1="12" y1="7.2" x2="17.7" y2="15.3"/><line x1="7.2" y1="17" x2="16.8" y2="17"/>',
   cloud: '<path d="M7 18h10.5a3.5 3.5 0 000-7 5.5 5.5 0 00-10.6-1.7A4.5 4.5 0 007 18z"/>',
+  chevronDown: '<polyline points="5 8 12 15 19 8"/>',
+  endpoint: '<rect x="4" y="4" width="16" height="11" rx="1"/><line x1="2" y1="19" x2="22" y2="19"/><line x1="9" y1="19" x2="9" y2="15"/><line x1="15" y1="19" x2="15" y2="15"/>',
+  printer: '<rect x="5" y="8" width="14" height="8" rx="1"/><path d="M7 8V4h10v4"/><rect x="7" y="16" width="10" height="5" rx="0.6"/>',
+  virtualization: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><rect x="6" y="8" width="5" height="4" rx="0.6"/><rect x="13" y="8" width="5" height="4" rx="0.6"/><rect x="6" y="14" width="5" height="3" rx="0.6"/><rect x="13" y="14" width="5" height="3" rx="0.6"/>',
+  iac: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><polyline points="9 10 7 12 9 14"/><polyline points="15 10 17 12 15 14"/>',
+  ml: '<circle cx="5.5" cy="6" r="2.2"/><circle cx="5.5" cy="18" r="2.2"/><circle cx="18.5" cy="12" r="2.6"/><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="18" r="1.6"/><line x1="7.4" y1="6.9" x2="16.3" y2="10.8"/><line x1="7.4" y1="17.1" x2="16.3" y2="13.2"/><line x1="10.4" y1="6.4" x2="10.6" y2="6.7"/><line x1="13.6" y1="6" x2="16" y2="10.3"/><line x1="13.6" y1="18" x2="16" y2="13.7"/>',
+  quantum: '<circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="9" ry="3.6"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(120 12 12)"/>',
 };
 
 export function icon(name, size = 18) {

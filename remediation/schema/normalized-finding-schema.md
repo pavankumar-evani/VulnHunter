@@ -15,7 +15,7 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   "asset": {
     "name": "WIN-DC01",
     "ip": "10.20.30.41",
-    "type": "windows-server | windows-endpoint | unix-server | network-routing-switching | network-security-device | iot-ot-device | cloud-infrastructure | application | certificate",
+    "type": "windows-server | windows-endpoint | unix-server | network-routing-switching | network-security-device | iot-ot-device | virtualization-host | cloud-infrastructure | application | certificate | client-application | mobile-device | printer | iac-resource | code-repository | container-runtime | ai-ml-system",
     "os": "Microsoft Windows Server 2019 Datacenter"
   },
   "title": "MS Windows Print Spooler Remote Code Execution (PrintNightmare)",
@@ -24,7 +24,8 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   "severity": "Critical | High | Medium | Low",
   "description": "Plain-English impact, not just the vendor synopsis.",
   "recommended_fix": "What the source system suggests (patch, config change, etc.)",
-  "remediation_domain": "windows-server | unix-server | network-routing-switching | network-security-device | iot-ot-device | application | certificate | null",
+  "remediation_domain": "windows-server | unix-server | null",
+  "remediation_mechanism": "SCCM / Microsoft Configuration Manager | MDM (e.g. Microsoft Intune) | Vendor firmware update | Vendor hypervisor patch tooling | null",
   "first_seen": "2026-07-28",
   "last_seen": "2026-08-02",
   "kev": {
@@ -37,7 +38,9 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   "epss": {
     "score": 0.9976,
     "percentile": 0.9996
-  }
+  },
+  "poc_available": true,
+  "user_interaction_required": false
 }
 ```
 
@@ -52,18 +55,44 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   OS-level patching: application-layer library CVEs (e.g. Log4Shell) and TLS/certificate
   lifecycle findings (expiry, deprecated protocols) are a different remediation domain
   again — a code/library upgrade or a cert renewal, not an OS package update.
-  `cloud-infrastructure` is listed for completeness (real vulnerability-management
-  platforms, including Tenable and Armis, do cover AWS/Azure/GCP asset/posture
-  scanning) but has **no sample finding in this repo's demo data yet** - same
-  "supported category, not faked" treatment `scan_type_mapping.py` already documents
-  for DAST. See `remediation/enrichment/infra_classification.py` for how `asset.type`
-  rolls up into the Infrastructure Vulnerabilities hub's OS/Network/Network Security/
-  OT/Cloud sub-categories.
-- **`remediation_domain`** is set by the normalizer from `asset.type`, but kept as a
-  separate field (not just reusing `asset.type`) because in a real deployment some asset
-  types might route to more than one remediation mechanism (e.g. a Windows endpoint patched
-  via Intune vs. a Windows Server patched via WSUS/Ansible) — that routing nuance lives
-  here, not baked into the asset classification itself.
+  `client-application` covers desktop/endpoint software (browsers, PDF readers, chat
+  clients) rather than a server-side application. `cloud-infrastructure` is listed for
+  completeness (real vulnerability-management platforms, including Tenable and Armis, do
+  cover AWS/Azure/GCP asset/posture scanning) - same "supported category, not faked"
+  treatment `scan_type_mapping.py` already documents for DAST.
+  `iac-resource` (Infrastructure-as-Code misconfigurations - Checkov/tfsec-style static
+  analysis of Terraform/CloudFormation templates, no CVE), `code-repository`
+  (GitHub/GitLab-style findings - Dependabot-style dependency alerts *with* a CVE,
+  secret-scanning alerts without one), `container-runtime` (Falco-style runtime/
+  container behavioral detections, no CVE), `ai-ml-system` (hand-authored AI/ML
+  security findings - prompt injection, model supply-chain, excessive agency, etc.,
+  no CVE - see `remediation/enrichment/ai_vuln_taxonomy.py`), `mobile-device`
+  (phone/tablet OS and app CVEs - patched via an MDM platform, e.g. Microsoft Intune,
+  not SCCM directly), `printer` (networked printer/MFP firmware CVEs - HP, Xerox,
+  Canon, Lexmark, Ricoh, etc.), and `virtualization-host` (hypervisor/VM-platform CVEs -
+  VMware ESXi/vCenter, Microsoft Hyper-V, Proxmox VE, Citrix Hypervisor) round out the
+  taxonomy. `windows-endpoint` (laptops/desktops - patched via SCCM/Microsoft
+  Configuration Manager) is now a real, populated category rather than a documented-
+  but-empty asset type. See `remediation/enrichment/infra_classification.py` for how
+  `asset.type` rolls up into the Infrastructure Vulnerabilities hub's Server/End-User
+  Device/Network/Network Security/OT/Virtualization/Cloud/Printer/IaC/Runtime
+  sub-categories (`ai-ml-system` deliberately does NOT roll up there - AI Vulnerabilities
+  is its own top-level Security Domains entry, not an infra sub-category), and
+  `remediation/enrichment/scan_type_mapping.py` for the broader Infra-VM/SCA/Cert-
+  Mgmt/SAST/DAST/IaC/Secrets/Runtime/AI-ML methodology taxonomy.
+- **`remediation_domain`** is set by the normalizer from `asset.type`, and reflects
+  whether a *working* `remediation-fixer-*` subagent exists for it today - only
+  `windows-server`/`unix-server` do, so this is `null` for every other asset type,
+  including the new ones added alongside `windows-endpoint`/`mobile-device`/`printer`/
+  `virtualization-host` above (no Ansible-style automation exists for any of them).
+- **`remediation_mechanism`** is a purely informational, reference-only field (not a
+  working integration - there is no SCCM/Intune API call anywhere in this codebase) that
+  names the REAL-WORLD tool that would normally patch that asset class, so a finding on
+  an end-user device or hypervisor at least says which team/tool owns it, even though
+  this app can't generate a fix artifact for it the way it can for `windows-server`/
+  `unix-server`. `null` for asset types where no single obvious tool applies (e.g.
+  `network-routing-switching`, which varies too much by vendor to name one mechanism
+  honestly).
 - **`cve`** is nullable — Armis in particular frequently reports policy/configuration
   findings (open Telnet, unauthenticated management UI) with no CVE attached, and so do
   most certificate-lifecycle findings (an expiring cert isn't a CVE).
@@ -74,6 +103,16 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   deliberate distinction between "checked, and it's not exploited-in-the-wild" vs. "not
   applicable to this finding at all." See
   [remediation/enrichment/kev_epss.py](../enrichment/kev_epss.py).
+- **`poc_available`** and **`user_interaction_required`** are added by
+  `remediation/enrichment/poc_enrichment.py` (a pipeline stage, same timing as
+  `kev`/`epss`) from two real, never-fabricated NVD API 2.0 fields already present in
+  the raw CVE data `generate_bulk_findings.py` fetched: `references[].tags` containing
+  `"Exploit"`, and the CVSS v3.x `userInteraction` metric. Both are `null` when `cve` is
+  `null`, or when the CVE predates this repo's local NVD cache (an honest gap, not a
+  guess). `remediation/enrichment/exploit_criteria.py` combines these with `kev`/`epss`
+  into a configurable, admin-editable `exploit_criteria_matches` field - computed LIVE
+  by the dashboard (like `eol_status`/`compensating_controls`), not persisted into this
+  file, so it isn't shown in the example above.
 - IDs (`FIND-N`) are assigned by the normalizer, sequential across all sources combined,
   so `remediation-planner` and `remediation-fixer-*` have one consistent key regardless of
   which system a finding originated from.

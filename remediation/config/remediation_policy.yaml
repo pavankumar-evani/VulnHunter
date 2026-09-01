@@ -1,0 +1,374 @@
+# Remediation Policy Engine configuration for VulnHunter.
+#
+# This is the admin-editable "how should remediation actually happen" layer, sitting on
+# top of the existing per-finding classification (asset.type, infra_category,
+# remediation_domain, remediation_mechanism - see remediation/schema/
+# normalized-finding-schema.md). It does NOT re-derive what kind of asset something is;
+# it decides, per domain, the real operational questions: how often should this get
+# patched, does it need a human approval click or can it go through automatically,
+# what maintenance window should it target, should a downtime notice go out, and which
+# real PAM system's Ansible lookup plugin should the generated playbook reference.
+#
+# Read by remediation/config/remediation_policy_engine.py, live (same convention as
+# priority_rules.yaml) - editing this file (directly, or via the dashboard's
+# /remediation-policy page) changes what /queue shows immediately, no pipeline re-run.
+#
+# IMPORTANT - what this does NOT do: it never causes this application to connect to,
+# or execute anything against, real infrastructure. `auto_remediate: true` only means
+# "the generated Ansible playbook does not need an explicit human Approve click before
+# it's considered ready" - a human or an existing enterprise system (SCCM, Ansible
+# Tower/AWX, a change-management pipeline) still has to actually run that playbook.
+# See docs/REMEDIATION_WORKFLOWS.md's "Remediation Policy" section for the full model.
+#
+# Fields per domain entry:
+#   change_type            - standard | normal | emergency (ITIL 4 Change Enablement:
+#                             standard = pre-approved/repeatable, no per-instance
+#                             sign-off needed; normal = full assessment + approval;
+#                             emergency = expedited, still approved, never skipped)
+#   cadence                 - weekly | monthly | quarterly | half-yearly | yearly | on-demand
+#   maintenance_window       - {day_of_week, start_time (24h HH:MM), end_time, timezone}
+#   auto_remediate           - true/false - only meaningful when change_type is "standard"
+#   restart_required         - true/false - informational, shown in the UI/communication
+#   requires_approval_group  - an AD/LDAP security-group name (string) whose members are
+#                             authorized to approve this domain's remediations, or null.
+#                             Validated via a real, read-only LDAP lookup if AD_SERVER/
+#                             AD_BASE_DN are configured (dashboard/auth/ad_directory.py) -
+#                             if not configured, approval still works, honestly labeled
+#                             "not AD-validated" rather than silently skipped.
+#   downtime_expected        - true/false
+#   communication_template   - a $placeholder-style message (uses Python's
+#                             string.Template safe_substitute - unknown placeholders are
+#                             left as literal text, never crash the page) for notifying
+#                             stakeholders ahead of a downtime-expected change.
+#   pam_backend              - none | vault | cyberark-pas | cyberark-conjur |
+#                             aws-sts-assume-role | azure-managed-identity |
+#                             gcp-workload-identity - which real Ansible collection's
+#                             credential-lookup/auth snippet to embed in the generated
+#                             playbook's vars: block. The three cloud-native backends are
+#                             the same "just-in-time, keyless, short-lived" posture as
+#                             Vault/CyberArk, just for AWS/Azure/GCP instead of an
+#                             on-prem PAM vault (real AWS STS AssumeRole, Azure Managed
+#                             Identity, GCP Workload Identity Federation - none require a
+#                             standing stored secret). The actual credential/token
+#                             exchange happens on whatever machine runs the playbook,
+#                             using your organization's own real cloud IAM configuration -
+#                             this app never fetches or holds a live privileged secret or
+#                             token, cloud or on-prem.
+#   pam_credential_path      - the secret path/object name (Vault/CyberArk) or role/
+#                             identity ARN-equivalent (cloud backends) to reference in
+#                             that snippet.
+
+# A CISA KEV-listed finding (confirmed actively exploited) always escalates to
+# change_type "emergency" regardless of its domain's configured default below - same
+# override convention as priority_rules.yaml's own kev_override. Set enabled: false to
+# disable it.
+kev_emergency_override:
+  enabled: true
+
+policies:
+  # End-User Devices (SCCM/MDM-managed laptops/desktops/mobiles) - matches the literal
+  # example given: weekly patch-and-restart cycle pushed via SCCM using a Windows Group
+  # Policy-managed maintenance window, pre-approved so it doesn't wait on a human click
+  # every week.
+  endpoint:
+    change_type: "standard"
+    cadence: "weekly"
+    maintenance_window: {day_of_week: "tuesday", start_time: "02:00", end_time: "04:00", timezone: "UTC"}
+    auto_remediate: true
+    restart_required: true
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "Standard weekly patch cycle for $asset_name (SCCM-managed) - $window_day $window_start-$window_end $timezone. A restart is expected; no downtime notice required for standard end-user maintenance."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Server Vulnerabilities (Windows/Linux/Unix) - matches the literal example given:
+  # slower cadence, requires approval, scheduled + communicated downtime, a named AD
+  # approval group, and a real PAM backend referenced in the generated playbook.
+  os:
+    change_type: "normal"
+    cadence: "monthly"
+    maintenance_window: {day_of_week: "saturday", start_time: "23:00", end_time: "03:00", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: true
+    requires_approval_group: "IT-Change-Approvers"
+    downtime_expected: true
+    communication_template: "Scheduled maintenance for $asset_name: $title ($cve). Window: $window_day $window_start-$window_end $timezone. Brief service interruption expected during the change - approved by $approved_by."
+    pam_backend: "vault"
+    pam_credential_path: "secret/servers/admin-credentials"
+
+  # Dev-environment assets (any asset tagged environment: dev on Asset Inventory) -
+  # matches the literal example given: auto-upgrade in specific off-hours, no approval
+  # gate, since a dev environment breaking is a much lower-stakes event than a
+  # production one.
+  dev:
+    change_type: "standard"
+    cadence: "weekly"
+    maintenance_window: {day_of_week: "daily", start_time: "01:00", end_time: "05:00", timezone: "UTC"}
+    auto_remediate: true
+    restart_required: false
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "Automatic dev-environment update for $asset_name - nightly window $window_start-$window_end $timezone. No approval required for non-production assets."
+    pam_backend: "vault"
+    pam_credential_path: "secret/dev/admin-credentials"
+
+  # Network routing/switching (routers, switches) - normal change, monthly, downtime
+  # possible during a failover/reload, PAM: vault (a common place network device admin
+  # credentials are already vaulted alongside server credentials).
+  network:
+    change_type: "normal"
+    cadence: "monthly"
+    maintenance_window: {day_of_week: "saturday", start_time: "23:00", end_time: "03:00", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: true
+    requires_approval_group: "IT-Change-Approvers"
+    downtime_expected: true
+    communication_template: "Scheduled network maintenance for $asset_name: $title ($cve). Window: $window_day $window_start-$window_end $timezone. Brief routing interruption possible - approved by $approved_by."
+    pam_backend: "vault"
+    pam_credential_path: "secret/network/admin-credentials"
+
+  # Network security devices (firewalls, IPS, WAF) - same cadence as network, but no
+  # downtime is normally expected (HA-paired devices patch one node at a time) and PAM
+  # defaults to CyberArk PAS, a classic real-world fit for firewall/IPS admin accounts.
+  network-security:
+    change_type: "normal"
+    cadence: "monthly"
+    maintenance_window: {day_of_week: "sunday", start_time: "01:00", end_time: "04:00", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: true
+    requires_approval_group: "IT-Change-Approvers"
+    downtime_expected: false
+    communication_template: "Scheduled firewall/network-security maintenance for $asset_name: $title ($cve). Window: $window_day $window_start-$window_end $timezone. HA failover expected, no full outage - approved by $approved_by."
+    pam_backend: "cyberark-pas"
+    pam_credential_path: "NetworkSecuritySafe"
+
+  # OT/IoT devices - grounded in NIST SP 800-82 Rev.3: OT patch decisions are risk-based,
+  # not a 30-day IT SLA - "a critical patch on a Windows-based HMI does not get applied
+  # in 30 days if the HMI vendor has not validated the patch [and] you have a 24/7
+  # production schedule" (real maintenance windows can be months apart). No
+  # auto_remediate here under any circumstance; conservative quarterly cadence as a
+  # default ceiling, not a promise every OT asset actually gets a window that often.
+  ot:
+    change_type: "normal"
+    cadence: "quarterly"
+    maintenance_window: {day_of_week: "saturday", start_time: "20:00", end_time: "22:00", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: true
+    requires_approval_group: "OT-Change-Board"
+    downtime_expected: true
+    communication_template: "Scheduled OT/ICS maintenance for $asset_name: $title ($cve). Window: $window_day $window_start-$window_end $timezone - vendor-validated and safety-reviewed before this window, approved by $approved_by. If this window slips, see the Compensating Controls page for interim risk treatment."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Virtualization hosts (hypervisors) - quarterly, approval-gated; downtime_expected
+  # true reflects the real live-migration/maintenance-mode workflow (VMs move off before
+  # the host patches, not a hard outage, but still a real operational event).
+  virtualization:
+    change_type: "normal"
+    cadence: "quarterly"
+    maintenance_window: {day_of_week: "saturday", start_time: "21:00", end_time: "23:00", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: true
+    requires_approval_group: "IT-Change-Approvers"
+    downtime_expected: true
+    communication_template: "Scheduled hypervisor maintenance for $asset_name: $title ($cve). Window: $window_day $window_start-$window_end $timezone. Workloads will be live-migrated off before patching - approved by $approved_by."
+    pam_backend: "vault"
+    pam_credential_path: "secret/virtualization/admin-credentials"
+
+  # Cloud infrastructure - monthly, approval-gated (cloud changes still carry real blast
+  # radius); PAM defaults to a keyless cloud credential-broker pattern instead of an
+  # on-prem vault - AWS STS AssumeRole here by default (this domain's finding set is
+  # mixed-provider; see docs/REMEDIATION_WORKFLOWS.md for switching this per-provider by
+  # cloning this domain if your fleet is Azure/GCP-only).
+  cloud:
+    change_type: "normal"
+    cadence: "monthly"
+    maintenance_window: {day_of_week: "saturday", start_time: "22:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: false
+    requires_approval_group: "Cloud-Platform-Team"
+    downtime_expected: false
+    communication_template: "Scheduled cloud remediation for $asset_name: $title ($cve). Window: $window_day $window_start-$window_end $timezone. Applied via your cloud provider's own change process (Terraform/console/CLI) - approved by $approved_by."
+    pam_backend: "aws-sts-assume-role"
+    pam_credential_path: "arn:aws:iam::ACCOUNT_ID:role/VulnHunterRemediationRole"
+
+  # OS Applications (end-user-installed apps on managed devices, e.g. browsers, PDF
+  # readers) - mirrors `endpoint` exactly: same SCCM-managed weekly cycle, since these
+  # ride along on the same managed-device patch cadence.
+  apps:
+    change_type: "standard"
+    cadence: "weekly"
+    maintenance_window: {day_of_week: "tuesday", start_time: "02:00", end_time: "04:00", timezone: "UTC"}
+    auto_remediate: true
+    restart_required: false
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "Standard weekly application update for $asset_name (SCCM-managed) - $window_day $window_start-$window_end $timezone. No downtime notice required."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Printers - quarterly vendor firmware pushes via centralized print management, no
+  # approval gate (low blast radius), no PAM (typically simple local/SNMP auth, not a
+  # vaulted privileged account).
+  printer:
+    change_type: "standard"
+    cadence: "quarterly"
+    maintenance_window: {day_of_week: "sunday", start_time: "03:00", end_time: "05:00", timezone: "UTC"}
+    auto_remediate: true
+    restart_required: true
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "Quarterly printer firmware update for $asset_name - $window_day $window_start-$window_end $timezone."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Infrastructure-as-Code findings - the fix is a corrected Terraform/CloudFormation
+  # template merged via a normal pull request, not a maintenance-window patch. auto_
+  # remediate here means "the PR can auto-merge on green CI," the same real mechanism
+  # `sca` below uses, not an SCCM-style push - see docs/REMEDIATION_WORKFLOWS.md.
+  iac:
+    change_type: "standard"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: true
+    restart_required: false
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "IaC fix for $asset_name: $title - merged via pull request, no maintenance window required."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Container/host runtime detections (e.g. Falco-style behavioral alerts) - explicitly
+  # NOT a patchable CVE or config drift; this is investigative security-team triage, per
+  # docs/REMEDIATION_WORKFLOWS.md's own "no fixer yet" reasoning. Never auto-remediated;
+  # the "approval group" here really means "who triages this," not a change approver.
+  runtime:
+    change_type: "normal"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: false
+    requires_approval_group: "SOC-Triage"
+    downtime_expected: false
+    communication_template: "Runtime security alert for $asset_name: $title - under SOC investigation, not an automatic patch."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Software Composition Analysis (dependency CVEs) - grounded in the real, current
+  # Renovate/Dependabot convention: patch-level dependency bumps auto-merge once CI is
+  # green, so auto_remediate: true here mirrors that industry-standard automation, not
+  # an invented one. Minor/major bumps still land as the same PR type but a maintainer
+  # would typically hold those for review - this domain covers the common case.
+  sca:
+    change_type: "standard"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: true
+    restart_required: false
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "Dependency update for $asset_name: $title ($cve) - auto-merged pull request, no maintenance window required."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Dynamic Application Security Testing findings - the fix is a code/config change that
+  # goes through the application's own release pipeline (code review + QA), not a
+  # maintenance window - change_type normal reflects that human review gate.
+  dast:
+    change_type: "normal"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: false
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "Application fix for $asset_name: $title - scheduled for the next release cycle, pending code review/QA."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Certificate & TLS lifecycle - grounded in the real, current ACME/Let's Encrypt
+  # standard: 90-day certificates auto-renewed around the 60-day mark via a cron/systemd
+  # timer, no human click needed for routine domain-validated renewal. This domain is
+  # deliberately scoped to THAT case only - an internal CA/root certificate change is a
+  # separate, manual decision this policy does not cover.
+  cert-mgmt:
+    change_type: "standard"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: true
+    restart_required: false
+    requires_approval_group: null
+    downtime_expected: false
+    communication_template: "Automatic ACME certificate renewal for $asset_name: $title - routine domain-validated renewal, no approval required. Internal CA/root certificate changes are handled separately, not by this policy."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Leaked secrets (secret-scanning findings) - a leaked credential is treated as an
+  # assumed compromise, so this is the one domain that is emergency by default
+  # regardless of the KEV override below - immediate human-verified rotation (and, for
+  # repo secrets, history purge) is required, never auto-remediated.
+  secrets:
+    change_type: "emergency"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: false
+    requires_approval_group: "Security-Team"
+    downtime_expected: false
+    communication_template: "URGENT - leaked credential for $asset_name: $title. Treat as compromised - rotate immediately and purge repository history if applicable. Reviewed by $approved_by."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # AI/ML vulnerabilities (prompt injection, model poisoning, agent-design issues) - the
+  # fix is an architecture or code-level change reviewed by a security architecture
+  # function, not a patch - never auto-remediated.
+  ai-ml:
+    change_type: "normal"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: false
+    requires_approval_group: "AI-Security-Review"
+    downtime_expected: false
+    communication_template: "AI/ML security finding for $asset_name: $title - requires architecture/code review by AI security. Approved by $approved_by."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Post-quantum crypto migration (remediation/enrichment/quantum_readiness.py) - a
+  # finding whose real title names classical asymmetric crypto (RSA/ECDSA/Diffie-
+  # Hellman) or a legacy TLS/cipher weakness gets THIS domain instead of whatever its
+  # asset type/scan_type would otherwise resolve to (see
+  # remediation_policy_engine.py's _domain_for_finding() - cuts across normal
+  # classification the same way the "dev" override does), because migrating off
+  # RSA/ECDSA/DH is a fundamentally different, larger-scope action than a routine OS
+  # patch or certificate renewal: it needs security-architecture review, real NIST
+  # FIPS 203/204/205 target-algorithm selection, and coordinated planning against real
+  # NIST IR 8547 (draft) migration deadlines - never a one-click auto-remediation.
+  quantum-crypto:
+    change_type: "normal"
+    cadence: "on-demand"
+    maintenance_window: {day_of_week: "daily", start_time: "00:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: true
+    requires_approval_group: "Security-Architecture-Review"
+    downtime_expected: false
+    communication_template: "Post-quantum crypto migration review for $asset_name: $title - assess against NIST FIPS 203/204/205 and NIST IR 8547 migration guidance (see Quantum Readiness). Approved by $approved_by."
+    pam_backend: "none"
+    pam_credential_path: null
+
+  # Fallback for any domain not explicitly listed above (present taxonomy already covers
+  # every real infra_category/scan_type this app produces - this exists for forward
+  # compatibility with a future category) - conservative by default: normal change,
+  # quarterly, no auto-remediate.
+  default:
+    change_type: "normal"
+    cadence: "quarterly"
+    maintenance_window: {day_of_week: "saturday", start_time: "22:00", end_time: "23:59", timezone: "UTC"}
+    auto_remediate: false
+    restart_required: false
+    requires_approval_group: "IT-Change-Approvers"
+    downtime_expected: false
+    communication_template: "Scheduled remediation for $asset_name: $title. Window: $window_day $window_start-$window_end $timezone."
+    pam_backend: "none"
+    pam_credential_path: null

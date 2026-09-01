@@ -34,9 +34,14 @@ import data as dashboard_data  # noqa: E402
 from app import app as fastapi_app  # noqa: E402
 from auth import rbac as rbac_module  # noqa: E402
 from auth import users as auth_users  # noqa: E402
+from remediation.audit import activity_log  # noqa: E402
 from remediation.config import priority_engine  # noqa: E402
+from remediation.config import remediation_policy_engine  # noqa: E402
+from remediation.enrichment import exploit_criteria  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
-from remediation.inventory import asset_inventory  # noqa: E402
+from remediation.inventory import asset_inventory, asset_policy  # noqa: E402
+from remediation.notifications import email_sender  # noqa: E402
+from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
 
 client = TestClient(fastapi_app)
 
@@ -50,10 +55,11 @@ TEST_USER_PASSWORD = "user-test-password-1"
 
 _auth_tmpdir = None
 _auth_patcher = None
+_activity_log_patcher = None
 
 
 def setUpModule():
-    global _auth_tmpdir, _auth_patcher
+    global _auth_tmpdir, _auth_patcher, _activity_log_patcher
     _auth_tmpdir = tempfile.TemporaryDirectory()
     tmp_users_path = Path(_auth_tmpdir.name) / "users.json"
     _auth_patcher = patch.object(auth_users, "DEFAULT_USERS_PATH", tmp_users_path)
@@ -61,8 +67,18 @@ def setUpModule():
     auth_users.create_user(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, "Test Admin", role="admin")
     auth_users.create_user(TEST_USER_EMAIL, TEST_USER_PASSWORD, "Test User", role="user")
 
+    # Every mutation route in this file (asset edits, exception revoke, approval
+    # decisions, login attempts) also writes to the real, shared activity log (see
+    # remediation/audit/activity_log.py) unless redirected - one module-wide patch here
+    # (rather than repeating it in every affected test class) keeps this suite from ever
+    # polluting the real, committed-empty log.
+    tmp_activity_log_path = Path(_auth_tmpdir.name) / "activity_log.json"
+    _activity_log_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", tmp_activity_log_path)
+    _activity_log_patcher.start()
+
 
 def tearDownModule():
+    _activity_log_patcher.stop()
     _auth_patcher.stop()
     _auth_tmpdir.cleanup()
 
@@ -78,25 +94,60 @@ def _logout():
     client.cookies.clear()
 
 
+class ParseMarkdownTable(unittest.TestCase):
+    """Regression coverage for a real Round 13 bug: bulk_plan.py escapes a literal '|'
+    inside a finding's title as '\\|' (valid Markdown), but the naive line.split("|")
+    parser this used to be didn't account for that - a real NVD CVE description naming
+    a "... | LOGIN" WordPress plugin silently dropped that entire row (len(cells) never
+    matched the header again), which surfaced as a real 9414-vs-9415 count mismatch
+    once the Round 13 cloud CVE expansion happened to include one such title."""
+
+    def test_splits_on_unescaped_pipes_only(self):
+        cells = dashboard_data._split_markdown_table_row("| a | b | c |")
+        self.assertEqual(cells, ["a", "b", "c"])
+
+    def test_escaped_pipe_inside_a_cell_is_preserved_not_split_on(self):
+        cells = dashboard_data._split_markdown_table_row(r"| FIND-1 | Plugin A \| Plugin B | Medium |")
+        self.assertEqual(cells, ["FIND-1", "Plugin A | Plugin B", "Medium"])
+
+    def test_a_table_row_with_an_escaped_pipe_is_not_dropped(self):
+        markdown = (
+            "## Queue\n\n"
+            "| ID | Title | Severity |\n"
+            "| --- | --- | --- |\n"
+            r"| FIND-1 | Contains a \| literal pipe | Medium |" + "\n"
+            "| FIND-2 | A normal title | Low |\n"
+        )
+        header, rows = dashboard_data.parse_markdown_table(markdown, "Queue")
+        self.assertEqual(header, ["ID", "Title", "Severity"])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0], ["FIND-1", "Contains a | literal pipe", "Medium"])
+
+
 class DataLayerReadsRealArtifacts(unittest.TestCase):
     """These mirror tests/test_pipeline_artifacts.py's expectations - the dashboard's
     parser must agree with the pipeline's own test suite about what the artifacts say."""
 
     def test_vulnhunt_data_matches_known_totals(self):
+        """9 original findings (app.py/Dockerfile) + 9 more added later from
+        ai_assistant.py (AI/ML) and admin_api.py (secrets/API-authorization) = 18 at
+        time of writing; 11 of those 18 are auto-fixable (see
+        vulnerable-demo-app/SECURITY_REPORT.md's remediation plan)."""
         vh = dashboard_data.load_vulnhunt_data()
         self.assertTrue(vh["available"])
-        self.assertEqual(vh["total"], 9)
-        self.assertEqual(vh["auto_fixable"], 6)
+        self.assertEqual(vh["total"], 18)
+        self.assertEqual(vh["auto_fixable"], 11)
 
     def test_remediation_findings_match_known_total(self):
         """Real total at time of writing: 15 hand-curated findings from the original
-        pipeline validation + 2,400 real-CVE findings added via bulk NVD sourcing (see
-        remediation/sample-data/generate_bulk_findings.py) = 2,415. This is a moving
-        target as more real data is added, so this asserts "at least the known floor"
-        rather than an exact snapshot - see test_pipeline_artifacts.py for the
-        structural well-formedness checks that matter regardless of exact count."""
+        pipeline validation + 7,425 real-CVE findings added via bulk NVD sourcing across
+        6 infra sub-categories (see remediation/sample-data/generate_bulk_findings.py)
+        = 7,440. This is a moving target as more real data is added, so this asserts
+        "at least the known floor" rather than an exact snapshot - see
+        test_pipeline_artifacts.py for the structural well-formedness checks that
+        matter regardless of exact count."""
         findings = dashboard_data.load_remediation_findings()
-        self.assertGreaterEqual(len(findings), 2415)
+        self.assertGreaterEqual(len(findings), 7440)
 
     def test_remediation_plan_queue_matches_findings_count(self):
         plan = dashboard_data.load_remediation_plan()
@@ -124,13 +175,57 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
         playbooks = dashboard_data.load_playbooks()
         self.assertEqual(len(playbooks), 7)
 
+    def test_every_real_playbook_has_a_parsed_rollback_plan(self):
+        """Every remediation-fixer-windows/-unix agent is instructed to include a
+        '# Rollback: ...' comment (ISO/IEC 27002:2022 §8.32) - regression guard that
+        _parse_rollback_plan() actually extracts real text from every one of the 7
+        real generated playbooks, not just in a synthetic unit test."""
+        for playbook in dashboard_data.load_playbooks():
+            self.assertIsNotNone(playbook["rollback_plan"], f"{playbook['filename']} has no parsed rollback_plan")
+            self.assertTrue(playbook["rollback_plan"].strip())
+
+    def test_parse_rollback_plan_single_line(self):
+        text = "# Some header\n# Rollback: revert the change\n---\nreal: yaml\n"
+        self.assertEqual(dashboard_data._parse_rollback_plan(text), "revert the change")
+
+    def test_parse_rollback_plan_wraps_across_comment_lines(self):
+        text = (
+            "# Rollback: re-enable the feature if legacy clients break:\n"
+            "#   Enable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol\n"
+            "#\n"
+            "---\n"
+        )
+        result = dashboard_data._parse_rollback_plan(text)
+        self.assertIn("re-enable the feature if legacy clients break:", result)
+        self.assertIn("Enable-WindowsOptionalFeature", result)
+
+    def test_parse_rollback_plan_stops_at_blank_comment_line(self):
+        text = "# Rollback: line one\n# line two\n#\n# unrelated comment after the blank\n"
+        result = dashboard_data._parse_rollback_plan(text)
+        self.assertNotIn("unrelated", result)
+
+    def test_parse_rollback_plan_missing_returns_none(self):
+        text = "# Some header with no rollback line\n---\nreal: yaml\n"
+        self.assertIsNone(dashboard_data._parse_rollback_plan(text))
+
+    def test_threat_intel_freshness_reports_a_real_recent_timestamp(self):
+        """normalized-findings.json is a real, committed file - its mtime should be a
+        real, parseable, recent-ish (not epoch-zero, not future) timestamp."""
+        freshness = dashboard_data.load_threat_intel_freshness()
+        self.assertTrue(freshness["available"])
+        parsed = datetime.datetime.fromisoformat(freshness["last_refreshed"])
+        self.assertLessEqual(parsed, datetime.datetime.now(datetime.timezone.utc))
+        self.assertGreater(freshness["cve_count"], 0)
+
     def test_kev_and_high_epss_counts(self):
         """Real, live-verified counts against CISA KEV + FIRST.org EPSS at time of
-        writing: 41 KEV-listed, 152 with EPSS >= 50% (see remediation/enrichment/kev_epss.py).
-        Asserts a floor, not an exact snapshot - see test_remediation_findings_match_known_total."""
+        writing: 112 KEV-listed, 253 with EPSS >= 50% (see remediation/enrichment/kev_epss.py) -
+        grew from 111/251 once the GitHub/GitLab repository (Dependabot-style) category's
+        real CVEs were merged in. Asserts a floor, not an exact snapshot - see
+        test_remediation_findings_match_known_total."""
         findings = dashboard_data.load_remediation_findings()
-        self.assertGreaterEqual(dashboard_data.count_kev_listed(findings), 41)
-        self.assertGreaterEqual(dashboard_data.count_high_epss(findings), 152)
+        self.assertGreaterEqual(dashboard_data.count_kev_listed(findings), 112)
+        self.assertGreaterEqual(dashboard_data.count_high_epss(findings), 253)
 
     def test_asset_type_breakdown_covers_all_categories(self):
         findings = dashboard_data.load_remediation_findings()
@@ -138,7 +233,8 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
         self.assertEqual(sum(breakdown.values()), len(findings))
         for expected_type in ("windows-server", "unix-server", "network-routing-switching",
                                "network-security-device", "iot-ot-device", "application",
-                               "certificate", "cloud-infrastructure"):
+                               "certificate", "cloud-infrastructure", "client-application",
+                               "iac-resource", "code-repository", "container-runtime"):
             self.assertIn(expected_type, breakdown)
             self.assertGreater(breakdown[expected_type], 0)
 
@@ -152,17 +248,89 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
         self.assertNotIn("â€”", plan["title"])
 
 
+class ContentEnrichedFindingsCache(unittest.TestCase):
+    """The ATT&CK/compensating-controls tagging pass is profiled at ~1.8s across the
+    real ~8,000-finding dataset (two regex-heavy passes) - now that Overview/
+    Infrastructure/AppSec/Risk all fetch the live queue, that cost was being paid on
+    every single page load. These verify the in-process cache (keyed on the findings
+    file's mtime + today's date - see _load_content_enriched_findings()'s own
+    docstring) actually avoids recomputation, not just that it happens to be fast."""
+
+    def setUp(self):
+        dashboard_data._ENRICHED_FINDINGS_CACHE["key"] = None
+        dashboard_data._ENRICHED_FINDINGS_CACHE["findings"] = None
+
+    def tearDown(self):
+        dashboard_data._ENRICHED_FINDINGS_CACHE["key"] = None
+        dashboard_data._ENRICHED_FINDINGS_CACHE["findings"] = None
+
+    def test_second_call_does_not_re_invoke_the_expensive_tag_functions(self):
+        with patch.object(dashboard_data, "tag_findings", wraps=dashboard_data.tag_findings) as mock_attack, \
+                patch.object(dashboard_data, "tag_compensating_controls",
+                              wraps=dashboard_data.tag_compensating_controls) as mock_comp:
+            dashboard_data._load_content_enriched_findings()
+            dashboard_data._load_content_enriched_findings()
+            self.assertEqual(mock_attack.call_count, 1)
+            self.assertEqual(mock_comp.call_count, 1)
+
+    def test_cache_invalidates_when_its_key_changes(self):
+        """Simulates what a real pipeline re-run (changed mtime) or a day rollover
+        (changed date) would trigger, without touching the real file's OS-level mtime."""
+        with patch.object(dashboard_data, "tag_findings", wraps=dashboard_data.tag_findings) as mock_attack:
+            dashboard_data._load_content_enriched_findings()
+            dashboard_data._ENRICHED_FINDINGS_CACHE["key"] = ("a-different-key", "2000-01-01")
+            dashboard_data._load_content_enriched_findings()
+            self.assertEqual(mock_attack.call_count, 2)
+
+    def test_load_live_queue_still_reflects_exploit_criteria_and_exceptions_live(self):
+        """The cache only covers the purely-content-derived tags - exploit-criteria
+        matching (reads an admin-editable rules file) and exceptions must still be
+        recomputed every call, cache or no cache."""
+        findings = dashboard_data.load_live_queue()
+        self.assertTrue(all("exploit_criteria_matches" in f for f in findings))
+        self.assertTrue(all("exception" in f for f in findings))
+
+
+class VulnhuntDataCache(unittest.TestCase):
+    """load_vulnhunt_data() is profiled at ~0.4s per call (two `git` subprocess
+    spawns) - cached for a short in-process TTL since several pages now call it on
+    every navigation, not just /vulnhunt itself."""
+
+    def setUp(self):
+        dashboard_data._VULNHUNT_DATA_CACHE["data"] = None
+        dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+
+    def tearDown(self):
+        dashboard_data._VULNHUNT_DATA_CACHE["data"] = None
+        dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+
+    def test_second_call_within_ttl_does_not_recompute(self):
+        with patch.object(dashboard_data, "_compute_vulnhunt_data",
+                           wraps=dashboard_data._compute_vulnhunt_data) as mock_compute:
+            dashboard_data.load_vulnhunt_data()
+            dashboard_data.load_vulnhunt_data()
+            self.assertEqual(mock_compute.call_count, 1)
+
+    def test_call_after_ttl_expiry_recomputes(self):
+        with patch.object(dashboard_data, "_compute_vulnhunt_data",
+                           wraps=dashboard_data._compute_vulnhunt_data) as mock_compute:
+            dashboard_data.load_vulnhunt_data()
+            dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0  # force expiry
+            dashboard_data.load_vulnhunt_data()
+            self.assertEqual(mock_compute.call_count, 2)
+
+
 class ApiOverview(unittest.TestCase):
     def test_overview_returns_expected_shape_and_counts(self):
         resp = client.get("/api/overview")
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertEqual(payload["vulnhunt"]["total"], 9)
-        self.assertEqual(payload["vulnhunt"]["auto_fixable"], 6)
-        self.assertGreaterEqual(payload["remediation"]["total"], 2415)
+        self.assertEqual(payload["vulnhunt"]["total"], 18)
+        self.assertEqual(payload["vulnhunt"]["auto_fixable"], 11)
+        self.assertGreaterEqual(payload["remediation"]["total"], 8096)
         self.assertEqual(payload["playbook_count"], 7)
-        self.assertGreaterEqual(payload["kev_count"], 41)
-        self.assertGreaterEqual(payload["high_epss_count"], 152)
+        self.assertGreaterEqual(payload["kev_count"], 112)
+        self.assertGreaterEqual(payload["high_epss_count"], 253)
         for key in ("breached", "at_risk", "on_track"):
             self.assertIn(key, payload["sla"])
         for asset_type in ("windows-server", "unix-server", "application", "certificate"):
@@ -178,16 +346,132 @@ class ApiOverview(unittest.TestCase):
             self.assertIn(tier, rules["priority_thresholds"])
         self.assertIn("enabled", rules["kev_override"])
         self.assertIn("threshold", rules["epss_escalation"])
+        self.assertIn("dc", rules["asset_criticality_keywords"])
+        self.assertIn("windows-server", rules["asset_type_weights"])
+
+    def test_overview_includes_the_live_risk_scoring_rules(self):
+        """Overview's Risk Scoring methodology panel quotes the real, currently
+        configured risk_scoring_rules.yaml - not a hardcoded copy of the weights."""
+        resp = client.get("/api/overview")
+        rules = resp.json()["risk_scoring_rules"]
+        self.assertIn("severity", rules["impact_weights"])
+        self.assertIn("criticality", rules["impact_weights"])
+        for key in ("kev", "epss", "exploit_criteria", "eol"):
+            self.assertIn(key, rules["likelihood_weights"])
+        for tier in ("Critical", "High", "Medium", "Low"):
+            self.assertIn(tier, rules["risk_tier_thresholds"])
+
+    def test_overview_includes_a_real_computed_exposure_score(self):
+        """The Aggregate Exposure Score tile - a real 0-100 int computed from this
+        app's own actual scored assets/findings, not a hardcoded placeholder."""
+        resp = client.get("/api/overview")
+        exposure = resp.json()["exposure_score"]
+        self.assertIsInstance(exposure["score"], int)
+        self.assertGreaterEqual(exposure["score"], 0)
+        self.assertLessEqual(exposure["score"], 100)
+        self.assertIn(exposure["band"], ("Critical", "High", "Medium", "Low"))
+        self.assertGreater(exposure["total_assets"], 0)
+        self.assertGreater(exposure["total_findings"], 0)
+        for key in ("avg_risk_score", "kev_prevalence", "avg_epss"):
+            self.assertIn(key, exposure["components"])
+
+    def test_overview_includes_the_live_exposure_score_rules(self):
+        resp = client.get("/api/overview")
+        rules = resp.json()["exposure_score_rules"]
+        for key in ("avg_risk_score", "kev_prevalence", "avg_epss"):
+            self.assertIn(key, rules["component_weights"])
+
+
+class ApiThreatIntelRefresh(unittest.TestCase):
+    """confirm=True calls remediation/enrichment/kev_epss.py's real enrich_file(),
+    which makes real live network calls to CISA/FIRST.org and overwrites the real,
+    committed normalized-findings.json - always mocked here, never actually invoked,
+    same "never make a real external call from the test suite" convention as every
+    other confirm-gated action in this app."""
+
+    def test_freshness_returns_a_real_timestamp_and_recommended_cadence(self):
+        resp = client.get("/api/threat-intel/freshness")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["available"])
+        self.assertIn("cisa_kev", payload["recommended_cadence"])
+        self.assertIn("first_epss", payload["recommended_cadence"])
+
+    def test_dry_run_refresh_never_calls_the_real_fetch(self):
+        with patch("app.kev_epss.enrich_file") as mock_enrich:
+            resp = client.post("/api/threat-intel/refresh-now", json={})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["dry_run"])
+        mock_enrich.assert_not_called()
+
+    def test_confirm_true_but_not_logged_in_is_rejected_before_ever_fetching(self):
+        with patch("app.kev_epss.enrich_file") as mock_enrich:
+            resp = client.post("/api/threat-intel/refresh-now", json={"confirm": True})
+        self.assertEqual(resp.status_code, 401)
+        mock_enrich.assert_not_called()
+
+    def test_confirm_true_as_admin_calls_the_real_enrichment_function_once(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            with patch("app.kev_epss.enrich_file") as mock_enrich:
+                resp = client.post("/api/threat-intel/refresh-now", json={"confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertFalse(payload["dry_run"])
+        mock_enrich.assert_called_once()
+
+    def test_confirm_true_as_non_admin_is_forbidden(self):
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        try:
+            with patch("app.kev_epss.enrich_file") as mock_enrich:
+                resp = client.post("/api/threat-intel/refresh-now", json={"confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 403)
+        mock_enrich.assert_not_called()
+
+    def test_confirm_true_surfaces_a_real_fetch_failure_as_502(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            with patch("app.kev_epss.enrich_file", side_effect=RuntimeError("network down")):
+                resp = client.post("/api/threat-intel/refresh-now", json={"confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 502)
+
+
+class ApiQuantumReadiness(unittest.TestCase):
+    def test_returns_real_matched_findings_and_a_consistent_summary(self):
+        resp = client.get("/api/quantum-readiness")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertGreater(payload["summary"]["total"], 0)
+        self.assertEqual(
+            payload["summary"]["total"],
+            payload["summary"]["asymmetric_crypto"] + payload["summary"]["legacy_protocol"],
+        )
+        self.assertEqual(len(payload["findings"]), payload["summary"]["total"])
+        for f in payload["findings"]:
+            self.assertIn(f["quantum_readiness"]["category"], ("asymmetric-crypto", "legacy-protocol"))
+
+    def test_includes_real_cited_nist_ir_8547_deadlines(self):
+        resp = client.get("/api/quantum-readiness")
+        ir8547 = resp.json()["nist_ir_8547"]
+        self.assertEqual(ir8547["deprecated_by"], 2030)
+        self.assertEqual(ir8547["disallowed_by"], 2035)
 
 
 class ApiVulnhunt(unittest.TestCase):
-    def test_lists_all_nine_findings(self):
+    def test_lists_all_eighteen_findings(self):
         resp = client.get("/api/vulnhunt")
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertTrue(payload["available"])
         ids = {f["ID"] for f in payload["findings"]}
-        self.assertEqual(ids, {f"VULN-{i}" for i in range(1, 10)})
+        self.assertEqual(ids, {f"VULN-{i}" for i in range(1, 19)})
 
 
 class ApiRemediate(unittest.TestCase):
@@ -195,7 +479,7 @@ class ApiRemediate(unittest.TestCase):
         resp = client.get("/api/remediate")
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertGreaterEqual(len(payload["findings"]), 2415)
+        self.assertGreaterEqual(len(payload["findings"]), 7440)
         ids = {row["ID"] for row in payload["plan"]["queue"]}
         # Every real finding ID (FIND-1..FIND-N) must appear in the plan queue - not an
         # exact set (the total grows as more real data is added).
@@ -255,6 +539,112 @@ class ApiRunPipeline(unittest.TestCase):
         })
         self.assertEqual(resp.status_code, 401)
 
+    def test_dry_run_with_finding_id_includes_the_scoped_flag_and_spends_nothing(self):
+        """The "Trigger Remediation" button's preview step - proves the exact scoped
+        command text is visible before ever calling cli.run() for real. Mocking
+        app.cli.run itself (not just the underlying subprocess) is belt-and-suspenders
+        here: dry_run=True already makes cli.run() a no-op internally, but this also
+        lets us assert on the exact prompt text passed in."""
+        with patch("app.cli.run", return_value=0) as mock_run:
+            resp = client.post("/api/run", json={
+                "pipeline": "remediate", "fix_or_generate": True, "finding_id": "FIND-1",
+            })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["dry_run"])
+        called_prompt = mock_run.call_args[0][0]
+        self.assertEqual(called_prompt, "/remediate --generate --finding-id FIND-1")
+
+    def test_unknown_finding_id_dry_run_still_just_previews(self):
+        """A finding_id that has no matching approval must never error - the dry-run
+        preview only describes the command, it doesn't look up the approval yet."""
+        resp = client.post("/api/run", json={
+            "pipeline": "remediate", "fix_or_generate": True, "finding_id": "FIND-9999999",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["dry_run"])
+
+
+class ApiRunTriggersRemediation(unittest.TestCase):
+    """/api/run's confirm=True + finding_id path - never calls the real cli.run(), so
+    this never spends real API usage/credits. Uses its own isolated
+    remediation_approvals.json (same pattern as ApiRemediationApprovals)."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self.tmpdir.name) / "remediation_approvals.json"
+        self.patcher = patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", self.tmp_path)
+        self.patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+
+    def tearDown(self):
+        _logout()
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def _create_and_approve(self, finding_id="FIND-1"):
+        created = client.post("/api/remediation-approvals", json={"finding_id": finding_id, "requested_by": "eng@example.com"}).json()
+        client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
+        return created["id"]
+
+    def test_confirm_true_with_finding_id_marks_the_approval_triggered(self):
+        approval_id = self._create_and_approve("FIND-1")
+        with patch("app.cli.run", return_value=0):
+            resp = client.post("/api/run", json={
+                "pipeline": "remediate", "fix_or_generate": True,
+                "finding_id": "FIND-1", "confirm": True,
+            })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertFalse(payload["dry_run"])
+        self.assertIn(f"Approval {approval_id} marked as remediation-triggered", payload["message"])
+
+        approvals = client.get("/api/remediation-approvals").json()["approvals"]
+        updated = next(a for a in approvals if a["id"] == approval_id)
+        self.assertEqual(updated["status"], "remediation_triggered")
+        self.assertEqual(updated["triggered_by"], TEST_ADMIN_EMAIL)
+
+    def test_confirm_true_with_no_matching_approval_still_succeeds(self):
+        """A finding with no approval on file at all must not break the run - playbook
+        generation is independent of the approval record; only the status-update side
+        effect is skipped."""
+        with patch("app.cli.run", return_value=0):
+            resp = client.post("/api/run", json={
+                "pipeline": "remediate", "fix_or_generate": True,
+                "finding_id": "FIND-9999999", "confirm": True,
+            })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertFalse(payload["dry_run"])
+        self.assertNotIn("marked as remediation-triggered", payload["message"])
+
+    def test_confirm_true_on_a_still_pending_approval_reports_the_status_error_but_still_succeeds(self):
+        """mark_remediation_triggered() raises ValueError for a non-"approved" approval
+        (see remediation_approvals/store.py) - the run itself still succeeded (exit_code
+        0), so the response must say so while being honest that the approval's status
+        wasn't updated."""
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        with patch("app.cli.run", return_value=0):
+            resp = client.post("/api/run", json={
+                "pipeline": "remediate", "fix_or_generate": True,
+                "finding_id": "FIND-1", "confirm": True,
+            })
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertIn("Approval status not updated", payload["message"])
+        approvals = client.get("/api/remediation-approvals").json()["approvals"]
+        updated = next(a for a in approvals if a["id"] == created["id"])
+        self.assertEqual(updated["status"], "pending")
+
+    def test_confirm_true_but_not_logged_in_is_rejected(self):
+        self._create_and_approve("FIND-1")
+        _logout()
+        resp = client.post("/api/run", json={
+            "pipeline": "remediate", "fix_or_generate": True,
+            "finding_id": "FIND-1", "confirm": True,
+        })
+        self.assertEqual(resp.status_code, 401)
+
 
 class ApiStatus(unittest.TestCase):
     def test_status_endpoint(self):
@@ -262,8 +652,9 @@ class ApiStatus(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["vulnhunt_findings"], 9)
-        self.assertGreaterEqual(payload["remediation_findings"], 2415)
+        self.assertEqual(payload["vulnhunt_findings"], 18)
+        self.assertGreaterEqual(payload["remediation_findings"], 7440)
+        self.assertEqual(payload["app_version"], fastapi_app.version)
 
 
 class ApiAuth(unittest.TestCase):
@@ -369,6 +760,70 @@ class ApiLiveQueue(unittest.TestCase):
         self.assertTrue(app_or_cert)
         self.assertTrue(all(f["infra_category"] is None for f in app_or_cert))
 
+    def test_queue_findings_carry_the_new_endpoint_printer_virtualization_categories(self):
+        """windows-endpoint/mobile-device (endpoint), printer, and virtualization-host
+        are real, populated infra sub-categories now - structural checks (not exact
+        counts, which depend on live NVD sourcing), same pattern as the scale-up tests
+        elsewhere in this suite."""
+        resp = client.get("/api/queue")
+        findings = resp.json()["findings"]
+        by_type = {}
+        for f in findings:
+            t = (f.get("asset") or {}).get("type")
+            by_type.setdefault(t, []).append(f)
+        for asset_type, expected_category in (
+            ("windows-endpoint", "endpoint"), ("mobile-device", "endpoint"),
+            ("printer", "printer"), ("virtualization-host", "virtualization"),
+        ):
+            self.assertTrue(by_type.get(asset_type), f"no {asset_type} findings present")
+            self.assertTrue(all(f["infra_category"] == expected_category for f in by_type[asset_type]))
+
+    def test_new_endpoint_printer_virtualization_findings_carry_remediation_mechanism(self):
+        """Purely informational field naming the real-world patch tool (SCCM/MDM/vendor
+        firmware/vendor hypervisor tooling) - present for the 4 new asset types, still
+        null for windows-server/unix-server (unaffected, no working automation claim
+        changes) since only a real remediation_domain implies working automation."""
+        resp = client.get("/api/queue")
+        findings = resp.json()["findings"]
+        mechanism_by_type = {
+            "windows-endpoint": "SCCM / Microsoft Configuration Manager",
+            "mobile-device": "MDM (e.g. Microsoft Intune)",
+            "printer": "Vendor firmware update (manual or vendor management console)",
+            "virtualization-host": "Vendor hypervisor patch tooling (e.g. VMware Update Manager)",
+        }
+        for asset_type, expected_mechanism in mechanism_by_type.items():
+            matches = [f for f in findings if (f.get("asset") or {}).get("type") == asset_type]
+            self.assertTrue(matches, f"no {asset_type} findings present")
+            self.assertTrue(all(f.get("remediation_mechanism") == expected_mechanism for f in matches))
+        windows_server = [f for f in findings if (f.get("asset") or {}).get("type") == "windows-server"]
+        self.assertTrue(windows_server)
+        self.assertTrue(all(not f.get("remediation_mechanism") for f in windows_server))
+
+    def test_queue_findings_carry_eol_eos_status(self):
+        """Real, dated vendor-lifecycle classification (remediation/enrichment/
+        eol_lookup.py) - every finding gets an eol_status dict, "unknown" for asset OS
+        strings that don't match anything (network/OT firmware mostly), a real
+        status/date/vendor/source for ones that do (Windows Server/Windows 10/Ubuntu/
+        CentOS)."""
+        resp = client.get("/api/queue")
+        payload = resp.json()
+        by_id = {f["id"]: f for f in payload["findings"]}
+        self.assertIn("eol_status", by_id["FIND-1"])  # WIN-DC01, Windows Server 2019
+        self.assertIn(by_id["FIND-1"]["eol_status"]["status"], ("eol", "eol-soon", "supported"))
+        self.assertTrue(all("eol_status" in f for f in payload["findings"]))
+
+    def test_queue_findings_carry_exploit_criteria_matches(self):
+        """Every finding gets an exploit_criteria_matches list (remediation/enrichment/
+        exploit_criteria.py) - empty for anything with no cve, real rule matches for
+        CVE-bearing findings whose real kev/poc_available/user_interaction_required/
+        epss signals satisfy a configured rule."""
+        resp = client.get("/api/queue")
+        payload = resp.json()
+        self.assertTrue(all("exploit_criteria_matches" in f for f in payload["findings"]))
+        no_cve = [f for f in payload["findings"] if not f.get("cve")]
+        self.assertTrue(no_cve)
+        self.assertTrue(all(f["exploit_criteria_matches"] == [] for f in no_cve))
+
 
 class ApiPriorityRules(unittest.TestCase):
     """Every test here uses a temporary rules file (via patching DEFAULT_RULES_PATH) so
@@ -418,6 +873,139 @@ class ApiPriorityRules(unittest.TestCase):
         _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
         resp = client.post("/api/priority-rules", json={"rules_text": "sla_days: {}"})
         self.assertEqual(resp.status_code, 403)
+
+
+class ApiExploitCriteria(unittest.TestCase):
+    """Every test here uses a temporary rules file (via patching DEFAULT_RULES_PATH) so
+    the suite never permanently mutates the real, shipped exploit_criteria_rules.yaml."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_rules_path = Path(self.tmpdir.name) / "exploit_criteria_rules.yaml"
+        self.tmp_rules_path.write_text(
+            exploit_criteria.DEFAULT_RULES_PATH.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        self.patcher = patch.object(exploit_criteria, "DEFAULT_RULES_PATH", self.tmp_rules_path)
+        self.patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)  # POST is admin-gated
+
+    def tearDown(self):
+        _logout()
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_get_returns_current_rules_text(self):
+        resp = client.get("/api/exploit-criteria")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("kev-no-interaction-poc-available", resp.json()["rules_text"])
+
+    def test_post_valid_yaml_saves(self):
+        new_text = self.tmp_rules_path.read_text(encoding="utf-8").replace("epss_min: 0.5", "epss_min: 0.7")
+        resp = client.post("/api/exploit-criteria", json={"rules_text": new_text})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("saved", resp.json()["message"])
+        self.assertIn("epss_min: 0.7", self.tmp_rules_path.read_text(encoding="utf-8"))
+
+    def test_post_invalid_yaml_is_rejected_and_file_unchanged(self):
+        original = self.tmp_rules_path.read_text(encoding="utf-8")
+        resp = client.post("/api/exploit-criteria", json={"rules_text": "not: valid: yaml: ["})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("invalid YAML", resp.json()["detail"])
+        self.assertEqual(self.tmp_rules_path.read_text(encoding="utf-8"), original)
+
+    def test_post_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/exploit-criteria", json={"rules_text": "rules: []"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_post_as_non_admin_is_rejected(self):
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/exploit-criteria", json={"rules_text": "rules: []"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_preview_computes_counts_without_saving_and_without_login(self):
+        _logout()  # preview is read-only, deliberately ungated - like servicenow preview
+        rules_text = (
+            "rules:\n"
+            "  - id: any-kev\n"
+            "    label: Any KEV-listed finding\n"
+            "    conditions: {kev_listed: true}\n"
+        )
+        resp = client.post("/api/exploit-criteria/preview", json={"rules_text": rules_text})
+        self.assertEqual(resp.status_code, 200)
+        counts = resp.json()["counts"]
+        self.assertEqual(len(counts), 1)
+        self.assertEqual(counts[0]["id"], "any-kev")
+        self.assertGreater(counts[0]["count"], 0)  # real KEV-listed findings exist
+        # Saving is untouched by a preview call.
+        self.assertNotIn("any-kev", self.tmp_rules_path.read_text(encoding="utf-8"))
+
+    def test_preview_rejects_invalid_yaml(self):
+        resp = client.post("/api/exploit-criteria/preview", json={"rules_text": "not: valid: yaml: ["})
+        self.assertEqual(resp.status_code, 400)
+
+
+class ApiRemediationPolicy(unittest.TestCase):
+    """Every test here uses a temporary rules file (via patching DEFAULT_RULES_PATH) so
+    the suite never permanently mutates the real, shipped remediation_policy.yaml."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_rules_path = Path(self.tmpdir.name) / "remediation_policy.yaml"
+        self.tmp_rules_path.write_text(
+            remediation_policy_engine.DEFAULT_RULES_PATH.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        self.patcher = patch.object(remediation_policy_engine, "DEFAULT_RULES_PATH", self.tmp_rules_path)
+        self.patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)  # POST is admin-gated
+
+    def tearDown(self):
+        _logout()
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_get_returns_current_rules_text(self):
+        resp = client.get("/api/remediation-policy")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("policies", resp.json()["rules_text"])
+
+    def test_post_valid_yaml_saves(self):
+        new_text = self.tmp_rules_path.read_text(encoding="utf-8").replace('cadence: "weekly"', 'cadence: "monthly"')
+        resp = client.post("/api/remediation-policy", json={"rules_text": new_text})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("saved", resp.json()["message"])
+        self.assertNotIn('cadence: "weekly"', self.tmp_rules_path.read_text(encoding="utf-8"))
+
+    def test_post_invalid_yaml_is_rejected_and_file_unchanged(self):
+        original = self.tmp_rules_path.read_text(encoding="utf-8")
+        resp = client.post("/api/remediation-policy", json={"rules_text": "not: valid: yaml: ["})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("invalid YAML", resp.json()["detail"])
+        self.assertEqual(self.tmp_rules_path.read_text(encoding="utf-8"), original)
+
+    def test_post_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/remediation-policy", json={"rules_text": "policies: {}"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_post_as_non_admin_is_rejected(self):
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/remediation-policy", json={"rules_text": "policies: {}"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_kev_listed_finding_shows_emergency_change_type_on_the_live_queue(self):
+        """FIND-1 (PrintNightmare, KEV-listed) must always resolve to change_type
+        emergency via the KEV override regardless of its domain's configured default -
+        same regression guard as test_remediation_policy_engine.py's own check, exercised
+        here through the full /api/queue merge in dashboard/data.py."""
+        resp = client.get("/api/queue")
+        findings_by_id = {f["id"]: f for f in resp.json()["findings"]}
+        policy = findings_by_id["FIND-1"]["remediation_policy"]
+        self.assertEqual(policy["change_type"], "emergency")
+        self.assertTrue(policy["emergency_override"])
+        self.assertIn("next_window", policy)
 
 
 class ApiServiceNow(unittest.TestCase):
@@ -623,8 +1211,8 @@ class ApiReports(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertEqual(payload["period"], "weekly")
-        self.assertGreaterEqual(payload["remediation_total"], 2415)
-        self.assertEqual(payload["vulnhunt_total"], 9)
+        self.assertGreaterEqual(payload["remediation_total"], 7440)
+        self.assertEqual(payload["vulnhunt_total"], 18)
 
     def test_invalid_period_is_rejected(self):
         resp = client.get("/api/reports/generate", params={"period": "fortnightly"})
@@ -769,6 +1357,257 @@ class ApiExceptions(unittest.TestCase):
         self.assertEqual(resp.status_code, 403)
 
 
+class ApiDirectoryStatus(unittest.TestCase):
+    """No AD_SERVER/AD_BASE_DN are set in this test process, so is_configured() is
+    always False here - that's the real, honest behavior to test (never fabricate a
+    "validated" group check against a directory that was never actually configured)."""
+
+    def test_reports_not_configured_by_default(self):
+        resp = client.get("/api/directory/status")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["configured"])
+
+    def test_reports_configured_when_env_vars_set(self):
+        with patch.dict("os.environ", {"AD_SERVER": "ldap://dc01.example.com", "AD_BASE_DN": "DC=example,DC=com"}):
+            resp = client.get("/api/directory/status")
+        self.assertTrue(resp.json()["configured"])
+
+
+class ApiRemediationApprovals(unittest.TestCase):
+    """Every test here uses a temporary store file (via patching DEFAULT_STORE_PATH) so
+    the suite never mutates the real, shipped remediation_approvals.json. AD_SERVER/
+    AD_BASE_DN are never set in this test process, so every approve() call here exercises
+    the honest "AD not configured" branch - the ldap3-mocked branch is covered directly
+    in test_ad_directory.py."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self.tmpdir.name) / "remediation_approvals.json"
+        self.patcher = patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", self.tmp_path)
+        self.patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+
+    def tearDown(self):
+        _logout()
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_list_on_empty_store_returns_empty_list(self):
+        resp = client.get("/api/remediation-approvals")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["approvals"], [])
+
+    def test_create_uses_the_findings_own_resolved_maintenance_window(self):
+        resp = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"})
+        self.assertEqual(resp.status_code, 200)
+        record = resp.json()
+        self.assertEqual(record["finding_id"], "FIND-1")
+        self.assertEqual(record["status"], "pending")
+        queue_policy = client.get("/api/queue").json()
+        finding = next(f for f in queue_policy["findings"] if f["id"] == "FIND-1")
+        self.assertEqual(record["scheduled_window"], finding["remediation_policy"]["next_window"])
+
+    def test_create_for_unknown_finding_returns_404(self):
+        resp = client.post("/api/remediation-approvals", json={"finding_id": "FIND-9999999", "requested_by": "eng@example.com"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_create_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_approve_without_a_required_approval_group_needs_no_ad_check(self):
+        # FIND-8229 (endpoint domain) resolves to requires_approval_group: null in the
+        # real shipped remediation_policy.yaml, unlike FIND-1 below (default domain,
+        # which does require a group) - see remediation_policy_engine.py's docstring.
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-8229", "requested_by": "eng@example.com"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["approval"]["status"], "approved")
+        self.assertIsNone(payload["approval"]["ad_group_validated"])
+
+    def test_approve_with_a_required_approval_group_but_ad_not_configured_is_honest(self):
+        """FIND-1's resolved policy names requires_approval_group (see
+        remediation_policy.yaml's os/default domains) - with no real AD_SERVER/AD_BASE_DN
+        set, the response must say so plainly rather than silently skip the check or
+        fabricate a passing validation."""
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertFalse(payload["ad_configured"])
+        self.assertIsNone(payload["approval"]["ad_group_validated"])
+        self.assertIn("AD not configured", payload["message"])
+
+    def test_approve_unknown_id_returns_404(self):
+        resp = client.post("/api/remediation-approvals/APR-999/approve", json={"decided_by": "approver@example.com"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_approve_without_login_is_rejected(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        _logout()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_approve_as_non_admin_is_forbidden(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_reject_records_reason(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/reject", json={"decided_by": "approver@example.com", "reason": "Conflicts with a release freeze"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["approval"]["status"], "rejected")
+        self.assertEqual(resp.json()["approval"]["rejection_reason"], "Conflicts with a release freeze")
+
+    def test_reject_unknown_id_returns_404(self):
+        resp = client.post("/api/remediation-approvals/APR-999/reject", json={"decided_by": "approver@example.com"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_reject_without_login_is_rejected(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        _logout()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/reject", json={"decided_by": "approver@example.com"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_send_communication_preview_needs_no_login_and_returns_the_rendered_text(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        _logout()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/send-communication", json={})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["preview_only"])
+        self.assertIn("WIN-DC01", payload["body_text"])
+
+    def test_send_communication_unknown_approval_returns_404(self):
+        resp = client.post("/api/remediation-approvals/APR-999/send-communication", json={})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_send_communication_with_confirm_but_smtp_not_configured_returns_503(self):
+        """No real SMTP_HOST is set in this test process - the honest failure, not a
+        fabricated 'sent' response, same convention as /api/notification-settings/send-test."""
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/send-communication", json={"recipient": "stakeholder@example.com", "confirm": True})
+        self.assertEqual(resp.status_code, 503)
+
+    def test_send_communication_with_confirm_but_not_logged_in_is_rejected(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        _logout()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/send-communication", json={"recipient": "stakeholder@example.com", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_mark_staging_validated_records_who_and_when(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/staging-validated", json={"validated_by": "tester@example.com"})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["approval"]["staging_validated_by"], "tester@example.com")
+        self.assertIsNotNone(payload["approval"]["staging_validated_at"])
+
+    def test_mark_staging_validated_unknown_approval_returns_404(self):
+        resp = client.post("/api/remediation-approvals/APR-999/staging-validated", json={"validated_by": "tester@example.com"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_mark_staging_validated_blank_validator_returns_400(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/staging-validated", json={"validated_by": "   "})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_mark_staging_validated_requires_login(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        _logout()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/staging-validated", json={"validated_by": "tester@example.com"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_list_approvals_includes_rollback_plan_from_the_real_playbook(self):
+        """FIND-1 (PrintNightmare) has a real generated playbook with a genuine
+        '# Rollback: ...' comment - the list route must join it in, not just report the
+        raw approval record."""
+        client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"})
+        resp = client.get("/api/remediation-approvals")
+        approval = next(a for a in resp.json()["approvals"] if a["finding_id"] == "FIND-1")
+        self.assertIsNotNone(approval["rollback_plan"])
+        self.assertIn("snapshot", approval["rollback_plan"])
+
+    def test_list_approvals_rollback_plan_is_none_without_a_generated_playbook(self):
+        """FIND-8229 (used elsewhere in this suite for its null requires_approval_group)
+        has no generated playbook - the join must report None honestly, not KeyError or
+        a fabricated placeholder."""
+        client.post("/api/remediation-approvals", json={"finding_id": "FIND-8229", "requested_by": "eng@example.com"})
+        resp = client.get("/api/remediation-approvals")
+        approval = next(a for a in resp.json()["approvals"] if a["finding_id"] == "FIND-8229")
+        self.assertIsNone(approval["rollback_plan"])
+
+
+class ApiActivityLog(unittest.TestCase):
+    """/api/activity-log reads remediation/audit/activity_log.py's shared feed - this
+    class uses its own isolated temp path (on top of setUpModule's module-wide one) so
+    entries written by other test classes running earlier/later in the same process
+    can't leak into these assertions."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_activity_path = Path(self.tmpdir.name) / "activity_log.json"
+        self.activity_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", self.tmp_activity_path)
+        self.activity_patcher.start()
+        self.tmp_ownership_path = Path(self.tmpdir.name) / "asset_ownership.json"
+        self.ownership_patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_ownership_path)
+        self.ownership_patcher.start()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+
+    def tearDown(self):
+        _logout()
+        self.ownership_patcher.stop()
+        self.activity_patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_no_asset_edits_by_default(self):
+        # setUp's own _login() call already wrote one real "login.success" entry - that
+        # is itself correct, intended behavior (see test_login_attempt_is_recorded
+        # below), not something to treat as "empty." Filter to the action under test
+        # instead of asserting a total count of zero.
+        resp = client.get("/api/activity-log?action=asset.set_owner")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["entries"], [])
+
+    def test_login_attempt_is_recorded(self):
+        entries = client.get("/api/activity-log?action=login.success").json()["entries"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["actor"], TEST_USER_EMAIL)
+
+    def test_a_real_asset_edit_appears_with_the_real_actor(self):
+        client.post("/api/assets/WIN-DC01/owner", json={"owner": "Priya Nair", "team": "Identity"})
+        entries = client.get("/api/activity-log?action=asset.set_owner").json()["entries"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["actor"], TEST_USER_EMAIL)
+        self.assertEqual(entries[0]["action"], "asset.set_owner")
+        self.assertEqual(entries[0]["target"], "WIN-DC01")
+
+    def test_newest_first(self):
+        client.post("/api/assets/WIN-DC01/owner", json={"owner": "First", "team": "T"})
+        client.post("/api/assets/WIN-DC01/owner", json={"owner": "Second", "team": "T"})
+        entries = client.get("/api/activity-log?action=asset.set_owner").json()["entries"]
+        self.assertEqual(entries[0]["details"]["owner"], "Second")
+        self.assertEqual(entries[1]["details"]["owner"], "First")
+
+    def test_filters_by_action(self):
+        client.post("/api/assets/WIN-DC01/owner", json={"owner": "A", "team": "T"})
+        client.post("/api/assets/WIN-DC01/facing", json={"facing": "internal"})
+        entries = client.get("/api/activity-log?action=asset.set_facing").json()["entries"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["action"], "asset.set_facing")
+
+    def test_limit_caps_result_count(self):
+        for i in range(5):
+            client.post("/api/assets/WIN-DC01/owner", json={"owner": f"Owner{i}", "team": "T"})
+        entries = client.get("/api/activity-log?action=asset.set_owner&limit=2").json()["entries"]
+        self.assertEqual(len(entries), 2)
+
+
 class ApiAssets(unittest.TestCase):
     """Every test here uses a temporary ownership file so the suite never mutates the
     real, shipped asset_ownership.json."""
@@ -793,6 +1632,31 @@ class ApiAssets(unittest.TestCase):
         # WEB-PORTAL01 has two real findings against it (FIND-13, FIND-14).
         self.assertEqual(by_name["WEB-PORTAL01"]["finding_count"], 2)
         self.assertIsNone(by_name["WEB-PORTAL01"]["owner"])
+
+    def test_assets_carry_os_and_eol_eos_status(self):
+        """Real, dated vendor-lifecycle classification (remediation/enrichment/
+        eol_lookup.py), backfilled the same way ip/mac already are - see
+        asset_inventory.py's build_asset_inventory()."""
+        resp = client.get("/api/assets")
+        assets = resp.json()["assets"]
+        by_name = {a["name"]: a for a in assets}
+        self.assertIn("os", by_name["WEB-PORTAL01"])
+        self.assertIn("eol_status", by_name["WEB-PORTAL01"])
+        self.assertTrue(all("eol_status" in a for a in assets))
+
+    def test_assets_carry_risk_scoring_fields(self):
+        """Real, NIST-SP-800-30-inspired per-asset Impact/Likelihood/Risk scores
+        (remediation/enrichment/risk_scoring.py) - every asset row gets all 4 fields,
+        each a valid 0-100 int (or a real tier string)."""
+        resp = client.get("/api/assets")
+        assets = resp.json()["assets"]
+        self.assertTrue(len(assets) > 0)
+        for a in assets:
+            for key in ("impact_score", "likelihood_score", "risk_score"):
+                self.assertIn(key, a)
+                self.assertIsInstance(a[key], int)
+                self.assertTrue(0 <= a[key] <= 100)
+            self.assertIn(a["risk_tier"], ("Critical", "High", "Medium", "Low"))
 
     def test_unowned_assets_have_a_suggestion_key_defaulting_to_none(self):
         # The temp ownership file starts empty in this test class, so there's
@@ -849,6 +1713,39 @@ class ApiAssets(unittest.TestCase):
         resp = client.post("/api/assets/WEB-PORTAL01/facing", json={"facing": "space-station"})
         self.assertEqual(resp.status_code, 400)
 
+    def test_new_asset_has_unknown_environment_by_default(self):
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["environment"], "unknown")
+
+    def test_set_environment_then_list_shows_the_new_classification(self):
+        set_resp = client.post("/api/assets/WEB-PORTAL01/environment", json={"environment": "dev"})
+        self.assertEqual(set_resp.status_code, 200)
+        self.assertEqual(set_resp.json()["environment"], "dev")
+
+        resp = client.get("/api/assets")
+        by_name = {a["name"]: a for a in resp.json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["environment"], "dev")
+
+    def test_set_environment_with_invalid_value_is_rejected(self):
+        resp = client.post("/api/assets/WEB-PORTAL01/environment", json={"environment": "space-station"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_set_environment_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/assets/WEB-PORTAL01/environment", json={"environment": "dev"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_dev_environment_tag_changes_the_findings_resolved_policy_domain(self):
+        """An asset tagged environment: dev resolves to the dev policy domain (weekly,
+        auto-remediate, no approval group) instead of whatever its infra_category/
+        scan_type would otherwise resolve to - see remediation_policy_engine.py's
+        _domain_for_finding() docstring."""
+        client.post("/api/assets/WEB-PORTAL01/environment", json={"environment": "dev"})
+        resp = client.get("/api/queue")
+        web_portal_finding = next(f for f in resp.json()["findings"] if (f["asset"] or {}).get("name") == "WEB-PORTAL01")
+        self.assertEqual(web_portal_finding["remediation_policy"]["domain"], "dev")
+
     def test_set_facing_does_not_clobber_an_existing_owner(self):
         client.post("/api/assets/WEB-PORTAL01/owner", json={"owner": "Web Ops", "team": "Platform"})
         client.post("/api/assets/WEB-PORTAL01/facing", json={"facing": "external"})
@@ -896,6 +1793,91 @@ class ApiAssets(unittest.TestCase):
         self.assertEqual(by_name["WEB-PORTAL01"]["owner"], "Web Ops")
 
 
+class ApiAssetPolicy(unittest.TestCase):
+    """Every test here uses a temporary rules file (via patching DEFAULT_RULES_PATH)
+    plus a temporary ownership file, so the suite never mutates the real, shipped
+    asset_policy_rules.yaml or asset_ownership.json."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_rules_path = Path(self.tmpdir.name) / "asset_policy_rules.yaml"
+        self.tmp_rules_path.write_text("rules: []\n", encoding="utf-8")
+        self.rules_patcher = patch.object(asset_policy, "DEFAULT_RULES_PATH", self.tmp_rules_path)
+        self.rules_patcher.start()
+        self.tmp_ownership_path = Path(self.tmpdir.name) / "asset_ownership.json"
+        self.ownership_patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_ownership_path)
+        self.ownership_patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+
+    def tearDown(self):
+        _logout()
+        self.ownership_patcher.stop()
+        self.rules_patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_get_returns_current_rules_text(self):
+        resp = client.get("/api/asset-policy")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("rules: []", resp.json()["rules_text"])
+
+    def test_post_valid_yaml_saves(self):
+        new_text = "rules:\n  - name: test\n    match: {name_prefix: WEB}\n    set: {facing: external}\n"
+        resp = client.post("/api/asset-policy", json={"rules_text": new_text})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("saved", resp.json()["message"])
+        self.assertIn("name: test", self.tmp_rules_path.read_text(encoding="utf-8"))
+
+    def test_post_invalid_yaml_is_rejected(self):
+        resp = client.post("/api/asset-policy", json={"rules_text": "not: valid: yaml: ["})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_post_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/asset-policy", json={"rules_text": "rules: []"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_post_as_non_admin_is_rejected(self):
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/asset-policy", json={"rules_text": "rules: []"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_preview_shows_real_matched_assets_without_writing_anything(self):
+        rules_text = "rules:\n  - name: test\n    match: {name_prefix: WEB-PORTAL}\n    set: {facing: external}\n"
+        resp = client.post("/api/asset-policy/preview", json={"rules_text": rules_text})
+        self.assertEqual(resp.status_code, 200)
+        matched = resp.json()["rules"][0]["matched_assets"]
+        self.assertIn("WEB-PORTAL01", matched)
+        # Preview never writes - the real asset still shows no owner/facing set.
+        by_name = {a["name"]: a for a in client.get("/api/assets").json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["facing"], "unknown")
+
+    def test_preview_needs_no_login(self):
+        _logout()
+        resp = client.post("/api/asset-policy/preview", json={"rules_text": "rules: []"})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_apply_writes_real_changes_using_the_saved_rules(self):
+        # WEB-PORTAL01 exactly (not a prefix match) - this repo's real sample data has
+        # grown to include many other WEB-PORTAL-prefixed assets (WEB-PORTAL-0001, etc.
+        # from later rounds' cloud/cert-mgmt CVE expansion), so an exact name_regex
+        # anchor is what actually isolates a single real asset here.
+        client.post("/api/asset-policy", json={
+            "rules_text": "rules:\n  - name: test\n    match: {name_regex: '^WEB-PORTAL01$'}\n    set: {facing: external}\n",
+        })
+        resp = client.post("/api/asset-policy/apply")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["assets_changed"], 1)
+        by_name = {a["name"]: a for a in client.get("/api/assets").json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["facing"], "external")
+
+    def test_apply_requires_admin(self):
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/asset-policy/apply")
+        self.assertEqual(resp.status_code, 403)
+
+
 class ApiRiskAttackHeatmap(unittest.TestCase):
     def test_heatmap_covers_the_full_known_taxonomy(self):
         resp = client.get("/api/risk/attack-heatmap")
@@ -923,12 +1905,20 @@ class ApiAiVulnerabilities(unittest.TestCase):
         self.assertTrue(all("summary" in v and "remediation" in v for v in body["vulnerabilities"]))
         self.assertEqual(len(body["heatmap"]), len(body["vulnerabilities"]))
 
-    def test_heatmap_is_all_zero_against_this_repos_real_demo_data(self):
-        """Honest scope check: no AI/ML component in this repo's demo app, so no real
-        finding should match - see ai_vuln_taxonomy.py's module docstring."""
+    def test_heatmap_has_real_nonzero_counts_from_the_planted_ai_findings(self):
+        """vulnerable-demo-app/ai_assistant.py plants 3 genuine AI/ML SAST findings
+        (VULN-11 insecure pickle deserialization, VULN-12 prompt injection, VULN-13
+        excessive agency) - these tag against this taxonomy for real, unlike the rest
+        of this repo's demo data (see ai_vuln_taxonomy.py's module docstring). Asserts
+        floors, not exact counts, since keyword-matching against thousands of real bulk
+        CVE descriptions can occasionally produce an incidental extra match too."""
         resp = client.get("/api/ai-vulnerabilities")
         heatmap = resp.json()["heatmap"]
-        self.assertTrue(all(row["count"] == 0 for row in heatmap))
+        self.assertFalse(all(row["count"] == 0 for row in heatmap))
+        by_id = {row["id"]: row["count"] for row in heatmap}
+        self.assertGreaterEqual(by_id["prompt-injection"], 1)
+        self.assertGreaterEqual(by_id["supply-chain"], 1)
+        self.assertGreaterEqual(by_id["excessive-agency"], 1)
 
 
 class ApiIngestGeneric(unittest.TestCase):
@@ -1070,6 +2060,8 @@ class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
         "/jira", "/splunk", "/xdr", "/ai-assist", "/reports", "/support", "/faq",
         "/exceptions", "/assets", "/appsec", "/inbox", "/risk", "/login", "/profile",
         "/adaptors", "/infoblox", "/axonius", "/infrastructure", "/ai-vulnerabilities",
+        "/vulnerability-mapping", "/asset-mapping", "/exploit-criteria", "/compensating-controls",
+        "/remediation-policy", "/remediation-approvals",
     ]
 
     def test_every_known_route_serves_the_same_spa_shell(self):
@@ -1110,6 +2102,211 @@ class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
         js = client.get("/static/js/app.js")
         self.assertEqual(js.status_code, 200)
         self.assertIn("renderRoute", js.text)
+
+
+class ApiReportSchedule(unittest.TestCase):
+    """Same temporary-file-isolation pattern as ApiPriorityRules/ApiExploitCriteria -
+    never mutates the real, shipped report_schedule_rules.yaml."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self.tmpdir.name) / "report_schedule_rules.yaml"
+        self.tmp_path.write_text(dashboard_data.REPORT_SCHEDULE_RULES_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        self.patcher = patch.object(dashboard_data, "REPORT_SCHEDULE_RULES_PATH", self.tmp_path)
+        self.patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+
+    def tearDown(self):
+        _logout()
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_get_returns_current_rules_text(self):
+        resp = client.get("/api/report-schedule")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("subscriptions", resp.json()["rules_text"])
+
+    def test_post_valid_yaml_saves(self):
+        new_text = "subscriptions:\n  - id: test-sub\n    scope: all\n    cadence: weekly\n    recipients: [a@example.com]\n    enabled: false\n"
+        resp = client.post("/api/report-schedule", json={"rules_text": new_text})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("test-sub", self.tmp_path.read_text(encoding="utf-8"))
+
+    def test_post_invalid_yaml_is_rejected(self):
+        resp = client.post("/api/report-schedule", json={"rules_text": "not: valid: yaml: ["})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_post_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/report-schedule", json={"rules_text": "subscriptions: []"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_post_as_non_admin_is_rejected(self):
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/report-schedule", json={"rules_text": "subscriptions: []"})
+        self.assertEqual(resp.status_code, 403)
+
+
+class ApiAlertRules(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self.tmpdir.name) / "alert_rules.yaml"
+        self.tmp_path.write_text(dashboard_data.ALERT_RULES_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        self.patcher = patch.object(dashboard_data, "ALERT_RULES_PATH", self.tmp_path)
+        self.patcher.start()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+
+    def tearDown(self):
+        _logout()
+        self.patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_get_returns_current_rules_text(self):
+        resp = client.get("/api/alert-rules")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("subscriptions", resp.json()["rules_text"])
+
+    def test_post_valid_yaml_saves(self):
+        new_text = "subscriptions:\n  - id: test-alert\n    alert_type: critical\n    scope: all\n    recipients: [a@example.com]\n    enabled: false\n"
+        resp = client.post("/api/alert-rules", json={"rules_text": new_text})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("test-alert", self.tmp_path.read_text(encoding="utf-8"))
+
+    def test_post_invalid_yaml_is_rejected(self):
+        resp = client.post("/api/alert-rules", json={"rules_text": "not: valid: yaml: ["})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_post_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/alert-rules", json={"rules_text": "subscriptions: []"})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiNotificationSettings(unittest.TestCase):
+    """Preview/status/send-test/run-checks-now - no SMTP env vars are set in this test
+    process, so is_configured() is always False here; that's the real, correct behavior
+    to test (never fabricate a "sent" result when nothing was actually configured)."""
+
+    def test_status_reports_unconfigured_by_default(self):
+        resp = client.get("/api/notification-settings/status")
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["smtp_configured"])
+        self.assertIsNone(resp.json()["from_address"])
+
+    def test_status_reports_configured_when_env_vars_set(self):
+        with patch.dict("os.environ", {"SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587", "SMTP_FROM_ADDRESS": "vulnhunter@example.com"}):
+            resp = client.get("/api/notification-settings/status")
+        self.assertTrue(resp.json()["smtp_configured"])
+        self.assertEqual(resp.json()["from_address"], "vulnhunter@example.com")
+
+    def test_preview_report_needs_no_login(self):
+        resp = client.post("/api/notification-settings/preview", json={"kind": "report", "period": "weekly"})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("Weekly Security Report", body["subject"])
+        self.assertIn("SLA breached", body["body_text"])
+
+    def test_preview_alert_returns_matched_count(self):
+        resp = client.post("/api/notification-settings/preview", json={"kind": "alert", "alert_type": "critical", "scope": "all"})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertIn("Critical Vulnerability Alert", body["subject"])
+        self.assertGreater(body["matched_count"], 0)  # real Critical findings exist
+
+    def test_preview_rejects_unknown_kind(self):
+        resp = client.post("/api/notification-settings/preview", json={"kind": "carrier-pigeon"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_send_test_without_confirm_is_preview_only_and_needs_no_login(self):
+        resp = client.post("/api/notification-settings/send-test", json={
+            "kind": "report", "period": "weekly", "recipient": "someone@example.com", "confirm": False,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_send_test_with_confirm_but_no_login_is_rejected(self):
+        resp = client.post("/api/notification-settings/send-test", json={
+            "kind": "report", "period": "weekly", "recipient": "someone@example.com", "confirm": True,
+        })
+        self.assertEqual(resp.status_code, 401)
+
+    def test_send_test_with_confirm_and_login_but_no_smtp_returns_503(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/notification-settings/send-test", json={
+                "kind": "report", "period": "weekly", "recipient": "someone@example.com", "confirm": True,
+            })
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 503)
+
+    def test_run_checks_now_needs_admin_login(self):
+        resp = client.post("/api/notification-settings/run-checks-now")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_run_checks_now_returns_empty_with_no_enabled_subscriptions(self):
+        # The real, shipped config files ship with an empty subscriptions list.
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/notification-settings/run-checks-now")
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["report_results"], [])
+        self.assertEqual(resp.json()["alert_results"], [])
+
+
+class ApiMlInsights(unittest.TestCase):
+    """Real, live-trained scikit-learn models (remediation/enrichment/ml_insights.py) run
+    against the actual shipped demo dataset here - not mocked. dashboard_data's own
+    in-process cache (same mtime-keyed convention as _load_content_enriched_findings())
+    means only the first test in this class pays the real IsolationForest/KMeans fit
+    cost; every later call (in this class or elsewhere in the suite) is fast."""
+
+    def test_anomalies_route_returns_real_flagged_assets_sorted_most_anomalous_first(self):
+        resp = client.get("/api/ml-insights/anomalies")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertGreater(body["total_assets"], 0)
+        self.assertGreater(len(body["anomalies"]), 0)
+        scores = [a["anomaly_score"] for a in body["anomalies"]]
+        self.assertEqual(scores, sorted(scores))
+        for a in body["anomalies"]:
+            self.assertTrue(a["is_anomaly"])
+            self.assertIsInstance(a["reasons"], list)
+            self.assertGreater(len(a["reasons"]), 0)
+
+    def test_clusters_route_sizes_sum_to_total_findings(self):
+        resp = client.get("/api/ml-insights/clusters")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertGreater(len(body["clusters"]), 0)
+        self.assertEqual(sum(c["size"] for c in body["clusters"]), body["total_findings"])
+
+    def test_cluster_members_route_returns_only_that_clusters_findings_capped_at_25(self):
+        clusters = client.get("/api/ml-insights/clusters").json()["clusters"]
+        target = clusters[0]
+        resp = client.get(f"/api/ml-insights/clusters/{target['cluster_id']}/members")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["total"], target["size"])
+        self.assertLessEqual(len(body["members"]), 25)
+        self.assertTrue(all(m["risk_cluster"] == target["cluster_id"] for m in body["members"]))
+
+    def test_similar_findings_surfaces_the_real_log4shell_family(self):
+        # FIND-12/619/622/623 are all real CVE-2021-44228/44832/45046 (Log4Shell)
+        # family findings in the shipped demo dataset - see
+        # remediation/output/normalized-findings.json.
+        resp = client.get("/api/ml-insights/similar/FIND-12")
+        self.assertEqual(resp.status_code, 200)
+        similar_ids = [s["id"] for s in resp.json()["similar"]]
+        self.assertIn("FIND-619", similar_ids[:3])
+
+    def test_similar_findings_for_unknown_id_returns_empty_not_an_error(self):
+        resp = client.get("/api/ml-insights/similar/FIND-NOPE-DOES-NOT-EXIST")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["similar"], [])
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ from remediation.config.priority_engine import (  # noqa: E402
 
 BASE_RULES = {
     "sla_days": {"Critical": 3, "High": 7, "Medium": 30, "Low": 90},
+    "sla_risk_tier_multiplier": {"Critical": 0.5, "High": 0.75, "Medium": 1.0, "Low": 1.25},
     "kev_override": {"enabled": True, "forces_priority": "Critical"},
     "epss_escalation": {"enabled": True, "threshold": 0.5, "forces_priority_at_least": "High"},
     "asset_criticality_keywords": {"dc": 3, "auth": 3, "bastion": 2, "default": 0},
@@ -110,6 +111,39 @@ class SlaComputation(unittest.TestCase):
         self.assertIsNone(sla["due_date"])
         self.assertIsNone(sla["breached"])
 
+    def test_no_asset_risk_tier_uses_neutral_multiplier(self):
+        """Omitting asset_risk_tier (every caller before this feature, and any caller
+        that doesn't compute risk_tier) must reproduce the exact pre-existing behavior -
+        no silent SLA-window change for code that hasn't opted in."""
+        f = finding(first_seen="2026-08-01")
+        sla = compute_sla(f, "High", BASE_RULES, as_of=datetime.date(2026, 8, 3))
+        self.assertEqual(sla["due_date"], "2026-08-08")  # +7 days, unchanged
+        self.assertEqual(sla["risk_tier_multiplier"], 1.0)
+
+    def test_critical_risk_tier_asset_tightens_the_sla_window(self):
+        f = finding(first_seen="2026-08-01")
+        sla = compute_sla(f, "High", BASE_RULES, as_of=datetime.date(2026, 8, 3), asset_risk_tier="Critical")
+        self.assertEqual(sla["due_date"], "2026-08-05")  # 7 * 0.5 = 3.5 -> round to 4 days
+        self.assertEqual(sla["risk_tier_multiplier"], 0.5)
+
+    def test_low_risk_tier_asset_loosens_the_sla_window(self):
+        f = finding(first_seen="2026-08-01")
+        sla = compute_sla(f, "High", BASE_RULES, as_of=datetime.date(2026, 8, 3), asset_risk_tier="Low")
+        self.assertEqual(sla["due_date"], "2026-08-10")  # 7 * 1.25 = 8.75 -> round to 9 days
+        self.assertEqual(sla["risk_tier_multiplier"], 1.25)
+
+    def test_unknown_risk_tier_falls_back_to_neutral_multiplier(self):
+        f = finding(first_seen="2026-08-01")
+        sla = compute_sla(f, "High", BASE_RULES, as_of=datetime.date(2026, 8, 3), asset_risk_tier="not-a-real-tier")
+        self.assertEqual(sla["risk_tier_multiplier"], 1.0)
+
+    def test_multiplier_never_drops_sla_below_one_day(self):
+        rules = {**BASE_RULES, "sla_days": {**BASE_RULES["sla_days"], "Critical": 1},
+                  "sla_risk_tier_multiplier": {**BASE_RULES["sla_risk_tier_multiplier"], "Critical": 0.1}}
+        f = finding(first_seen="2026-08-01")
+        sla = compute_sla(f, "Critical", rules, as_of=datetime.date(2026, 8, 1), asset_risk_tier="Critical")
+        self.assertEqual(sla["due_date"], "2026-08-02")  # floored at 1 day, not 0
+
 
 class ScoreFindingsBatch(unittest.TestCase):
     def test_score_findings_sorts_highest_priority_first(self):
@@ -129,13 +163,37 @@ class ScoreFindingsBatch(unittest.TestCase):
         score_findings(findings, rules=BASE_RULES)
         self.assertEqual(set(findings[0].keys()), original_keys)  # no 'priority' key added to original
 
+    def test_risk_tier_by_asset_feeds_the_sla_multiplier_per_finding(self):
+        findings = [
+            finding(asset={"name": "CRIT-ASSET", "type": "windows-server"}, first_seen="2026-08-01"),
+            finding(asset={"name": "LOW-ASSET", "type": "windows-server"}, first_seen="2026-08-01"),
+        ]
+        findings[0]["id"] = "FIND-ON-CRIT-ASSET"
+        findings[1]["id"] = "FIND-ON-LOW-ASSET"
+        risk_tier_by_asset = {"CRIT-ASSET": "Critical", "LOW-ASSET": "Low"}
+        scored = score_findings(findings, rules=BASE_RULES, risk_tier_by_asset=risk_tier_by_asset)
+        by_id = {f["id"]: f for f in scored}
+        self.assertEqual(by_id["FIND-ON-CRIT-ASSET"]["sla"]["risk_tier_multiplier"], 0.5)
+        self.assertEqual(by_id["FIND-ON-LOW-ASSET"]["sla"]["risk_tier_multiplier"], 1.25)
+
+    def test_omitting_risk_tier_by_asset_uses_neutral_multiplier_for_everyone(self):
+        findings = [finding(asset={"name": "SOME-HOST", "type": "windows-server"})]
+        scored = score_findings(findings, rules=BASE_RULES)
+        self.assertEqual(scored[0]["sla"]["risk_tier_multiplier"], 1.0)
+
 
 class RealRulesFileIsValid(unittest.TestCase):
     def test_real_rules_file_loads_and_has_expected_top_level_keys(self):
         rules = load_rules(DEFAULT_RULES_PATH)
-        for key in ("sla_days", "kev_override", "epss_escalation", "asset_criticality_keywords",
-                    "asset_type_weights", "severity_weights", "priority_thresholds"):
+        for key in ("sla_days", "sla_risk_tier_multiplier", "kev_override", "epss_escalation",
+                    "asset_criticality_keywords", "asset_type_weights", "severity_weights",
+                    "priority_thresholds"):
             self.assertIn(key, rules, f"priority_rules.yaml missing '{key}'")
+
+    def test_real_rules_file_sla_risk_tier_multiplier_covers_every_tier(self):
+        rules = load_rules(DEFAULT_RULES_PATH)
+        for tier in ("Critical", "High", "Medium", "Low"):
+            self.assertIn(tier, rules["sla_risk_tier_multiplier"])
 
     def test_real_rules_file_scores_a_known_finding_as_expected(self):
         """Regression guard using our own real sample data - PrintNightmare (KEV-listed,

@@ -15,12 +15,12 @@ test_heatmap_counts_real_tagged_findings (test_ai_vuln_taxonomy.AiAtlasHeatmap.t
 test_heatmap_ignores_findings_with_no_matched_vulnerability (test_ai_vuln_taxonomy.AiAtlasHeatmap.test_heatmap_ignores_findings_with_no_matched_vulnerability) ... ok
 test_heatmap_includes_every_known_vulnerability_even_with_zero_findings (test_ai_vuln_taxonomy.AiAtlasHeatmap.test_heatmap_includes_every_known_vulnerability_even_with_zero_findings) ... ok
 test_heatmap_rows_carry_the_atlas_cross_reference (test_ai_vuln_taxonomy.AiAtlasHeatmap.test_heatmap_rows_carry_the_atlas_cross_reference) ... ok
+test_almost_no_incidental_matches_in_the_bulk_infra_findings (test_ai_vuln_taxonomy.KeywordMatching.test_almost_no_incidental_matches_in_the_bulk_infra_findings)
+Honest scope check: this file (remediation/output/normalized-findings.json) ... ok
 test_backdoored_model_also_matches_poisoning (test_ai_vuln_taxonomy.KeywordMatching.test_backdoored_model_also_matches_poisoning) ... ok
 test_jailbreak_also_matches_prompt_injection (test_ai_vuln_taxonomy.KeywordMatching.test_jailbreak_also_matches_prompt_injection) ... ok
 test_model_denial_of_service_matches_unbounded_consumption (test_ai_vuln_taxonomy.KeywordMatching.test_model_denial_of_service_matches_unbounded_consumption) ... ok
 test_model_extraction_matches_model_theft (test_ai_vuln_taxonomy.KeywordMatching.test_model_extraction_matches_model_theft) ... ok
-test_no_ai_findings_in_this_repos_real_demo_data (test_ai_vuln_taxonomy.KeywordMatching.test_no_ai_findings_in_this_repos_real_demo_data)
-Honest scope check: this repo's demo app isn't an AI/ML system, so real ... ok
 test_no_keyword_match_returns_none_not_a_guess (test_ai_vuln_taxonomy.KeywordMatching.test_no_keyword_match_returns_none_not_a_guess) ... ok
 test_prompt_injection_matches (test_ai_vuln_taxonomy.KeywordMatching.test_prompt_injection_matches) ... ok
 test_system_prompt_leak_matches_sensitive_info_disclosure (test_ai_vuln_taxonomy.KeywordMatching.test_system_prompt_leak_matches_sensitive_info_disclosure) ... ok
@@ -212,8 +212,8 @@ The critical safety test, same pattern as /api/run and /api/servicenow/send: ...
 test_unknown_action_returns_400 (test_dashboard.ApiAiAssist.test_unknown_action_returns_400) ... ok
 test_unknown_finding_returns_404 (test_dashboard.ApiAiAssist.test_unknown_finding_returns_404) ... ok
 test_works_for_a_code_scan_finding_too (test_dashboard.ApiAiAssist.test_works_for_a_code_scan_finding_too) ... ok
-test_heatmap_is_all_zero_against_this_repos_real_demo_data (test_dashboard.ApiAiVulnerabilities.test_heatmap_is_all_zero_against_this_repos_real_demo_data)
-Honest scope check: no AI/ML component in this repo's demo app, so no real ... ok
+test_heatmap_has_real_nonzero_counts_from_the_planted_ai_findings (test_dashboard.ApiAiVulnerabilities.test_heatmap_has_real_nonzero_counts_from_the_planted_ai_findings)
+vulnerable-demo-app/ai_assistant.py plants 3 genuine AI/ML SAST findings ... ok
 test_returns_the_full_taxonomy_and_heatmap (test_dashboard.ApiAiVulnerabilities.test_returns_the_full_taxonomy_and_heatmap) ... ok
 test_already_owned_asset_never_gets_a_suggestion_for_itself (test_dashboard.ApiAssets.test_already_owned_asset_never_gets_a_suggestion_for_itself) ... ok
 test_cmdb_import_apply_requires_login (test_dashboard.ApiAssets.test_cmdb_import_apply_requires_login) ... ok
@@ -273,6 +273,8 @@ test_exception_far_from_expiry_produces_no_notification (test_dashboard.ApiNotif
 test_no_generic_ingested_file_produces_no_ingestion_notification (test_dashboard.ApiNotifications.test_no_generic_ingested_file_produces_no_ingestion_notification) ... ok
 test_pending_generic_ingested_findings_produce_an_info_notification (test_dashboard.ApiNotifications.test_pending_generic_ingested_findings_produce_an_info_notification) ... ok
 test_sla_breached_findings_produce_danger_notifications (test_dashboard.ApiNotifications.test_sla_breached_findings_produce_danger_notifications) ... ok
+test_overview_includes_the_live_priority_rules_summary (test_dashboard.ApiOverview.test_overview_includes_the_live_priority_rules_summary)
+Overview's SLA/priority definitions panel reads the real, currently ... ok
 test_overview_returns_expected_shape_and_counts (test_dashboard.ApiOverview.test_overview_returns_expected_shape_and_counts) ... ok
 test_known_playbook_matches_file_contents (test_dashboard.ApiPlaybookDetail.test_known_playbook_matches_file_contents) ... ok
 test_unknown_playbook_returns_404 (test_dashboard.ApiPlaybookDetail.test_unknown_playbook_returns_404) ... ok
@@ -281,7 +283,7 @@ test_post_as_non_admin_is_rejected (test_dashboard.ApiPriorityRules.test_post_as
 test_post_invalid_yaml_is_rejected_and_file_unchanged (test_dashboard.ApiPriorityRules.test_post_invalid_yaml_is_rejected_and_file_unchanged) ... ok
 test_post_valid_yaml_saves (test_dashboard.ApiPriorityRules.test_post_valid_yaml_saves) ... ok
 test_post_without_login_is_rejected (test_dashboard.ApiPriorityRules.test_post_without_login_is_rejected) ... ok
-test_lists_all_fourteen_findings_and_playbook_links (test_dashboard.ApiRemediate.test_lists_all_fourteen_findings_and_playbook_links) ... ok
+test_lists_all_findings_and_playbook_links (test_dashboard.ApiRemediate.test_lists_all_findings_and_playbook_links) ... ok
 test_generate_returns_real_computed_kpis (test_dashboard.ApiReports.test_generate_returns_real_computed_kpis) ... ok
 test_html_report_download_sets_content_disposition (test_dashboard.ApiReports.test_html_report_download_sets_content_disposition) ... ok
 test_html_report_is_served_inline_by_default (test_dashboard.ApiReports.test_html_report_is_served_inline_by_default) ... ok
@@ -307,16 +309,20 @@ test_send_with_confirm_but_not_logged_in_is_rejected (test_dashboard.ApiSplunk.t
 test_send_without_confirm_never_touches_the_network (test_dashboard.ApiSplunk.test_send_without_confirm_never_touches_the_network)
 Mirrors /api/servicenow/send's dry-run guarantee: submitting without confirm ... ok
 test_status_endpoint (test_dashboard.ApiStatus.test_status_endpoint) ... ok
-test_lists_all_nine_findings (test_dashboard.ApiVulnhunt.test_lists_all_nine_findings) ... ok
+test_lists_all_eighteen_findings (test_dashboard.ApiVulnhunt.test_lists_all_eighteen_findings) ... ok
 test_asset_type_breakdown_covers_all_categories (test_dashboard.DataLayerReadsRealArtifacts.test_asset_type_breakdown_covers_all_categories) ... ok
-test_kev_and_high_epss_counts (test_dashboard.DataLayerReadsRealArtifacts.test_kev_and_high_epss_counts) ... ok
+test_kev_and_high_epss_counts (test_dashboard.DataLayerReadsRealArtifacts.test_kev_and_high_epss_counts)
+Real, live-verified counts against CISA KEV + FIRST.org EPSS at time of ... ok
 test_no_mojibake_in_parsed_text (test_dashboard.DataLayerReadsRealArtifacts.test_no_mojibake_in_parsed_text)
 Regression guard for the subprocess-encoding bug: git output must be decoded ... ok
-test_playbooks_match_known_count (test_dashboard.DataLayerReadsRealArtifacts.test_playbooks_match_known_count) ... ok
-test_remediation_findings_match_known_total (test_dashboard.DataLayerReadsRealArtifacts.test_remediation_findings_match_known_total) ... ok
+test_playbooks_match_known_count (test_dashboard.DataLayerReadsRealArtifacts.test_playbooks_match_known_count)
+Real generated Ansible playbooks - still only for the original 7 ... ok
+test_remediation_findings_match_known_total (test_dashboard.DataLayerReadsRealArtifacts.test_remediation_findings_match_known_total)
+Real total at time of writing: 15 hand-curated findings from the original ... ok
 test_remediation_plan_queue_matches_findings_count (test_dashboard.DataLayerReadsRealArtifacts.test_remediation_plan_queue_matches_findings_count) ... ok
 test_risk_tier_counts_match_known_split (test_dashboard.DataLayerReadsRealArtifacts.test_risk_tier_counts_match_known_split) ... ok
-test_vulnhunt_data_matches_known_totals (test_dashboard.DataLayerReadsRealArtifacts.test_vulnhunt_data_matches_known_totals) ... ok
+test_vulnhunt_data_matches_known_totals (test_dashboard.DataLayerReadsRealArtifacts.test_vulnhunt_data_matches_known_totals)
+9 original findings (app.py/Dockerfile) + 9 more added later from ... ok
 test_every_known_route_serves_the_same_spa_shell (test_dashboard.HtmlShellRoutesServeTheSpaShell.test_every_known_route_serves_the_same_spa_shell) ... ok
 test_playbook_detail_route_also_serves_the_shell (test_dashboard.HtmlShellRoutesServeTheSpaShell.test_playbook_detail_route_also_serves_the_shell) ... ok
 test_static_assets_are_served (test_dashboard.HtmlShellRoutesServeTheSpaShell.test_static_assets_are_served) ... ok
@@ -392,6 +398,7 @@ test_normalize_takes_first_ip_when_multiple_present (test_infoblox_connector.Inf
 test_application_asset_type_is_not_an_infra_category (test_infra_classification.ClassifyFinding.test_application_asset_type_is_not_an_infra_category)
 Application/certificate findings are a different domain entirely - this ... ok
 test_certificate_asset_type_is_not_an_infra_category (test_infra_classification.ClassifyFinding.test_certificate_asset_type_is_not_an_infra_category) ... ok
+test_client_application_classifies_as_apps (test_infra_classification.ClassifyFinding.test_client_application_classifies_as_apps) ... ok
 test_cloud_infrastructure_classifies_as_cloud (test_infra_classification.ClassifyFinding.test_cloud_infrastructure_classifies_as_cloud) ... ok
 test_iot_ot_device_classifies_as_ot (test_infra_classification.ClassifyFinding.test_iot_ot_device_classifies_as_ot) ... ok
 test_missing_asset_type_returns_none (test_infra_classification.ClassifyFinding.test_missing_asset_type_returns_none) ... ok
@@ -490,8 +497,11 @@ test_subnet_match_suggests_the_shared_type (test_pattern_recognition.SuggestType
 test_no_real_looking_secrets_in_tracked_files (test_pipeline_artifacts.NoRealSecretsLeakedAnywhere.test_no_real_looking_secrets_in_tracked_files) ... ok
 test_all_three_sources_represented (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_all_three_sources_represented) ... ok
 test_asset_type_classification_spot_checks (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_asset_type_classification_spot_checks) ... ok
+test_at_least_7487_findings_total (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_at_least_7487_findings_total)
+15 hand-curated + 7,472 real-CVE findings added via bulk NVD sourcing across ... ok
 test_every_finding_has_required_fields (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_every_finding_has_required_fields) ... ok
-test_fourteen_findings_total (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_fourteen_findings_total) ... ok
+test_findings_eligible_for_automation (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_findings_eligible_for_automation)
+Real total at time of writing: 1,099 (658 windows-server + 441 unix-server, ... ok
 test_kev_and_epss_fields_present_and_consistent (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_kev_and_epss_fields_present_and_consistent)
 Every finding must have kev/epss keys (added by threat-intel-enricher). ... ok
 test_known_kev_listed_findings_match_real_cisa_catalog (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_known_kev_listed_findings_match_real_cisa_catalog)
@@ -499,7 +509,6 @@ Spot-checks against real, verified CISA KEV status as of this data's ... ok
 test_no_fabricated_cve_ids (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_no_fabricated_cve_ids)
 Every non-null CVE must match the standard CVE-YYYY-NNNN(N...) format - ... ok
 test_remediation_domain_only_set_for_supported_domains (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_remediation_domain_only_set_for_supported_domains) ... ok
-test_seven_findings_eligible_for_automation (test_pipeline_artifacts.RemediationNormalizedFindingsAreWellFormed.test_seven_findings_eligible_for_automation) ... ok
 test_every_finding_id_referenced_in_plan (test_pipeline_artifacts.RemediationPlanIsConsistentWithFindings.test_every_finding_id_referenced_in_plan) ... ok
 test_manual_only_domains_explicitly_called_out (test_pipeline_artifacts.RemediationPlanIsConsistentWithFindings.test_manual_only_domains_explicitly_called_out) ... ok
 test_change_approval_marker_matches_risk_tier (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_change_approval_marker_matches_risk_tier)
@@ -508,6 +517,16 @@ test_every_playbook_corresponds_to_an_automatable_finding (test_pipeline_artifac
 test_every_playbook_has_finding_id_rollback_and_hosts (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_every_playbook_has_finding_id_rollback_and_hosts) ... ok
 test_exactly_seven_playbooks_generated (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_exactly_seven_playbooks_generated) ... ok
 test_no_playbook_for_manual_only_findings (test_pipeline_artifacts.RemediationPlaybooksMatchThePlan.test_no_playbook_for_manual_only_findings) ... ok
+test_admin_route_still_has_no_auth_check (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_admin_route_still_has_no_auth_check)
+The unauthenticated /admin/users route (VULN-16) must NOT be modified - ... ok
+test_aws_keys_now_from_environment (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_aws_keys_now_from_environment) ... ok
+test_cors_no_longer_wildcard (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_cors_no_longer_wildcard) ... ok
+test_fixed_files_still_valid_python (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_fixed_files_still_valid_python) ... ok
+test_jwt_secret_now_from_environment (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_jwt_secret_now_from_environment) ... ok
+test_llm_api_key_now_from_environment (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_llm_api_key_now_from_environment) ... ok
+test_manual_review_ai_findings_untouched (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_manual_review_ai_findings_untouched)
+Insecure pickle.load, prompt injection, and excessive agency must NOT be ... ok
+test_mass_assignment_now_allow_listed (test_pipeline_artifacts.VulnHuntFixerAppliesAiAndApiFixes.test_mass_assignment_now_allow_listed) ... ok
 test_command_injection_now_uses_arg_list (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_command_injection_now_uses_arg_list) ... ok
 test_debug_mode_now_gated_by_env_var (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_debug_mode_now_gated_by_env_var) ... ok
 test_dockerfile_now_has_non_root_user (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_dockerfile_now_has_non_root_user) ... ok
@@ -518,9 +537,17 @@ test_manual_review_findings_untouched (test_pipeline_artifacts.VulnHuntFixerAppl
 eval() and plaintext password storage must NOT be modified - the fixer ... ok
 test_secret_now_from_environment (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_secret_now_from_environment) ... ok
 test_sql_injection_now_parameterized (test_pipeline_artifacts.VulnHuntFixerAppliesOnlyApprovedFixes.test_sql_injection_now_parameterized) ... ok
-test_all_nine_finding_ids_present (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_all_nine_finding_ids_present) ... ok
-test_reports_nine_findings (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_reports_nine_findings) ... ok
-test_reports_six_auto_fixed (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_reports_six_auto_fixed) ... ok
+test_all_eighteen_finding_ids_present (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_all_eighteen_finding_ids_present) ... ok
+test_reports_eighteen_findings (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_reports_eighteen_findings) ... ok
+test_reports_eleven_auto_fixed (test_pipeline_artifacts.VulnHuntReportIsAccurate.test_reports_eleven_auto_fixed) ... ok
+test_hardcoded_aws_keys_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_hardcoded_aws_keys_present) ... ok
+test_hardcoded_jwt_secret_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_hardcoded_jwt_secret_present) ... ok
+test_hardcoded_llm_api_key_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_hardcoded_llm_api_key_present) ... ok
+test_insecure_pickle_load_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_insecure_pickle_load_present) ... ok
+test_llm_output_executed_via_shell_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_llm_output_executed_via_shell_present) ... ok
+test_mass_assignment_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_mass_assignment_present) ... ok
+test_prompt_injection_concatenation_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_prompt_injection_concatenation_present) ... ok
+test_wildcard_cors_present (test_pipeline_artifacts.VulnHuntScannerFindsRealAiAndApiVulnerabilities.test_wildcard_cors_present) ... ok
 test_command_injection_shell_true_present (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_command_injection_shell_true_present) ... ok
 test_debug_mode_hardcoded_true (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_debug_mode_hardcoded_true) ... ok
 test_dockerfile_has_no_user_directive (test_pipeline_artifacts.VulnHuntScannerFindsRealVulnerabilities.test_dockerfile_has_no_user_directive) ... ok
@@ -559,7 +586,11 @@ test_includes_kpi_numbers (test_reports.RenderReportHtml.test_includes_kpi_numbe
 test_includes_the_no_persistence_caveat (test_reports.RenderReportHtml.test_includes_the_no_persistence_caveat) ... ok
 test_includes_the_period_in_the_title (test_reports.RenderReportHtml.test_includes_the_period_in_the_title) ... ok
 test_renders_valid_looking_html_document (test_reports.RenderReportHtml.test_renders_valid_looking_html_document) ... ok
-test_application_asset_is_sca (test_scan_type_mapping.ClassifyFinding.test_application_asset_is_sca) ... ok
+test_application_asset_missing_cve_key_entirely_is_dast (test_scan_type_mapping.ClassifyFinding.test_application_asset_missing_cve_key_entirely_is_dast) ... ok
+test_application_asset_with_a_cve_is_sca (test_scan_type_mapping.ClassifyFinding.test_application_asset_with_a_cve_is_sca)
+Has a CVE => a versioned, publicly-tracked vulnerable dependency - SCA. ... ok
+test_application_asset_without_a_cve_is_dast (test_scan_type_mapping.ClassifyFinding.test_application_asset_without_a_cve_is_dast)
+No CVE => an app-specific bug found by actively probing the running app, ... ok
 test_certificate_asset_is_cert_mgmt (test_scan_type_mapping.ClassifyFinding.test_certificate_asset_is_cert_mgmt) ... ok
 test_missing_asset_defaults_to_infra_vm_rather_than_crashing (test_scan_type_mapping.ClassifyFinding.test_missing_asset_defaults_to_infra_vm_rather_than_crashing) ... ok
 test_network_and_iot_assets_are_infra_vm (test_scan_type_mapping.ClassifyFinding.test_network_and_iot_assets_are_infra_vm) ... ok
@@ -612,7 +643,7 @@ test_batch_passes_custom_sourcetype_and_index_through (test_splunk_connector.Sen
 test_batch_sends_events_for_all_findings (test_splunk_connector.SendEventsForFindingsBatch.test_batch_sends_events_for_all_findings) ... ok
 
 ----------------------------------------------------------------------
-Ran 562 tests in 20.648s
+Ran 582 tests in 76.805s
 
 OK
 WARNING: VULNHUNTER_SESSION_SECRET is not set - using a random secret generated for this process only. Set it to a real, stable value before any real deployment (see dashboard/README.md).

@@ -1,0 +1,200 @@
+"""
+Remediation approval workflow - the real, human-in-the-loop approve/reject action this
+app was missing for "normal"/"emergency" change-type findings (see
+remediation/config/remediation_policy_engine.py). `risk_tier == needs-change-approval`
+and `change_type == normal/emergency` were previously just labels in
+REMEDIATION_PLAN.md/generated playbook comments - nothing recorded who actually clicked
+approve, or when, or whether they were verified to be in the required AD group. This is
+that missing piece.
+
+Deliberately NOT the same thing as remediation/exceptions/store.py: an exception means
+"accept the risk instead of fixing this"; an approval here means "yes, go ahead and mark
+this remediation's generated playbook ready for a human/change-management process to
+run" - a decision about HOW to proceed with the fix, not whether to skip it.
+
+Persistence is a single local JSON file (remediation_approvals.json), the same
+"real, editable, not a database" pattern as exceptions.json/priority_rules.yaml -
+committed and starting empty (no seeded fake approval history, since fabricating past
+approvals would misrepresent what's actually happened in this demo dataset).
+"""
+import datetime
+import json
+from pathlib import Path
+
+from remediation.audit.activity_log import record_activity
+
+DEFAULT_STORE_PATH = Path(__file__).resolve().parent / "remediation_approvals.json"
+
+STATUSES = ("pending", "approved", "rejected", "expired", "remediation_triggered")
+
+
+def load_approvals(path=None):
+    # Resolved inside the body, not a bound default - see exceptions/store.py's own
+    # comment for why (patch.object on DEFAULT_STORE_PATH must take effect for callers
+    # that omit `path`).
+    path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_approvals(approvals, path=None):
+    path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    path.write_text(json.dumps(approvals, indent=2) + "\n", encoding="utf-8")
+
+
+def _next_id(approvals):
+    existing = [int(a["id"].split("-")[1]) for a in approvals if a.get("id", "").startswith("APR-")]
+    return f"APR-{max(existing, default=0) + 1}"
+
+
+def compute_status(approval, as_of=None):
+    """An approval's stored status is only ever "pending"/"approved"/"rejected"/
+    "remediation_triggered" (approve/reject/trigger are all explicit human actions);
+    "expired" is derived here - a pending request whose scheduled maintenance window
+    has already passed with no decision - same "derive on read, never silently stay
+    pending forever" pattern as exceptions/store.py's compute_status()."""
+    status = approval.get("status", "pending")
+    if status in ("approved", "rejected", "remediation_triggered"):
+        return status
+    as_of = as_of or datetime.date.today()
+    window_date_str = (approval.get("scheduled_window") or {}).get("date")
+    if window_date_str:
+        try:
+            if datetime.date.fromisoformat(window_date_str) < as_of:
+                return "expired"
+        except (TypeError, ValueError):
+            pass
+    return "pending"
+
+
+def list_approvals_with_status(path=None, as_of=None):
+    """Returns every approval request with its live-computed status attached (doesn't
+    mutate the stored file)."""
+    approvals = load_approvals(path)
+    return [{**a, "computed_status": compute_status(a, as_of=as_of)} for a in approvals]
+
+
+def approvals_by_finding(path=None, as_of=None):
+    """Returns {finding_id: approval} - the most recently created request wins per
+    finding_id if more than one somehow exists."""
+    result = {}
+    for a in list_approvals_with_status(path=path, as_of=as_of):
+        result[a["finding_id"]] = a
+    return result
+
+
+def create_approval_request(finding_id, requested_by, scheduled_window, path=None, as_of=None):
+    if not finding_id:
+        raise ValueError("finding_id is required")
+    if not requested_by or not requested_by.strip():
+        raise ValueError("requested_by is required")
+
+    as_of = as_of or datetime.date.today()
+    approvals = load_approvals(path)
+    record = {
+        "id": _next_id(approvals),
+        "finding_id": finding_id,
+        "requested_by": requested_by.strip(),
+        "scheduled_window": scheduled_window or {},
+        "created_on": as_of.isoformat(),
+        "status": "pending",
+        "approved_by": None,
+        "approved_at": None,
+        "ad_group_validated": None,
+        "rejected_by": None,
+        "rejected_at": None,
+        "rejection_reason": None,
+        "staging_validated_by": None,
+        "staging_validated_at": None,
+    }
+    approvals.append(record)
+    save_approvals(approvals, path)
+    record_activity(requested_by.strip(), "approval.request", record["id"], {"finding_id": finding_id})
+    return record
+
+
+def mark_staging_validated(approval_id, validated_by, path=None, as_of=None):
+    """Records that this change was validated in a staging/test environment before
+    production approval - ISO/IEC 27002:2022 §8.32 ("Change management") calls for
+    testing changes before they're applied, alongside the change-approval step this
+    workflow already has. Metadata only: there's no real staging environment behind
+    this - it records who attests the validation happened and when, the same honest
+    "who/when, not a live integration" pattern as ad_group_validated above. Settable at
+    any status (most naturally before Approve, but not enforced - a real org's staging
+    validation might happen at a different point in its own process, and refusing to
+    record it after the fact would just be a demo restriction pretending to be a
+    control, not a real one)."""
+    if not validated_by or not validated_by.strip():
+        raise ValueError("validated_by is required")
+    approvals = load_approvals(path)
+    for a in approvals:
+        if a["id"] == approval_id:
+            a["staging_validated_by"] = validated_by.strip()
+            a["staging_validated_at"] = (as_of or datetime.date.today()).isoformat()
+            save_approvals(approvals, path)
+            record_activity(validated_by.strip(), "approval.staging_validated", approval_id, {"finding_id": a.get("finding_id")})
+            return a
+    raise KeyError(f"No approval request with id {approval_id!r}")
+
+
+def mark_remediation_triggered(approval_id, actor=None, path=None, as_of=None):
+    """Marks an already-approved finding's real playbook as generated on demand (the
+    dashboard's "Trigger Remediation" button, backed by /api/run scoped to one finding -
+    see cli/vulnhunter.py's remediate_prompt(finding_id=...)). Only ever moves an
+    approval FROM "approved" - a pending or rejected approval can't be triggered, and
+    raises ValueError rather than silently overwriting a decision that hasn't
+    happened yet. This never means the playbook was executed against real
+    infrastructure - only that it was generated and is ready for a human/
+    change-management process to run, same as every other playbook in this app."""
+    approvals = load_approvals(path)
+    for a in approvals:
+        if a["id"] == approval_id:
+            if a.get("status") != "approved":
+                raise ValueError(
+                    f"Approval {approval_id!r} must be 'approved' before remediation can be "
+                    f"triggered (currently {a.get('status')!r})."
+                )
+            a["status"] = "remediation_triggered"
+            a["triggered_by"] = actor or "unknown"
+            a["triggered_at"] = (as_of or datetime.date.today()).isoformat()
+            save_approvals(approvals, path)
+            record_activity(actor, "approval.trigger_remediation", approval_id, {"finding_id": a.get("finding_id")})
+            return a
+    raise KeyError(f"No approval request with id {approval_id!r}")
+
+
+def approve(approval_id, approved_by, ad_group_validated=None, path=None, as_of=None):
+    """`ad_group_validated` is True/False when AD was configured and the check actually
+    ran, or None when AD isn't configured - callers must not collapse None into False,
+    since that would misrepresent "we didn't check" as "we checked and it failed"."""
+    if not approved_by or not approved_by.strip():
+        raise ValueError("approved_by is required")
+    approvals = load_approvals(path)
+    for a in approvals:
+        if a["id"] == approval_id:
+            a["status"] = "approved"
+            a["approved_by"] = approved_by.strip()
+            a["approved_at"] = (as_of or datetime.date.today()).isoformat()
+            a["ad_group_validated"] = ad_group_validated
+            save_approvals(approvals, path)
+            record_activity(approved_by.strip(), "approval.approve", approval_id, {"finding_id": a.get("finding_id")})
+            return a
+    raise KeyError(f"No approval request with id {approval_id!r}")
+
+
+def reject(approval_id, rejected_by, reason, path=None, as_of=None):
+    if not rejected_by or not rejected_by.strip():
+        raise ValueError("rejected_by is required")
+    approvals = load_approvals(path)
+    for a in approvals:
+        if a["id"] == approval_id:
+            a["status"] = "rejected"
+            a["rejected_by"] = rejected_by.strip()
+            a["rejected_at"] = (as_of or datetime.date.today()).isoformat()
+            a["rejection_reason"] = (reason or "").strip() or None
+            save_approvals(approvals, path)
+            record_activity(rejected_by.strip(), "approval.reject", approval_id, {"finding_id": a.get("finding_id"), "reason": a["rejection_reason"]})
+            return a
+    raise KeyError(f"No approval request with id {approval_id!r}")

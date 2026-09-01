@@ -1,0 +1,48 @@
+# Scheduled security report subscriptions for VulnHunter's dashboard.
+#
+# Each entry sends a periodic report, scoped to one security sub-domain, to one team's
+# recipient email address(es) - "sub-domain, team-wise" scheduled reporting. Reports are
+# built from the exact same real, live-computed data as the on-demand /reports page
+# (dashboard/reports.py) - not a separate data source.
+#
+# Read by remediation/notifications/report_scheduler.py, which runs on an in-process
+# timer inside the dashboard server (see dashboard/app.py's startup hook) - this only
+# checks/sends while that server process is alive; if it restarts, timers reset but no
+# subscription is ever double-sent for the same period (last_sent_at below is what
+# prevents that). For guaranteed delivery independent of server uptime, point a real
+# external cron/Task Scheduler at POST /api/notification-settings/run-checks-now instead
+# of relying on the in-process timer.
+#
+# Actually delivering email requires a real SMTP relay configured via the SMTP_HOST/
+# SMTP_PORT/SMTP_FROM_ADDRESS (+ optional SMTP_USERNAME/SMTP_PASSWORD/SMTP_USE_TLS)
+# environment variables - see remediation/notifications/email_sender.py. Until those are
+# set, due subscriptions are logged as skipped, never silently dropped.
+#
+# Edit this file directly, or use the dashboard's /notification-settings page.
+#
+# Fields per subscription:
+#   id            - unique string, used to track when it was last sent and dedupe
+#   scope         - one of: all, infra-vm, sca, cert-mgmt, dast, iac, secrets, runtime,
+#                   ai-ml (matches this app's existing scan_type taxonomy: "all" is the
+#                   whole landscape, anything else scopes to that one sub-domain)
+#   team          - a team name as it appears in remediation/inventory/asset_ownership.json
+#                   (e.g. "Identity & Domain Services") - only findings on assets owned by
+#                   this team are included
+#   cadence       - one of: weekly, monthly, quarterly, half-yearly, yearly
+#   recipients    - list of email addresses
+#   enabled       - true/false (false entries are never sent, but stay editable)
+#
+# When a subscription last actually sent is tracked separately, in
+# remediation/notifications/schedule_state.json - NOT in this file, so an admin's own
+# comments/formatting here never get silently stripped by the scheduler's own writes.
+#
+# Example (disabled, for reference - copy and edit to add a real one):
+# subscriptions:
+#   - id: "infra-weekly-identity"
+#     scope: "infra-vm"
+#     team: "Identity & Domain Services"
+#     cadence: "weekly"
+#     recipients: ["identity-team@example.com"]
+#     enabled: false
+
+subscriptions: []

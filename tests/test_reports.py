@@ -152,8 +152,8 @@ class RealArtifactIntegration(unittest.TestCase):
 
     def test_generate_report_data_against_real_artifacts(self):
         data = reports.generate_report_data("weekly", self.dashboard_data)
-        self.assertGreaterEqual(data["remediation_total"], 2415)
-        self.assertEqual(data["vulnhunt_total"], 9)
+        self.assertGreaterEqual(data["remediation_total"], 7440)
+        self.assertEqual(data["vulnhunt_total"], 18)
         self.assertLessEqual(len(data["top_priority_findings"]), 5)
 
     def test_render_report_html_against_real_artifacts(self):

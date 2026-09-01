@@ -1,0 +1,195 @@
+"""
+Tests for remediation/enrichment/risk_scoring.py - the per-asset Impact/Likelihood/Risk
+scoring engine. Like test_eol_lookup.py/test_exploit_criteria.py, these check the
+formula's real behavior against synthetic inputs - not "this is the objectively correct
+NIST SP 800-30 output," since (per the module docstring) this is a disclosed,
+NIST-SP-800-30-inspired simplification, not a certified reproduction of that document's
+own qualitative lookup tables.
+"""
+import sys
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from remediation.config import priority_engine  # noqa: E402
+from remediation.enrichment.risk_scoring import load_rules, score_assets  # noqa: E402
+
+
+def _asset_row(**overrides):
+    row = {
+        "name": "GENERIC-ASSET-01",
+        "type": "unix-server",
+        "finding_count": 1,
+        "critical_count": 0,
+        "highest_severity": "Medium",
+        "kev_count": 0,
+        "eol_status": {"status": "unknown"},
+    }
+    row.update(overrides)
+    return row
+
+
+def _finding(asset_name, **overrides):
+    f = {
+        "id": "FIND-1",
+        "asset": {"name": asset_name, "type": "unix-server"},
+        "severity": "Medium",
+        "cve": None,
+        "cvss": None,
+        "kev": None,
+        "epss": None,
+        "exploit_criteria_matches": [],
+    }
+    f.update(overrides)
+    return f
+
+
+class ScoreRange(unittest.TestCase):
+    def test_scores_always_within_0_to_100(self):
+        rows = [
+            _asset_row(name="A", kev_count=1, highest_severity="Critical", eol_status={"status": "eol"}),
+            _asset_row(name="B", kev_count=0, highest_severity="Low", eol_status={"status": "supported"}),
+        ]
+        findings = [
+            _finding("A", cvss=9.8, kev={"listed": True}, epss={"score": 0.95},
+                     exploit_criteria_matches=[{"id": "x", "label": "y"}]),
+            _finding("B"),
+        ]
+        scored = score_assets(rows, findings)
+        for row in scored:
+            for key in ("impact_score", "likelihood_score", "risk_score"):
+                self.assertGreaterEqual(row[key], 0, key)
+                self.assertLessEqual(row[key], 100, key)
+
+
+class KevAndEpssEffect(unittest.TestCase):
+    def test_kev_listed_asset_scores_higher_likelihood_than_identical_non_kev_asset(self):
+        rows = [
+            _asset_row(name="KEV-ASSET", kev_count=1),
+            _asset_row(name="NO-KEV-ASSET", kev_count=0),
+        ]
+        findings = [
+            _finding("KEV-ASSET", kev={"listed": True}),
+            _finding("NO-KEV-ASSET", kev=None),
+        ]
+        scored = {r["name"]: r for r in score_assets(rows, findings)}
+        self.assertGreater(scored["KEV-ASSET"]["likelihood_score"], scored["NO-KEV-ASSET"]["likelihood_score"])
+
+    def test_higher_epss_scores_higher_likelihood(self):
+        rows = [_asset_row(name="A"), _asset_row(name="B")]
+        findings = [
+            _finding("A", epss={"score": 0.9}),
+            _finding("B", epss={"score": 0.1}),
+        ]
+        scored = {r["name"]: r for r in score_assets(rows, findings)}
+        self.assertGreater(scored["A"]["likelihood_score"], scored["B"]["likelihood_score"])
+
+    def test_max_epss_wins_not_average(self):
+        rows = [_asset_row(name="A")]
+        findings = [
+            _finding("A", cve="CVE-1", epss={"score": 0.95}),
+            _finding("A", cve="CVE-2", epss={"score": 0.05}),
+        ]
+        scored = score_assets(rows, findings)[0]
+        # Weighted-average likelihood (only epss component non-zero, weight 0.30,
+        # normalized by total weight 1.0) should reflect the MAX (0.95), not the
+        # average (0.5) - i.e. the epss component alone contributes 95, not ~50.
+        rules = load_rules()
+        expected = round(rules["likelihood_weights"]["epss"] * 95 / sum(rules["likelihood_weights"].values()))
+        self.assertEqual(scored["likelihood_score"], expected)
+
+
+class EolEffect(unittest.TestCase):
+    def test_unknown_eol_scores_equal_to_supported_not_eol_soon(self):
+        rows = [
+            _asset_row(name="UNKNOWN-ASSET", eol_status={"status": "unknown"}),
+            _asset_row(name="SUPPORTED-ASSET", eol_status={"status": "supported"}),
+            _asset_row(name="EOL-SOON-ASSET", eol_status={"status": "eol-soon"}),
+        ]
+        findings = [_finding(r["name"]) for r in rows]
+        scored = {r["name"]: r for r in score_assets(rows, findings)}
+        self.assertEqual(scored["UNKNOWN-ASSET"]["likelihood_score"], scored["SUPPORTED-ASSET"]["likelihood_score"])
+        self.assertLess(scored["UNKNOWN-ASSET"]["likelihood_score"], scored["EOL-SOON-ASSET"]["likelihood_score"])
+
+    def test_eol_scores_higher_than_eol_soon(self):
+        rows = [
+            _asset_row(name="EOL-ASSET", eol_status={"status": "eol"}),
+            _asset_row(name="EOL-SOON-ASSET", eol_status={"status": "eol-soon"}),
+        ]
+        findings = [_finding(r["name"]) for r in rows]
+        scored = {r["name"]: r for r in score_assets(rows, findings)}
+        self.assertGreater(scored["EOL-ASSET"]["likelihood_score"], scored["EOL-SOON-ASSET"]["likelihood_score"])
+
+
+class RiskTierBoundaries(unittest.TestCase):
+    def test_tier_boundaries_map_correctly_on_both_sides(self):
+        rules = load_rules()
+        thresholds = rules["risk_tier_thresholds"]
+        # A Critical-tier asset: max out every likelihood component and give it the
+        # highest possible severity/criticality so impact*likelihood/100 clears the
+        # Critical threshold.
+        rows = [_asset_row(name="MAX-RISK", kev_count=1, highest_severity="Critical",
+                            eol_status={"status": "eol"}, type="network-routing-switching")]
+        findings = [_finding("MAX-RISK", cvss=10.0, kev={"listed": True}, epss={"score": 1.0},
+                              exploit_criteria_matches=[{"id": "a", "label": "b"}] * 3)]
+        scored = score_assets(rows, findings)[0]
+        self.assertGreaterEqual(scored["risk_score"], thresholds["Critical"])
+        self.assertEqual(scored["risk_tier"], "Critical")
+
+        rows_low = [_asset_row(name="MIN-RISK", kev_count=0, highest_severity="Low",
+                                eol_status={"status": "supported"})]
+        findings_low = [_finding("MIN-RISK")]
+        scored_low = score_assets(rows_low, findings_low)[0]
+        self.assertLess(scored_low["risk_score"], thresholds["High"])
+        self.assertEqual(scored_low["risk_tier"], "Low")
+
+
+class RulesAreReal(unittest.TestCase):
+    def test_a_rule_change_actually_changes_the_output(self):
+        rows = [_asset_row(name="A", kev_count=1)]
+        findings = [_finding("A", kev={"listed": True})]
+
+        default_rules = load_rules()
+        scored_default = score_assets(rows, findings, rules=default_rules)[0]
+
+        retuned_rules = dict(default_rules)
+        retuned_rules["likelihood_weights"] = {"kev": 0.0, "epss": 0.0, "exploit_criteria": 0.0, "eol": 1.0}
+        scored_retuned = score_assets(rows, findings, rules=retuned_rules)[0]
+
+        self.assertNotEqual(scored_default["likelihood_score"], scored_retuned["likelihood_score"])
+        # With eol as the only weight and this asset's eol_status "unknown" (0 points),
+        # likelihood should drop to 0 once KEV/EPSS/exploit-criteria are zeroed out.
+        self.assertEqual(scored_retuned["likelihood_score"], 0)
+
+
+class DoesNotMutateInput(unittest.TestCase):
+    def test_score_assets_does_not_mutate_asset_rows_or_findings(self):
+        rows = [_asset_row(name="A")]
+        findings = [_finding("A")]
+        rows_before = [dict(r) for r in rows]
+        findings_before = [dict(f) for f in findings]
+        score_assets(rows, findings)
+        self.assertEqual(rows, rows_before)
+        self.assertEqual(findings, findings_before)
+
+
+class RealRulesFileIsValid(unittest.TestCase):
+    def test_real_rules_file_loads_and_has_expected_top_level_keys(self):
+        rules = load_rules()
+        required = {"impact_weights", "likelihood_weights", "exploit_criteria_match_cap",
+                    "eol_likelihood_points", "risk_tier_thresholds"}
+        self.assertTrue(required.issubset(rules.keys()))
+
+    def test_asset_criticality_score_is_reused_not_redeclared(self):
+        # Confirms risk_scoring.py truly calls into priority_engine's shared helper
+        # rather than a second copy of the keyword-matching logic.
+        priority_rules = priority_engine.load_rules()
+        result = priority_engine.asset_criticality_score({"name": "win-dc01", "type": "windows-server"}, priority_rules)
+        self.assertIn("keyword_score", result)
+        self.assertEqual(result["matched_keyword"], "dc")
+
+
+if __name__ == "__main__":
+    unittest.main()

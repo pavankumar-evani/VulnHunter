@@ -30,7 +30,7 @@ the [docs/README.md](README.md) index.
 | **Protect** | The tool-scoping safety model — each subagent has only the tools its job requires (e.g. `remediation-fixer-windows`/`-unix` have `Read`/`Write` only, no execution or network capability at all), which is a least-privilege concept applied architecturally rather than by policy | `.claude/agents/*.md` frontmatter; see [KNOWLEDGE_TRANSFER.md §4.3](../KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision) |
 | **Detect** | Code vulnerability scanning (`vuln-scanner`) plus real-world exploitation-likelihood enrichment (CISA KEV + FIRST.org EPSS), and MITRE ATT&CK keyword tagging as a rough detection-technique grouping | `.claude/agents/vuln-scanner.md`, `remediation/enrichment/kev_epss.py`, `remediation/enrichment/attack_mapping.py` |
 | **Respond** | Risk-tiered, prioritized remediation planning (`remediation-planner`) plus optional ServiceNow Incident creation for tracking response work in an org's own ITSM tool | `remediation-planner.md`, `remediation/connectors/servicenow_connector.py` |
-| **Recover** | Every remediation plan entry and generated playbook carries an explicit `rollback_plan` / rollback comment, so a reviewer isn't starting from zero if a change needs to be undone | `remediation-planner.md`'s `rollback_plan` field; playbook header comments in `remediation/output/*.yml` |
+| **Recover** | Every generated playbook carries a real, human-written `# Rollback: ...` header comment, now surfaced directly on the Remediation Approvals page (not just inside the playbook file), so a reviewer isn't starting from zero if a change needs to be undone | Playbook header comments in `remediation/output/*.yml`; `dashboard/data.py`'s `_parse_rollback_plan()`; `/remediation-approvals`'s "Rollback Plan" column |
 
 ## SOC 2 Trust Services Criteria — conceptual mapping
 
@@ -43,6 +43,45 @@ the [docs/README.md](README.md) index.
 third party.** It is a map of "this exists and points in that direction," not evidence
 that any control operates effectively over time — which is what SOC 2 and NIST CSF
 assessments actually require.
+
+## Patch Management Standards (NIST SP 800-40r4 / CIS Controls v8 §7 / ISO 27002:2022 §8.8, §8.32) — conceptual mapping
+
+| Control | Existing capability it conceptually relates to | Where it lives |
+|---|---|---|
+| **NIST SP 800-40r4 — risk-based prioritization** | Configurable, weighted priority scoring (severity + asset criticality + asset type), with real CISA KEV/FIRST.org EPSS overrides so a confirmed-exploited or high-likelihood finding is never silently deprioritized | `remediation/config/priority_engine.py`, `remediation/config/priority_rules.yaml` |
+| **CIS Controls v8 §7.1/7.4 — establish and maintain a remediation process** | Real per-finding remediation plans (action type, automation mechanism, risk tier) and generated, reviewable Ansible playbooks/PowerShell DSC — always an artifact for a human/change-management process to run, never auto-applied | `remediation-planner.md`, `remediation-fixer-windows.md`/`-unix.md`, `remediation/output/*.yml` |
+| **CIS Controls v8 §7.2 — asset-criticality-tiered remediation timelines** | SLA windows are no longer keyed on finding severity alone — a real, disclosed asset `risk_tier` (Impact × Likelihood, see `remediation/enrichment/risk_scoring.py`) multiplies the base SLA window, tightening it for a Critical-risk asset and loosening it for a Low-risk one | `remediation/config/priority_engine.py`'s `compute_sla()`; `sla_risk_tier_multiplier` in `priority_rules.yaml` |
+| **ISO/IEC 27002:2022 §8.32 — change management (test before applying)** | A real, recorded staging-validation attestation (who tested the change in a staging/test environment, and when) as an explicit step alongside the existing change-approval workflow | `remediation/remediation_approvals/store.py`'s `mark_staging_validated()`; `/remediation-approvals`'s "Staging Validation" column |
+| **ISO/IEC 27002:2022 §8.32 — rollback/recovery procedure** | Every generated playbook's real `# Rollback: ...` header comment, now surfaced directly where the approval decision happens, not only inside the playbook file | `remediation/output/*.yml`; `/remediation-approvals`'s "Rollback Plan" column |
+| **CIS Controls v8 §7.5/7.6 — automated vulnerability scanning** | **Not covered.** This app ingests already-scanned findings (Tenable/Armis exports or APIs, or its own code scanner) — it does not itself run a scheduled, automated infrastructure scan against live hosts. | — |
+| **CIS Controls v8 §7.3 — automated patch deployment** | **Not covered by design.** Every generated remediation is a reviewable artifact for a human/change-management process to run — this app deliberately never executes a patch against real infrastructure (see the safety model). A real automated-deployment pipeline (e.g. Ansible Tower/AWX, SCCM/Intune) would sit downstream of this app's output, not inside it. | — |
+| **Vendor-release / advisory monitoring, configuration-drift detection** | **Not covered.** No polling of vendor patch-release feeds or scheduled config-drift scanning exists; both would need real infrastructure access this demo doesn't have. | — |
+
+## Quantum-Readiness Standards (NIST FIPS 203/204/205 / NIST IR 8547) — conceptual mapping
+
+| Standard | Existing capability it conceptually relates to | Where it lives |
+|---|---|---|
+| **NIST FIPS 203 (ML-KEM), FIPS 204 (ML-DSA), FIPS 205 (SLH-DSA)** — finalized August 2024, the real post-quantum replacements for RSA/Diffie-Hellman key exchange and RSA/ECDSA digital signatures | A real classification of already-normalized findings whose title names classical asymmetric crypto (RSA/ECDSA/Diffie-Hellman), pointing each toward the correct FIPS replacement | `remediation/enrichment/quantum_readiness.py`; `/quantum-readiness` |
+| **NIST IR 8547 migration timeline** (Initial Public Draft, November 2024 — not yet finalized) — RSA/ECDSA/Diffie-Hellman at the weaker, 112-bit-strength parameter tier (e.g. RSA-2048) deprecated after 2030, disallowed after 2035; stronger parameters skip the 2030 step | The real cited deadlines shown alongside every classified finding, and factored into the finding's own remediation policy domain (security-architecture review, not a routine patch) | `remediation/config/remediation_policy.yaml`'s `quantum-crypto` domain; `quantum_readiness.py`'s `NIST_IR_8547_DEPRECATED_BY`/`NIST_IR_8547_DISALLOWED_BY` |
+
+**Not the same as NSA's CNSA 2.0** (PP-22-1338) — a separate, National-Security-Systems-
+specific framework with its own different category-by-category schedule (2025-2033,
+converging with IR 8547 only at a shared 2035 backstop). This app cites IR 8547 only,
+to avoid conflating two real but distinct standards with different numbers.
+
+This is a disclosed keyword classification against each finding's own real title (this
+app's normalized finding schema carries no separate CWE field to join against) - not a
+"quantum vulnerability scanner" (no such product category exists to honestly claim,
+since a quantum computer capable of breaking real-world RSA/ECDSA doesn't exist yet) and
+not a certification against any of the standards named above. See
+`remediation/enrichment/quantum_readiness.py`'s module docstring for the full
+disclosure.
+
+Like the CSF/SOC 2 tables above, this is a conceptual mapping for internal planning, not
+a certification, audit result, or attestation that any of these controls has been tested
+or operates effectively over time — and the three "Not covered" rows are named
+explicitly rather than silently omitted, since a real patch-management program needs
+them regardless of what this app does or doesn't do.
 
 ---
 

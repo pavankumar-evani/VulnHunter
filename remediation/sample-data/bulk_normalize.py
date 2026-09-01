@@ -22,6 +22,7 @@ Existing FIND-1..FIND-N entries in normalized-findings.json are preserved byte-f
 (matched by source + source_ref, never re-numbered) - only genuinely new records from
 the bulk files get new sequential IDs, exactly matching the normalizer's stable-ID rule.
 """
+import argparse
 import csv
 import json
 from pathlib import Path
@@ -29,6 +30,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 BULK_DIR = Path(__file__).resolve().parent / "bulk"
 OUTPUT_PATH = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
+
+# The 15 original, individually hand-curated findings (from before any bulk sourcing) -
+# never removed, renumbered, or regenerated, regardless of any --reset-asset-types run.
+ORIGINAL_FIND_IDS = {f"FIND-{i}" for i in range(1, 16)}
 
 # filename stem -> asset.type, per vuln-ingest-normalizer.md's documented classification
 # rules (each bulk file was generated already knowing which category it represents).
@@ -39,8 +44,18 @@ FILE_TO_ASSET_TYPE = {
     "tenable_bulk_network_security": "network-security-device",
     "tenable_bulk_cloud": "cloud-infrastructure",
     "tenable_bulk_certificate": "certificate",
+    "tenable_bulk_os_apps": "client-application",
     "tenable_bulk_sca": "application",
     "tenable_bulk_dast": "application",
+    "tenable_bulk_iac": "iac-resource",
+    "tenable_bulk_code_repository": "code-repository",
+    "tenable_bulk_code_repository_secrets": "code-repository",
+    "tenable_bulk_runtime": "container-runtime",
+    "tenable_bulk_ai_ml": "ai-ml-system",
+    "tenable_bulk_endpoint_windows": "windows-endpoint",
+    "tenable_bulk_endpoint_mobile": "mobile-device",
+    "tenable_bulk_printer": "printer",
+    "tenable_bulk_virtualization": "virtualization-host",
 }
 
 # Only these two domains have a working remediation-fixer subagent today - same rule
@@ -50,6 +65,24 @@ _REMEDIATION_DOMAIN_SUPPORTED = {"windows-server", "unix-server"}
 
 def _remediation_domain(asset_type):
     return asset_type if asset_type in _REMEDIATION_DOMAIN_SUPPORTED else None
+
+
+# Purely informational, reference-only field - names the REAL-WORLD tool that would
+# normally patch this asset class, since this app has no working SCCM/Intune/vendor
+# API integration for any of them (remediation_domain stays null for all of these -
+# see _REMEDIATION_DOMAIN_SUPPORTED above, unchanged). Deliberately omits asset types
+# where no single tool applies honestly (e.g. network-routing-switching varies too
+# much by vendor to name one mechanism).
+_REMEDIATION_MECHANISM = {
+    "windows-endpoint": "SCCM / Microsoft Configuration Manager",
+    "mobile-device": "MDM (e.g. Microsoft Intune)",
+    "printer": "Vendor firmware update (manual or vendor management console)",
+    "virtualization-host": "Vendor hypervisor patch tooling (e.g. VMware Update Manager)",
+}
+
+
+def _remediation_mechanism(asset_type):
+    return _REMEDIATION_MECHANISM.get(asset_type)
 
 
 def _parse_tenable_csv(path, asset_type):
@@ -74,6 +107,7 @@ def _parse_tenable_csv(path, asset_type):
                 "description": row["Synopsis"],
                 "recommended_fix": row["Solution"],
                 "remediation_domain": _remediation_domain(asset_type),
+                "remediation_mechanism": _remediation_mechanism(asset_type),
                 "first_seen": row["First Discovered"],
                 "last_seen": row["Last Observed"],
             })
@@ -153,14 +187,61 @@ def merge(existing, new_findings):
     return merged, added
 
 
+def compact_bulk_ids(merged):
+    """Renumbers every non-original finding (id not in ORIGINAL_FIND_IDS) to a
+    contiguous FIND-16, FIND-17, ... sequence, preserving relative order - closes any
+    gaps left by drop_bulk_findings_of_type() removing findings from the middle of the
+    range. Safe because only the original 15 findings have external references
+    (playbook filenames like FIND-4-sudo-baron-samedit-patch.yml) - no bulk-sourced
+    finding has a generated playbook, so nothing external points at a bulk FIND-N by
+    number. Several dashboard/tests assert the live finding-ID set is a contiguous
+    FIND-1..FIND-N range, which a gap would break."""
+    original = [f for f in merged if f["id"] in ORIGINAL_FIND_IDS]
+    bulk = [f for f in merged if f["id"] not in ORIGINAL_FIND_IDS]
+    next_id = len(ORIGINAL_FIND_IDS) + 1
+    renumbered = []
+    for f in bulk:
+        f = dict(f)
+        f["id"] = f"FIND-{next_id}"
+        renumbered.append(f)
+        next_id += 1
+    return original + renumbered
+
+
+def drop_bulk_findings_of_type(existing, asset_types):
+    """Removes every non-original finding (id not in ORIGINAL_FIND_IDS) whose
+    asset.type is in `asset_types` - used when re-running the generator with a higher
+    target/different query set for a category, so the old counter-based source_refs
+    from before the CVE-derived stable-ID fix don't linger as orphaned duplicates
+    alongside the freshly re-merged versions of the same real CVEs."""
+    kept = [f for f in existing
+            if f["id"] in ORIGINAL_FIND_IDS or (f.get("asset") or {}).get("type") not in asset_types]
+    return kept, len(existing) - len(kept)
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--reset-asset-types", nargs="*", default=[],
+                         help="Asset types to fully drop (except the original 15 findings) before "
+                              "re-merging - use when a category's bulk data was regenerated with a "
+                              "different ID scheme or target and would otherwise duplicate.")
+    args = parser.parse_args()
+
     existing = json.loads(OUTPUT_PATH.read_text(encoding="utf-8")) if OUTPUT_PATH.exists() else []
     print(f"Existing findings: {len(existing)}")
+
+    if args.reset_asset_types:
+        existing, dropped = drop_bulk_findings_of_type(existing, set(args.reset_asset_types))
+        print(f"Dropped {dropped} previously-merged bulk findings for asset types {args.reset_asset_types} "
+              f"(will be re-added fresh from the regenerated CSVs below).")
 
     print("Parsing bulk fixture files:")
     new_findings = load_bulk_findings()
 
     merged, added = merge(existing, new_findings)
+    if args.reset_asset_types:
+        merged = compact_bulk_ids(merged)
+        print("Renumbered non-original findings to close any ID gaps left by the reset above.")
     OUTPUT_PATH.write_text(json.dumps(merged, indent=2), encoding="utf-8")
 
     print(f"\nAdded {added} new findings (of {len(new_findings)} parsed - the rest already existed).")

@@ -14,6 +14,9 @@ by hand; this is the honest MVP version of that idea (see KNOWLEDGE_TRANSFER.md)
 import json
 from pathlib import Path
 
+from remediation.audit.activity_log import record_activity
+from remediation.enrichment.eol_lookup import classify_eol
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_OWNERSHIP_PATH = Path(__file__).resolve().parent / "asset_ownership.json"
 
@@ -25,6 +28,20 @@ _SEVERITY_RANK = {"Critical": 3, "High": 2, "Medium": 1, "Low": 0}
 # "unknown" is the honest default until someone actually sets it - never guessed.
 VALID_FACING_VALUES = ("external", "internal", "unknown")
 DEFAULT_FACING = "unknown"
+
+# Same manually-set, never-guessed convention as facing above - lets the remediation
+# policy engine (remediation/config/remediation_policy_engine.py) apply a distinct
+# auto-remediate/no-approval-needed policy to non-production assets. "unknown" (not
+# "prod") is the honest default until someone actually tags an asset - this app has no
+# way to infer environment from a hostname or scan result reliably.
+VALID_ENVIRONMENT_VALUES = ("prod", "staging", "dev", "unknown")
+DEFAULT_ENVIRONMENT = "unknown"
+
+# Same string-enum convention remediation_policy.yaml's own per-domain `cadence` field
+# already uses (see that file's header comment) - an asset-level override is meant to be
+# directly interchangeable with a domain's default, not a second, incompatible
+# representation ("every N days") of the same real concept.
+VALID_CADENCE_VALUES = ("weekly", "monthly", "quarterly", "half-yearly", "yearly", "on-demand")
 
 
 def load_ownership(path=None):
@@ -44,7 +61,7 @@ def save_ownership(ownership, path=None):
     path.write_text(json.dumps(ownership, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def set_owner(asset_name, owner, team, path=None):
+def set_owner(asset_name, owner, team, actor=None, path=None):
     if not asset_name:
         raise ValueError("asset_name is required")
     ownership = load_ownership(path)
@@ -54,10 +71,11 @@ def set_owner(asset_name, owner, team, path=None):
     entry["owner"] = owner or ""
     entry["team"] = team or ""
     save_ownership(ownership, path)
+    record_activity(actor, "asset.set_owner", asset_name, {"owner": entry["owner"], "team": entry["team"]})
     return entry
 
 
-def set_facing(asset_name, facing, path=None):
+def set_facing(asset_name, facing, actor=None, path=None):
     if not asset_name:
         raise ValueError("asset_name is required")
     if facing not in VALID_FACING_VALUES:
@@ -66,6 +84,44 @@ def set_facing(asset_name, facing, path=None):
     entry = ownership.setdefault(asset_name, {})
     entry["facing"] = facing
     save_ownership(ownership, path)
+    record_activity(actor, "asset.set_facing", asset_name, {"facing": facing})
+    return entry
+
+
+def set_environment(asset_name, environment, actor=None, path=None):
+    if not asset_name:
+        raise ValueError("asset_name is required")
+    if environment not in VALID_ENVIRONMENT_VALUES:
+        raise ValueError(f"environment must be one of {VALID_ENVIRONMENT_VALUES}, got {environment!r}")
+    ownership = load_ownership(path)
+    entry = ownership.setdefault(asset_name, {})
+    entry["environment"] = environment
+    save_ownership(ownership, path)
+    record_activity(actor, "asset.set_environment", asset_name, {"environment": environment})
+    return entry
+
+
+def set_remediation_schedule(asset_name, cadence=None, maintenance_window=None, actor=None, path=None):
+    """Per-asset remediation-schedule override - checked by
+    remediation/config/remediation_policy_engine.py's policy_for_finding() before it
+    falls back to the finding's remediation_domain's own default cadence/maintenance
+    window (same override-precedence pattern already proven for environment=='dev').
+    `cadence` uses the same string enum as a domain's own cadence field (see
+    VALID_CADENCE_VALUES) - never a second, incompatible representation of the same
+    concept. Pass cadence=None and maintenance_window=None to clear an existing
+    override and revert the asset to its domain's default schedule."""
+    if not asset_name:
+        raise ValueError("asset_name is required")
+    if cadence is not None and cadence not in VALID_CADENCE_VALUES:
+        raise ValueError(f"cadence must be one of {VALID_CADENCE_VALUES} or None, got {cadence!r}")
+    ownership = load_ownership(path)
+    entry = ownership.setdefault(asset_name, {})
+    if cadence is None and maintenance_window is None:
+        entry.pop("remediation_schedule", None)
+    else:
+        entry["remediation_schedule"] = {"cadence": cadence, "maintenance_window": maintenance_window}
+    save_ownership(ownership, path)
+    record_activity(actor, "asset.set_remediation_schedule", asset_name, entry.get("remediation_schedule"))
     return entry
 
 
@@ -85,18 +141,21 @@ def build_asset_inventory(findings, ownership=None):
             "type": asset.get("type", "unknown"),
             "ip": asset.get("ip"),
             "mac": asset.get("mac"),
+            "os": asset.get("os"),
             "finding_count": 0,
             "critical_count": 0,
             "highest_severity": None,
             "kev_count": 0,
         })
-        # A later finding for the same asset might carry an ip/mac the first one
+        # A later finding for the same asset might carry an ip/mac/os the first one
         # didn't (findings are otherwise independent per-scan records) - backfill
         # rather than overwrite, so the first non-null value wins either way.
         if not row["ip"] and asset.get("ip"):
             row["ip"] = asset.get("ip")
         if not row["mac"] and asset.get("mac"):
             row["mac"] = asset.get("mac")
+        if not row["os"] and asset.get("os"):
+            row["os"] = asset.get("os")
         row["finding_count"] += 1
         severity = f.get("severity")
         if severity == "Critical":
@@ -113,6 +172,9 @@ def build_asset_inventory(findings, ownership=None):
         row["owner"] = owner_info.get("owner") or None
         row["team"] = owner_info.get("team") or None
         row["facing"] = owner_info.get("facing") or DEFAULT_FACING
+        row["environment"] = owner_info.get("environment") or DEFAULT_ENVIRONMENT
+        row["remediation_schedule"] = owner_info.get("remediation_schedule")
+        row["eol_status"] = classify_eol(row["os"])
         rows.append(row)
 
     rows.sort(key=lambda r: (-r["finding_count"], r["name"]))

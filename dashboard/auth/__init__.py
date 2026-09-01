@@ -21,6 +21,8 @@ Modules:
   this repo carries (ServiceNow, Jira, Splunk, CrowdStrike, Tenable, Armis).
 - `rbac.py` - FastAPI dependencies (`get_current_user`, `require_login`,
   `require_admin`) used to gate sensitive routes in `dashboard/app.py`.
+- `login_audit.py` - records every login attempt (success or failure, never the
+  password) into the shared `remediation/audit/activity_log.py` feed.
 
 Scope decision (stated plainly, not hidden): only sensitive *mutation* endpoints are
 gated behind login in this pass - real ServiceNow/Jira/Splunk sends, real pipeline runs,

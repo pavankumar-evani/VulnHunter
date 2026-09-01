@@ -6,26 +6,34 @@
 import { api } from "../api.js";
 import { escapeHtml, flash } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
+import { buildOwnerTeamMaps } from "../assetLookup.js";
+import {
+  severityChartBlockHtml, buildTopRankings, topRankingsHtml, wireTopRankings, teamPriorityChartBlockHtml,
+  agingChartBlockHtml, agingByPriorityTableHtml, agingDisclaimerHtml,
+} from "../domainSummary.js";
+import { countBy } from "../charts.js";
+import { aiTrendAnalysisSectionHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Risk Management";
-
-const VULN_EXPORT_COLUMNS = [
-  { label: "Vulnerability", value: (g) => g.title },
-  { label: "CVE", value: (g) => g.cve },
-  { label: "Severity", value: (g) => g.severity },
-  { label: "Affected Assets", value: (g) => g.assetCount },
-  { label: "Assets", value: (g) => g.assetNames.join("; ") },
-  { label: "Owner(s)", value: (g) => g.owners.join("; ") },
-];
 
 const ASSET_EXPORT_COLUMNS = [
   { label: "Asset", value: (a) => a.name },
   { label: "Type", value: (a) => a.type },
   { label: "Critical Findings", value: (a) => a.critical_count },
   { label: "KEV", value: (a) => a.kev_count },
+  { label: "Risk Score", value: (a) => a.risk_score },
+  { label: "Risk Tier", value: (a) => a.risk_tier },
   { label: "Facing", value: (a) => a.facing },
   { label: "Owner", value: (a) => a.owner },
 ];
+
+// Same badge convention as Asset Inventory/Asset Mapping's own risk column - see
+// Asset Inventory's callout for the NIST SP 800-30-inspired disclosure this shares.
+function riskCellHtml(a) {
+  if (typeof a.risk_score !== "number") return `<span class="muted">—</span>`;
+  return `<span class="badge badge-${(a.risk_tier || "").toLowerCase()}" data-tooltip="Impact ${a.impact_score} × Likelihood ${a.likelihood_score} (NIST SP 800-30-inspired, not a certified assessment)">${a.risk_score}</span>`;
+}
 
 // Canonical MITRE kill-chain tactic order (attack.mitre.org) - only tactics this
 // heuristic actually maps to appear as columns; see attack_mapping.py's module
@@ -86,49 +94,6 @@ function facingSelect(asset) {
     </select>`;
 }
 
-// Groups live-queue findings into "vulnerability types" - keyed by CVE when the
-// finding has one (the real, unambiguous identifier), falling back to its title
-// otherwise (e.g. certificate-expiry findings, which have no CVE). Shows how many
-// distinct assets each vulnerability type touches and who owns them, so "we have 6
-// Critical findings" becomes "which ONE vulnerability is spread across the most
-// assets, and whose problem is it to fix."
-function groupVulnerabilitiesByType(findings, ownerByAssetName) {
-  const rank = { Critical: 3, High: 2, Medium: 1, Low: 0 };
-  const groups = new Map();
-  for (const f of findings) {
-    const key = f.cve || f.title;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        key, title: f.title, cve: f.cve || null, severity: f.severity || f.priority,
-        assetNames: new Set(), owners: new Set(),
-      });
-    }
-    const g = groups.get(key);
-    if (rank[f.severity] > rank[g.severity]) g.severity = f.severity;
-    const assetName = f.asset && f.asset.name;
-    if (assetName) {
-      g.assetNames.add(assetName);
-      const owner = ownerByAssetName.get(assetName);
-      g.owners.add(owner || "Unowned");
-    }
-  }
-  return [...groups.values()]
-    .map((g) => ({ ...g, assetCount: g.assetNames.size, assetNames: [...g.assetNames], owners: [...g.owners] }))
-    .sort((a, b) => b.assetCount - a.assetCount);
-}
-
-function topVulnerabilityRows(groups) {
-  return groups.map((g) => `
-    <tr>
-      <td>${escapeHtml(g.title)}</td>
-      <td>${g.cve ? `<code>${escapeHtml(g.cve)}</code>` : `<span class="muted">-</span>`}</td>
-      <td><span class="badge badge-${(g.severity || "").toLowerCase()}">${escapeHtml(g.severity || "?")}</span></td>
-      <td><span class="badge badge-critical">${g.assetCount}</span></td>
-      <td title="${g.assetNames.map(escapeHtml).join(', ')}">${escapeHtml(g.assetNames.slice(0, 3).join(", "))}${g.assetNames.length > 3 ? ` +${g.assetNames.length - 3} more` : ""}</td>
-      <td>${escapeHtml(g.owners.join(", "))}</td>
-    </tr>`).join("");
-}
-
 function topAssetsRows(assets) {
   return assets.map((a) => `
     <tr>
@@ -136,6 +101,7 @@ function topAssetsRows(assets) {
       <td>${escapeHtml(a.type)}</td>
       <td><span class="badge badge-critical">${a.critical_count}</span></td>
       <td>${a.kev_count > 0 ? `<span class="badge badge-critical">${a.kev_count} KEV</span>` : `<span class="muted">-</span>`}</td>
+      <td>${riskCellHtml(a)}</td>
       <td>${facingSelect(a)}</td>
       <td>${escapeHtml(a.owner || "Unowned")}</td>
     </tr>`).join("");
@@ -147,11 +113,16 @@ export async function render(container) {
     api.attackHeatmap(), api.assetsList(), api.queue(),
   ]);
   const assets = assetsData.assets;
-  const ownerByAssetName = new Map(assets.map((a) => [a.name, a.owner]));
-  const vulnerabilityGroups = groupVulnerabilitiesByType(queueData.findings, ownerByAssetName).slice(0, 10);
+  const { ownerByAssetName, teamByAssetName } = buildOwnerTeamMaps(assets);
+  const rankings = buildTopRankings(queueData.findings, ownerByAssetName, teamByAssetName);
 
+  // Re-ranked by overall Risk Score (Impact x Likelihood - see risk_scoring.py), not
+  // raw critical_count alone: among assets that already have a Critical finding, this
+  // surfaces the ones whose real threat-intel signals (KEV/EPSS/EOL/exploit-criteria)
+  // make them genuinely the most urgent, not just whichever happens to have the most
+  // Critical-tagged rows.
   const topCritical = [...assets].filter((a) => a.critical_count > 0)
-    .sort((a, b) => b.critical_count - a.critical_count).slice(0, 10);
+    .sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0)).slice(0, 5);
 
   const facingCounts = { external: 0, internal: 0, unknown: 0 };
   const facingCriticalCounts = { external: 0, internal: 0, unknown: 0 };
@@ -174,6 +145,22 @@ export async function render(container) {
       <div class="kpi-card"><div class="kpi-value">${facingCounts.unknown || 0}</div><div class="kpi-label">Assets with no facing classification yet</div></div>
     </div>
 
+    <div class="chart-row">
+      ${severityChartBlockHtml(queueData.findings)}
+    </div>
+
+    <div class="chart-row">
+      ${teamPriorityChartBlockHtml(queueData.findings, teamByAssetName)}
+    </div>
+
+    <h2 style="margin-top:28px">Open-finding age (30/60/90-day backlog aging)</h2>
+    ${agingDisclaimerHtml()}
+    <div class="chart-row">
+      ${agingChartBlockHtml(queueData.findings)}
+    </div>
+    <h3 style="margin-top:20px">By priority</h3>
+    ${agingByPriorityTableHtml(queueData.findings)}
+
     <h2>MITRE ATT&amp;CK heat map</h2>
     <p class="filter-count" style="margin:-4px 0 8px">
       Counts of live-queue findings per tactic/technique - keyword heuristic, not
@@ -184,10 +171,17 @@ export async function render(container) {
     ${renderHeatmap(heatmapData.heatmap)}
 
     <h2 style="margin-top:28px">Top assets by critical findings</h2>
+    <p class="filter-count" style="margin:-4px 0 8px">
+      Top 5 shown here, ranked by overall Risk Score (Impact × Likelihood - hover a
+      score for its breakdown), not raw Critical-finding count alone. For the full
+      ranked list (by distinct vulnerability count, clickable, with
+      owner/team/EOL-EOS/SLA/date filters), see
+      <a href="/asset-mapping" data-link>the Asset Mapping dashboard →</a>
+    </p>
     ${exportButtonsHtml("top-assets")}
     <div class="table-scroll">
       <table class="data-table">
-        <thead><tr><th>Asset</th><th>Type</th><th>Critical</th><th>KEV</th><th>Facing</th><th>Owner</th></tr></thead>
+        <thead><tr><th>Asset</th><th>Type</th><th>Critical</th><th>KEV</th><th>Risk Score</th><th>Facing</th><th>Owner</th></tr></thead>
         <tbody id="top-assets-body">${topAssetsRows(topCritical)}</tbody>
       </table>
     </div>
@@ -200,19 +194,13 @@ export async function render(container) {
         External exposure + Critical severity is the highest-priority combination on this page.
       </div>` : ""}
 
-    <h2 style="margin-top:28px">Top vulnerabilities by type</h2>
-    <p class="filter-count" style="margin:-4px 0 8px">
-      Grouped by CVE (or title, for findings with no CVE - e.g. certificate expiry) -
-      "affected assets" is how many distinct assets carry this exact vulnerability.
+    ${topRankingsHtml("risk-hub", rankings)}
+    <p class="filter-count" style="margin:-10px 0 12px">
+      "Top 5 assets by distinct-vulnerability count" above is a different metric than
+      "Top assets by critical findings" further up this page - one counts every real,
+      distinct vulnerability an asset carries, the other counts only Critical-severity
+      findings. Both are genuinely useful, for different questions.
     </p>
-    ${exportButtonsHtml("top-vulns")}
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead><tr><th>Vulnerability</th><th>CVE</th><th>Severity</th><th>Affected Assets</th><th>Assets</th><th>Owner(s)</th></tr></thead>
-        <tbody>${topVulnerabilityRows(vulnerabilityGroups)}</tbody>
-      </table>
-    </div>
-    ${!vulnerabilityGroups.length ? `<p class="empty-state">No findings in the live queue.</p>` : ""}
 
     <h2 style="margin-top:28px">Severity definitions (CVSS v3.1)</h2>
     <div class="table-scroll">
@@ -230,18 +218,16 @@ export async function render(container) {
     </div>
     <p class="filter-count">Per the
       <a href="https://www.first.org/cvss/v3.1/specification-document" target="_blank" rel="noopener">FIRST.org CVSS v3.1 specification</a> -
-      the industry-standard scale, not a VulnHunter-specific invention.</p>`;
+      the industry-standard scale, not a VulnHunter-specific invention.</p>
+
+    ${aiTrendAnalysisSectionHtml("risk-hub", "Risk Management (facing classification, critical findings, Risk Score)")}`;
 
   wireExportButtons(container, "top-assets", {
     getRows: () => topCritical,
     columns: ASSET_EXPORT_COLUMNS,
     filenameBase: "vulnhunter-top-assets",
   });
-  wireExportButtons(container, "top-vulns", {
-    getRows: () => vulnerabilityGroups,
-    columns: VULN_EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-top-vulnerabilities",
-  });
+  wireTopRankings(container, "risk-hub", rankings);
 
   container.querySelector("#top-assets-body").addEventListener("change", async (e) => {
     const select = e.target.closest(".facing-select");
@@ -253,4 +239,38 @@ export async function render(container) {
       flash(err.message, "error");
     }
   });
+
+  wireAiTrendAnalysis(container, "risk-hub", "risk management", async () => {
+    const priorityData = countBy(queueData.findings, (f) => f.priority);
+    const riskTierCounts = countBy(assets, (a) => a.risk_tier || "Unscored");
+    return {
+      "Total assets": assets.length,
+      "Critical findings on external-facing assets": facingCriticalCounts.external || 0,
+      "Critical findings on internal-only assets": facingCriticalCounts.internal || 0,
+      "Assets with no facing classification": facingCounts.unknown || 0,
+      "Assets by risk tier": riskTierCounts.map((d) => `${d.label}=${d.value}`).join(", "),
+      "Priority breakdown (live queue)": priorityData.map((d) => `${d.label}=${d.value}`).join(", "),
+      "Top 5 assets by risk score": topCritical.map((a) => `${a.name}=${a.risk_score}`).join(", "),
+    };
+  });
+
+  const unclassifiedPct = assets.length ? Math.round((facingCounts.unknown / assets.length) * 100) : 0;
+
+  const alerts = [];
+  if (externalCritical.length) {
+    alerts.push(insightAlertHtml(
+      `<strong>${externalCritical.length}</strong> external-facing asset(s) have a Critical finding - the highest-priority combination on this page.`,
+      "danger",
+    ));
+  }
+  if (unclassifiedPct > 50) {
+    alerts.push(insightAlertHtml(
+      `<strong>${unclassifiedPct}%</strong> (${facingCounts.unknown} of ${assets.length}) of assets have no internal/external-facing classification set - edit it directly in the table below.`,
+      "warn",
+    ));
+  }
+
+  // Trimmed to just the one most load-bearing section - see queue.js's own comment on
+  // this same change (Part 11: insights panel now starts collapsed by default).
+  setInsightsContent(insightSectionHtml("On this page", alerts.join("")));
 }

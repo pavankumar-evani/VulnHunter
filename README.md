@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/Deloitte-US-Consulting/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-456%2F456%20passing-brightgreen.svg)](TEST_CASES.md)
+[![Tests](https://img.shields.io/badge/tests-597%2F597%20passing-brightgreen.svg)](TEST_CASES.md)
 
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
@@ -19,7 +19,7 @@ Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
 statement, the idea and why it's built this way, product/solution details for both
 pipelines, step-by-step instructions to actually run everything, test evidence, and a
 troubleshooting log of what broke and how it was fixed. For the detailed test case log
-(456 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
+(597 test cases, steps, expected vs. actual results), see [TEST_CASES.md](TEST_CASES.md).
 For task-oriented usage docs, FAQs, AI commands, integrations, and remediation
 workflows, see the [docs/](docs/README.md) folder.
 
@@ -71,8 +71,12 @@ cannot introduce new ones.
 A deliberately vulnerable Flask app lives in `vulnerable-demo-app/` with 6 planted,
 labeled vulnerabilities in `app.py` (SQL injection, command injection, `eval()` misuse,
 hardcoded API key, plaintext passwords, debug mode) plus 3 more in its `Dockerfile`
-(secret baked into an image layer, root user, unpinned base image) — 9 total. This is
-what we run VulnHunter against on stage.
+(secret baked into an image layer, root user, unpinned base image) — 9 total, plus 9
+more in two more fixture files, `ai_assistant.py` (AI/ML: hardcoded LLM API key,
+insecure model deserialization, prompt injection, excessive agency) and `admin_api.py`
+(secrets/API-authorization: hardcoded AWS keys, hardcoded JWT secret, unauthenticated
+admin route, wildcard CORS, mass assignment) — 18 total. This is what we run VulnHunter
+against on stage.
 
 ```bash
 # 1. Point VulnHunter at the vulnerable demo app
@@ -83,11 +87,13 @@ claude
 /vulnhunt vulnerable-demo-app --fix
 ```
 
-Expected result: 9 findings detected in seconds (4 Critical, 2 High, 2 Medium, 1 Low), 6
-auto-fixed on a pushed branch, 3 flagged for human review with a clear reason each (e.g.
-"removing eval() here requires redesigning the /calc endpoint — needs a human decision").
-Opening the actual PR from that branch is one click away in GitHub's web UI or VS Code's
-Source Control panel.
+Expected result: 18 findings detected in seconds (9 Critical, 6 High, 2 Medium, 1 Low),
+11 auto-fixed on a pushed branch, 7 flagged for human review with a clear reason each
+(e.g. "removing eval() here requires redesigning the /calc endpoint — needs a human
+decision"; "requires plugging into the app's actual authentication/authorization
+system, which cannot be inferred or invented safely by an automated fixer" for the
+unauthenticated admin route). Opening the actual PR from that branch is one click away
+in GitHub's web UI or VS Code's Source Control panel.
 
 ## Why this approach
 
@@ -239,19 +245,29 @@ perimeter firewall, an IoT camera and OT controller, a mobile endpoint, a
 Log4Shell-vulnerable application, and 2 certificate/TLS findings) are fully planned in
 `REMEDIATION_PLAN.md` with a clear reason no fixer exists yet for that asset class.
 
-### Optional: bulk real-CVE sample data (2,400 more findings)
+### Optional: bulk real-CVE sample data (8,081 more findings)
 
 The 15 findings above are the original, individually hand-curated set. Separately,
-`remediation/sample-data/generate_bulk_findings.py` sources ~300 additional real,
-distinct CVEs per category (OS, Network, Network Security, Cloud Infrastructure,
-Certificate, SCA, DAST, OT/IoT) from NVD's public CVE API - real CVE IDs, CVSS scores,
-and vendor descriptions, not fabricated - and `bulk_normalize.py` /
-`remediation/enrichment/kev_epss.py` / `bulk_plan.py` merge, classify, and enrich them
-the same way `/remediate` does, at a scale (2,400 findings) an LLM-subagent pass can't
-practically handle. Running `/remediate` fresh (with the default 3 sample files) still
-produces the original 15 - the shipped `remediation/output/normalized-findings.json` and
-`REMEDIATION_PLAN.md` in this repo already include the bulk-expanded 2,415 total. See
-that script's module docstring for exactly what it does and doesn't claim.
+`remediation/sample-data/generate_bulk_findings.py` sources real, distinct CVEs per
+category from NVD's public CVE API - real CVE IDs, CVSS scores, and vendor
+descriptions, not fabricated: ~1,100 each for OS Windows, OS Linux, Network, Network
+Security, and Cloud Infrastructure; ~1,100 for a realistic "OS Applications" category
+(browsers, PDF readers, dev tools, media/utility software, drivers - Chrome, Firefox,
+Adobe Acrobat Reader, VS Code, Notepad++, VLC, 7-Zip, and more); ~300 each for
+Certificate, SCA, and DAST; ~1,100 for OT/IoT via the Armis connector; and three more
+recently-added categories, each hand-authored from real, independently-verified rule
+sets rather than CVE-fetched, same reasoning DAST already documents: ~220 Infrastructure-
+as-Code misconfigurations (real Checkov rule IDs against fictional Terraform/
+CloudFormation resources), ~219 GitHub/GitLab repository findings (a real-CVE
+Dependabot-style half plus a CWE-798 secret-scanning half), and ~218 runtime/container
+security findings (real Falco default rule names). `bulk_normalize.py` /
+`remediation/enrichment/kev_epss.py` / `remediation/enrichment/poc_enrichment.py` /
+`bulk_plan.py` merge, classify, and enrich them the same way `/remediate` does, at a
+scale (~8,100 findings) an LLM-subagent pass can't practically handle. Running
+`/remediate` fresh (with the default 3 sample files) still produces the original 15 -
+the shipped `remediation/output/normalized-findings.json` and `REMEDIATION_PLAN.md` in
+this repo already include the bulk-expanded 8,096 total. See that script's module
+docstring for exactly what it does and doesn't claim.
 
 ## Project structure
 
@@ -303,7 +319,7 @@ that script's module docstring for exactly what it does and doesn't claim.
 ├── docs/                        # USER_GUIDE, FAQ, AI_COMMANDS, INTEGRATIONS,
 │                                #   REMEDIATION_WORKFLOWS, COMPLIANCE_MAPPING (non-
 │                                #   certifying), SUPPORT - see docs/README.md
-├── tests/                       # 456 tests (pipeline artifacts, CLI, dashboard, connectors,
+├── tests/                       # 597 tests (pipeline artifacts, CLI, dashboard, connectors,
 │                                #   enrichment, priority engine, ATT&CK, ServiceNow,
 │                                #   multi-language scanner patterns, AI-assist, reports,
 │                                #   exceptions, asset inventory, generic ingestion,

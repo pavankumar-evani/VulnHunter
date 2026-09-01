@@ -27,6 +27,8 @@ import datetime
 import json
 from pathlib import Path
 
+from remediation.audit.activity_log import record_activity
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_STORE_PATH = Path(__file__).resolve().parent / "exceptions.json"
 
@@ -122,16 +124,24 @@ def create_exception(finding_id, reason, requested_by, approved_by, expires_on,
     }
     exceptions.append(record)
     save_exceptions(exceptions, path)
+    record_activity(requested_by.strip(), "exception.create", record["id"],
+                     {"finding_id": finding_id, "approved_by": record["approved_by"], "expires_on": expires_on})
     return record
 
 
-def revoke_exception(exception_id, path=None):
+def revoke_exception(exception_id, revoked_by=None, path=None, as_of=None):
     """Marks an exception revoked (a permanent, explicit action distinct from
-    expiring). Raises KeyError if no exception with that ID exists."""
+    expiring). Records who revoked it and when - previously this only flipped the
+    status with no who/when trace at all. Raises KeyError if no exception with that ID
+    exists."""
     exceptions = load_exceptions(path)
+    as_of = as_of or datetime.datetime.now(datetime.timezone.utc)
     for e in exceptions:
         if e["id"] == exception_id:
             e["status"] = "revoked"
+            e["revoked_by"] = revoked_by or "unknown"
+            e["revoked_at"] = as_of.isoformat()
             save_exceptions(exceptions, path)
+            record_activity(revoked_by, "exception.revoke", exception_id, {"finding_id": e.get("finding_id")}, as_of=as_of)
             return e
     raise KeyError(f"No exception with id {exception_id!r}")

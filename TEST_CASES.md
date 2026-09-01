@@ -35,7 +35,7 @@ owner/team/type suggestion heuristic for the asset inventory), and
 `tests/test_ai_vuln_taxonomy.py` (the AI/ML vulnerability taxonomy and its
 illustrative MITRE ATLAS cross-reference, same keyword-heuristic honesty pattern as
 `test_attack_mapping.py`), and `tests/test_infra_classification.py` (the OS/Network/
-Network Security/OT-IoT/Cloud sub-classification behind the Infrastructure
+Network Security/OT-IoT/Cloud/OS Applications sub-classification behind the Infrastructure
 Vulnerabilities hub). Every row below
 maps 1:1 to one `test_*` method in one of those files — there is no test case here
 without a corresponding, runnable assertion, and no assertion in any suite that isn't
@@ -50,7 +50,7 @@ pip install -r remediation/config/requirements.txt
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-**Last run:** 562 / 562 passed, 0 failures, 0 errors. Raw output captured in
+**Last run:** 651 / 651 passed, 0 failures, 0 errors. Raw output captured in
 [`tests/test_results.txt`](tests/test_results.txt).
 
 **What these tests do NOT do:** they don't invoke the Claude Code subagents directly
@@ -71,7 +71,9 @@ evidence rather than a mocked demo.
 | Suite | Test class | Test cases | Result |
 |---|---|---|---|
 | `/vulnhunt` scan | `VulnHuntScannerFindsRealVulnerabilities` | TC-SCAN-01 – 07 | 7/7 PASS |
+| `/vulnhunt` scan (AI/API fixtures) | `VulnHuntScannerFindsRealAiAndApiVulnerabilities` | TC-SCAN-08 – 15 | 8/8 PASS |
 | `/vulnhunt` fix | `VulnHuntFixerAppliesOnlyApprovedFixes` | TC-FIX-01 – 08 | 8/8 PASS |
+| `/vulnhunt` fix (AI/API fixtures) | `VulnHuntFixerAppliesAiAndApiFixes` | TC-FIX-09 – 15 | 7/7 PASS |
 | `/vulnhunt` report | `VulnHuntReportIsAccurate` | TC-RPT-01 – 03 | 3/3 PASS |
 | `/remediate` normalize | `RemediationNormalizedFindingsAreWellFormed` | TC-NORM-01 – 09 | 9/9 PASS |
 | `/remediate` plan | `RemediationPlanIsConsistentWithFindings` | TC-PLAN-01 – 02 | 2/2 PASS |
@@ -87,14 +89,14 @@ evidence rather than a mocked demo.
 | Dashboard `/api/playbooks/{filename}` | `ApiPlaybookDetail` | TC-DASH-12 – 13 | 2/2 PASS |
 | Dashboard `/api/run` | `ApiRunPipeline` | TC-DASH-14 – 16 | 3/3 PASS |
 | Dashboard `/api/status` | `ApiStatus` | TC-DASH-17 | 1/1 PASS |
-| Dashboard `/api/queue` (live queue) | `ApiLiveQueue` | TC-DASH-18 – 19, 106 | 3/3 PASS |
+| Dashboard `/api/queue` (live queue) | `ApiLiveQueue` | TC-DASH-18 – 19, 106, 108 | 4/4 PASS |
 | Dashboard `/api/priority-rules` editor | `ApiPriorityRules` | TC-DASH-20 – 22 | 3/3 PASS |
 | Dashboard `/api/servicenow/*` | `ApiServiceNow` | TC-DASH-23 – 25 | 3/3 PASS |
 | Dashboard SPA shell routes | `HtmlShellRoutesServeTheSpaShell` | TC-DASH-26 – 31 | 6/6 PASS |
 | Dashboard `/api/ai-assist` | `ApiAiAssist` | TC-DASH-32 – 38 | 7/7 PASS |
 | Dashboard `/api/reports/*` | `ApiReports` | TC-DASH-39 – 42 | 4/4 PASS |
 | Dashboard `/api/exceptions` (risk-acceptance workflow) | `ApiExceptions` | TC-DASH-43 – 49 | 7/7 PASS |
-| Dashboard `/api/assets` (asset inventory + ownership) | `ApiAssets` | TC-DASH-50 – 51 | 2/2 PASS |
+| Dashboard `/api/assets` (asset inventory + ownership) | `ApiAssets` | TC-DASH-50 – 51, 109 | 3/3 PASS |
 | Dashboard `/api/ingest/generic` (generic webhook ingestion) | `ApiIngestGeneric` | TC-DASH-52 – 56 | 5/5 PASS |
 | Dashboard authentication (login/logout/me/change-password/OIDC) | `ApiAuth` | TC-DASH-57 – 66 | 10/10 PASS |
 | Dashboard auth-gating on existing mutation routes | `ApiRunPipeline`, `ApiPriorityRules`, `ApiServiceNow`, `ApiAiAssist`, `ApiExceptions`, `ApiAssets` (additional cases) | TC-DASH-67 – 81 | 15/15 PASS |
@@ -164,17 +166,31 @@ evidence rather than a mocked demo.
 | AI vulnerability keyword matching (incl. honest-scope check) | `KeywordMatching` | TC-AIVULN-05 – 14 | 10/10 PASS |
 | AI vulnerability batch tagging | `TagFindingsBatch` | TC-AIVULN-15 – 17 | 3/3 PASS |
 | AI vulnerability / MITRE ATLAS heat map | `AiAtlasHeatmap` | TC-AIVULN-18 – 21 | 4/4 PASS |
-| Infra sub-category classification | `ClassifyFinding` | TC-INFRA-01 – 10 | 10/10 PASS |
+| Infra sub-category classification | `ClassifyFinding` | TC-INFRA-01 – 10, 17 | 11/11 PASS |
 | Infra sub-category tagging | `TagInfraCategories` | TC-INFRA-11 – 13 | 3/3 PASS |
 | Infra sub-category counts | `InfraCategoryCounts` | TC-INFRA-14 – 16 | 3/3 PASS |
-| **Total** | | **565** | **565/565 PASS** |
+| EOL/EOS classification | `ClassifyEol` | TC-EOL-01 – 10 | 10/10 PASS |
+| EOL/EOS batch tagging | `TagEolEos` | TC-EOL-11 – 13 | 3/3 PASS |
+| NVD-derived POC/user-interaction signal extraction | `PocAvailable`, `UserInteractionRequired`, `BuildNvdSignalIndex` | TC-POC-01 – 09 | 9/9 PASS |
+| NVD-derived POC signal enrichment + file round-trip | `EnrichFindings`, `EnrichFile` | TC-POC-10 – 14 | 5/5 PASS |
+| Exploit-criteria rule matching | `EvaluateFinding` | TC-EXPLOIT-01 – 10 | 10/10 PASS |
+| Exploit-criteria batch tagging + match counting | `TagExploitCriteria`, `CountMatchesPerRule` | TC-EXPLOIT-11 – 14 | 4/4 PASS |
+| Exploit-criteria shipped rules file validation | `ShippedRulesFile` | TC-EXPLOIT-15 – 16 | 2/2 PASS |
+| Dashboard `/api/exploit-criteria` (get/save/preview/auth-gating) | `ApiExploitCriteria` | TC-DASH-110 – 116 | 7/7 PASS |
+| Dashboard live queue carries `exploit_criteria_matches` | `ApiLiveQueue` (additional case) | TC-DASH-117 | 1/1 PASS |
+| Infra sub-category classification (IaC/runtime/code-repository) | `ClassifyFinding` (additional cases) | TC-INFRA-18 – 21 | 4/4 PASS |
+| Scan-type classification (iac/runtime/secrets) | `ClassifyFinding` (additional cases) | TC-CAT-14 – 18 | 5/5 PASS |
+| New finding categories well-formed (IaC/repo/runtime, ≥200 each) | `NewFindingCategoriesAreWellFormed` | TC-NEWCAT-01 – 07 | 7/7 PASS |
+| **Total** | | **651** | **651/651 PASS** |
 
 ---
 
 ## Suite 1: `/vulnhunt` scanner finds real vulnerabilities
 
 **Purpose:** prove the vulnerable baseline (`master` branch) genuinely contains the flaws
-the demo claims, so later "9 findings" claims aren't testing a strawman.
+the demo claims (9 in `app.py`/`Dockerfile`, plus 9 more added later in `ai_assistant.py`/
+`admin_api.py` - see TC-SCAN-08–15 below), so later "18 findings" claims aren't testing
+a strawman.
 **Preconditions (all TC-SCAN):** repo cloned with full history; `master` branch exists.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
@@ -186,6 +202,19 @@ the demo claims, so later "9 findings" claims aren't testing a strawman.
 | TC-SCAN-05 | Debug mode is hardcoded on | Read `app.py` at `master`; check for `debug=True` | Found | Found | PASS |
 | TC-SCAN-06 | Dockerfile has no non-root `USER` directive | Read `Dockerfile` at `master`; regex for a line starting `USER <name>` | NOT found (negative test) | Not found | PASS |
 | TC-SCAN-07 | Dockerfile bakes the secret into an image layer | Read `Dockerfile` at `master`; regex for `ENV STRIPE_API_KEY="sk_live_...` | Found | Found | PASS |
+
+**Purpose (TC-SCAN-08–15):** same rule, for the 2 fixture files added later
+(`ai_assistant.py`, `admin_api.py`) that back VULN-10 through VULN-18 - prove the
+vulnerable baseline genuinely contains these too, not just the original app.py/Dockerfile.
+
+| TC-SCAN-08 | Hardcoded LLM API key is present | Read `ai_assistant.py` at `master`; regex for `ANTHROPIC_API_KEY = "sk-ant-...` | Found | Found | PASS |
+| TC-SCAN-09 | Insecure `pickle.load` on an uploaded model file is present | Read `ai_assistant.py` at `master`; check for `pickle.load(uploaded_file)` | Found | Found | PASS |
+| TC-SCAN-10 | Prompt-injection-shaped string concatenation is present | Read `ai_assistant.py` at `master`; check for `"User message: " + user_message` | Found | Found | PASS |
+| TC-SCAN-11 | LLM output executed via shell is present | Read `ai_assistant.py` at `master`; check for `subprocess.check_output(llm_command, shell=True)` | Found | Found | PASS |
+| TC-SCAN-12 | Hardcoded AWS access key is present | Read `admin_api.py` at `master`; regex for `AWS_ACCESS_KEY_ID = "AKIA...` | Found | Found | PASS |
+| TC-SCAN-13 | Hardcoded JWT signing secret is present | Read `admin_api.py` at `master`; check for `JWT_SIGNING_SECRET = "vulnshop-demo-jwt-secret...` | Found | Found | PASS |
+| TC-SCAN-14 | Wildcard CORS policy is present | Read `admin_api.py` at `master`; check for `CORS(app, resources={r"/*": {"origins": "*"}})` | Found | Found | PASS |
+| TC-SCAN-15 | Mass assignment on the profile-update endpoint is present | Read `admin_api.py` at `master`; check for `_apply_updates_to_user(user_id, updates)  # e.g.` | Found | Found | PASS |
 
 ---
 
@@ -207,19 +236,33 @@ touched nothing else, and didn't break the file.
 | TC-FIX-07 | Manual-review findings left untouched | Check `eval(expression)` still present AND the plaintext-password `INSERT` still present, unmodified | Both still present (fixer did not touch them) | Both present | PASS |
 | TC-FIX-08 | Fixed file is still valid Python | `compile(app_py_source, "app.py", "exec")` | No `SyntaxError` raised | No error | PASS |
 
+**Purpose (TC-FIX-09–15):** same rule, for the 5 auto-fixable findings in
+`ai_assistant.py`/`admin_api.py` (VULN-10, 14, 15, 17, 18) - and the 4 manual-review
+findings in those same 2 files (VULN-11, 12, 13, 16) that must stay untouched.
+
+| TC-FIX-09 | LLM API key now reads from environment | Read `ai_assistant.py` at the fix branch; check for `os.environ["ANTHROPIC_API_KEY"]` present AND the old hardcoded pattern absent | Both conditions hold | Both hold | PASS |
+| TC-FIX-10 | AWS keys now read from environment | Check for `os.environ["AWS_ACCESS_KEY_ID"]` and `os.environ["AWS_SECRET_ACCESS_KEY"]` present AND the old hardcoded pattern absent | Both conditions hold | Both hold | PASS |
+| TC-FIX-11 | JWT secret now reads from environment | Check for `os.environ["JWT_SIGNING_SECRET"]` present AND the old hardcoded string absent | Both conditions hold | Both hold | PASS |
+| TC-FIX-12 | CORS no longer wildcard | Check for absence of `resources={r"/*": {"origins": "*"}}` AND presence of `resources={r"/admin/*"` | Both conditions hold | Both hold | PASS |
+| TC-FIX-13 | Mass assignment now allow-listed | Check for `_PROFILE_UPDATABLE_FIELDS` present AND the old raw-body-apply line absent | Both conditions hold | Both hold | PASS |
+| TC-FIX-14 | Manual-review AI findings left untouched | Check `pickle.load(uploaded_file)`, the prompt-injection concatenation, and the shell-exec line are all still present, unmodified; separately check the unauthenticated `/admin/users` route body is unmodified | All still present | All present | PASS |
+| TC-FIX-15 | Fixed files are still valid Python | `compile(...)` on both `ai_assistant.py` and `admin_api.py` | No `SyntaxError` raised | No error | PASS |
+
 ---
 
 ## Suite 3: `/vulnhunt` report is accurate
 
 **Purpose:** prove `SECURITY_REPORT.md`'s headline numbers match what was actually found/fixed —
-a report that overstates or understates its own results is worse than no report.
+a report that overstates or understates its own results is worse than no report. Covers
+the original 9 findings (app.py/Dockerfile) plus 9 more added later from
+`ai_assistant.py` (AI/ML) and `admin_api.py` (secrets/API-authorization).
 **Preconditions:** `SECURITY_REPORT.md` exists on the fix branch.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
-| TC-RPT-01 | Report states 9 total findings | Read `SECURITY_REPORT.md`; check for the string `"9 findings"` | Found | Found | PASS |
-| TC-RPT-02 | Report states 6 auto-fixed | Check for the string `"Auto-fixing now (6)"` | Found | Found | PASS |
-| TC-RPT-03 | All 9 finding IDs (VULN-1..9) are documented | Loop `VULN-1` through `VULN-9`; each must appear in the report | All 9 present | All 9 present | PASS |
+| TC-RPT-01 | Report states 18 total findings | Read `SECURITY_REPORT.md`; check for the string `"18 findings"` | Found | Found | PASS |
+| TC-RPT-02 | Report states 11 auto-fixed | Check for the string `"Already fixed, historical record (11)"` | Found | Found | PASS |
+| TC-RPT-03 | All 18 finding IDs (VULN-1..18) are documented | Loop `VULN-1` through `VULN-18`; each must appear in the report | All 18 present | All 18 present | PASS |
 
 ---
 
@@ -231,12 +274,12 @@ a report that overstates or understates its own results is worse than no report.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
-| TC-NORM-01 | At least 2,415 findings total (floor, not exact - grows with bulk real-CVE sourcing) | Parse the JSON array; count elements | `len(findings) >= 2415` | Matches | PASS |
+| TC-NORM-01 | At least 8,096 findings total (floor, not exact - grows with bulk real-CVE sourcing) | Parse the JSON array; count elements | `len(findings) >= 8096` | Matches | PASS |
 | TC-NORM-02 | Every finding has required fields | For each finding, check `id/source/source_ref/asset/title/severity/remediation_domain` present, and `asset.name/ip/type` present | All findings compliant | All compliant | PASS |
 | TC-NORM-03 | All 3 sources represented | Collect distinct `source` values | `{tenable, armis, threat-intel}` | Matches exactly | PASS |
 | TC-NORM-04 | Asset-type classification spot checks | Check known assets: `WIN-DC01`→windows-server, `LNX-DB03`→unix-server, `CSW-CORE01`→network-routing-switching, Axis camera→iot-ot-device, Log4Shell finding→application, both cert findings→certificate, `FW-EDGE01` PAN-OS firewall→network-security-device | All 8 spot checks correct | All correct | PASS |
 | TC-NORM-05 | `remediation_domain` only set for supported domains | For each finding: if `asset.type` is windows-server/unix-server, `remediation_domain` must equal it; otherwise must be `null` (now including `application`/`certificate`/`network-security-device`/`cloud-infrastructure`) | Rule holds for every finding | Holds | PASS |
-| TC-NORM-06 | At least 307 findings eligible for automation | Count findings with non-null `remediation_domain` | `>= 307` (184 bulk windows-server + 123 bulk unix-server) | Matches | PASS |
+| TC-NORM-06 | At least 1,099 findings eligible for automation | Count findings with non-null `remediation_domain` | `>= 1099` (658 bulk windows-server + 441 bulk unix-server) | Matches | PASS |
 | TC-NORM-07 | No fabricated CVE IDs | For each non-null `cve`, regex-match `CVE-\d{4}-\d{4,}` | All CVEs well-formed (catches agent hallucination of a plausible-but-fake ID) | All well-formed | PASS |
 | TC-NORM-08 | `kev`/`epss` fields present and null-consistent | For each finding, check both keys exist; if `cve` is null both must be null, else `kev` must be a dict with a `listed` key | Rule holds for all 14 | Holds | PASS |
 | TC-NORM-09 | Known KEV-listed findings match the real CISA catalog | Spot-check: PrintNightmare and Log4Shell are KEV-listed; OpenSSL DoS is not | All 3 spot checks correct against live-verified data | All correct | PASS |
@@ -370,34 +413,35 @@ test-for-test.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
-| TC-DASH-01 | `/vulnhunt` data matches known totals | Call `load_vulnhunt_data()` | `total == 9`, `auto_fixable == 6` | Matches | PASS |
-| TC-DASH-02 | Remediation findings count matches (floor, not exact - grows as real bulk data is added) | Call `load_remediation_findings()` | `len(findings) >= 2415` | Matches | PASS |
+| TC-DASH-01 | `/vulnhunt` data matches known totals | Call `load_vulnhunt_data()` | `total == 18`, `auto_fixable == 11` | Matches | PASS |
+| TC-DASH-02 | Remediation findings count matches (floor, not exact - grows as real bulk data is added) | Call `load_remediation_findings()` | `len(findings) >= 8096` | Matches | PASS |
 | TC-DASH-03 | Remediation plan queue count matches | Call `load_remediation_plan()` | `len(queue) == 14` | Matches | PASS |
 | TC-DASH-04 | Risk tier counts are structurally consistent | Same as above | Every tier (`auto-approvable`/`needs-change-approval`/`manual-only`) present and non-zero; sum of all three equals the full queue length | Matches | PASS |
 | TC-DASH-05 | Playbook count matches | Call `load_playbooks()` | `len(playbooks) == 7` | Matches | PASS |
 | TC-DASH-06 | KEV-listed / high-EPSS counts match live-verified data | Call `count_kev_listed()` / `count_high_epss()` | 7 KEV-listed, 8 with EPSS ≥ 50% | Matches | PASS |
 | TC-DASH-07 | Asset-type breakdown covers all 6 categories | Call `asset_type_breakdown()` | Counts sum to 14; all 6 asset types present (including `application`, `certificate`) | Matches | PASS |
 | TC-DASH-08 | No mojibake in parsed text (regression guard) | Check `vh["title"]` and `plan["title"]` for the mojibake pattern `â€"` | Pattern absent from both | Absent | PASS |
-| TC-DASH-09 | `/api/overview` returns combined dashboard shape and known counts | `GET /api/overview` | HTTP 200; `vulnhunt.total==9`, `vulnhunt.auto_fixable==6`, `remediation.total>=2415`, `playbook_count==7`, `kev_count>=41`, `high_epss_count>=152`; `sla` has `breached`/`at_risk`/`on_track`; `asset_type_breakdown` includes `windows-server`/`unix-server`/`application`/`certificate` | Matches | PASS |
-| TC-DASH-10 | `/api/vulnhunt` lists all 9 findings | `GET /api/vulnhunt` | HTTP 200; `available` true; finding IDs equal exactly `VULN-1`...`VULN-9` | Matches | PASS |
-| TC-DASH-11 | `/api/remediate` lists all findings, the full plan queue, and playbook links | `GET /api/remediate` | HTTP 200; `findings` has >=2415 entries; plan queue IDs equal exactly `FIND-1`...`FIND-N` for the real N; `playbooks_by_finding` has 7 entries | Matches | PASS |
+| TC-DASH-09 | `/api/overview` returns combined dashboard shape and known counts | `GET /api/overview` | HTTP 200; `vulnhunt.total==18`, `vulnhunt.auto_fixable==11`, `remediation.total>=8096`, `playbook_count==7`, `kev_count>=112`, `high_epss_count>=253`; `sla` has `breached`/`at_risk`/`on_track`; `asset_type_breakdown` includes `windows-server`/`unix-server`/`application`/`certificate` | Matches | PASS |
+| TC-DASH-10 | `/api/vulnhunt` lists all 18 findings | `GET /api/vulnhunt` | HTTP 200; `available` true; finding IDs equal exactly `VULN-1`...`VULN-18` | Matches | PASS |
+| TC-DASH-11 | `/api/remediate` lists all findings, the full plan queue, and playbook links | `GET /api/remediate` | HTTP 200; `findings` has >=8096 entries; plan queue IDs equal exactly `FIND-1`...`FIND-N` for the real N; `playbooks_by_finding` has 7 entries | Matches | PASS |
 | TC-DASH-12 | `/api/playbooks/{filename}` matches the real playbook file's contents | `GET /api/playbooks/FIND-4-sudo-baron-samedit-patch.yml`; independently read the same file from disk and check for `"CHANGE APPROVAL REQUIRED"` | HTTP 200; `finding_id=="FIND-4"`; `needs_approval` equals whatever the raw file actually contains | Matches | PASS |
 | TC-DASH-13 | Unknown playbook returns 404 | `GET /api/playbooks/does-not-exist.yml` | HTTP 404 (negative test) | 404 | PASS |
 | TC-DASH-14 | `GET /api/run` returns default budget and audit-log shape | `GET /api/run` | HTTP 200; response includes `default_budget`; `audit_log` is a list | Matches | PASS |
 | TC-DASH-15 | Dry-run POST never calls the real API (critical safety test) | `POST /api/run` with `pipeline=scan`, `path=vulnerable-demo-app`, `max_budget_usd=2.00`, `confirm` omitted | HTTP 200; `dry_run` true; `message` contains `"Dry run only"` | Matches | PASS |
 | TC-DASH-16 | Unknown pipeline name is rejected | `POST /api/run` with `pipeline="not-a-real-pipeline"` | HTTP 400 (negative test) | 400 | PASS |
-| TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 9`, `remediation_findings >= 2415` | Matches | PASS |
+| TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 18`, `remediation_findings >= 8096` | Matches | PASS |
 | TC-DASH-18 | Live queue lists all findings sorted by priority | `GET /api/queue` | HTTP 200; finding IDs equal exactly `FIND-1`...`FIND-N` for the real N; priorities sorted highest-first (Critical > High > Medium > Low) | Matches | PASS |
 | TC-DASH-19 | Live queue shows SLA breach status and ATT&CK tags | `GET /api/queue` | At least one finding has `sla.breached` true; `T1210` (PrintNightmare/Log4Shell-style RCE) appears among the findings' `attack_techniques` | Matches | PASS |
 | TC-DASH-107 | Overview's SLA/priority definitions panel reads the real, currently-configured priority rules | `GET /api/overview` | Response includes a `priority_rules` object with `sla_days`/`priority_thresholds` for all 4 tiers (Critical/High/Medium/Low), plus `kev_override`/`epss_escalation` objects | Matches | PASS |
 | TC-DASH-106 | Live queue findings carry the infra sub-category | `GET /api/queue` | `FIND-1` (WIN-DC01, windows-server) has `infra_category == "os"`; every application/certificate finding has `infra_category is None` | Matches | PASS |
+| TC-DASH-108 | Live queue findings carry a real EOL/EOS status | `GET /api/queue` | Every finding has an `eol_status` dict; `FIND-1` (WIN-DC01, Windows Server 2019)'s `eol_status.status` is one of `eol`/`eol-soon`/`supported` | Matches | PASS |
 | TC-DASH-20 | `GET /api/priority-rules` returns the current rules YAML text | `GET /api/priority-rules` (against a temp copy of the real rules file, so the shipped file is never mutated) | HTTP 200; `rules_text` contains `sla_days` | Matches | PASS |
 | TC-DASH-21 | Valid YAML POST saves the new rules | `POST /api/priority-rules` with `rules_text` edited to change `Medium: 30` to `Medium: 5` | HTTP 200; response message contains `"saved"`; the (temp) rules file on disk now contains `Medium: 5` | Matches | PASS |
 | TC-DASH-22 | Invalid YAML POST is rejected and the file is left unchanged | `POST /api/priority-rules` with `rules_text="not: valid: yaml: ["` | HTTP 400; `detail` contains `"invalid YAML"`; rules file content identical to before the request | Matches | PASS |
 | TC-DASH-23 | ServiceNow preview lists every finding without needing credentials | `GET /api/servicenow/preview` | HTTP 200; preview `finding_id`s equal exactly `FIND-1`...`FIND-N` for the real N | Matches | PASS |
 | TC-DASH-24 | Sending without confirm never touches the network (critical safety test) | `POST /api/servicenow/send` with real-looking `instance`/`username`/`password`/`table` but `confirm` omitted | HTTP 200; `preview_only` true; `results` is `null` | Matches | PASS |
 | TC-DASH-25 | Sending with confirm but missing credentials is rejected | `POST /api/servicenow/send` with empty `instance`/`username`/`password`, `table="incident"`, `confirm=true` | HTTP 400; `detail` contains `"required"` | Matches | PASS |
-| TC-DASH-26 | Every known page route serves the identical SPA shell | `GET` each of `/`, `/vulnhunt`, `/remediate`, `/run`, `/queue`, `/priority-rules`, `/servicenow`, `/ai-assist`, `/reports`, `/support`, `/faq`, `/exceptions`, `/assets` (`SHELL_ROUTES`; the last two added alongside this round's new `/api/exceptions` and `/api/assets` pages) | All return HTTP 200 with `text/html`, each containing `<script type="module" src="/static/js/app.js">`; all 13 responses are byte-identical | Matches | PASS |
+| TC-DASH-26 | Every known page route serves the identical SPA shell | `GET` every route in `SHELL_ROUTES` (26 routes as of this writing, including `/vulnerability-mapping`/`/asset-mapping`, the two newest) | All return HTTP 200 with `text/html`, each containing `<script type="module" src="/static/js/app.js">`; all responses are byte-identical | Matches | PASS |
 | TC-DASH-27 | Playbook detail route also serves the SPA shell | `GET /playbooks/FIND-4-sudo-baron-samedit-patch.yml` | HTTP 200; body contains `id="app"` | Matches | PASS |
 | TC-DASH-28 | Unknown page route still serves the shell (client-side-routing fallback) | `GET /this-route-does-not-exist` | HTTP 200; body still contains `<script type="module" src="/static/js/app.js">` so `app.js`'s router can render a styled "not found" page | Matches | PASS |
 | TC-DASH-29 | Unknown `/api/*` route returns a real 404 (not the SPA shell) | `GET /api/this-does-not-exist` | HTTP 404 (negative test) | 404 | PASS |
@@ -410,7 +454,7 @@ test-for-test.
 | TC-DASH-36 | Unknown action returns 400 | `POST /api/ai-assist` with `finding_id="FIND-1"`, `action="delete_everything"` | HTTP 400 (negative test) | 400 | PASS |
 | TC-DASH-37 | `confirm=true` calls the real binary exactly once | `POST /api/ai-assist` with `confirm=true`, with `app.cli.find_claude_binary` and `app.subprocess.run` mocked to return a successful result | HTTP 200; `dry_run` false; `response` equals the mocked stdout; mocked `subprocess.run` called exactly once | Matches | PASS |
 | TC-DASH-38 | `confirm=true` surfaces a failed call as 502 | Same as above but the mocked `subprocess.run` result has `returncode=1` | HTTP 502 | 502 | PASS |
-| TC-DASH-39 | `/api/reports/generate` returns real computed KPIs | `GET /api/reports/generate?period=weekly` | HTTP 200; `period=="weekly"`, `remediation_total>=2415`, `vulnhunt_total==9` | Matches | PASS |
+| TC-DASH-39 | `/api/reports/generate` returns real computed KPIs | `GET /api/reports/generate?period=weekly` | HTTP 200; `period=="weekly"`, `remediation.total>=8096`, `vulnhunt_total==18` | Matches | PASS |
 | TC-DASH-40 | Invalid report period is rejected | `GET /api/reports/generate?period=fortnightly` | HTTP 400 (negative test) | 400 | PASS |
 | TC-DASH-41 | HTML report is served inline by default | `GET /api/reports/generate.html?period=daily` | HTTP 200; `content-type` contains `text/html`; no `content-disposition` header; body contains `"Daily Security Report"` | Matches | PASS |
 | TC-DASH-42 | HTML report download sets `Content-Disposition` | `GET /api/reports/generate.html?period=monthly&download=true` | `content-disposition` contains `"attachment"` and `"vulnhunter-monthly-report.html"` | Matches | PASS |
@@ -423,6 +467,7 @@ test-for-test.
 | TC-DASH-49 | The live queue reflects an active exception on its finding | Create an exception (reason `"Isolated OT VLAN"`) against `FIND-7`; `GET /api/queue` | `FIND-7`'s `exception` is not `null` and its `reason` equals `"Isolated OT VLAN"`; `FIND-1` (no exception requested) shows `exception: null`, not an error | Matches | PASS |
 | TC-DASH-50 | `/api/assets` aggregates the real findings | `GET /api/assets` (against a temp ownership file) | HTTP 200; `WEB-PORTAL01` row has `finding_count==2` (its 2 real findings, FIND-13/FIND-14) and `owner` is `null` | Matches | PASS |
 | TC-DASH-51 | Setting an owner then listing shows the new owner | `POST /api/assets/WEB-PORTAL01/owner` with `owner="Web Ops"`, `team="Platform"`; then `GET /api/assets` | Set returns HTTP 200; list shows `WEB-PORTAL01`'s `owner=="Web Ops"`, `team=="Platform"` | Matches | PASS |
+| TC-DASH-109 | `/api/assets` rows carry `os` and a real EOL/EOS status | `GET /api/assets` | Every row has `os` and `eol_status` keys (`WEB-PORTAL01` included) | Matches | PASS |
 | TC-DASH-52 | A valid generic-ingest payload is accepted and normalized | `POST /api/ingest/generic` with one valid finding (`asset_type="application"`) | HTTP 200; `accepted==1`, `rejected==[]`; the returned finding's `source=="generic"` | Matches | PASS |
 | TC-DASH-53 | An ingested ID never collides with a real finding ID | Ingest one valid finding | Its assigned `id` is not among the real pipeline's `FIND-1`..`FIND-N` IDs (from `load_remediation_findings()`) | Matches | PASS |
 | TC-DASH-54 | An invalid payload is rejected with specific per-item errors | `POST /api/ingest/generic` with one finding that has only `title` set | HTTP 200 (batch endpoint — per-item errors, not a 4xx); `accepted==0`; exactly 1 rejected entry with `index==0` | Matches | PASS |
@@ -462,7 +507,7 @@ test-for-test.
 | TC-DASH-88 | ATT&CK heat map covers the full known taxonomy | `GET /api/risk/attack-heatmap` | HTTP 200; `heatmap` includes every known tactic/technique pair, including zero-count ones; every row has both a `tactic` and a `count` key | Matches | PASS |
 | TC-DASH-89 | PrintNightmare finding shows up under its technique on the heat map | `GET /api/risk/attack-heatmap` | The row keyed `T1210` has `count > 0` (FIND-1/PrintNightmare-style RCE) | Matches | PASS |
 | TC-DASH-104 | AI Vulnerabilities returns the full taxonomy and a matching heat map | `GET /api/ai-vulnerabilities` | HTTP 200; `vulnerabilities` has ≥8 entries each with `summary`/`remediation`; `heatmap` has one row per vulnerability | Matches | PASS |
-| TC-DASH-105 | AI Vulnerabilities heat map is honestly all-zero against real demo data | `GET /api/ai-vulnerabilities` | Every `heatmap` row has `count == 0` - this repo's demo app has no AI/ML component | Matches | PASS |
+| TC-DASH-105 | AI Vulnerabilities heat map has real non-zero counts from the planted AI findings | `GET /api/ai-vulnerabilities` | Not all `heatmap` rows are `count == 0`; `prompt-injection`, `supply-chain`, `excessive-agency` each `>= 1` (from `vulnerable-demo-app/ai_assistant.py`'s planted VULN-11/12/13) | Matches | PASS |
 | TC-DASH-90 | Jira preview lists every finding with no credentials needed | `GET /api/jira/preview` | HTTP 200; preview `finding_id`s equal exactly `FIND-1`...`FIND-N` for the real N | Matches | PASS |
 | TC-DASH-91 | Jira send without confirm never touches the network | `POST /api/jira/send` with real-looking `base_url`/`email`/`api_token`/`project_key`, `confirm` omitted | HTTP 200; `preview_only` true; `results` is `null` | Matches | PASS |
 | TC-DASH-92 | Jira send with confirm but missing credentials is rejected | Log in as admin; `POST /api/jira/send` with blank credentials, `confirm=true` | HTTP 400; `detail` contains `"required"` | Matches | PASS |
@@ -540,7 +585,7 @@ follows.
 | TC-REPORTGEN-10 | No-persistence caveat is included | Same monthly report | Output contains `"no persistence layer"` | Matches | PASS |
 | TC-REPORTGEN-11 | KPI numbers are included | Same monthly report (stub's breached/kev_count/high_epss all `1`) | Output contains `">1<"` | Matches | PASS |
 | TC-REPORTGEN-12 | HTML in a finding title is escaped, not injected (XSS guard) | Render with `top_priority_findings` containing a title of `"<script>alert(1)</script>"` | Output does NOT contain the raw `<script>alert(1)</script>`; contains the escaped `"&lt;script&gt;"` | Matches | PASS |
-| TC-REPORTGEN-13 | `generate_report_data` against the real dashboard data module | `generate_report_data("weekly", dashboard_data)` against the real, imported `dashboard/data.py` | `remediation_total >= 2415`, `vulnhunt_total == 9`, `len(top_priority_findings) <= 5` | Matches | PASS |
+| TC-REPORTGEN-13 | `generate_report_data` against the real dashboard data module | `generate_report_data("weekly", dashboard_data)` against the real, imported `dashboard/data.py` | `remediation_total >= 8096`, `vulnhunt_total == 18`, `len(top_priority_findings) <= 5` | Matches | PASS |
 | TC-REPORTGEN-14 | `render_report_html` against real artifacts | `render_report_html(generate_report_data("yearly", dashboard_data))` | Output contains `"Yearly Security Report"` | Matches | PASS |
 
 ---
@@ -974,7 +1019,7 @@ every real finding gets a non-empty suggestion list.
 | TC-COMP-05 | `suggest_compensating_controls` never returns an empty list | Call with 5 different titles (including `""` and unrelated text) | Every call returns a non-empty list | Matches | PASS |
 | TC-COMP-06 | A title matching no keyword pattern falls back to `DEFAULT_CONTROLS` | `suggest_compensating_controls({"title": "Something entirely unrelated to any pattern", "description": ""})` | Returned list equals `DEFAULT_CONTROLS` exactly (not a guessed/fabricated suggestion) | Matches | PASS |
 | TC-COMP-07 | `tag_compensating_controls` adds the field without mutating its input | Tag a one-finding list; compare the original dict's key set before/after | Original finding's keys unchanged (no `compensating_controls` key added to it); the returned (copied) finding has a `compensating_controls` key | Matches | PASS |
-| TC-COMP-08 | Tagging the real, shipped sample findings never produces an empty suggestion list | Load the real `remediation/output/normalized-findings.json` (2,415+ findings); `tag_compensating_controls(findings)` | Every tagged finding has a non-empty `compensating_controls` list | Matches | PASS |
+| TC-COMP-08 | Tagging the real, shipped sample findings never produces an empty suggestion list | Load the real `remediation/output/normalized-findings.json` (8,096+ findings); `tag_compensating_controls(findings)` | Every tagged finding has a non-empty `compensating_controls` list | Matches | PASS |
 
 ---
 
@@ -1326,7 +1371,7 @@ mutation).
 | TC-AIVULN-11 | "Model denial of service" matches Unbounded Consumption | `map_finding_to_ai_vuln({"title": "Model denial of service via oversized context"})` | `result["id"] == "unbounded-consumption"` | Matches | PASS |
 | TC-AIVULN-12 | "Model extraction" matches Model Theft / IP Extraction | `map_finding_to_ai_vuln({"title": "Model extraction attack via systematic API querying"})` | `result["id"] == "model-theft"` | Matches | PASS |
 | TC-AIVULN-13 | No keyword match returns `None`, not a guess | `map_finding_to_ai_vuln({"title": "SQL Injection via string concatenation"})` | `None` (negative test) | Matches | PASS |
-| TC-AIVULN-14 | Honest scope: this repo's own real demo findings never match this taxonomy | Run `map_finding_to_ai_vuln` against every finding in the real, committed `normalized-findings.json` | Every finding returns `None` - this repo's demo app has no AI/ML component, so this is expected, not a bug | Matches | PASS |
+| TC-AIVULN-14 | Almost no incidental matches in the bulk infra findings | Run `map_finding_to_ai_vuln` against every finding in the real, committed `normalized-findings.json` (infra/asset-scan data, ~8,096 findings) | At most 5 incidental matches (structural ceiling, not exact zero - one real bulk CVE, a `manga-image-translator` unsafe-pickle-deserialization issue, is a genuine on-topic match) | Matches (1 incidental match) | PASS |
 | TC-AIVULN-15 | `tag_findings` adds the field without mutating input | `tag_findings([{"id": "FIND-1", "title": "Prompt injection", ...}])` | Input dict's key set unchanged; tagged output has an `ai_vulnerability` key | Matches | PASS |
 | TC-AIVULN-16 | `tag_findings` sets `None` for a non-matching finding | `tag_findings([{"title": "Unrelated finding"}])` | `tagged[0]["ai_vulnerability"] is None` | Matches | PASS |
 | TC-AIVULN-17 | `tag_findings` sets the matched id for a matching finding | `tag_findings([{"title": "Model theft via extraction"}])` | `tagged[0]["ai_vulnerability"] == "model-theft"` | Matches | PASS |
@@ -1339,13 +1384,16 @@ mutation).
 
 ## Suite 33: Infrastructure sub-category classification (`remediation/enrichment/infra_classification.py`)
 
-**Purpose:** prove the OS/Network/Network Security/OT-IoT/Cloud sub-classification
-behind the Infrastructure Vulnerabilities hub (`/infrastructure`) correctly maps every
-real `asset.type` value in the schema, correctly declines to classify non-infra
-findings (application/certificate) rather than forcing them into a bucket, and its
-count-rollup shows the full known taxonomy - including Cloud Infrastructure, which
-has no sample finding in this repo's demo data (same honest "real category, 0
-findings" treatment as DAST - see the module docstring). **Preconditions (all
+**Purpose:** prove the OS/Network/Network Security/OT-IoT/Cloud/OS Applications
+sub-classification behind the Infrastructure Vulnerabilities hub (`/infrastructure`)
+correctly maps every real `asset.type` value in the schema (including
+`client-application` -> `apps`, the newest sub-category), correctly declines to
+classify non-infra findings (application/certificate) rather than forcing them into a
+bucket, and its count-rollup shows the full known taxonomy. Every sub-category
+(including Cloud Infrastructure and OS Applications) now has real bulk-sourced sample
+findings in this repo's demo data - these unit tests use synthetic in-memory dicts
+regardless, to isolate the classification logic itself from whatever sample data
+happens to be loaded. **Preconditions (all
 TC-INFRA):** `remediation/enrichment/infra_classification.py` importable; every test
 constructs its own in-memory finding dicts, no file I/O.
 
@@ -1366,7 +1414,37 @@ constructs its own in-memory finding dicts, no file I/O.
 | TC-INFRA-13 | Tag sets `None`/`None` for a non-infra finding | `tag_infra_categories([{"asset": {"type": "application"}}])` | Both `infra_category` and `infra_category_label` are `None` | Matches | PASS |
 | TC-INFRA-14 | Counts include every known category, including zero-count ones | `build_infra_category_counts([])` | `len(rows) == len(INFRA_CATEGORIES)`; every row's `count == 0` | Matches | PASS |
 | TC-INFRA-15 | Cloud Infrastructure shows zero by default, honestly | `build_infra_category_counts(tag_infra_categories([{"asset": {"type": "windows-server"}}]))` | The `cloud` row's `count == 0` and `label == "Cloud Infrastructure"` | Matches | PASS |
-| TC-INFRA-16 | Counts real tagged findings per category, excluding non-infra ones | Tag a mix of 6 infra findings (3 `os`, 1 each `network`/`network-security`/`ot`) plus 1 `application` finding, build the counts | `os` count `3`; `network`/`network-security`/`ot` each `1`; total across all rows `== 6` (the application finding excluded entirely) | Matches | PASS |
+| TC-INFRA-16 | Counts real tagged findings per category, excluding non-infra ones | Tag a mix of 7 infra findings (3 `os`, 1 each `network`/`network-security`/`ot`/`apps`) plus 1 `application` finding, build the counts | `os` count `3`; `network`/`network-security`/`ot`/`apps` each `1`; total across all rows `== 7` (the application finding excluded entirely) | Matches | PASS |
+| TC-INFRA-17 | `client-application` classifies as `apps` | `classify_infra_finding({"asset": {"type": "client-application"}})` | `"apps"` | Matches | PASS |
+
+---
+
+## Suite 34: End-of-Life/End-of-Support classification (`remediation/enrichment/eol_lookup.py`)
+
+**Purpose:** prove the EOL/EOS lookup (shown on `/assets` and in the finding-detail
+modal) is a real, dated, transparent substring match against a small table of
+publicly-documented vendor lifecycle dates - never a guessed date, and never forced
+onto an OS string it doesn't actually recognize (same "unknown by default" rule as
+`pattern_recognition.py`'s owner-suggestion heuristic). **Preconditions (all
+TC-EOL):** `remediation/enrichment/eol_lookup.py` importable; every test constructs
+its own in-memory OS strings/findings, no file I/O, and pins `as_of` to a fixed date
+(2026-08-04) so results don't drift as real time passes.
+
+| TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
+|---|---|---|---|---|---|
+| TC-EOL-01 | Unknown OS string returns `unknown`, not a guess | `classify_eol("Cisco IOS XE 17.x")` | `{"status": "unknown"}` | Matches | PASS |
+| TC-EOL-02 | `None` OS string returns `unknown` | `classify_eol(None)` | `{"status": "unknown"}` | Matches | PASS |
+| TC-EOL-03 | Empty OS string returns `unknown` | `classify_eol("")` | `{"status": "unknown"}` | Matches | PASS |
+| TC-EOL-04 | Past EOL date classifies as `eol` | `classify_eol("Microsoft Windows Server 2012 R2", as_of=2026-08-04)` | `status == "eol"`, `eol_date == "2023-10-10"`, `days_until_eol < 0` | Matches | PASS |
+| TC-EOL-05 | Near-future EOL date (within 180 days) classifies as `eol-soon` | `classify_eol("Microsoft Windows Server 2016 Standard", as_of=2026-08-04)` | `status == "eol-soon"` (real EOL 2027-01-12, 161 days out) | Matches | PASS |
+| TC-EOL-06 | Far-future EOL date classifies as `supported` | `classify_eol("Microsoft Windows Server 2022 Standard", as_of=2026-08-04)` | `status == "supported"` | Matches | PASS |
+| TC-EOL-07 | Match is case-insensitive | `classify_eol("MICROSOFT WINDOWS SERVER 2012 R2", as_of=2026-08-04)` | `status == "eol"` | Matches | PASS |
+| TC-EOL-08 | Compound OS strings (OS Applications' `"Windows 10 (client workstation) - Adobe Acrobat/Reader"` shape) still match on the OS portion | `classify_eol("Windows 10 (client workstation) - Adobe Acrobat/Reader", as_of=2026-08-04)` | `status == "eol"`, `vendor == "Microsoft"` | Matches | PASS |
+| TC-EOL-09 | Longest match wins on any overlap | `classify_eol("Microsoft Windows Server 2019 Datacenter (Domain Controller)", as_of=2026-08-04)` | `eol_date == "2029-01-09"` | Matches | PASS |
+| TC-EOL-10 | Every reference-table entry has real, parseable data | Check every `EOL_REFERENCE` entry has `match`/`vendor`/`eol_date`/`source`, and `eol_date` parses as a real ISO date | All entries valid | Matches | PASS |
+| TC-EOL-11 | `tag_eol_eos` adds the field without mutating input | `tag_eol_eos([{"id": "FIND-1", "asset": {"os": "Microsoft Windows Server 2012 R2"}}])` | Input dict's key set unchanged; tagged output has an `eol_status` key | Matches | PASS |
+| TC-EOL-12 | `tag_eol_eos` sets `unknown` for an unmatched OS | `tag_eol_eos([{"asset": {"os": "Cisco IOS 15.x"}}])` | `tagged[0]["eol_status"] == {"status": "unknown"}` | Matches | PASS |
+| TC-EOL-13 | `tag_eol_eos` handles a missing `asset` gracefully | `tag_eol_eos([{"id": "FIND-1"}])` | `tagged[0]["eol_status"] == {"status": "unknown"}`, no crash | Matches | PASS |
 
 ---
 
@@ -1436,3 +1514,36 @@ test suite that never catches anything is less convincing than one with a track 
    two frontend XSS gaps, by consistent use of the same `escapeHtml()` helper already
    used everywhere else those fields render. See `CHANGELOG.md`'s `[Unreleased] Fixed`
    section for full detail on each.
+9. **A small, real hash-collision loss found while data-quality-checking the three new
+   finding categories, not by a pre-written test**: generating 220 IaC findings and 220
+   runtime findings only merged 219 and 218 respectively - one finding "disappeared"
+   from each category during `bulk_normalize.py`'s merge. Root cause:
+   `generate_bulk_findings.py`'s `_stable_id()` derives a Plugin ID by truncating a
+   SHA1 hash to a ~900,000-value space; at ~220 samples per category, the birthday-
+   paradox collision probability (~2-3%) is real, not negligible, and `merge()`'s
+   within-batch dedup (`existing_keys.add(key)` inside the loop) correctly - if
+   silently - drops the second finding whose hash happens to collide with an earlier
+   one in the same run. Not fixed (both counts still comfortably clear the ≥200
+   target, and DAST/other 220+-sample categories were already carrying this same
+   latent characteristic before this round), but confirmed via a direct Python count
+   against the merged JSON and documented here and in `CHANGELOG.md` rather than
+   silently accepting an unexplained "220 generated, 219 merged" discrepancy. A wider
+   ID space would remove this if it's ever worth the churn of regenerating every
+   already-merged category's stable IDs.
+10. **A quota-exhaustion bug found while researching the EOL/EOS overhaul, not by a
+   pre-written test**: every one of the 1,092 "OS Applications" bulk findings carried
+   the identical OS label ("Windows 11 (client workstation) - Google Chrome") despite
+   their titles spanning ~26 distinct real products. Root cause:
+   `generate_bulk_findings.py`'s `collect_real_cves()` drained its per-category CVE
+   quota against NVD queries in list order with no per-query cap, so one ubiquitous
+   query (Chrome) could exhaust the entire category's target before any other query
+   ran, then `_os_for()` re-derived the product from NVD description text, which is
+   ambiguous for old multi-browser CVEs. Fixed with a two-pass quota allocation
+   (`per_query_quota = max(1, -(-target // len(queries)))` ceil-divided across queries
+   in pass one, uncapped fill only if short in pass two) and by tagging each CVE with
+   its originating `source_query` so `_os_for()` no longer has to guess. Verified via
+   direct CSV inspection: 23 distinct products after the fix vs. 1 before. No dedicated
+   regression test was added for the quota-allocation logic itself (it lives in the
+   sample-data generator, not the pipeline under test), but `tests/test_eol_lookup.py`
+   and the `ApiLiveQueue`/`ApiAssets` EOL/EOS test additions all depend on the corrected,
+   varied OS data to be meaningful.

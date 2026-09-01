@@ -1,7 +1,7 @@
 """
 Tests for remediation/enrichment/infra_classification.py - the OS/Network/Network
-Security/OT/Cloud sub-classification of Infrastructure Vulnerability Management
-findings.
+Security/OT/Cloud/OS Applications sub-classification of Infrastructure Vulnerability
+Management findings.
 """
 import sys
 import unittest
@@ -24,8 +24,20 @@ class ClassifyFinding(unittest.TestCase):
     def test_windows_server_classifies_as_os(self):
         self.assertEqual(classify_infra_finding(_finding("windows-server")), "os")
 
-    def test_windows_endpoint_also_classifies_as_os(self):
-        self.assertEqual(classify_infra_finding(_finding("windows-endpoint")), "os")
+    def test_windows_endpoint_classifies_as_endpoint_not_os(self):
+        """windows-endpoint (laptops/desktops, patched via SCCM) is a genuinely
+        different remediation reality from windows-server - it must NOT roll up into
+        the "os" (server) bucket."""
+        self.assertEqual(classify_infra_finding(_finding("windows-endpoint")), "endpoint")
+
+    def test_mobile_device_classifies_as_endpoint(self):
+        self.assertEqual(classify_infra_finding(_finding("mobile-device")), "endpoint")
+
+    def test_printer_classifies_as_printer(self):
+        self.assertEqual(classify_infra_finding(_finding("printer")), "printer")
+
+    def test_virtualization_host_classifies_as_virtualization(self):
+        self.assertEqual(classify_infra_finding(_finding("virtualization-host")), "virtualization")
 
     def test_unix_server_classifies_as_os(self):
         self.assertEqual(classify_infra_finding(_finding("unix-server")), "os")
@@ -42,6 +54,9 @@ class ClassifyFinding(unittest.TestCase):
     def test_cloud_infrastructure_classifies_as_cloud(self):
         self.assertEqual(classify_infra_finding(_finding("cloud-infrastructure")), "cloud")
 
+    def test_client_application_classifies_as_apps(self):
+        self.assertEqual(classify_infra_finding(_finding("client-application")), "apps")
+
     def test_application_asset_type_is_not_an_infra_category(self):
         """Application/certificate findings are a different domain entirely - this
         must return None, not a guessed/forced infra bucket."""
@@ -49,6 +64,17 @@ class ClassifyFinding(unittest.TestCase):
 
     def test_certificate_asset_type_is_not_an_infra_category(self):
         self.assertIsNone(classify_infra_finding(_finding("certificate")))
+
+    def test_iac_resource_classifies_as_iac(self):
+        self.assertEqual(classify_infra_finding(_finding("iac-resource")), "iac")
+
+    def test_container_runtime_classifies_as_runtime(self):
+        self.assertEqual(classify_infra_finding(_finding("container-runtime")), "runtime")
+
+    def test_code_repository_asset_type_is_not_an_infra_category(self):
+        """A GitHub/GitLab-style finding is an application-security category, not an
+        infra one - same treatment as application/certificate above."""
+        self.assertIsNone(classify_infra_finding(_finding("code-repository")))
 
     def test_missing_asset_type_returns_none(self):
         self.assertIsNone(classify_infra_finding(_finding(None)))
@@ -89,19 +115,36 @@ class InfraCategoryCounts(unittest.TestCase):
 
     def test_counts_real_tagged_findings_per_category(self):
         findings = tag_infra_categories([
-            _finding("windows-server"), _finding("unix-server"), _finding("windows-endpoint"),
+            _finding("windows-server"), _finding("unix-server"),
+            _finding("windows-endpoint"), _finding("mobile-device"),
             _finding("network-routing-switching"),
             _finding("network-security-device"),
             _finding("iot-ot-device"),
+            _finding("virtualization-host"),
+            _finding("client-application"),
+            _finding("printer"),
             _finding("application"),  # not infra - must not count anywhere
         ])
         rows = build_infra_category_counts(findings)
         by_id = {row["id"]: row for row in rows}
-        self.assertEqual(by_id["os"]["count"], 3)
+        self.assertEqual(by_id["os"]["count"], 2)
+        self.assertEqual(by_id["endpoint"]["count"], 2)
         self.assertEqual(by_id["network"]["count"], 1)
         self.assertEqual(by_id["network-security"]["count"], 1)
         self.assertEqual(by_id["ot"]["count"], 1)
-        self.assertEqual(sum(row["count"] for row in rows), 6)  # the application finding excluded
+        self.assertEqual(by_id["virtualization"]["count"], 1)
+        self.assertEqual(by_id["apps"]["count"], 1)
+        self.assertEqual(by_id["printer"]["count"], 1)
+        self.assertEqual(sum(row["count"] for row in rows), 10)  # the application finding excluded
+
+    def test_iac_and_runtime_categories_count_correctly(self):
+        findings = tag_infra_categories([
+            _finding("iac-resource"), _finding("container-runtime"), _finding("iac-resource"),
+        ])
+        rows = build_infra_category_counts(findings)
+        by_id = {row["id"]: row for row in rows}
+        self.assertEqual(by_id["iac"]["count"], 2)
+        self.assertEqual(by_id["runtime"]["count"], 1)
 
 
 if __name__ == "__main__":

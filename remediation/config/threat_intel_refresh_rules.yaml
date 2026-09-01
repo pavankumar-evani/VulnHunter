@@ -1,0 +1,20 @@
+# Recommended re-check cadence for the real, live threat-intel feeds this app pulls
+# from (remediation/enrichment/kev_epss.py) - informational only, not an enforced
+# background schedule. There is no in-process automatic refresh loop for this today
+# (unlike notification_settings.py's real scheduled-report/alert loop); refreshing
+# happens on demand via the dashboard's "Refresh threat intel now" action
+# (POST /api/threat-intel/refresh-now, admin-gated, preview-then-confirm like every
+# other real-network-call action in this app), or by re-running the full /remediate
+# pipeline, which re-enriches as one of its stages.
+#
+# CVSS itself is deliberately NOT covered by a refresh cadence here: CVSS is a static,
+# point-in-time score assigned when a CVE is published and does not change afterward for
+# that CVE (a *new* CVE for the same underlying flaw can get a different score, but
+# that's a new record, not a refresh of the old one) - there is nothing to "keep up to
+# date" about an existing CVE's CVSS. What genuinely changes over time, and is worth
+# re-checking, is whether a CVE has since been added to CISA's KEV catalog, or its
+# FIRST.org EPSS exploitation-probability score has moved - both real, live, frequently
+# updated feeds.
+recommended_cadence:
+  cisa_kev: daily
+  first_epss: daily

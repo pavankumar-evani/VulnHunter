@@ -19,6 +19,7 @@
         <div class="topbar-extra" id="topbar-extra"></div>
         <div class="topbar-notifications" id="topbar-notifications"></div>
         <div class="topbar-account" id="topbar-account"></div>
+        <div class="topbar-tenant" id="topbar-tenant"></div>
       </header>
       <main class="content">
         <div class="flash-container" id="flash-container"></div>
@@ -27,6 +28,15 @@
         <div id="page-footer"></div>
       </main>
     </div>
+    <aside class="insights-panel" id="insights-panel">
+      <div class="insights-resize-handle" id="insights-resize-handle"></div>
+      <div class="insights-panel-header">
+        <span class="insights-panel-title">Insights</span>
+        <button type="button" class="insights-toggle" id="insights-toggle"
+          aria-label="Collapse insights panel" aria-pressed="false" title="Collapse insights panel"></button>
+      </div>
+      <div class="insights-panel-body" id="insights-body"></div>
+    </aside>
   </div>
   <div id="modal-root"></div>
   <script type="module" src="/static/js/app.js"></script>

@@ -45,6 +45,13 @@ const FAQS = [
     "and lets you attach an owner/team, stored in a real, editable local file - not a " +
     "sync from a real CMDB/asset-management system. It also has a CMDB CSV import " +
     "panel to bulk-assign owner/team from an uploaded export."],
+  ["Is \"Container Vulnerabilities\" the same as \"Container/Host Runtime Security\"?",
+    "No - genuinely different, same build-time-vs-runtime distinction real container-" +
+    "security products draw. Container Vulnerabilities (Application Vulnerabilities " +
+    "hub) is static Dockerfile/base-image analysis from code scanning. Container/Host " +
+    "Runtime Security (Infrastructure hub) is Falco-style behavioral detection on an " +
+    "already-running container/host. Different tools, different findings in real " +
+    "deployments - kept as two categories here too."],
   ["Are Container and API Vulnerabilities real categories, or placeholders?",
     "Both real, different maturity. Container Vulnerabilities surfaces findings the " +
     "scanner already detected (root user, baked-in secrets, unpinned base image) - they " +
@@ -67,8 +74,13 @@ const FAQS = [
     "(prompt injection, model poisoning, supply-chain compromise, etc.) each cross-" +
     "reference a MITRE ATLAS tactic/technique - this module's own reading of published " +
     "ATLAS docs, not a verified mapping, same \"suggestion to verify\" posture as the " +
-    "existing ATT&CK heat map. Shows 0 findings against real demo data, same honest " +
-    "treatment as API Vulnerabilities - nothing faked to look populated."],
+    "existing ATT&CK heat map. Unlike API Vulnerabilities, this one isn't stuck at 0: " +
+    "vulnerable-demo-app/ai_assistant.py plants 4 real AI/ML vulnerabilities (hardcoded " +
+    "LLM API key, insecure model deserialization, prompt injection, excessive agency), " +
+    "a real scan found all 4, and 3 tag against this taxonomy for real - Prompt " +
+    "Injection, AI Supply Chain Compromise, and Excessive Agency show genuine non-zero " +
+    "counts. Every other category is still honestly at 0 - nothing faked to look " +
+    "populated."],
   ["Is the owner suggestion on Asset Inventory real machine learning?",
     "No. It's three transparent, weighted pattern-matching signals - hostname naming " +
     "convention, IP subnet, and asset type (plus MAC vendor matching for type " +
@@ -77,6 +89,16 @@ const FAQS = [
     "entries, far too few to train or validate real ML on. Never auto-applied - a " +
     "one-click \"Use\" button, same posture as the ATT&CK tags and compensating-control " +
     "suggestions."],
+  ["Is there real machine learning anywhere in this app now?",
+    "Yes, on /ml-insights - real scikit-learn, genuinely fit at request time: " +
+    "IsolationForest anomaly detection (per asset type), KMeans risk-archetype " +
+    "clustering, and TF-IDF + cosine-similarity \"Similar findings\" search. All three " +
+    "are unsupervised (no labeled examples needed), unlike owner suggestion above which " +
+    "would need labels this demo doesn't have enough of. It never replaces or feeds into " +
+    "the deterministic Remediation Policy or Priority Rules engines, and it still doesn't " +
+    "do supervised learning or remediation-outcome prediction - there's no real " +
+    "resolved/fixed_at field anywhere to learn that from. See the full FAQ.md entry for " +
+    "the complete reasoning."],
   ["Is there a login now? What are the demo credentials?",
     "Yes - a real local login MVP, not a placeholder. Two demo accounts ship in the " +
     "seed file (intentionally public, since it's a demo seed, not a real secret): " +
@@ -99,6 +121,47 @@ const FAQS = [
     "No. It's manually set only, exactly like asset ownership - there's no network " +
     "scan, firewall analysis, or exposure-scanning tool behind it. It defaults to " +
     "\"Unknown\" until someone sets it."],
+  ["Does Notification Settings actually send real emails?",
+    "Yes, if you configure real SMTP (SMTP_HOST/SMTP_PORT/SMTP_FROM_ADDRESS " +
+    "environment variables) - genuinely inert until then, honestly shown as " +
+    "configured/not-configured rather than implying it works either way. Uses " +
+    "Python's stdlib smtplib, no new dependency; not exercised against a real mail " +
+    "server during development - send yourself a real test first. Scheduled reports " +
+    "and team alerts both run on an in-process timer (hourly by default) that only " +
+    "ticks while the dashboard server stays running - point a real external cron at " +
+    "POST /api/notification-settings/run-checks-now for delivery that doesn't depend " +
+    "on server uptime."],
+  ["Does the AD/PAM integration on Remediation Policy connect to a real directory or vault?",
+    "AD, yes if configured (AD_SERVER/AD_BASE_DN environment variables) - but strictly " +
+    "read-only, only checking group membership for a Remediation Approval, never " +
+    "creating/modifying/resetting anything; honestly reported as null (\"not checked\") " +
+    "when unconfigured, never faked as pass/fail. PAM is different in kind, not just " +
+    "configuration: this app never holds or fetches a live privileged credential at " +
+    "all - a generated playbook instead gets a real Vault/CyberArk Ansible lookup " +
+    "snippet in its vars block, and the actual secret fetch happens later, when your " +
+    "own change-management process runs that playbook. See REMEDIATION_WORKFLOWS.md's " +
+    "\"Remediation Policy\" section for the full model."],
+  ["What's the difference between an Exception and a Remediation Approval?",
+    "Opposite questions. An Exception means \"accept the risk instead of fixing this\" " +
+    "- a time-boxed waiver. A Remediation Approval means \"yes, proceed with fixing " +
+    "this\" - the human sign-off a normal/emergency-change-type finding needs before " +
+    "its generated playbook is considered ready to hand off. A finding only ever needs " +
+    "one or the other, never both."],
+  ["Why don't domains like IaC/SCA/Runtime have a maintenance window the way OS/Endpoint do?",
+    "Because they're genuinely different remediation mechanisms. OS/Endpoint/Network " +
+    "really do get a scheduled patch pushed to a running system in a time window. IaC/" +
+    "SCA findings get fixed by a pull request merging (auto-mergeable for low-risk " +
+    "patch-level changes, the real Renovate/Dependabot convention) - nothing is being " +
+    "patched live. Runtime findings (behavioral alerts) are investigative SOC triage, " +
+    "not a patchable CVE at all. The cadence/window fields still exist for consistency, " +
+    "but for these three, read them as \"how often to check,\" not \"when the outage happens.\""],
+  ["Is \"cloud vulnerabilities\" just Kubernetes, or real cloud-provider issues too?",
+    "Both, and it's all real. The ~1,400 cloud-infrastructure sample findings are " +
+    "genuine NVD-sourced CVEs spanning Kubernetes/Docker/Terraform AND real, provider-" +
+    "specific services - Amazon S3/Lambda/IAM/RDS/CloudFormation, Azure Active " +
+    "Directory/Storage/DevOps, Google Cloud Storage/SDK. They get the same KEV/EPSS " +
+    "enrichment and priority scoring as every other category, plus a dedicated cloud " +
+    "Remediation Policy domain with AWS/Azure/GCP-native PAM backends."],
   ["Where does my data go?",
     "Nowhere - everything is local files in this repo (git history, JSON, YAML). " +
     "There's no cloud service and no telemetry."],
@@ -107,6 +170,42 @@ const FAQS = [
     "credits, spend-capped via --max-budget-usd (default shown on the Run Pipeline " +
     "page). AI Assist's real (confirmed) calls do the same, at whatever your Claude " +
     "plan's per-request cost is - always preview first, it's free."],
+  ["Is Quantum Readiness a real \"quantum vulnerability scanner\"?",
+    "No - no such product category exists to honestly claim, since a quantum computer " +
+    "capable of breaking real RSA/ECDSA doesn't exist yet. It classifies real, " +
+    "already-normalized findings by a disclosed keyword heuristic (same tier as ATT&CK " +
+    "tagging) into asymmetric crypto (RSA/ECDSA/Diffie-Hellman - genuinely quantum-" +
+    "relevant, Shor's algorithm breaks these) and legacy protocol (SSLv2/SSLv3/3DES/" +
+    "RC4/MD5-sig - classically broken already, not itself quantum-relevant). Migration " +
+    "guidance cites real NIST FIPS 203/204/205 (Aug 2024) and NIST IR 8547 (draft) - " +
+    "2030 deprecation/2035 disallowal for the weaker 112-bit tier, e.g. RSA-2048; CNSA " +
+    "2.0 is a separate NSS-specific framework with its own dates, not the same ones. " +
+    "Nothing fabricated - every matched " +
+    "finding is real, already-shipped sample data."],
+  ["Is there a single aggregate score on the main dashboard, like Tenable's Cyber Exposure Score?",
+    "Yes, on the Overview page - real-time, not fabricated. Deliberately NOT claimed as " +
+    "equivalent to Tenable's Cyber Exposure Score (proprietary, unpublished formula) or " +
+    "any other named product - research confirms no citable industry-standard aggregate " +
+    "exposure score exists (SSVC is a per-vulnerability decision tree, not a fleet " +
+    "aggregate). It's an original, disclosed rollup of three real signals: average " +
+    "per-asset Risk Score, CISA KEV prevalence, and average FIRST.org EPSS - see the " +
+    "\"How is this calculated?\" panel right under the tile for the full math."],
+  ["Is \"staging validated\" on Remediation Approvals a real staging-environment check?",
+    "No - metadata only, same honest pattern as ad_group_validated on the same record. " +
+    "It records who attests a change was tested in staging and when (ISO/IEC " +
+    "27002:2022 §8.32) - no real staging environment behind it. The page also now " +
+    "surfaces each finding's real generated-playbook rollback procedure (a genuine " +
+    "\"# Rollback: ...\" comment the fixer subagent wrote) - \"Not yet available\" " +
+    "honestly means no playbook has been generated for that finding yet."],
+  ["Does this use React, Node.js, or Perl? Is there a real Infrastructure-as-Code layer?",
+    "No React, no Node.js/npm - deliberately, since this machine had no Node.js/npm " +
+    "installed and an untested React build isn't \"modern,\" it's just unverified. See " +
+    "dashboard/README.md's \"Why FastAPI + vanilla JS\" section. Perl only appears as " +
+    "one of six languages the code scanner can find vulnerabilities IN, not something " +
+    "VulnHunter is built in. Real Infrastructure-as-Code already exists though: the " +
+    "remediation-fixer subagents generate real, reviewable Ansible playbooks (or " +
+    "PowerShell DSC for Windows) - never auto-applied. /api/*'s JSON contract is " +
+    "already the seam a future React frontend would build against."],
   ["What if I find a bug or need help?",
     "See the Support page, or docs/SUPPORT.md in the repo."],
 ];

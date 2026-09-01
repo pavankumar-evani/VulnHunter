@@ -30,9 +30,16 @@ Classification is intentionally simple and honest: it's a lookup against
 `asset.type`, not a claim that Tenable/Armis/etc. themselves report a scan
 methodology - they don't. VulnHunter infers it from what kind of asset the finding is
 against.
+
+Three more real methodologies, added alongside the IaC/GitHub-GitLab/runtime finding
+categories: `iac` (Infrastructure-as-Code static analysis - Checkov/tfsec-style config-
+template scanning, no CVE), `secrets` (repository secret-scanning alerts - CWE-798
+hardcoded-credential findings, no CVE), and `runtime` (Falco-style container/host
+runtime detection, no CVE). Each is a genuinely distinct methodology from agent-based
+infra-vm scanning, same reasoning DAST already got its own bucket for.
 """
 
-SCAN_TYPES = ("infra-vm", "sca", "cert-mgmt", "sast", "dast")
+SCAN_TYPES = ("infra-vm", "sca", "cert-mgmt", "sast", "dast", "iac", "secrets", "runtime", "ai-ml")
 
 SCAN_TYPE_LABELS = {
     "infra-vm": "Infrastructure Vulnerability Management",
@@ -40,24 +47,37 @@ SCAN_TYPE_LABELS = {
     "cert-mgmt": "Certificate & TLS Lifecycle Management",
     "sast": "Static Application Security Testing (SAST)",
     "dast": "Dynamic Application Security Testing (DAST)",
+    "iac": "Infrastructure-as-Code Security Scanning",
+    "secrets": "Secret Scanning (Repository)",
+    "runtime": "Runtime / Container Security",
+    "ai-ml": "AI/ML Security",
 }
 
 _ASSET_TYPE_TO_SCAN_TYPE = {
     "certificate": "cert-mgmt",
+    "iac-resource": "iac",
+    "container-runtime": "runtime",
+    "ai-ml-system": "ai-ml",
 }
 _DEFAULT_SCAN_TYPE = "infra-vm"
 
 
 def classify_finding(finding):
     """Returns one of SCAN_TYPES for a single /remediate-pipeline finding, based on
-    asset.type (and, for `application` assets only, whether it has a CVE - see this
-    module's docstring for why that's the SCA/DAST split). A finding against an
-    `application` asset is SCA or DAST rather than SAST, since /remediate ingests
-    third-party scan/asset data, not VulnHunter's own source-code analysis - that's the
-    fully separate /vulnhunt pipeline."""
+    asset.type (and, for `application`/`code-repository` assets, whether it has a CVE
+    - see this module's docstring for why that's the SCA/DAST split for `application`).
+    A `code-repository` finding (GitHub/GitLab-style alert) follows the identical
+    logic: a Dependabot-style dependency alert has a real CVE (classified `sca`, same
+    methodology bucket as any other vulnerable-dependency finding), while a
+    secret-scanning alert has none (classified `secrets` - deliberately a distinct
+    label from `application`'s DAST bucket, and from /appsec's own SAST-CWE-based
+    "Secrets Management" card, which is a fully separate data path - see
+    scan_type_mapping's callers in appsec.js)."""
     asset_type = (finding.get("asset") or {}).get("type", "")
     if asset_type == "application":
         return "sca" if finding.get("cve") else "dast"
+    if asset_type == "code-repository":
+        return "sca" if finding.get("cve") else "secrets"
     return _ASSET_TYPE_TO_SCAN_TYPE.get(asset_type, _DEFAULT_SCAN_TYPE)
 
 

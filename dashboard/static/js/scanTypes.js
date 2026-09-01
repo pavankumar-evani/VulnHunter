@@ -8,10 +8,14 @@ export const SCAN_TYPE_LABELS = {
   "sca": "Software Composition Analysis (SCA)",
   "cert-mgmt": "Certificate & TLS Lifecycle Management",
   "dast": "Dynamic Application Security Testing (DAST)",
+  "iac": "Infrastructure-as-Code Security Scanning",
+  "secrets": "Secret Scanning (Repository)",
+  "runtime": "Runtime / Container Security",
+  "ai-ml": "AI/ML Security",
 };
 
 // "sast" is deliberately excluded here: /remediate findings (what /queue and /assets show)
 // are never tagged scan_type "sast" - SAST findings live entirely in the separate /vulnhunt
 // data path (see scan_type_mapping.py's module docstring). Listing it in the queue's filter
 // would only ever show zero rows, so the Code Scan page is where "SAST" actually lives.
-export const QUEUE_SCAN_TYPES = ["infra-vm", "sca", "cert-mgmt", "dast"];
+export const QUEUE_SCAN_TYPES = ["infra-vm", "sca", "cert-mgmt", "dast", "iac", "secrets", "runtime", "ai-ml"];

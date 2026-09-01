@@ -1,0 +1,55 @@
+# Configurable per-ASSET risk-scoring rules.
+#
+# Read by remediation/enrichment/risk_scoring.py, which the dashboard uses to compute a
+# live Impact score, Likelihood score, and overall Risk score for every asset in Asset
+# Inventory (/assets), Asset Mapping (/asset-mapping), and the Risk Dashboard (/risk).
+#
+# IMPORTANT - read before treating this as a certified assessment: this is a
+# NIST SP 800-30 Rev. 1-INSPIRED methodology (that document's real model is a
+# semi-quantitative Likelihood x Impact risk matrix), not a certified RMF/800-30
+# output. See risk_scoring.py's module docstring for the full honesty caveat, including
+# why "NIST RMF" (SP 800-37, the 7-step authorization process) isn't itself a scoring
+# formula to borrow from - SP 800-30 is the document that actually defines one.
+#
+# Edit this file directly to retune the weights. This is a NEW, separate config from
+# priority_rules.yaml - it does NOT re-declare asset_criticality_keywords/
+# asset_type_weights/severity_weights; the Impact score's "criticality" component reads
+# those directly from priority_rules.yaml so there is exactly one place that defines
+# "how critical is this asset," not two competing ones.
+
+# Impact score (0-100) = how bad it would be if this asset's worst finding were
+# exploited, blending the severity of what's actually been found on it with the asset's
+# own inherent criticality (reused from priority_rules.yaml, not redefined here).
+impact_weights:
+  severity: 0.6      # worst CVSS (or severity_weights fallback) among this asset's findings
+  criticality: 0.4   # asset_criticality_keywords + asset_type_weights, from priority_rules.yaml
+
+# Likelihood score (0-100) = how likely this asset is to actually be compromised,
+# given real, already-computed threat-intel signals on its findings.
+likelihood_weights:
+  kev: 0.40               # any KEV-listed finding on this asset (presence, not proportion)
+  epss: 0.30              # MAX EPSS score among this asset's findings
+  exploit_criteria: 0.15  # count of findings matching a configured /exploit-criteria rule
+  eol: 0.15               # this asset's own EOL/EOS status
+
+# How many exploit-criteria-matching findings on one asset counts as "maxed out" for the
+# exploit_criteria likelihood component (a linear scale from 0 to this count).
+exploit_criteria_match_cap: 3
+
+# Likelihood points awarded per EOL/EOS status - "unknown" is deliberately equal to
+# "supported" (0), never treated as an elevated risk guess, matching eol_lookup.py's own
+# "unknown is honest, not a guess" rule.
+eol_likelihood_points:
+  eol: 100
+  eol-soon: 50
+  supported: 0
+  unknown: 0
+
+# Risk score (0-100) = round(Impact * Likelihood / 100) - mapped to a tier using this
+# app's existing Critical/High/Medium/Low convention (same as finding priority/severity
+# everywhere else), not a separate 5-tier scheme.
+risk_tier_thresholds:
+  Critical: 60
+  High: 35
+  Medium: 15
+  Low: 0

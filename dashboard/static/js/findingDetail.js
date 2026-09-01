@@ -3,6 +3,7 @@
 // reuse it too). Reuses the same openModal/closeModal pattern as assets.js's edit-owner
 // modal (see dom.js) - this one just renders, it never submits anything.
 import { escapeHtml, openModal, closeModal } from "./dom.js";
+import { api } from "./api.js";
 
 function row(label, valueHtml) {
   if (valueHtml === null || valueHtml === undefined || valueHtml === "") return "";
@@ -38,6 +39,31 @@ export function openFindingDetail(f) {
 
   const asset = f.asset || {};
 
+  // Real, dated vendor-lifecycle lookup (remediation/enrichment/eol_lookup.py) - only
+  // rendered when the asset's OS actually matched a known EOL/EOS entry; "unknown"
+  // (no confident match) shows nothing here, same "don't fabricate a claim" rule as
+  // everywhere else in this app.
+  const eolStatus = f.eol_status;
+  let eolCallout = "";
+  let eolReasonForException = "";
+  if (eolStatus && (eolStatus.status === "eol" || eolStatus.status === "eol-soon")) {
+    const verb = eolStatus.status === "eol" ? "has been" : "is approaching";
+    eolReasonForException = `Asset running an End-of-Life/End-of-Support OS (${asset.os || "unknown OS"}) ` +
+      `- ${eolStatus.vendor} lists this as EOL ${eolStatus.eol_date} (${eolStatus.source}). No vendor patch is ` +
+      `expected - remediation likely needs a hardware/software refresh or isolation, not a patch.`;
+    eolCallout = `
+      <div class="callout callout-warn" style="margin-top:12px">
+        <strong>${eolStatus.status === "eol" ? "End-of-Life" : "End-of-Support approaching"}:</strong>
+        ${escapeHtml(asset.os || "this asset's OS")} - ${eolStatus.vendor} lifecycle end
+        <strong>${escapeHtml(eolStatus.eol_date)}</strong> (${escapeHtml(eolStatus.source)}). A vendor patch is
+        unlikely to exist for this finding - recommended action is a hardware/software refresh or network
+        isolation, not patching.
+        <br>
+        <a href="/exceptions?finding_id=${encodeURIComponent(f.id)}&reason=${encodeURIComponent(eolReasonForException)}" data-link>
+          Request an exception for this finding →</a>
+      </div>`;
+  }
+
   const body = `
     <h2>${escapeHtml(f.title)}</h2>
     <p class="subtitle">
@@ -61,6 +87,8 @@ export function openFindingDetail(f) {
           ${row("Asset", asset.name ? `${escapeHtml(asset.name)}${asset.ip ? ` <span class="muted">(${escapeHtml(asset.ip)})</span>` : ""}` : null)}
           ${row("Asset type", asset.type ? escapeHtml(asset.type) : null)}
           ${row("OS", asset.os ? escapeHtml(asset.os) : null)}
+          ${row("EOL/EOS", eolStatus && eolStatus.status !== "unknown"
+            ? `${escapeHtml(eolStatus.status)} (${escapeHtml(eolStatus.eol_date)}, ${escapeHtml(eolStatus.vendor)})` : null)}
           ${row("First seen", f.first_seen ? escapeHtml(f.first_seen) : null)}
           ${row("Last seen", f.last_seen ? escapeHtml(f.last_seen) : null)}
           ${row("SLA due", sla)}
@@ -68,21 +96,77 @@ export function openFindingDetail(f) {
         </tbody>
       </table>
     </div>
+    ${eolCallout}
 
     ${f.recommended_fix ? `
       <h3>Recommended fix</h3>
       <p>${escapeHtml(f.recommended_fix)}</p>` : ""}
 
+    <h3>Similar findings</h3>
+    <div id="similar-findings-body">
+      <p class="filter-count">Loading — real TF-IDF + cosine-similarity text search…</p>
+    </div>
+
     <p class="subtitle" style="margin-top:16px">
       <a href="/ai-assist?finding_id=${encodeURIComponent(f.id)}" data-link>Ask AI about this finding</a>
       &nbsp;·&nbsp;
       <a href="/remediate" data-link>See it in the remediation plan</a>
+      &nbsp;·&nbsp;
+      <a href="/ml-insights" data-link>ML Insights</a>
     </p>`;
 
   const modalBody = openModal(body);
-  // The two links above navigate away via app.js's document-level [data-link]
-  // handler - close the modal first so it doesn't stay open over the new page.
+  // The links above navigate away via app.js's document-level [data-link] handler -
+  // close the modal first so it doesn't stay open over the new page.
   modalBody.querySelectorAll("a[data-link]").forEach((a) => {
     a.addEventListener("click", () => closeModal());
+  });
+
+  loadSimilarFindings(f.id, modalBody);
+}
+
+// Fetched lazily (not blocking the modal's initial open) - real scikit-learn
+// TfidfVectorizer + cosine similarity over title+description
+// (remediation/enrichment/ml_insights.py's find_similar_findings()), same "unsupervised,
+// advisory, real - not a heuristic" posture as the rest of /ml-insights.
+async function loadSimilarFindings(findingId, modalBody) {
+  let similar;
+  try {
+    ({ similar } = await api.mlSimilarFindings(findingId));
+  } catch (err) {
+    const el = modalBody.querySelector("#similar-findings-body");
+    if (el) el.innerHTML = `<p class="filter-count">Couldn't load similar findings (${escapeHtml(err.message || String(err))}).</p>`;
+    return;
+  }
+  // The modal may have already been closed (or replaced by a different finding) by the
+  // time this async fetch resolves - querying modalBody (not document) means a stale
+  // response can't accidentally write into whatever's open now.
+  const el = modalBody.querySelector("#similar-findings-body");
+  if (!el) return;
+  if (!similar.length) {
+    el.innerHTML = `<p class="filter-count">No similar findings found.</p>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>ID</th><th>Asset</th><th>Severity</th><th>Title</th><th>Similarity</th></tr></thead>
+        <tbody>
+          ${similar.map((s) => `
+            <tr>
+              <td><button type="button" class="link-button similar-finding-link" data-finding-id="${escapeHtml(s.id)}">${escapeHtml(s.id)}</button></td>
+              <td>${escapeHtml(s.asset && s.asset.name)}</td>
+              <td>${escapeHtml(s.severity)}</td>
+              <td>${escapeHtml(s.title)}</td>
+              <td>${(s.similarity * 100).toFixed(0)}%</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+  el.querySelectorAll(".similar-finding-link").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const match = similar.find((s) => s.id === btn.dataset.findingId);
+      if (match) openFindingDetail(match);
+    });
   });
 }

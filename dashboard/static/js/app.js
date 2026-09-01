@@ -10,6 +10,9 @@ import { initSidebarToggle } from "./sidebarToggle.js";
 import { initTooltips } from "./tooltip.js";
 import { initThreatTip } from "./threatTip.js";
 import { initPageFooter } from "./pageFooter.js";
+import { initTopbarTenant } from "./topbarTenant.js";
+import { initInsightsPanel, resetInsightsContent } from "./insightsPanel.js";
+import { initIdleTimeout } from "./idleTimeout.js";
 
 const routes = [
   { pattern: /^\/$/, load: () => import("./pages/overview.js") },
@@ -17,6 +20,10 @@ const routes = [
   { pattern: /^\/remediate\/?$/, load: () => import("./pages/remediate.js") },
   { pattern: /^\/queue\/?$/, load: () => import("./pages/queue.js") },
   { pattern: /^\/priority-rules\/?$/, load: () => import("./pages/priorityRules.js") },
+  { pattern: /^\/exploit-criteria\/?$/, load: () => import("./pages/exploitCriteria.js") },
+  { pattern: /^\/notification-settings\/?$/, load: () => import("./pages/notificationSettings.js") },
+  { pattern: /^\/remediation-policy\/?$/, load: () => import("./pages/remediationPolicy.js") },
+  { pattern: /^\/remediation-approvals\/?$/, load: () => import("./pages/remediationApprovals.js") },
   { pattern: /^\/servicenow\/?$/, load: () => import("./pages/servicenow.js") },
   { pattern: /^\/jira\/?$/, load: () => import("./pages/jira.js") },
   { pattern: /^\/splunk\/?$/, load: () => import("./pages/splunk.js") },
@@ -35,8 +42,18 @@ const routes = [
   { pattern: /^\/infrastructure\/?$/, load: () => import("./pages/infrastructure.js") },
   { pattern: /^\/inbox\/?$/, load: () => import("./pages/inbox.js") },
   { pattern: /^\/risk\/?$/, load: () => import("./pages/risk.js") },
+  { pattern: /^\/vulnerability-mapping\/?$/, load: () => import("./pages/vulnerabilityMapping.js") },
+  { pattern: /^\/asset-mapping\/?$/, load: () => import("./pages/assetMapping.js") },
+  { pattern: /^\/compensating-controls\/?$/, load: () => import("./pages/compensatingControls.js") },
+  { pattern: /^\/ml-insights\/?$/, load: () => import("./pages/mlInsights.js") },
+  { pattern: /^\/activity-log\/?$/, load: () => import("./pages/activityLog.js") },
+  { pattern: /^\/asset-policy\/?$/, load: () => import("./pages/assetPolicy.js") },
+  { pattern: /^\/threat-intel\/?$/, load: () => import("./pages/threatIntel.js") },
   { pattern: /^\/ai-vulnerabilities\/?$/, load: () => import("./pages/aiVulnerabilities.js") },
+  { pattern: /^\/quantum-readiness\/?$/, load: () => import("./pages/quantumReadiness.js") },
+  { pattern: /^\/certificate-vulnerabilities\/?$/, load: () => import("./pages/certificateVulnerabilities.js") },
   { pattern: /^\/login\/?$/, load: () => import("./pages/login.js") },
+  { pattern: /^\/logout\/?$/, load: () => import("./pages/logout.js") },
   { pattern: /^\/profile\/?$/, load: () => import("./pages/profile.js") },
   { pattern: /^\/playbooks\/([^/]+)$/, load: () => import("./pages/playbookDetail.js") },
 ];
@@ -68,10 +85,12 @@ async function renderRoute() {
     currentCleanup = null;
   }
   topbarExtraEl.innerHTML = "";
+  resetInsightsContent();
 
   let pathname = window.location.pathname;
+  const isAuthPage = (p) => p === "/login" || p === "/logout";
 
-  if (pathname !== "/login") {
+  if (!isAuthPage(pathname)) {
     const user = await getCurrentUser();
     if (!user) {
       const redirect = encodeURIComponent(pathname + window.location.search);
@@ -80,8 +99,8 @@ async function renderRoute() {
     }
   }
 
-  document.querySelector(".app-shell").classList.toggle("auth-page", pathname === "/login");
-  if (pathname === "/login") {
+  document.querySelector(".app-shell").classList.toggle("auth-page", isAuthPage(pathname));
+  if (isAuthPage(pathname)) {
     document.getElementById("sidebar").innerHTML = "";
   } else {
     renderSidebar(pathname, window.location.search);
@@ -126,8 +145,11 @@ window.addEventListener("popstate", renderRoute);
 initGlobalSearch();
 initNotificationBell();
 initAccountChip();
+initTopbarTenant();
 initSidebarToggle();
+initInsightsPanel();
 initTooltips();
 initThreatTip();
 initPageFooter();
+initIdleTimeout();
 renderRoute();

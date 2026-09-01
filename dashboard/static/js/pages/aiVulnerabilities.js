@@ -4,8 +4,9 @@
 // module docstring for the same "illustrative, not authoritative" honesty caveat
 // already applied to the Risk Dashboard's MITRE ATT&CK heat map. Every count here
 // comes from real /api/ai-vulnerabilities data (findings tagged by keyword against
-// this taxonomy) - this repo's demo app has no AI/ML component, so expect every
-// count to be zero, not faked - see the FAQ.
+// this taxonomy) - vulnerable-demo-app/ai_assistant.py plants real AI/ML SAST
+// findings, so several categories now show genuine non-zero counts; see the FAQ for
+// which categories still honestly have none.
 import { escapeHtml } from "../dom.js";
 import { api } from "../api.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
@@ -71,9 +72,15 @@ function vulnerabilityCard(v) {
   const atlasRef = v.atlas_technique_id
     ? `<code>${escapeHtml(v.atlas_technique_id)}</code> - ${escapeHtml(v.atlas_technique_name)} (tactic: ${escapeHtml(v.atlas_tactic)})`
     : `${escapeHtml(v.atlas_technique_name)} (tactic: ${escapeHtml(v.atlas_tactic)})`;
+  // Same ATLAS reference shown below in the expanded body, surfaced here too as a small
+  // inline badge so the TTP is visible on the collapsed row - previously it was only
+  // visible after clicking a category open.
+  const ttpBadge = v.atlas_technique_id
+    ? `<span class="badge badge-outline" data-tooltip="${escapeHtml(v.atlas_tactic)}">${escapeHtml(v.atlas_technique_id)}</span>`
+    : `<span class="badge badge-outline muted" data-tooltip="${escapeHtml(v.atlas_tactic)} - no dedicated ATLAS technique">No dedicated technique</span>`;
   return `
     <details class="faq-item">
-      <summary>${escapeHtml(v.name)}</summary>
+      <summary>${escapeHtml(v.name)} ${ttpBadge}</summary>
       <p><strong>Summary:</strong> ${escapeHtml(v.summary)}</p>
       <p><strong>Remediation:</strong> ${escapeHtml(v.remediation)}</p>
       <p><strong>MITRE ATLAS cross-reference:</strong> ${atlasRef}</p>
@@ -98,9 +105,13 @@ export async function render(container) {
       (<a href="https://atlas.mitre.org/" target="_blank" rel="noopener">atlas.mitre.org</a>),
       not a verified or authoritative mapping - same "suggestion to verify, not a fact
       to cite" caveat already applied to the Risk Dashboard's MITRE ATT&CK heat map.
-      Confirm any specific ID before citing it formally. This repo's demo app has no
-      AI/ML component, so every count below is honestly zero - not faked to look
-      populated (same treatment DAST and API Vulnerabilities already get).
+      Confirm any specific ID before citing it formally.
+      vulnerable-demo-app/ai_assistant.py plants real AI/ML SAST findings (an insecure
+      model-deserialization path, a prompt-injection-shaped concatenation, an
+      excessive-agency LLM-to-shell path), so Prompt Injection, AI Supply Chain
+      Compromise, and Excessive Agency below show genuine non-zero counts. Every other
+      category is honestly zero - not faked to look populated (same treatment DAST and
+      API Vulnerabilities get).
     </div>
 
     <h2>MITRE ATLAS heat map</h2>
