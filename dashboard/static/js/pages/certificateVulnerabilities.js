@@ -17,7 +17,7 @@ import {
   totalVulnerabilitiesKpiHtml, teamPriorityChartBlockHtml,
   agingChartBlockHtml, agingByPriorityTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
-import { aiTrendAnalysisSectionHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Certificate Vulnerabilities";
@@ -61,13 +61,12 @@ export async function render(container) {
     ${agingDisclaimerHtml()}
     <div class="chart-row">
       ${agingChartBlockHtml(certFindings)}
+      ${aiTrendAnalysisTileHtml("cert-hub", "Certificate & TLS Lifecycle Management")}
     </div>
     <h3 style="margin-top:20px">By priority</h3>
     ${agingByPriorityTableHtml(certFindings)}
 
     ${topRankingsHtml("cert-hub", rankings)}
-
-    ${aiTrendAnalysisSectionHtml("cert-hub", "Certificate & TLS Lifecycle Management")}
 
     <h2 style="margin-top:28px">All certificate findings</h2>
     <div class="filter-bar" id="cert-hub-filters">${dateRangeHtml("cert-hub-daterange", dateRange)}</div>

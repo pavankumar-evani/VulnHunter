@@ -1,5 +1,6 @@
-// Shared "AI trend analysis" widget - reused across Overview/Infrastructure/AppSec/Risk
-// so each gets the same real, confirm-gated Claude Code call over that page's OWN
+// Shared "AI trend analysis" widget - reused across Overview/Infrastructure/AppSec/
+// Risk/Certificate Vulnerabilities so each gets the same real, confirm-gated Claude
+// Code call over that page's OWN
 // already-computed real stats (severity/team/priority breakdowns, KPI totals, etc.),
 // never a fabricated "AI insight" and never an auto-run-on-page-load call (per
 // /api/ai-assist's own established pattern: no caching, no budget cap on this route,
@@ -9,34 +10,11 @@
 import { api } from "./api.js";
 import { escapeHtml, flash } from "./dom.js";
 
-export function aiTrendAnalysisSectionHtml(idPrefix, scopeLabel) {
-  return `
-    <h2 style="margin-top:28px">AI trend analysis</h2>
-    <div class="callout callout-warn">
-      ⚠️ Generating a REAL analysis (checking confirm below) calls the real Claude API
-      and spends real usage/credits against your Claude plan, over the ${escapeHtml(scopeLabel)}
-      stats already shown above - not a live re-query, and not a fabricated insight.
-      Preview first - it's free and shows the exact prompt that would be sent, same
-      pattern as AI Assist on a single finding.
-    </div>
-    <form class="run-form" id="${idPrefix}-ai-trend-form">
-      <label class="checkbox-label checkbox-danger">
-        <input type="checkbox" name="confirm" id="${idPrefix}-ai-trend-confirm">
-        I understand this spends real API usage/credits - actually ask the AI (leave
-        unchecked to preview the prompt only, free, no call made)
-      </label>
-      <button type="submit">Generate trend analysis</button>
-    </form>
-    <div id="${idPrefix}-ai-trend-result"></div>`;
-}
-
-// A compact variant of the same real feature (same form fields/ids, same
-// wireAiTrendAnalysis() wiring below - only the surrounding markup differs), sized to
-// sit as a third .chart-block in an existing .chart-row next to whichever real chart
-// that page already renders (e.g. overview.js's "By team"/"By priority" row) instead
-// of as its own full-width section pushing everything else down. The full warning
-// text moves into a hover tooltip on the (i) - still real, still disclosed, just not
-// taking up permanent vertical space in a tile-sized slot.
+// Sized to sit as a chart-block in an existing .chart-row next to whichever real
+// chart that page already renders (e.g. overview.js's "By team"/"By priority" row)
+// instead of pushing everything else down as its own full-width section. The full
+// warning text lives in a hover tooltip on the (i) - still real, still disclosed,
+// just not taking up permanent vertical space in a tile-sized slot.
 export function aiTrendAnalysisTileHtml(idPrefix, scopeLabel) {
   const tooltip = `Generating a REAL analysis (checking confirm) calls the real Claude API and spends real usage/credits, over the ${scopeLabel} stats already shown - not a live re-query, never fabricated. Preview first, it's free.`;
   return `

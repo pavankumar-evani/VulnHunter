@@ -22,7 +22,7 @@ import {
   totalVulnerabilitiesKpiHtml, severityBreakdownTableHtml, teamPriorityChartBlockHtml,
   agingChartBlockHtml, agingByPriorityTableHtml, agingBreakdownTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
-import { aiTrendAnalysisSectionHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Application Vulnerabilities";
@@ -162,6 +162,7 @@ export async function render(container) {
 
     <div class="chart-row">
       ${teamPriorityChartBlockHtml(scaDastFindings, teamByAssetName)}
+      ${aiTrendAnalysisTileHtml("appsec-hub", "Application Security (SAST/DAST/SCA/Secrets/Container/API)")}
     </div>
     <p class="filter-count" style="margin:-4px 0 12px">
       Team/priority breakdown covers DAST/SCA/Repo Secret Scanning findings only - SAST
@@ -200,8 +201,6 @@ export async function render(container) {
       API findings have no asset/CVE shape to rank by (see the Code Scan page).
     </p>
     ${topRankingsHtml("appsec-hub", rankings)}
-
-    ${aiTrendAnalysisSectionHtml("appsec-hub", "Application Security (SAST/DAST/SCA/Secrets/Container/API)")}
 
     <h2 style="margin-top:28px">SCA, DAST, and Repository Secret Scanning findings (SLA-tracked)</h2>
     <p class="subtitle">

@@ -20,7 +20,7 @@ import {
   totalVulnerabilitiesKpiHtml, severityBreakdownTableHtml, teamPriorityChartBlockHtml,
   agingChartBlockHtml, agingByPriorityTableHtml, agingBreakdownTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
-import { aiTrendAnalysisSectionHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Infrastructure Vulnerabilities";
@@ -135,6 +135,7 @@ export async function render(container) {
 
     <div class="chart-row">
       ${teamPriorityChartBlockHtml(infraFindings, teamByAssetName)}
+      ${aiTrendAnalysisTileHtml("infra-hub", "Infrastructure Vulnerability Management")}
     </div>
 
     <h2 style="margin-top:28px">Open-finding age (30/60/90-day backlog aging)</h2>
@@ -149,8 +150,6 @@ export async function render(container) {
     ${severityBreakdownTableHtml(subgroups)}
 
     ${topRankingsHtml("infra-hub", rankings)}
-
-    ${aiTrendAnalysisSectionHtml("infra-hub", "Infrastructure Vulnerability Management")}
 
     <h2 style="margin-top:28px">All infrastructure findings</h2>
     <div class="filter-bar" id="infra-hub-filters">${dateRangeHtml("infra-hub-daterange", dateRange)}</div>
