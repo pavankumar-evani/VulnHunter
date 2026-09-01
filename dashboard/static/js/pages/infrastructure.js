@@ -124,7 +124,7 @@ export async function render(container) {
         })))}
       </div>
       ${counts.cloud ? `
-      <div class="chart-block" style="max-width:380px">
+      <div class="chart-block">
         <h3>Cloud findings by provider</h3>
         <p class="filter-count" style="margin:-4px 0 8px">
           Derived from each cloud asset's own real platform description

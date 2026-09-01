@@ -345,7 +345,7 @@ function riskScoringSection(assets, riskRules) {
     </div>
 
     <div class="chart-row">
-      <div class="chart-block" style="max-width:380px">
+      <div class="chart-block">
         <h3>Assets by risk tier</h3>
         <p class="filter-count" style="margin:-4px 0 8px">Hover a bar for its top asset types; click to see those assets in Asset Inventory.</p>
         ${tierChartData.length ? barChartSvg(tierChartData, { width: 340 }) : `<p class="empty-state">No scored assets yet.</p>`}
@@ -591,7 +591,7 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
     </div>
 
     <div class="chart-row">
-      <div class="chart-block" style="max-width:380px">
+      <div class="chart-block">
         <h3>Findings by month first seen (Infrastructure)</h3>
         <p class="filter-count" style="margin:-4px 0 8px">
           No historical-snapshot storage exists in this app, so this shows which of
@@ -600,7 +600,7 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
         </p>
         ${infraByMonth.length ? barChartSvg(infraByMonth, { width: 340 }) : `<p class="empty-state">No dated findings to chart.</p>`}
       </div>
-      <div class="chart-block" style="max-width:380px">
+      <div class="chart-block">
         <h3>Findings by month first seen (Application)</h3>
         <p class="filter-count" style="margin:-4px 0 8px">
           Same honest caveat as Infrastructure's chart, left of this one - SAST/Code Scan

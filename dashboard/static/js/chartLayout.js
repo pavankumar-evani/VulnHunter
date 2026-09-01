@@ -76,6 +76,11 @@ export function makeChartsReorderable(container, pageKey) {
       dragged = block;
       block.classList.add("chart-block-dragging");
       e.dataTransfer.effectAllowed = "move";
+      // Firefox (unlike Chrome) won't treat the drag as valid - and silently drops
+      // the whole gesture, so dragover/drop never fire - unless dragstart calls
+      // setData with something. The value itself is never read; blockKey(block) is
+      // just a meaningful, already-available string rather than an empty one.
+      e.dataTransfer.setData("text/plain", blockKey(block));
     });
     row.addEventListener("dragend", () => {
       if (dragged) dragged.classList.remove("chart-block-dragging");

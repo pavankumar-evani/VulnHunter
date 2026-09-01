@@ -575,7 +575,27 @@ a.notif-item:hover { background: var(--bg); }
 
 /* --- Hand-rolled charts (charts.js) - bar/pie, no charting library --- */
 .chart-row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin: 14px 0 20px; }
+/* flex:1 1 <basis> (not a fixed width) so every chart-block in a row grows to share
+   the row's full width evenly - same final rendered width across a row (the real
+   "uniform tile size" ask) instead of each block sitting at its own SVG's fixed
+   intrinsic width with empty space past the last one whenever a row doesn't divide
+   evenly, or - worse - a chart that wraps alone onto its own line staying small with
+   a large dead-space gap beside it. max-width caps how far a single wrapped block (or
+   a short row) can stretch, so a lone chart doesn't blow up to the full container
+   width. The chart SVG/pie-wrap inside keeps its own intrinsic size (see below) and
+   is centered within whatever extra width the block now has, rather than being
+   force-scaled and distorted. */
 .chart-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.chart-row .chart-block { flex: 1 1 320px; max-width: 560px; }
+/* Deliberately NOT made responsive (width:100%) - a bar chart sharing a row with a
+   pie chart (e.g. Infrastructure Vulnerabilities' top row) would then grow taller as
+   its block grows wider, since its viewBox aspect ratio ties height to width, while
+   the pie's own fixed-size SVG doesn't grow at all (its legend absorbs extra width
+   instead, see .chart-pie-wrap below) - reintroducing a height mismatch within the
+   very row this fix is meant to make uniform. Centering the chart's own intrinsic
+   size within its now-wider block is the safe tradeoff: the tile (block) fills the
+   row either way, this only affects whether the chart drawing itself also grows. */
+.chart-row .chart-block > svg.chart-svg { display: block; margin: 0 auto; }
 .chart-block h3 { margin: 0 0 8px; font-size: 0.92rem; }
 
 /* Drag-to-rearrange (chartLayout.js) - a real grip handle rather than making the
@@ -650,17 +670,20 @@ a.notif-item:hover { background: var(--bg); }
 .chart-bar-value { font-size: 10px; fill: var(--text); font-weight: 600; }
 .chart-bar-label { font-size: 9px; fill: var(--text-muted); }
 .chart-pie-wrap { display: flex; align-items: center; gap: 16px; }
-/* max-width forces long category labels (e.g. "Server Vulnerabilities (Windows,
-   Linux/Unix)") to wrap onto multiple lines instead of stretching the legend - and
-   with it, the whole .chart-block - wide enough to push a sibling chart onto its own
-   row in a .chart-row. Without this, two normally-side-by-side charts silently stack
-   as soon as any pie slice's label is long, on any moderate/laptop-width viewport. */
+.chart-pie-wrap > svg.chart-svg { flex-shrink: 0; }
+/* Sizing the whole ROW's width is .chart-row .chart-block's job now (flex-grow,
+   above) - a long category label just needs to wrap onto multiple lines rather than
+   stretching the legend (and with it, the whole .chart-block) wide enough to push a
+   sibling chart onto its own row. min-width (not max-width) keeps that same
+   wrap-not-stretch behavior at the block's smallest real width, while still letting
+   the legend actually use whatever extra room a wider block now has (flex:1 1 auto)
+   instead of leaving it as dead space beside a legend stuck at a fixed 150px. */
 /* max-height + scroll caps how TALL a many-category legend can grow - without this,
    an 11-category pie's chart-block ends up visibly taller than every bar-chart block
    beside it (a real reported "one pie chart is too big" complaint), since a legend's
    height was otherwise unbounded. Matches the pie's own default size (180px) so a
    pie's block reads about as tall as a bar chart's, not conspicuously longer. */
-.chart-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--text); max-width: 150px; max-height: 180px; overflow-y: auto; padding-right: 4px; }
+.chart-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--text); flex: 1 1 auto; min-width: 150px; max-width: 280px; max-height: 180px; overflow-y: auto; padding-right: 4px; }
 .chart-legend-row { display: flex; align-items: flex-start; gap: 6px; }
 .chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; display: inline-block; margin-top: 3px; }
 .chart-legend-label { min-width: 0; overflow-wrap: break-word; }

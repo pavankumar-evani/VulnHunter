@@ -2,7 +2,7 @@
 AI/ML vulnerability taxonomy, keyword tagging, and an illustrative MITRE ATLAS
 cross-reference.
 
-The ten categories below are real, established AI/ML security concepts (prompt
+The twelve categories below are real, established AI/ML security concepts (prompt
 injection, training-data poisoning, model supply-chain compromise, etc.) - the same
 substance covered by OWASP's Top 10 for LLM Applications and MITRE ATLAS
 (https://atlas.mitre.org/), MITRE's real, published knowledge base of adversary
@@ -207,6 +207,51 @@ AI_VULNERABILITIES = [
         "atlas_technique_id": "AML.T0053",
         "atlas_technique_name": "LLM Plugin Compromise",
     },
+    {
+        "id": "mcp-tool-poisoning",
+        "name": "MCP Tool Poisoning",
+        "summary": "A tool exposed to an agent via the Model Context Protocol (MCP) - or "
+            "any similar tool-description/schema mechanism - carries attacker-controlled "
+            "instructions hidden in its own description, parameter names, or metadata, "
+            "which the agent reads as trusted context and acts on, even though the "
+            "tool's human-facing name looks benign. A close sibling of Prompt Injection "
+            "above, specifically targeting tool-definition metadata rather than "
+            "end-user input - OWASP's own 2025-2026 LLM guidance flags this as a "
+            "critical, rapidly-growing risk as MCP adoption spreads.",
+        "remediation": "Treat every MCP server's tool descriptions as untrusted input, "
+            "not trusted configuration - review a tool's full schema/description text "
+            "before connecting to it, not just its name. Pin MCP server versions/hashes "
+            "rather than auto-updating. Prefer MCP servers from vetted, signed sources "
+            "(same supply-chain discipline as AI Supply Chain Compromise above). Log and "
+            "review what an agent actually invoked, not just what it was asked to do.",
+        "atlas_tactic": "Initial Access",
+        "atlas_technique_id": None,
+        "atlas_technique_name": "No dedicated ATLAS technique yet - MCP-specific tool "
+            "poisoning is newer than ATLAS's current published technique set; this is "
+            "the same real risk as LLM Prompt Injection (AML.T0051) applied to "
+            "tool-definition metadata instead of user-facing input.",
+    },
+    {
+        "id": "shadow-ai-agents",
+        "name": "Shadow AI Agents",
+        "summary": "An LLM-based agent or automation is deployed with real production "
+            "system access - a CRM, email, an internal API - without security/IT ever "
+            "inventorying, reviewing, or governing it. The AI-specific analogue of "
+            "shadow IT, except the unmanaged thing itself can also take autonomous "
+            "action rather than just sitting there as an unpatched risk.",
+        "remediation": "Maintain a real inventory of every agent with production system "
+            "access - owner, granted tools/scopes, last review date. Require the same "
+            "onboarding/approval gate for a new agent that a new service account or "
+            "integration would get. Periodically audit API-key/OAuth-grant usage "
+            "patterns for signs of an unregistered agent operating.",
+        "atlas_tactic": "Persistence",
+        "atlas_technique_id": None,
+        "atlas_technique_name": "No dedicated ATLAS technique - this is an "
+            "asset-visibility/governance gap (an unmanaged agent existing at all) "
+            "rather than an attack technique against a known one. \"Persistence\" is "
+            "the closest real ATLAS tactic: an ungoverned agent that nobody is tracking "
+            "is, by definition, a long-lived, unmonitored foothold.",
+    },
 ]
 
 _BY_ID = {v["id"]: v for v in AI_VULNERABILITIES}
@@ -226,6 +271,8 @@ _PATTERNS = [
     (r"\bmodel extraction\b|\bmodel theft\b|\bmodel stealing\b", "model-theft"),
     (r"\bhallucinat|\bmisinformation\b.*\bmodel\b|\boverreliance\b", "misinformation"),
     (r"\bplugin\b.*\b(llm|agent)\b.*\bunvalidated\b|\btool.calling\b.*\bunvalidated\b", "insecure-plugin-tool-design"),
+    (r"\bmcp\b.*\b(poison|malicious|compromis)|\btool poisoning\b", "mcp-tool-poisoning"),
+    (r"\bshadow (ai |llm )?agents?\b|\bunmanaged agent\b|\bunregistered agent\b|\bungoverned agent\b", "shadow-ai-agents"),
 ]
 _COMPILED = [(re.compile(pattern, re.IGNORECASE), vid) for pattern, vid in _PATTERNS]
 

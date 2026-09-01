@@ -81,9 +81,14 @@ def fetch_nvd(keyword, results_per_page=2000):
 
 
 def best_cvss(cve):
-    """Prefers CVSS v3.1, then v3.0, then v2 - returns (score, severity) or (None, None)."""
+    """Prefers CVSS v4.0, then v3.1, then v3.0, then v2 - returns (score, severity) or
+    (None, None). NVD's real API v2.0 response carries whichever version(s) NIST has
+    actually scored a given CVE under - v4.0 (FIRST.org's current standard, released
+    Nov 2023) is being backfilled gradually, so most CVEs today still only carry a
+    v3.1/v3.0 entry; this picks the newest one actually present rather than assuming
+    v4.0 exists for everything."""
     metrics = cve.get("metrics", {})
-    for key in ("cvssMetricV31", "cvssMetricV30"):
+    for key in ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30"):
         entries = metrics.get(key)
         if entries:
             data = entries[0]["cvssData"]
@@ -1320,6 +1325,70 @@ AI_ML_CLASSES = [
     ("Medium", 6.5, "Ticketing-System Plugin Accepts Unvalidated Priority Escalation Field From Agent",
      "The ticketing-system plugin accepts an unvalidated priority-escalation field from the agent's tool call, letting a manipulated conversation force incident escalation.",
      "Validate the escalation field against role-based limits at the plugin boundary, rather than trusting whatever priority the agent's tool call requests."),
+
+    # --- mcp-tool-poisoning (10) ---
+    ("Critical", 9.0, "MCP Tool Description Poisoning Injects Hidden Instructions in Code-Review Copilot",
+     "A Model Context Protocol tool exposed to the code-review copilot carries hidden instructions embedded in its own description field, a form of MCP tool poisoning that the agent reads as trusted context rather than untrusted external content.",
+     "Review a tool's full schema/description text before connecting to it, not just its name; treat every MCP server's tool descriptions as untrusted input."),
+    ("High", 7.7, "Malicious MCP Server Compromises File-Access Tool Schema for Coding Agent",
+     "A third-party MCP server the coding agent connects to was found to be malicious, having compromised the file-access tool's schema to request broader permissions than its stated purpose.",
+     "Source MCP servers only from vetted, signed repositories, and pin server versions/hashes rather than auto-updating from an unverified source."),
+    ("Medium", 6.3, "MCP Tool Poisoning via Hidden Unicode Instructions in Parameter Description",
+     "A parameter description on an MCP tool contained hidden Unicode-obscured instructions - a form of MCP tool poisoning - that the agent parsed and acted on without a human noticing the visually-blank text.",
+     "Scan MCP tool metadata for non-printing/obscured Unicode content before trusting a server's tool definitions."),
+    ("High", 8.1, "Compromised Third-Party MCP Server Poisons Database-Query Tool Metadata",
+     "A compromised third-party MCP server poisons the metadata of a database-query tool, causing the agent to execute an unintended broader query than the user requested.",
+     "Pin and vet third-party MCP servers the same as any other dependency; monitor for unexpected changes to a previously-reviewed tool's schema."),
+    ("Critical", 9.2, "MCP Tool Poisoning Exfiltrates Credentials Through Disguised Logging Tool",
+     "An MCP logging tool's description was poisoned to instruct the agent to include credential material in its log payloads, exfiltrating secrets through a tool that looked benign.",
+     "Log and review what an agent actually invoked and what data it passed, not just what it was asked to do; scope logging tools to reject sensitive-looking payloads."),
+    ("Medium", 6.0, "Unpinned MCP Server Auto-Update Introduces Tool Poisoning in CI Pipeline Agent",
+     "An MCP server used by the CI pipeline agent auto-updated to a new version that introduced tool poisoning in its build-tool description, altering agent behavior without any change review.",
+     "Pin MCP server versions/hashes explicitly rather than auto-updating, so a poisoned update can't silently reach a production agent."),
+    ("High", 7.4, "MCP Tool Poisoning Overrides Agent Instructions via Malicious Tool Name Field",
+     "An MCP tool's own name field contained an instruction-shaped string - a form of MCP tool poisoning - that overrode the agent's task instructions once the tool list was loaded into context.",
+     "Validate MCP tool name/description fields for instruction-shaped content before allowing a server's tools into an agent's context."),
+    ("High", 7.9, "MCP Search Tool Poisoning Redirects Agent to Attacker-Controlled Endpoint",
+     "An MCP search tool's description was poisoned to redirect the agent's follow-up actions to an attacker-controlled endpoint disguised as the original search result source.",
+     "Review MCP tool descriptions for embedded URLs/redirects before approving a server, and log which endpoints an agent's tool calls actually reach."),
+    ("Medium", 6.6, "MCP Tool Poisoning in Shared Internal Registry Affects Multiple Downstream Agents",
+     "A poisoned tool definition in a shared internal MCP registry affected every downstream agent that referenced it, spreading MCP tool poisoning across teams from a single compromised source.",
+     "Review and sign tool definitions centrally before they're published to a shared MCP registry, rather than trusting each consuming team to catch it independently."),
+    ("Critical", 8.8, "MCP Tool Poisoning Bypasses Human Review by Mimicking a Benign Formatting Tool",
+     "An MCP tool disguised as a simple text-formatting utility carried poisoned instructions that triggered a privileged action once invoked, bypassing human review that only checked the tool's stated (benign) purpose.",
+     "Review a tool's actual behavior/permissions, not just its stated purpose, before approving it; require confirmation for any consequential action regardless of which tool triggered it."),
+
+    # --- shadow-ai-agents (10) ---
+    ("High", 7.6, "Shadow AI Agent Discovered with Unreviewed Production CRM Access",
+     "A shadow AI agent was found operating with standing access to the production CRM, deployed by a business team without security or IT ever reviewing or inventorying it.",
+     "Maintain a real inventory of every agent with production system access - owner, granted scopes, last review date - and require the same approval gate a new integration would get."),
+    ("Medium", 6.2, "Unregistered Agent Automating Email Replies Found Outside IT Governance",
+     "An unregistered agent auto-replying to customer emails on behalf of a team was discovered operating entirely outside IT's governance process, with no record of its permissions or owner.",
+     "Require agent registration before granting mailbox or messaging access, and periodically audit for automation activity with no matching registration."),
+    ("High", 7.8, "Shadow LLM Agent Connected to Internal Ticketing System Without Security Review",
+     "A shadow LLM agent connected to the internal ticketing system was found auto-triaging and closing tickets, never having gone through a security review before being granted that access.",
+     "Gate ticketing-system integrations (human or agent) behind the same access-review process, and audit existing integrations for ones that were never reviewed."),
+    ("Critical", 8.5, "Unmanaged Agent with Standing Database Write Access Found in Marketing Team's Workflow",
+     "An unmanaged agent embedded in a marketing team's workflow tool was found with standing write access to a production database, granted informally with no security review or ownership record.",
+     "Treat any agent with database write access as a privileged integration requiring the same review as a service account, regardless of which team deployed it."),
+    ("Medium", 5.8, "Shadow AI Agent Deployed via Personal API Key Bypasses Central Governance",
+     "An employee deployed a shadow AI agent using a personal API key rather than a managed service credential, bypassing central governance and leaving no audit trail tied to the organization's own key management.",
+     "Prohibit production integrations authenticated with personal API keys; require all agent credentials to be issued and rotated through central key management."),
+    ("High", 7.3, "Ungoverned Agent Orchestrating Cloud Infrastructure Changes Outside Change Management",
+     "An ungoverned agent was found making real cloud-infrastructure changes on a recurring schedule, entirely outside the organization's change-management process.",
+     "Route every infrastructure-changing action - agent-initiated or human - through the same change-management approval process, with no informal exceptions for automation."),
+    ("Medium", 6.4, "Shadow Agent Built on Public Automation Platform Has Access to Customer Data Export",
+     "A shadow agent built on a public no-code automation platform was found with export access to customer data, set up by a team without any data-governance or security review.",
+     "Extend data-access governance to no-code/low-code automation platforms explicitly, since they're a common, easy path for a shadow agent to acquire real data access."),
+    ("High", 7.1, "Unregistered Agent Found Auto-Approving Internal Purchase Requests",
+     "An unregistered agent was discovered auto-approving internal purchase requests below a threshold it had set for itself, with no record of who deployed it or why it had approval authority.",
+     "Require human-in-the-loop approval for any financially-consequential action, and audit approval-authority grants for ones tied to an unregistered agent rather than a named human."),
+    ("Critical", 8.3, "Shadow AI Agent with OAuth Grant to Finance System Discovered During Audit",
+     "A routine access audit discovered a shadow AI agent holding an active OAuth grant to the finance system, with no record of when it was authorized or by whom.",
+     "Periodically audit OAuth grants for ones tied to unregistered agents, and require re-authorization through a governed process for any grant that can't be traced to an approved request."),
+    ("Medium", 6.5, "Unmanaged Agent Running Unattended Since Deployment with No Owner of Record",
+     "An unmanaged agent has been running unattended since its initial deployment with no owner of record, so nobody was positioned to notice when its behavior started to drift from its original purpose.",
+     "Assign a named owner to every deployed agent at creation time, and flag any agent whose owner field is empty or whose owner has left the organization."),
 ]
 
 AI_ML_HOSTS = [

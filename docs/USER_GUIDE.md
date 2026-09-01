@@ -127,7 +127,7 @@ database and no historical trend view across runs — see
 | FAQ | `/faq` | Direct answers to common questions — mirrors [FAQ.md](FAQ.md). |
 | Exceptions | `/exceptions` | Request/approve/auto-expire/revoke a time-boxed risk-acceptance waiver per finding, with keyword-suggested compensating controls on the request form. Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
 | Asset Inventory | `/assets` | Every asset with findings against it, aggregated, with an editable owner/team field (local file, not a CMDB sync). `[SCREENSHOT: Asset Inventory]` |
-| Risk Management | `/risk` | MITRE ATT&CK heat map, top vulnerabilities by type, top assets by critical findings, an editable internal/external-facing classification, and a CVSS v3.1 severity reference. See [§9](#9-the-risk-management-dashboard) below. `[SCREENSHOT: Risk Management]` |
+| Risk Management | `/risk` | MITRE ATT&CK heat map, top vulnerabilities by type, top assets by critical findings, an editable internal/external-facing classification, and a CVSS v4.0 severity reference. See [§9](#9-the-risk-management-dashboard) below. `[SCREENSHOT: Risk Management]` |
 | Inbox | `/inbox` | Real, system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not messages between people. See [§10](#10-the-notification-inbox) below. `[SCREENSHOT: Inbox]` |
 | Jira | `/jira` | Same preview/send pattern as ServiceNow, targeting a Jira Cloud project. |
 | Splunk | `/splunk` | Same preview/send pattern as ServiceNow, sending findings to Splunk as HEC events. |
@@ -307,9 +307,12 @@ Remediation Queue and Asset Inventory pages already show — not a new data sour
   table, that you can change on the spot. This is **manually set only** — there is no
   network scan behind it, exactly like asset ownership. It defaults to "Unclassified"
   until someone sets it. See [FAQ.md](FAQ.md#is-the-internalexternal-facing-classification-on-the-risk-dashboard-from-a-real-network-scan).
-- **CVSS v3.1 severity-definitions reference** — a plain reminder of what
+- **CVSS v4.0 severity-definitions reference** — a plain reminder of what
   Critical/High/Medium/Low mean on the industry-standard 0-10 scale, per the
-  [FIRST.org CVSS v3.1 specification](https://www.first.org/cvss/v3.1/specification-document).
+  [FIRST.org CVSS v4.0 specification](https://www.first.org/cvss/v4.0/specification-document).
+  The qualitative bands are unchanged from CVSS v3.x, so this reference applies
+  regardless of which CVSS version a given finding's own score was originally reported
+  in - VulnHunter never re-scores a finding itself.
 
 ## 10. The notification inbox
 

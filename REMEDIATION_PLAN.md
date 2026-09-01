@@ -1,13 +1,13 @@
-# Remediation Plan — 9425 findings
+# Remediation Plan — 9445 findings
 
 **Automated remediation available today:** 1099 findings (windows-server + unix-server)
-**Manual-only (no fixer for this asset class yet):** 8326 findings
+**Manual-only (no fixer for this asset class yet):** 8346 findings
 
-**Risk tier split:** 1095 auto-approvable · 4 needs-change-approval · 8326 manual-only
+**Risk tier split:** 1095 auto-approvable · 4 needs-change-approval · 8346 manual-only
 
 **Threat intel:** 134 findings are KEV-listed (confirmed actively exploited) and 286 have an EPSS score ≥ 50%.
 
-**Scale note:** this plan now covers 9425 findings (9410 added via real-CVE bulk sourcing from NVD, see `remediation/sample-data/generate_bulk_findings.py`). `action_type` and `risk_tier` for the bulk-sourced majority come from one disclosed, uniform heuristic (`remediation/sample-data/bulk_plan.py`) rather than individual per-finding research - see that script's module docstring. The live, re-scored view at `/queue` remains the authoritative, always-current source; this file is the point-in-time snapshot `/remediate` shows.
+**Scale note:** this plan now covers 9445 findings (9430 added via real-CVE bulk sourcing from NVD, see `remediation/sample-data/generate_bulk_findings.py`). `action_type` and `risk_tier` for the bulk-sourced majority come from one disclosed, uniform heuristic (`remediation/sample-data/bulk_plan.py`) rather than individual per-finding research - see that script's module docstring. The live, re-scored view at `/queue` remains the authoritative, always-current source; this file is the point-in-time snapshot `/remediate` shows.
 
 ## Remediation queue (priority order)
 
@@ -1243,6 +1243,7 @@
 | FIND-7030 | AI-ML-LLM-CHATBOT-01 | Model Registry Loads Third-Party Checkpoint via Insecure Pickle Deserialization | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-7051 | AI-ML-LLM-API-GATEWAY-07 | Autonomous Ops Agent Given Unrestricted Tool Access to Production Shell | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-8290 | CLOUD-0281 | bleon-ethical/api-gateway-deploy provides API gateway deployment. Version 1.0.0 is vulnerable to an attack chain… | CVE-2026-27208 | Critical | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-9430 | AI-ML-RECOMMENDATION-ENGINE-ML-15 | MCP Tool Poisoning Exfiltrates Credentials Through Disguised Logging Tool | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-276 | WEB-PORTAL-0261 | Node.js was affected by OpenSSL vulnerability CVE-2017-3737 in regards to the use of SSL_read() due to TLS handshake… | CVE-2017-15896 | Critical | config-change | manual-only | manual-only | No | 2.4% |
 | FIND-309 | WEB-PORTAL-0294 | An issue was discovered in openfortivpn 1.11.0 when used with OpenSSL before 1.0.2. tunnel.c mishandles certificate… | CVE-2020-7043 | Critical | config-change | manual-only | manual-only | No | 2.5% |
 | FIND-310 | WEB-PORTAL-0295 | openssl_x509_check_host in lua-openssl 0.7.7-1 mishandles X.509 certificate validation because it uses lua_pushboolean… | CVE-2020-9432 | Critical | config-change | manual-only | manual-only | No | 0.8% |
@@ -1434,6 +1435,7 @@
 | FIND-9102 | CLOUD-1098 | vCluster Platform provides a Kubernetes platform for managing virtual clusters, multi-tenancy, and cluster sharing.… | CVE-2026-42457 | Critical | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9306 | CLOUD-1304 | This affects all versions of package docker-cli-js. If the command parameter of the Docker.command method can at least… | CVE-2021-23732 | Critical | firmware-update | manual-only | manual-only | No | 1.8% |
 | FIND-9329 | CLOUD-1327 | Information Exposure Through an Error Message vulnerability in Hitachi RAID Manager Storage Replication Adapter allows… | CVE-2022-34882 | Critical | firmware-update | manual-only | manual-only | No | 0.8% |
+| FIND-9426 | AI-ML-CODE-REVIEW-COPILOT-11 | MCP Tool Description Poisoning Injects Hidden Instructions in Code-Review Copilot | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-7007 | AI-ML-ML-INFERENCE-SVC-08 | Prompt Injection Through Malicious Code Comments Reviewed by AI Copilot | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-7056 | AI-ML-DOC-SUMMARIZER-AI-12 | DevOps Agent Can Modify Production Infrastructure With No Human Approval Gate | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-9165 | CLOUD-1161 | A flaw was identified in Argo CD, the GitOps engine used by Red Hat OpenShift GitOps, that could allow an… | CVE-2026-15416 | High | firmware-update | manual-only | manual-only | No | 0.3% |
@@ -1744,6 +1746,7 @@
 | FIND-9337 | CLOUD-1335 | Akeneo PIM is an open source Product Information Management (PIM). Akeneo PIM Community Edition versions before… | CVE-2022-46157 | High | firmware-update | manual-only | manual-only | No | 1.4% |
 | FIND-9363 | CLOUD-1361 | CKAN is an open-source data management system for powering data hubs and data portals. Prior to versions 2.9.9 and… | CVE-2023-32696 | High | firmware-update | manual-only | manual-only | No | 0.8% |
 | FIND-9372 | CLOUD-1370 | Netmaker makes networks with WireGuard. A Mass assignment vulnerability was found in versions prior to 0.17.1 and… | CVE-2023-32079 | High | firmware-update | manual-only | manual-only | No | 0.7% |
+| FIND-9435 | AI-ML-MODEL-REGISTRY-05 | MCP Tool Poisoning Bypasses Human Review by Mimicking a Benign Formatting Tool | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-2706 | FW-EDGE-0699 | ZITADEL combines the ease of Auth0 and the versatility of Keycloak.**Actions**, introduced in ZITADEL **1.42.0** on… | CVE-2022-36051 | High | firmware-update | manual-only | manual-only | No | 0.8% |
 | FIND-6075 | WKS-0831 | The Act module for Red Discord Bot before commit 6b9f3b86 is vulnerable to Remote Code Execution. With this exploit,… | CVE-2020-15172 | High | patch | manual-only | manual-only | No | 1.8% |
 | FIND-6447 | REPO-0105 | Axios is a promise based HTTP client for the browser and Node.js. From 1.0.0 to before 1.16.0, the Axios library is… | CVE-2026-44494 | High | patch | manual-only | manual-only | No | 1.0% |
@@ -1923,6 +1926,7 @@
 | FIND-9187 | CLOUD-1184 | A flaw was found in the cluster-proxy service-proxy component used in Red Hat Advanced Cluster Management for… | CVE-2026-17107 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9192 | CLOUD-1189 | Kamaji is the Hosted Control Plane Manager for Kubernetes. Prior to 26.7.4-edge, Kamaji derives a TenantControlPlane… | CVE-2026-62246 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9194 | CLOUD-1191 | A flaw was found in Red Hat Advanced Cluster Security for Kubernetes (RHACS). When processing Kubernetes Deployments,… | CVE-2026-10079 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-9439 | AI-ML-CONTENT-MOD-MODEL-09 | Unmanaged Agent with Standing Database Write Access Found in Marketing Team's Workflow | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-1713 | NET-RTSW-0802 | A vulnerability in Cisco IOS XE SD-WAN Software could allow an unauthenticated, local attacker to gain unauthorized… | CVE-2019-1950 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-1757 | NET-RTSW-0846 | A vulnerability in task group assignment for a specific CLI command in Cisco IOS XR Software could allow an… | CVE-2020-3530 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-1978 | NET-RTSW-1068 | A vulnerability in the storage method of the PON Controller configuration file could allow an authenticated, local… | CVE-2024-20489 | High | firmware-update | manual-only | manual-only | No | 0.1% |
@@ -1975,6 +1979,7 @@
 | FIND-9098 | CLOUD-1094 | Argo Workflows is an open source container-native workflow engine for orchestrating parallel jobs on Kubernetes. From… | CVE-2026-42297 | High | firmware-update | manual-only | manual-only | No | 0.5% |
 | FIND-9166 | CLOUD-1162 | When NGINX Ingress Controller is configured with Custom Resource Definitions (CRDs) or Ingress annotations, an… | CVE-2026-55723 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9387 | CLOUD-1386 | Mailcow: dockerized is an open source groupware/email suite based on docker. A Cross-Site Scripting (XSS)… | CVE-2023-49077 | High | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-9444 | AI-ML-AUTONOMOUS-OPS-AGENT-14 | Shadow AI Agent with OAuth Grant to Finance System Discovered During Audit | — | Critical | manual-investigation | manual-only | manual-only | — | — |
 | FIND-235 | WEB-PORTAL-0220 | The X509_NAME_oneline function in crypto/x509/x509_obj.c in OpenSSL before 1.0.1t and 1.0.2 before 1.0.2h allows… | CVE-2016-2176 | High | config-change | manual-only | manual-only | No | 22.8% |
 | FIND-297 | WEB-PORTAL-0282 | An unprivileged user or program on Microsoft Windows which can create OpenSSL configuration files in a fixed location… | CVE-2019-2390 | High | config-change | manual-only | manual-only | No | 1.0% |
 | FIND-327 | WEBAPP-NOTIFICATION-SERVICE | XML External Entity (XXE) Injection (CWE-611) | — | High | config-change | manual-only | manual-only | — | — |
@@ -2273,6 +2278,7 @@
 | FIND-9334 | CLOUD-1332 | There is a vulnerability in DHCPv6 packet parsing code that could be explored by remote attacker to craft a packet… | CVE-2022-0324 | High | firmware-update | manual-only | manual-only | No | 1.1% |
 | FIND-9366 | CLOUD-1364 | Auto-GPT is an experimental open-source application showcasing the capabilities of the GPT-4 language model. Running… | CVE-2023-37273 | High | firmware-update | manual-only | manual-only | No | 0.4% |
 | FIND-9386 | CLOUD-1385 | The News & Blog Designer Pack – WordPress Blog Plugin — (Blog Post Grid, Blog Post Slider, Blog Post Carousel, Blog… | CVE-2023-5815 | High | firmware-update | manual-only | manual-only | No | 4.3% |
+| FIND-9429 | AI-ML-AUTONOMOUS-OPS-AGENT-14 | Compromised Third-Party MCP Server Poisons Database-Query Tool Metadata | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-1584 | NET-RTSW-0671 | Format String vulnerability in the Link Layer Discovery Protocol (LLDP) subsystem of Cisco IOS Software, Cisco IOS XE… | CVE-2018-0175 | High | firmware-update | manual-only | manual-only | Yes | 3.5% |
 | FIND-1939 | NET-RTSW-1029 | A vulnerability in the Authentication, Authorization, and Accounting (AAA) feature of Cisco IOS Software and Cisco IOS… | CVE-2023-20186 | High | firmware-update | manual-only | manual-only | No | 0.6% |
 | FIND-6790 | RUNTIME-LOGGING-AGENT-POD | Falco rule: Drop and execute new binary in container | — | High | manual-investigation | manual-only | manual-only | — | — |
@@ -2318,6 +2324,7 @@
 | FIND-8009 | VHOST-0296 | Incorrect Default Permissions vulnerability in Hitachi Storage Plug-in for VMware vCenter allows local users to read… | CVE-2024-21840 | High | patch | manual-only | manual-only | No | 0.1% |
 | FIND-8139 | CLOUD-0127 | The AWS SDK for Java enables Java developers to work with Amazon Web Services. A partial-path traversal issue exists… | CVE-2022-31159 | High | firmware-update | manual-only | manual-only | No | 1.4% |
 | FIND-9281 | CLOUD-1279 | Improper limitation of a pathname to a restricted directory ('Path Traversal') vulnerability container volume… | CVE-2021-33183 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-9433 | AI-ML-RAG-KNOWLEDGE-BOT-03 | MCP Search Tool Poisoning Redirects Agent to Attacker-Controlled Endpoint | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-4 | LNX-DB03 | Sudo Heap-Based Buffer Overflow (Baron Samedit) | CVE-2021-3156 | Critical | patch | ansible-unix | needs-change-approval | Yes | 99.3% |
 | FIND-47 | WEB-PORTAL-0032 | OpenSSL 0.9.7 before 0.9.7l and 0.9.8 before 0.9.8d allows remote attackers to cause a denial of service (infinite… | CVE-2006-2937 | High | config-change | manual-only | manual-only | No | 10.5% |
 | FIND-48 | WEB-PORTAL-0033 | OpenSSL 0.9.7 before 0.9.7l, 0.9.8 before 0.9.8d, and earlier versions allows attackers to cause a denial of service… | CVE-2006-2940 | High | config-change | manual-only | manual-only | No | 4.9% |
@@ -2887,6 +2894,7 @@
 | FIND-9410 | WKS-0318 | In the Linux kernel, the following vulnerability has been resolved: Revert "block, bfq: merge… | CVE-2024-53182 | High | patch | manual-only | manual-only | No | 0.2% |
 | FIND-9411 | WKS-0319 | A vulnerability in the update process of Docker Desktop for Windows versions prior to 4.41.0 could allow a local,… | CVE-2025-3224 | High | patch | manual-only | manual-only | No | 0.2% |
 | FIND-9415 | WKS-0323 | An out of bounds read vulnerability in the grpcfuse kernel module present in the Linux VM in Docker Desktop for… | CVE-2026-2664 | High | patch | manual-only | manual-only | No | 0.2% |
+| FIND-9438 | AI-ML-ML-INFERENCE-SVC-08 | Shadow LLM Agent Connected to Internal Ticketing System Without Security Review | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-1719 | NET-RTSW-0808 | A vulnerability in the Secure Shell (SSH) server code of Cisco IOS Software and Cisco IOS XE Software could allow an… | CVE-2020-3200 | High | firmware-update | manual-only | manual-only | No | 1.7% |
 | FIND-1750 | NET-RTSW-0839 | A vulnerability in the Simple Network Management Protocol (SNMP) subsystem of Cisco IOS Software and Cisco IOS XE… | CVE-2020-3235 | High | firmware-update | manual-only | manual-only | No | 1.6% |
 | FIND-1872 | NET-RTSW-0962 | A vulnerability in the Internet Key Exchange Version 2 (IKEv2) support for the AutoReconnect feature of Cisco IOS… | CVE-2021-1620 | High | firmware-update | manual-only | manual-only | No | 1.1% |
@@ -2948,6 +2956,7 @@
 | FIND-9132 | CLOUD-1128 | Fission is an open-source, Kubernetes-native serverless framework that simplifies the deployment of functions and… | CVE-2026-49823 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9138 | CLOUD-1134 | Fission is an open-source, Kubernetes-native serverless framework that simplifies the deployment of functions and… | CVE-2026-50567 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9155 | CLOUD-1151 | A flaw was found in Red Hat Advanced Cluster Security for Kubernetes (RHACS). Central does not limit the depth of… | CVE-2026-9165 | High | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-9427 | AI-ML-DOC-SUMMARIZER-AI-12 | Malicious MCP Server Compromises File-Access Tool Schema for Coding Agent | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-111 | WEB-PORTAL-0096 | Multiple race conditions in ssl/t1_lib.c in OpenSSL 0.9.8f through 0.9.8o, 1.0.0, and 1.0.0a, when multi-threading and… | CVE-2010-3864 | High | config-change | manual-only | manual-only | No | 22.1% |
 | FIND-1086 | NET-RTSW-0171 | Buffer overflow in the login implementation in the Extension Mobility feature in the Unified Communications Manager… | CVE-2009-2865 | High | firmware-update | manual-only | manual-only | No | 5.5% |
 | FIND-2644 | FW-EDGE-0636 | The Portable SDK for UPnP Devices is an SDK for development of UPnP device and control point applications. The server… | CVE-2021-29462 | High | firmware-update | manual-only | manual-only | No | 0.6% |
@@ -2984,6 +2993,7 @@
 | FIND-8708 | CLOUD-0702 | Azure DevOps Server Spoofing Vulnerability | CVE-2024-35267 | High | firmware-update | manual-only | manual-only | No | 1.6% |
 | FIND-8894 | CLOUD-0890 | Cilium is a networking, observability, and security solution with an eBPF-based dataplane. An attacker with the… | CVE-2023-39347 | High | firmware-update | manual-only | manual-only | No | 0.5% |
 | FIND-9189 | CLOUD-1186 | A flaw was found in the koku-metrics-operator for Red Hat OpenShift. The operator's CostManagementMetricsConfig custom… | CVE-2026-18381 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-9436 | AI-ML-AI-AGENT-ORCHESTRATOR-06 | Shadow AI Agent Discovered with Unreviewed Production CRM Access | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-5 | LNX-WEB05 | OpenSSL Infinite Loop Denial of Service (BN_mod_sqrt) | CVE-2022-0778 | High | patch | ansible-unix | auto-approvable | No | 70.6% |
 | FIND-16 | WEB-PORTAL-0001 | OpenSSL and SSLeay allow remote attackers to reuse SSL sessions and bypass access controls. | CVE-1999-0428 | High | config-change | manual-only | manual-only | No | 3.2% |
 | FIND-19 | WEB-PORTAL-0004 | OpenSSL 0.9.6d and earlier, and 0.9.7-beta2 and earlier, does not properly handle ASCII representations of integers on… | CVE-2002-0655 | High | config-change | manual-only | manual-only | No | 8.2% |
@@ -3846,6 +3856,7 @@
 | FIND-8789 | CLOUD-0784 | A flaw was found in the fabric8 kubernetes-client in version 4.2.0 and after. This flaw allows a malicious… | CVE-2021-20218 | High | firmware-update | manual-only | manual-only | No | 1.3% |
 | FIND-8935 | CLOUD-0931 | IBM Db2 on Cloud Pak for Data and Db2 Warehouse on Cloud Pak for Data 3.5, 4.0, 4.5, 4.6, 4.7, and 4.8 could allow a… | CVE-2023-42005 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9029 | CLOUD-1025 | Strimzi provides a way to run an Apache Kafka cluster on Kubernetes or OpenShift in various deployment configurations.… | CVE-2025-66623 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-9432 | AI-ML-AI-SUPPORT-AGENT-02 | MCP Tool Poisoning Overrides Agent Instructions via Malicious Tool Name Field | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-855 | APP-0240 | baserCMS 4.3.6 and earlier is affected by Cross Site Scripting (XSS) via arbitrary script execution. Admin access is… | CVE-2020-15154 | High | patch | manual-only | manual-only | No | 1.0% |
 | FIND-1486 | NET-RTSW-0573 | A vulnerability in the implementation of X.509 Version 3 for SSH authentication functionality in Cisco IOS and IOS XE… | CVE-2016-6474 | High | firmware-update | manual-only | manual-only | No | 1.4% |
 | FIND-1637 | NET-RTSW-0724 | A vulnerability in the client application for iOS of Cisco Webex Teams could allow an authenticated, remote attacker… | CVE-2019-1689 | High | firmware-update | manual-only | manual-only | No | 1.6% |
@@ -3886,6 +3897,7 @@
 | FIND-9171 | CLOUD-1167 | cert-manager adds certificates and certificate issuers as resource types in Kubernetes clusters, and simplifies the… | CVE-2026-62290 | High | firmware-update | manual-only | manual-only | No | 0.1% |
 | FIND-9274 | CLOUD-1272 | In Bitnami Containers, all Laravel container versions prior to: 6.20.0-debian-10-r107 for Laravel 6,… | CVE-2021-21979 | High | firmware-update | manual-only | manual-only | No | 0.6% |
 | FIND-9344 | CLOUD-1342 | mailcow is a dockerized email package, with multiple containers linked in one bridged network. The Sync Job feature -… | CVE-2023-26490 | High | firmware-update | manual-only | manual-only | No | 2.2% |
+| FIND-9441 | AI-ML-CODE-REVIEW-COPILOT-11 | Ungoverned Agent Orchestrating Cloud Infrastructure Changes Outside Change Management | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-794 | APP-0179 | mcp-security provides Security and Authorization support for Model Context Protocol in Spring AI. Prior to 0.1.9, the… | CVE-2026-45609 | High | patch | manual-only | manual-only | No | 0.2% |
 | FIND-849 | APP-0234 | In Honeywell WIN-PAK 4.7.2, Web and prior versions, the affected product is vulnerable due to the usage of old jQuery… | CVE-2020-6978 | High | patch | manual-only | manual-only | No | 0.8% |
 | FIND-1166 | NET-RTSW-0251 | Cisco IOS 12.2 through 12.4 and 15.0 through 15.2 and IOS XE 2.1.x through 2.6.x and 3.1.xS before 3.1.2S, 3.2.xS… | CVE-2012-0384 | High | firmware-update | manual-only | manual-only | No | 3.9% |
@@ -4349,6 +4361,7 @@
 | FIND-9358 | CLOUD-1356 | Docker Desktop before 4.6.0 on Windows allows attackers to delete any file through the hyperv/destroy dockerBackendV2… | CVE-2022-31647 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9359 | CLOUD-1357 | Docker Desktop for Windows before 4.6.0 allows attackers to overwrite any file through a symlink attack on the… | CVE-2022-34292 | High | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9380 | CLOUD-1378 | Docker Desktop before 4.23.0 allows an unprivileged user to bypass Enhanced Container Isolation (ECI) restrictions via… | CVE-2023-5165 | High | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-9443 | AI-ML-VOICE-ASSISTANT-BACKEND-13 | Unregistered Agent Found Auto-Approving Internal Purchase Requests | — | High | manual-investigation | manual-only | manual-only | — | — |
 | FIND-3 | WIN-APP07 | Windows MSHTML Platform Security Feature Bypass | CVE-2024-30040 | High | patch | ansible-windows | auto-approvable | Yes | 3.9% |
 | FIND-236 | WEB-PORTAL-0221 | OpenSSLCipher.java in Conscrypt in Android 6.x before 2016-05-01 mishandles resets of the Additional Authenticated… | CVE-2016-2461 | High | config-change | manual-only | manual-only | No | 0.5% |
 | FIND-237 | WEB-PORTAL-0222 | OpenSSLCipher.java in Conscrypt in Android 6.x before 2016-05-01 mishandles updates of the Additional Authenticated… | CVE-2016-2462 | High | config-change | manual-only | manual-only | No | 0.4% |
@@ -5540,6 +5553,7 @@
 | FIND-8822 | CLOUD-0818 | An issue was discovered in the Pinniped Supervisor with either LADPIdentityProvider or ActiveDirectoryIdentityProvider… | CVE-2022-22975 | Medium | firmware-update | manual-only | manual-only | No | 1.0% |
 | FIND-8865 | CLOUD-0861 | Users may have access to secure endpoints in the control plane network. Kubernetes clusters are only affected if an… | CVE-2022-3294 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
 | FIND-9191 | CLOUD-1188 | Capsule is a multi-tenancy and policy-based framework for Kubernetes. From 0.13.0 until 0.13.8, after the incomplete… | CVE-2026-65835 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
+| FIND-9434 | AI-ML-ML-TRAINING-PIPELINE-04 | MCP Tool Poisoning in Shared Internal Registry Affects Multiple Downstream Agents | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-271 | WEB-PORTAL-0256 | There is a carry propagating bug in the x86_64 Montgomery squaring procedure in OpenSSL before 1.0.2m and 1.1.0 before… | CVE-2017-3736 | Medium | config-change | manual-only | manual-only | No | 10.1% |
 | FIND-279 | WEB-PORTAL-0264 | Constructed ASN.1 types with a recursive definition (such as can be found in PKCS7) could eventually exceed the stack… | CVE-2018-0739 | Medium | config-change | manual-only | manual-only | No | 18.9% |
 | FIND-328 | WEBAPP-INTERNAL-WIKI | HTTP Request Smuggling (CWE-444) | — | Medium | config-change | manual-only | manual-only | — | — |
@@ -5870,6 +5884,7 @@
 | FIND-9364 | CLOUD-1362 | gpt_academic provides a graphical interface for ChatGPT/GLM. A vulnerability was found in gpt_academic 3.37 and prior.… | CVE-2023-33979 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
 | FIND-9384 | CLOUD-1383 | Docker Machine through 0.16.2 allows an attacker, who has control of a worker node, to provide crafted version data,… | CVE-2023-40453 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
 | FIND-9395 | CLOUD-1394 | The vantage6 technology enables to manage and deploy privacy enhancing technologies like Federated Learning (FL) and… | CVE-2024-21653 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
+| FIND-9445 | AI-ML-RECOMMENDATION-ENGINE-ML-15 | Unmanaged Agent Running Unattended Since Deployment with No Owner of Record | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-56 | WEB-PORTAL-0041 | The PRNG implementation for the OpenSSL FIPS Object Module 1.1.1 does not perform auto-seeding during the FIPS… | CVE-2007-5502 | Medium | config-change | manual-only | manual-only | No | 2.3% |
 | FIND-83 | WEB-PORTAL-0068 | The OpenSSL::OCSP module for Ruby in Apple Mac OS X 10.5 before 10.5.7 misinterprets an unspecified invalid response… | CVE-2009-0161 | Medium | config-change | manual-only | manual-only | No | 2.3% |
 | FIND-99 | WEB-PORTAL-0084 | Martin Lambers msmtp before 1.4.19, when OpenSSL is used, does not properly handle a '\0' character in a domain name… | CVE-2009-3942 | Medium | config-change | manual-only | manual-only | No | 1.1% |
@@ -5943,6 +5958,7 @@
 | FIND-9074 | CLOUD-1070 | A container privilege escalation flaw was found in certain Multicluster Engine for Kubernetes images. This issue stems… | CVE-2025-57851 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
 | FIND-9091 | CLOUD-1087 | Traefik is an HTTP reverse proxy and load balancer. Prior to versions 2.11.43, 3.6.14, and 3.7.0-rc.2, there is a… | CVE-2026-41174 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9304 | CLOUD-1302 | Extensible Service Proxy, a.k.a. ESP is a proxy which enables API management capabilities for JSON/REST or gRPC API… | CVE-2021-41130 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
+| FIND-9442 | AI-ML-DOC-SUMMARIZER-AI-12 | Shadow Agent Built on Public Automation Platform Has Access to Customer Data Export | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-722 | APP-0107 | A vulnerability, which was classified as critical, has been found in Xiamen Four-Faith Video Surveillance Management… | CVE-2023-6308 | Medium | patch | manual-only | manual-only | No | 1.0% |
 | FIND-1018 | NET-RTSW-0103 | The IOS FTP Server in Cisco IOS 11.3 through 12.4 allows remote authenticated users to cause a denial of service (IOS… | CVE-2007-2587 | Medium | firmware-update | manual-only | manual-only | No | 1.6% |
 | FIND-1188 | NET-RTSW-0273 | Cisco IOS 15.1 and 15.2 and IOS XE 3.x, when configured as an IPsec hub with X.509 certificates in use, allows remote… | CVE-2011-4231 | Medium | firmware-update | manual-only | manual-only | No | 0.6% |
@@ -6017,6 +6033,7 @@
 | FIND-9302 | CLOUD-1300 | Moby is an open-source project created by Docker to enable software containerization. A bug was found in Moby (Docker… | CVE-2021-41091 | Medium | firmware-update | manual-only | manual-only | No | 2.8% |
 | FIND-9338 | CLOUD-1336 | Canarytokens is an open source tool which helps track activity and actions on your network. A Cross-Site Scripting… | CVE-2023-22475 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
 | FIND-9361 | CLOUD-1359 | Docker Desktop for Windows before 4.6 allows attackers to overwrite any file through the windowscontainers/start… | CVE-2022-38730 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
+| FIND-9428 | AI-ML-VOICE-ASSISTANT-BACKEND-13 | MCP Tool Poisoning via Hidden Unicode Instructions in Parameter Description | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-710 | APP-0095 | In Apache Struts 2.5 to 2.5.14, the REST Plugin is using an outdated JSON-lib library which is vulnerable and allow… | CVE-2017-15707 | Medium | patch | manual-only | manual-only | No | 4.9% |
 | FIND-886 | APP-0271 | MooTools is a collection of JavaScript utilities for JavaScript developers. All known versions include a CSS selector… | CVE-2021-32821 | Medium | patch | manual-only | manual-only | No | 0.6% |
 | FIND-2047 | FW-EDGE-0037 | A local privilege escalation and local code execution vulnerability in Fortinet FortiOS 5.6.0 to 5.6.2, 5.4.0 to… | CVE-2017-14187 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
@@ -6048,6 +6065,7 @@
 | FIND-8925 | CLOUD-0921 | Azure Arc-enabled Kubernetes Extension Cluster-Scope Elevation of Privilege Vulnerability | CVE-2024-28917 | Medium | firmware-update | manual-only | manual-only | No | 0.9% |
 | FIND-8972 | CLOUD-0968 | A security issue was discovered in Kubernetes where a large number of container checkpoint requests made to the… | CVE-2025-0426 | Medium | firmware-update | manual-only | manual-only | No | 0.4% |
 | FIND-9393 | CLOUD-1392 | IBM Security Access Manager Appliance (IBM Security Verify Access Appliance 10.0.0.0 through 10.0.6.1 and IBM Security… | CVE-2023-38267 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-9437 | AI-ML-LLM-API-GATEWAY-07 | Unregistered Agent Automating Email Replies Found Outside IT Governance | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-347 | WEBAPP-VENDOR-ONBOARDING | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
 | FIND-351 | WEBAPP-BILLING-API | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
 | FIND-364 | WEBAPP-SEARCH-SERVICE | Credentials Transmitted Over Unencrypted HTTP Basic Auth (CWE-522) | — | Medium | config-change | manual-only | manual-only | — | — |
@@ -6297,6 +6315,7 @@
 | FIND-8770 | CLOUD-0764 | An issue has been discovered in GitLab Runner affecting all versions starting from 13.4.0 before 13.4.2, all versions… | CVE-2020-13327 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
 | FIND-8877 | CLOUD-0873 | Baremetal Operator (BMO) is a bare metal host provisioning integration for Kubernetes. Prior to version 0.3.0, ironic… | CVE-2023-30841 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
 | FIND-9226 | CLOUD-1223 | An issue was discovered in Docker Engine before 19.03.11. An attacker in a container, with the CAP_NET_RAW capability,… | CVE-2020-13401 | Medium | firmware-update | manual-only | manual-only | No | 2.8% |
+| FIND-9431 | AI-ML-LLM-CHATBOT-01 | Unpinned MCP Server Auto-Update Introduces Tool Poisoning in CI Pipeline Agent | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-218 | WEB-PORTAL-0203 | ssl/s2_srvr.c in OpenSSL 1.0.1 before 1.0.1r and 1.0.2 before 1.0.2f does not prevent use of disabled ciphers, which… | CVE-2015-3197 | Medium | config-change | manual-only | manual-only | No | 10.7% |
 | FIND-221 | WEB-PORTAL-0206 | The get_client_master_key function in s2_srvr.c in the SSLv2 implementation in OpenSSL before 0.9.8zf, 1.0.0 before… | CVE-2016-0703 | Medium | config-change | manual-only | manual-only | No | 5.4% |
 | FIND-222 | WEB-PORTAL-0207 | An oracle protection mechanism in the get_client_master_key function in s2_srvr.c in the SSLv2 implementation in… | CVE-2016-0704 | Medium | config-change | manual-only | manual-only | No | 6.9% |
@@ -6514,6 +6533,7 @@
 | FIND-8879 | CLOUD-0875 | Fluid is an open source Kubernetes-native distributed dataset orchestrator and accelerator for data-intensive… | CVE-2023-30840 | Medium | firmware-update | manual-only | manual-only | No | 0.2% |
 | FIND-8979 | CLOUD-0975 | Kyverno is a policy engine designed for cloud native platform engineering teams. Prior to version 1.14.0-alpha.1,… | CVE-2025-29778 | Medium | firmware-update | manual-only | manual-only | No | 0.3% |
 | FIND-9150 | CLOUD-1146 | K3s is a fully conformant production-ready Kubernetes distribution. Prior to 1.35.3+k3s1, 1.34.6+k3s1, v1.33.10+k3s1,… | CVE-2026-54250 | Medium | firmware-update | manual-only | manual-only | No | 0.1% |
+| FIND-9440 | AI-ML-FRAUD-DETECTION-MODEL-10 | Shadow AI Agent Deployed via Personal API Key Bypasses Central Governance | — | Medium | manual-investigation | manual-only | manual-only | — | — |
 | FIND-1250 | NET-RTSW-0335 | The remember feature in the DHCP server in Cisco IOS allows remote attackers to cause a denial of service (device… | CVE-2013-5499 | Medium | firmware-update | manual-only | manual-only | No | 0.5% |
 | FIND-1251 | NET-RTSW-0336 | The OSPF functionality in Cisco IOS and IOS XE allows remote attackers to cause a denial of service (device reload)… | CVE-2013-5527 | Medium | firmware-update | manual-only | manual-only | No | 0.8% |
 | FIND-1287 | NET-RTSW-0372 | Cisco IOS before 15.1(1)SY, when Multicast Listener Discovery (MLD) snooping is enabled, allows remote attackers to… | CVE-2012-3062 | Medium | firmware-update | manual-only | manual-only | No | 0.7% |
@@ -9441,7 +9461,7 @@
 
 ## Per-finding detail (top 60 by priority)
 
-Showing the 60 highest-priority findings of 9425 total - full detail for every finding at this scale would not be practically readable as a document; every finding is still in the queue table above, and in full (with live SLA/KEV/EPSS) at `/queue`.
+Showing the 60 highest-priority findings of 9445 total - full detail for every finding at this scale would not be practically readable as a document; every finding is still in the queue table above, and in full (with live SLA/KEV/EPSS) at `/queue`.
 
 ### FIND-6 — Cisco IOS XE Web UI Privilege Escalation — **CRITICAL** (CVE-2023-20198)
 - Asset: CSW-CORE01 (network-routing-switching)
@@ -9759,4 +9779,4 @@ Showing the 60 highest-priority findings of 9425 total - full detail for every f
 - **container-runtime** (218 findings) — needs security-team triage - a runtime detection alert (Falco-style) flags anomalous in-container behavior, not a patchable CVE or a config drift; response is investigative, not automatable
 - **mobile-device** (194 findings) — needs a real MDM API integration (e.g. Microsoft Intune) to push the OS/app update - `remediation_mechanism` names the real tool, but no working integration exists in this app yet
 - **printer** (141 findings) — needs vendor-specific firmware tooling (HP/Xerox/Canon/Lexmark/Ricoh each ship their own) - no general-purpose fixer exists across printer vendors, same reasoning as `iot-ot-device`
-- **ai-ml-system** (100 findings) — needs AI/ML security team triage - a prompt-injection, agent-design, or model-supply-chain finding requires a design/code change specific to that system, not a general-purpose patch or config diff
+- **ai-ml-system** (120 findings) — needs AI/ML security team triage - a prompt-injection, agent-design, or model-supply-chain finding requires a design/code change specific to that system, not a general-purpose patch or config diff

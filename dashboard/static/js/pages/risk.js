@@ -203,7 +203,7 @@ export async function render(container) {
       findings. Both are genuinely useful, for different questions.
     </p>
 
-    <h2 style="margin-top:28px">Severity definitions (CVSS v3.1)</h2>
+    <h2 style="margin-top:28px">Severity definitions (CVSS v4.0)</h2>
     <div class="table-scroll">
       <table class="data-table">
         <thead><tr><th>Tier</th><th>CVSS score range</th><th>What it means here</th></tr></thead>
@@ -218,8 +218,12 @@ export async function render(container) {
       </table>
     </div>
     <p class="filter-count">Per the
-      <a href="https://www.first.org/cvss/v3.1/specification-document" target="_blank" rel="noopener">FIRST.org CVSS v3.1 specification</a> -
-      the industry-standard scale, not a VulnHunter-specific invention.</p>
+      <a href="https://www.first.org/cvss/v4.0/specification-document" target="_blank" rel="noopener">FIRST.org CVSS v4.0 specification</a> -
+      the industry-standard scale, not a VulnHunter-specific invention. The qualitative
+      Critical/High/Medium/Low bands above are unchanged from CVSS v3.x, so this table
+      applies whichever version a given finding's own score was reported in by its
+      source scanner - real scan/NVD data today is still a mix of v3.0/v3.1/v4.0,
+      and this app never re-scores a finding itself.</p>
     ${aiTrendAnalysisFabHtml("risk-hub")}`;
 
   wireExportButtons(container, "top-assets", {

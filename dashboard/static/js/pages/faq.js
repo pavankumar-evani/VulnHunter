@@ -74,7 +74,7 @@ const FAQS = [
     "CWE/OWASP classes for DAST since dynamic-testing bugs aren't CVE-numbered). API " +
     "Vulnerabilities still shows 0, same honest treatment, for the reason above."],
   ["Is the AI Vulnerabilities page's MITRE ATLAS mapping authoritative?",
-    "No, and it says so on the page itself. The ten AI/ML vulnerability categories " +
+    "No, and it says so on the page itself. The twelve AI/ML vulnerability categories " +
     "(prompt injection, model poisoning, supply-chain compromise, etc.) each cross-" +
     "reference a MITRE ATLAS tactic/technique - this module's own reading of published " +
     "ATLAS docs, not a verified mapping, same \"suggestion to verify\" posture as the " +

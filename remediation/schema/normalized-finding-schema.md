@@ -107,7 +107,8 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   `remediation/enrichment/poc_enrichment.py` (a pipeline stage, same timing as
   `kev`/`epss`) from two real, never-fabricated NVD API 2.0 fields already present in
   the raw CVE data `generate_bulk_findings.py` fetched: `references[].tags` containing
-  `"Exploit"`, and the CVSS v3.x `userInteraction` metric. Both are `null` when `cve` is
+  `"Exploit"`, and the CVSS `userInteraction` metric (v4.0 first, falling back to
+  v3.1/v3.0 for CVEs not yet scored under v4.0 - see `poc_enrichment.py`). Both are `null` when `cve` is
   `null`, or when the CVE predates this repo's local NVD cache (an honest gap, not a
   guess). `remediation/enrichment/exploit_criteria.py` combines these with `kev`/`epss`
   into a configurable, admin-editable `exploit_criteria_matches` field - computed LIVE

@@ -5,9 +5,12 @@ Backfills two real, never-fabricated signals onto every CVE-bearing finding:
 - `poc_available`: True if NVD itself tagged one of a CVE's own references as
   "Exploit" - a real, documented field of the NVD API 2.0 response
   (references[].tags), not a guess or a third-party scrape.
-- `user_interaction_required`: True/False from NVD's own CVSS v3.x `userInteraction`
-  metric (REQUIRED/NONE). `None` (not a guess) when a CVE only has CVSS v2 data, which
-  carries no such metric.
+- `user_interaction_required`: True/False from NVD's own CVSS `userInteraction` metric -
+  checks v4.0 first (three real values: NONE/PASSIVE/ACTIVE - PASSIVE and ACTIVE both
+  count as "required" here, the same real-world meaning v3.x's binary REQUIRED/NONE
+  captures), falling back to v3.1/v3.0 (REQUIRED/NONE) for CVEs NVD hasn't scored under
+  v4.0 yet. `None` (not a guess) when a CVE only has CVSS v2 data, which carries no such
+  metric.
 
 Both come from data `remediation/sample-data/generate_bulk_findings.py` already fetched
 and cached to disk under `bulk/_nvd_cache/` while sourcing this project's real CVEs -
@@ -36,7 +39,14 @@ def poc_available(cve):
 
 
 def user_interaction_required(cve):
+    """True/False from the CVE's best-available CVSS userInteraction metric, None if
+    only CVSS v2 data (or nothing) exists. Checks v4.0 first - its UI metric has three
+    real values (NONE/PASSIVE/ACTIVE) rather than v3.x's two (NONE/REQUIRED); PASSIVE
+    and ACTIVE both count as "required" here, matching v3.x's REQUIRED semantically."""
     metrics = cve.get("metrics", {})
+    v40_entries = metrics.get("cvssMetricV40")
+    if v40_entries:
+        return v40_entries[0]["cvssData"].get("userInteraction") in ("PASSIVE", "ACTIVE")
     for key in ("cvssMetricV31", "cvssMetricV30"):
         entries = metrics.get(key)
         if entries:

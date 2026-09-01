@@ -111,8 +111,8 @@ class KeywordMatching(unittest.TestCase):
         self.assertLessEqual(len(matches), 10, matches)
 
     def test_every_ai_ml_asset_finding_matches_the_taxonomy(self):
-        """The inverse check: every one of the 100 hand-authored `ai-ml-system`
-        findings should tag against exactly one of this taxonomy's 10 categories with
+        """The inverse check: every one of the 120 hand-authored `ai-ml-system`
+        findings should tag against exactly one of this taxonomy's 12 categories with
         no untagged stragglers - each was written specifically to contain that
         category's own tagging keywords (see AI_ML_CLASSES in
         generate_bulk_findings.py). A regression here means a finding's wording
@@ -124,7 +124,7 @@ class KeywordMatching(unittest.TestCase):
         findings_path = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
         findings = json.loads(findings_path.read_text(encoding="utf-8"))
         ai_ml = [f for f in findings if (f.get("asset") or {}).get("type") == "ai-ml-system"]
-        self.assertEqual(len(ai_ml), 100)
+        self.assertEqual(len(ai_ml), 120)
         tagged = tag_findings(ai_ml)
         untagged = [f["title"] for f in tagged if not f.get("ai_vulnerability")]
         self.assertEqual(untagged, [])

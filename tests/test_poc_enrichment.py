@@ -20,12 +20,14 @@ from remediation.enrichment.poc_enrichment import (  # noqa: E402
 )
 
 
+_CVSS_VERSION_KEYS = {"v40": "cvssMetricV40", "v31": "cvssMetricV31", "v30": "cvssMetricV30"}
+
+
 def _cve(cve_id, tags=None, user_interaction=None, cvss_version="v31"):
     references = [{"url": "https://example.test", "tags": tags}] if tags is not None else []
     metrics = {}
     if user_interaction is not None:
-        key = "cvssMetricV31" if cvss_version == "v31" else "cvssMetricV30"
-        metrics[key] = [{"cvssData": {"userInteraction": user_interaction}}]
+        metrics[_CVSS_VERSION_KEYS[cvss_version]] = [{"cvssData": {"userInteraction": user_interaction}}]
     return {"cve": {"id": cve_id, "references": references, "metrics": metrics}}
 
 
@@ -57,6 +59,32 @@ class UserInteractionRequired(unittest.TestCase):
 
     def test_no_metrics_at_all_returns_none(self):
         self.assertIsNone(user_interaction_required({"id": "CVE-2099-0007"}))
+
+    def test_v40_passive_is_true(self):
+        cve = _cve("CVE-2099-0008", user_interaction="PASSIVE", cvss_version="v40")["cve"]
+        self.assertTrue(user_interaction_required(cve))
+
+    def test_v40_active_is_true(self):
+        cve = _cve("CVE-2099-0009", user_interaction="ACTIVE", cvss_version="v40")["cve"]
+        self.assertTrue(user_interaction_required(cve))
+
+    def test_v40_none_is_false(self):
+        cve = _cve("CVE-2099-0010", user_interaction="NONE", cvss_version="v40")["cve"]
+        self.assertFalse(user_interaction_required(cve))
+
+    def test_v40_is_preferred_over_v31_when_both_present(self):
+        cve = {
+            "id": "CVE-2099-0011",
+            "metrics": {
+                "cvssMetricV40": [{"cvssData": {"userInteraction": "ACTIVE"}}],
+                "cvssMetricV31": [{"cvssData": {"userInteraction": "NONE"}}],
+            },
+        }
+        self.assertTrue(user_interaction_required(cve))
+
+    def test_falls_back_to_v31_when_v40_absent(self):
+        cve = _cve("CVE-2099-0012", user_interaction="REQUIRED", cvss_version="v31")["cve"]
+        self.assertTrue(user_interaction_required(cve))
 
 
 class BuildNvdSignalIndex(unittest.TestCase):
