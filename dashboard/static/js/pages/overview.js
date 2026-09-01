@@ -568,7 +568,7 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
     <h2 style="margin-top:28px">Remediation-triggered findings (age since trigger)</h2>
     ${remediationTriggeredDisclaimerHtml()}
     <div class="chart-row">
-      ${agingChartBlockHtml(triggeredPseudoFindings, "Time since triggered", "No findings have been remediation-triggered yet - see Remediation Approvals.")}
+      ${agingChartBlockHtml(triggeredPseudoFindings, "Time since triggered", "No findings have been remediation-triggered yet - see Remediation Approvals.", false)}
     </div>
     <h3 style="margin-top:20px">By priority</h3>
     ${agingByPriorityTableHtml(triggeredPseudoFindings)}

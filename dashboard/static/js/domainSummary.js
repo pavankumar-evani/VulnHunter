@@ -198,7 +198,7 @@ const AGE_BUCKET_LABELS = { "0-30": "0-30 days", "31-60": "31-60 days", "61-90":
 // - the longer a finding has sat open, the more urgent it reads, same visual language.
 const AGE_BUCKET_BADGE_TIER = { "0-30": "low", "31-60": "medium", "61-90": "high", "90+": "critical" };
 
-function ageBucketFor(firstSeen, today) {
+export function ageBucketFor(firstSeen, today) {
   if (!firstSeen) return null;
   const seen = new Date(firstSeen);
   if (Number.isNaN(seen.getTime())) return null;
@@ -255,14 +255,23 @@ export function remediationTriggeredDisclaimerHtml() {
 // by each item's own `first_seen` date - `heading`/`emptyLabel` let a caller reuse this
 // for a differently-dated event too (see remediationTriggeredAgingSectionHtml below),
 // as long as it's reshaped into the same {first_seen, priority} pseudo-finding shape.
-export function agingChartBlockHtml(findings, heading = "Open-finding age", emptyLabel = "No findings.") {
+// `linkable` gates the deep-link href: it's real and correct for the default "Open-
+// finding age" case (a bucket maps directly onto /queue's own ageBucket filter, the
+// same first_seen field) but would be WRONG for a reused/pseudo-finding call (e.g.
+// overview.js's "Time since triggered", whose "first_seen" field is really a trigger
+// date, not the queue's real first_seen) - callers reusing this for a different date
+// must pass linkable:false explicitly rather than get a silently-mismatched link.
+export function agingChartBlockHtml(findings, heading = "Open-finding age", emptyLabel = "No findings.", linkable = true) {
   const today = new Date();
   const counts = { "0-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
   for (const f of findings) {
     const bucket = ageBucketFor(f.first_seen, today);
     if (bucket) counts[bucket] += 1;
   }
-  const data = AGE_BUCKETS.map((b) => ({ label: AGE_BUCKET_LABELS[b], value: counts[b] }));
+  const data = AGE_BUCKETS.map((b) => ({
+    label: AGE_BUCKET_LABELS[b], value: counts[b],
+    href: linkable ? `/queue?ageBucket=${encodeURIComponent(b)}` : undefined,
+  }));
   // This chart-block is always alone in its own .chart-row (no natural second chart to
   // pair it with on any page that uses it) - explicit wider width so it fills a
   // meaningful share of the row instead of sitting narrow with a large empty gap

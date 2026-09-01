@@ -12,6 +12,7 @@ import { buildOwnerTeamMaps, environmentCellHtml, ENVIRONMENT_LABELS } from "../
 import { dateRangeHtml, wireDateRange, filterByDateRange, computeRange, dateRangeDisclaimerHtml } from "../dateRange.js";
 import { threatIntelCellHtml, threatIntelExportValue } from "../threatIntelTagging.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
+import { ageBucketFor } from "../domainSummary.js";
 
 // These 5 categories are each fixed to one effective asset type/category the moment the
 // URL selects them (cert-mgmt->certificate, iac->iac-resource, runtime->container-runtime,
@@ -225,6 +226,7 @@ function applyFilters(findings, filters) {
     if (filters.assetName && (f.asset && f.asset.name) !== filters.assetName) return false;
     if (filters.severity && f.severity !== filters.severity) return false;
     if (filters.team && f.team !== filters.team) return false;
+    if (filters.ageBucket && ageBucketFor(f.first_seen, new Date()) !== filters.ageBucket) return false;
     return true;
   });
   if (filters.dateRange && filters.dateRange.preset) {
@@ -281,13 +283,16 @@ export async function render(container) {
   const initialKevOnly = new URLSearchParams(window.location.search).get("kevOnly") === "true";
   // Reports' "High EPSS" KPI deep-links here with ?highEpssOnly=true - same pattern.
   const initialHighEpssOnly = new URLSearchParams(window.location.search).get("highEpssOnly") === "true";
+  // The "Open-finding age" chart's bars deep-link here with ?ageBucket=0-30|31-60|
+  // 61-90|90+ - silent, no dropdown, same pattern as severity/team above.
+  const initialAgeBucket = new URLSearchParams(window.location.search).get("ageBucket") || null;
   // Overview's SLA breached/at-risk/on-track KPI tiles deep-link here with
   // ?slaStatus=breached|at_risk|on_track.
   const initialSlaStatus = new URLSearchParams(window.location.search).get("slaStatus") || "all";
   let filters = {
     priority: initialPriority, assetType: "all", environment: "all", category: initialCategory, infraType: initialInfraType,
     kevOnly: initialKevOnly, highEpssOnly: initialHighEpssOnly, slaStatus: initialSlaStatus, cve: initialCve, title: initialTitle, assetName: initialAssetName,
-    severity: initialSeverity, team: initialTeam,
+    severity: initialSeverity, team: initialTeam, ageBucket: initialAgeBucket,
     dateRange: { preset: "", customFrom: "", customTo: "" },
   };
   // A global-search result (search.js) deep-links here with ?highlight=<id> - the
