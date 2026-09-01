@@ -32,6 +32,7 @@ from remediation.enrichment import ml_insights  # noqa: E402
 from remediation.enrichment import risk_scoring  # noqa: E402
 from remediation.enrichment.quantum_readiness import tag_quantum_readiness  # noqa: E402
 from remediation.enrichment.cloud_provider import tag_cloud_provider  # noqa: E402
+from remediation.enrichment.dedup import dedup_findings  # noqa: E402
 from remediation.enrichment.scan_type_mapping import tag_scan_types  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, asset_policy  # noqa: E402
@@ -312,7 +313,14 @@ def _load_content_enriched_findings():
     can change without a full pipeline re-run. Cached in-process, keyed on the
     findings file's own mtime (a re-run changes it) plus today's date (so an EOL/EOS
     status that flips at midnight isn't pinned to a stale cache) - either changing
-    invalidates it automatically, nothing else can leave it stale."""
+    invalidates it automatically, nothing else can leave it stale.
+
+    dedup_findings() runs first, deliberately before every tag_* call - it only reads
+    cve/asset/title/first_seen/id, none of which any tag_* call adds or changes, so
+    ordering relative to them doesn't affect correctness, but running it first keeps
+    the "identify duplicates" step conceptually separate from "annotate content" -
+    see remediation/enrichment/dedup.py for what it tags and why (cross-scanner
+    deduplication - the gap named in docs/VR_PLATFORM_COMPARISON.md)."""
     path = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
     mtime = path.stat().st_mtime if path.exists() else None
     cache_key = (mtime, datetime.date.today().isoformat())
@@ -321,6 +329,7 @@ def _load_content_enriched_findings():
         return _ENRICHED_FINDINGS_CACHE["findings"]
 
     findings = load_remediation_findings()
+    findings = dedup_findings(findings)
     findings = tag_findings(findings)
     findings = tag_scan_types(findings)
     findings = tag_infra_categories(findings)
