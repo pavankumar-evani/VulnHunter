@@ -50,7 +50,7 @@ function needsApprovalRow(f) {
     <tr>
       <td>${escapeHtml(f.priority || "")}</td>
       <td>${escapeHtml(f.id)}</td>
-      <td>${escapeHtml(f.title || "")}</td>
+      <td class="wrap-cell">${escapeHtml(f.title || "")}</td>
       <td>${escapeHtml((f.asset && f.asset.name) || "")}</td>
       <td><span class="badge ${CHANGE_TYPE_CLASS[policy.change_type] || ""}">${escapeHtml(policy.change_type || "")}</span></td>
       <td>${windowText(policy.next_window)}</td>
@@ -93,7 +93,7 @@ function approvalRow(a) {
       <td>${escapeHtml(a.requested_by)}</td>
       <td>${windowText(a.scheduled_window)}</td>
       <td><span class="badge ${STATUS_CLASS[status] || ""}">${escapeHtml(status)}</span></td>
-      <td>${decisionCell}</td>
+      <td class="wrap-cell">${decisionCell}</td>
       <td>${stagingCellHtml(a)}</td>
       <td>${rollbackPlanCellHtml(a)}</td>
       <td>

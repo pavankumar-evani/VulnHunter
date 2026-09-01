@@ -7,7 +7,7 @@ function previewRows(previews) {
   return previews.map((p) => `
     <tr>
       <td>${escapeHtml(p.finding_id)}</td>
-      <td>${escapeHtml(p.body.fields.summary)}</td>
+      <td class="wrap-cell">${escapeHtml(p.body.fields.summary)}</td>
       <td>${escapeHtml(p.body.fields.issuetype.name)}</td>
       <td>${(p.body.fields.labels || []).map((l) => `<code>${escapeHtml(l)}</code>`).join(" ")}</td>
     </tr>`).join("");

@@ -50,7 +50,7 @@ function rowHtml(f) {
   return `
     <tr data-finding-id="${escapeHtml(f.ID)}">
       <td>${escapeHtml(f.ID)}</td>
-      <td>${escapeHtml(f.Title)}</td>
+      <td class="wrap-cell">${escapeHtml(f.Title)}</td>
       <td><span class="badge badge-${(f.Severity || "").toLowerCase()}">${escapeHtml(f.Severity)}</span></td>
       <td>${escapeHtml(f._category)}</td>
       <td>${escapeHtml(f.CWE)}</td>

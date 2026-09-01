@@ -670,7 +670,13 @@ export async function render(container) {
   // is fully replaced every 20s by the auto-refresh below, which would otherwise wipe an
   // in-progress prompt preview or a just-received (real API cost!) AI response the
   // moment it arrived.
-  container.innerHTML = `<div id="overview-body"></div>${aiTrendAnalysisSectionHtml("overview", "the whole landscape (Infrastructure + AppSec + AI/ML + Certificate)")}`;
+  // The AI Trend tile stays OUTSIDE #overview-body (which the 20s auto-refresh below
+  // fully replaces) on purpose - an in-progress prompt preview or a just-received
+  // (real API cost!) response must survive that refresh, so it can't live inside the
+  // same region as the chart row it'd otherwise sit beside (moving it there would
+  // wipe it mid-read every 20 seconds). Still the compact tile, just in its own
+  // narrow row rather than the old full-width section.
+  container.innerHTML = `<div id="overview-body"></div><div class="chart-row" style="max-width:300px">${aiTrendAnalysisTileHtml("overview", "the whole landscape (Infrastructure + AppSec + AI/ML + Certificate)")}</div>`;
   const bodyEl = container.querySelector("#overview-body");
   wireAiTrendAnalysis(container, "overview", "landscape-wide", buildOverviewAiStats);
 

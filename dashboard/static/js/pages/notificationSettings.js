@@ -220,7 +220,7 @@ export async function render(container) {
               <tr>
                 <td>${escapeHtml(r.id)}</td>
                 <td><span class="badge badge-${r.status === "sent" ? "auto_approvable" : r.status === "error" ? "critical" : "medium"}">${escapeHtml(r.status)}</span></td>
-                <td>${escapeHtml(r.reason || (r.recipients ? r.recipients.join(", ") : "") || (typeof r.new_count === "number" ? `${r.new_count} new` : ""))}</td>
+                <td class="wrap-cell">${escapeHtml(r.reason || (r.recipients ? r.recipients.join(", ") : "") || (typeof r.new_count === "number" ? `${r.new_count} new` : ""))}</td>
               </tr>`).join("")}
             </tbody></table></div>`
         : `<p class="empty-state">No enabled subscription is currently due.</p>`;

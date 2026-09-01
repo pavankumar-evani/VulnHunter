@@ -64,7 +64,7 @@ function anomalyRowHtml(a) {
       <td data-col="kev">${a.kev_count}</td>
       <td data-col="risk">${typeof a.risk_score === "number" ? `<span class="badge badge-${(a.risk_tier || "").toLowerCase()}">${a.risk_score}</span>` : `<span class="muted">—</span>`}</td>
       <td data-col="anomaly_score"><code>${a.anomaly_score}</code></td>
-      <td data-col="why_flagged">${reasonsHtml(a.reasons)}</td>
+      <td data-col="why_flagged" class="wrap-cell">${reasonsHtml(a.reasons)}</td>
       <td data-col="owner">${escapeHtml(a.owner || "Unowned")}</td>
       <td data-col="team">${escapeHtml(a.team || "—")}</td>
     </tr>`;
@@ -119,7 +119,7 @@ function clusterMembersHtml(members) {
       <td>${escapeHtml(f.asset && f.asset.name)}</td>
       <td>${escapeHtml(f.severity)}</td>
       <td>${f.cvss ?? "—"}</td>
-      <td>${escapeHtml(f.title)}</td>
+      <td class="wrap-cell">${escapeHtml(f.title)}</td>
       <td>${f.kev && f.kev.listed ? `<span class="badge badge-critical">KEV</span>` : `<span class="muted">—</span>`}</td>
     </tr>`).join("");
 }

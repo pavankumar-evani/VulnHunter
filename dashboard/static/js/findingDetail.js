@@ -5,9 +5,9 @@
 import { escapeHtml, openModal, closeModal } from "./dom.js";
 import { api } from "./api.js";
 
-function row(label, valueHtml) {
+function row(label, valueHtml, wrap = false) {
   if (valueHtml === null || valueHtml === undefined || valueHtml === "") return "";
-  return `<tr><th>${escapeHtml(label)}</th><td>${valueHtml}</td></tr>`;
+  return `<tr><th>${escapeHtml(label)}</th><td${wrap ? ` class="wrap-cell"` : ""}>${valueHtml}</td></tr>`;
 }
 
 export function openFindingDetail(f) {
@@ -92,7 +92,7 @@ export function openFindingDetail(f) {
           ${row("First seen", f.first_seen ? escapeHtml(f.first_seen) : null)}
           ${row("Last seen", f.last_seen ? escapeHtml(f.last_seen) : null)}
           ${row("SLA due", sla)}
-          ${row("Exception", exception)}
+          ${row("Exception", exception, true)}
         </tbody>
       </table>
     </div>
@@ -157,7 +157,7 @@ async function loadSimilarFindings(findingId, modalBody) {
               <td><button type="button" class="link-button similar-finding-link" data-finding-id="${escapeHtml(s.id)}">${escapeHtml(s.id)}</button></td>
               <td>${escapeHtml(s.asset && s.asset.name)}</td>
               <td>${escapeHtml(s.severity)}</td>
-              <td>${escapeHtml(s.title)}</td>
+              <td class="wrap-cell">${escapeHtml(s.title)}</td>
               <td>${(s.similarity * 100).toFixed(0)}%</td>
             </tr>`).join("")}
         </tbody>

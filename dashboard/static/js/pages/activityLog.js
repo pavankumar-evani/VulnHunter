@@ -42,7 +42,7 @@ function rowHtml(e) {
       <td>${escapeHtml(e.actor)}</td>
       <td>${escapeHtml(actionLabel(e.action))}</td>
       <td>${escapeHtml(e.target || "—")}</td>
-      <td>${escapeHtml(detailsText(e.details))}</td>
+      <td class="wrap-cell">${escapeHtml(detailsText(e.details))}</td>
     </tr>`;
 }
 
@@ -62,7 +62,7 @@ function unusualActorRowHtml(r) {
       <td>${(r.off_hours_fraction * 100).toFixed(0)}%</td>
       <td>${(r.self_approval_fraction * 100).toFixed(0)}%</td>
       <td><code>${r.anomaly_score}</code></td>
-      <td>${r.reasons.length
+      <td class="wrap-cell">${r.reasons.length
         ? `<ul style="margin:0; padding-left:18px">${r.reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`
         : `<span class="muted">—</span>`}</td>
     </tr>`;

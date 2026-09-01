@@ -33,7 +33,7 @@ function resultRowHtml(r) {
   if (r.id !== undefined && r.title !== undefined) {
     return `<tr>
       <td>${escapeHtml(r.id)}</td>
-      <td>${escapeHtml(r.title || "")}</td>
+      <td class="wrap-cell">${escapeHtml(r.title || "")}</td>
       <td>${r.severity ? `<span class="badge badge-${String(r.severity).toLowerCase()}">${escapeHtml(r.severity)}</span>` : ""}</td>
     </tr>`;
   }

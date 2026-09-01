@@ -7,7 +7,7 @@ function previewRows(previews) {
   return previews.map((p) => `
     <tr>
       <td>${escapeHtml(p.finding_id)}</td>
-      <td>${escapeHtml(p.body.event.title || "")}</td>
+      <td class="wrap-cell">${escapeHtml(p.body.event.title || "")}</td>
       <td>${escapeHtml(p.body.event.severity || "")}</td>
       <td>${escapeHtml(p.body.sourcetype)}</td>
       <td>${escapeHtml(p.body.index || "(HEC default)")}</td>

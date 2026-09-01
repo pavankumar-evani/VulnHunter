@@ -30,6 +30,29 @@ export function aiTrendAnalysisSectionHtml(idPrefix, scopeLabel) {
     <div id="${idPrefix}-ai-trend-result"></div>`;
 }
 
+// A compact variant of the same real feature (same form fields/ids, same
+// wireAiTrendAnalysis() wiring below - only the surrounding markup differs), sized to
+// sit as a third .chart-block in an existing .chart-row next to whichever real chart
+// that page already renders (e.g. overview.js's "By team"/"By priority" row) instead
+// of as its own full-width section pushing everything else down. The full warning
+// text moves into a hover tooltip on the (i) - still real, still disclosed, just not
+// taking up permanent vertical space in a tile-sized slot.
+export function aiTrendAnalysisTileHtml(idPrefix, scopeLabel) {
+  const tooltip = `Generating a REAL analysis (checking confirm) calls the real Claude API and spends real usage/credits, over the ${scopeLabel} stats already shown - not a live re-query, never fabricated. Preview first, it's free.`;
+  return `
+    <div class="chart-block ai-trend-tile">
+      <h3>✨ AI trend analysis <span class="muted" data-tooltip="${escapeHtml(tooltip)}" style="cursor:help">ⓘ</span></h3>
+      <form class="ai-trend-tile-form" id="${idPrefix}-ai-trend-form">
+        <label class="checkbox-label checkbox-danger" style="font-size:0.8rem">
+          <input type="checkbox" name="confirm" id="${idPrefix}-ai-trend-confirm">
+          Actually ask AI (spends credits)
+        </label>
+        <button type="submit" class="secondary-button">Generate</button>
+      </form>
+      <div id="${idPrefix}-ai-trend-result" class="ai-trend-tile-result"></div>
+    </div>`;
+}
+
 // `statsFn` is called fresh at click-time (not captured once at render time) - may be
 // async (e.g. re-fetching /api/overview itself rather than relying on a closure
 // variable from the page's last render, which matters on pages like Overview that

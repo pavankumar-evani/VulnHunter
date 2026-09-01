@@ -11,7 +11,7 @@ export async function render(container) {
       <td>${escapeHtml(e.timestamp)}</td>
       <td>${escapeHtml(e.pipeline)}</td>
       <td>${escapeHtml(e.returncode)}</td>
-      <td><code>${escapeHtml(e.command)}</code></td>
+      <td class="wrap-cell"><code>${escapeHtml(e.command)}</code></td>
     </tr>`).join("");
 
   container.innerHTML = `

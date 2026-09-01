@@ -32,7 +32,7 @@ function vulnRowHtml(g) {
   const href = g.cve ? `/queue?cve=${encodeURIComponent(g.cve)}` : `/queue?title=${encodeURIComponent(g.title)}`;
   return `
     <tr>
-      <td><a href="${href}" data-link>${escapeHtml(g.title)}</a></td>
+      <td class="wrap-cell"><a href="${href}" data-link>${escapeHtml(g.title)}</a></td>
       <td>${g.cve ? `<code>${escapeHtml(g.cve)}</code>` : `<span class="muted">—</span>`}</td>
       <td><span class="badge badge-${(g.severity || "").toLowerCase()}">${escapeHtml(g.severity || "?")}</span></td>
       <td><span class="badge badge-critical">${g.assetCount}</span></td>

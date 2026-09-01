@@ -40,10 +40,10 @@ function rowHtml(f) {
     <tr>
       <td><button type="button" class="link-button finding-id-link" data-finding-id="${escapeHtml(f.id)}">${escapeHtml(f.id)}</button></td>
       <td><code>${escapeHtml(f.cve || "—")}</code></td>
-      <td>${escapeHtml(f.title)}</td>
+      <td class="wrap-cell">${escapeHtml(f.title)}</td>
       <td>${escapeHtml((f.asset && f.asset.name) || "—")}</td>
       <td><span class="badge ${CATEGORY_BADGE_CLASS[qr.category] || ""}">${escapeHtml(CATEGORY_LABELS[qr.category] || qr.category)}</span></td>
-      <td>${escapeHtml(qr.migration_guidance)}</td>
+      <td class="wrap-cell">${escapeHtml(qr.migration_guidance)}</td>
     </tr>`;
 }
 

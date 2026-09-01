@@ -30,7 +30,7 @@ function rowHtml(row, playbookFile) {
     <tr>
       <td>${escapeHtml(row.ID)}</td>
       <td>${escapeHtml(row.Asset)}</td>
-      <td>${escapeHtml(row.Title)}</td>
+      <td class="wrap-cell">${escapeHtml(row.Title)}</td>
       <td><code>${escapeHtml(row.CVE)}</code></td>
       <td><span class="badge badge-${(row.Severity || "").toLowerCase()}">${escapeHtml(row.Severity)}</span></td>
       <td>${escapeHtml(row["Action Type"])}</td>

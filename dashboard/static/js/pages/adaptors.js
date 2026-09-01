@@ -24,10 +24,10 @@ function referencePanelHtml(c) {
     <table class="data-table finding-detail-table">
       <tbody>
         <tr><th>Category</th><td>${escapeHtml(c.category)}</td></tr>
-        <tr><th>What it does</th><td>${escapeHtml(c.blurb)}</td></tr>
+        <tr><th>What it does</th><td class="wrap-cell">${escapeHtml(c.blurb)}</td></tr>
         <tr><th>Auth model</th><td>${escapeHtml(c.authMethod)}</td></tr>
-        <tr><th>Integration shape</th><td>${escapeHtml(c.integrationShape)}</td></tr>
-        <tr><th>Data that would flow</th><td>${escapeHtml(c.dataFlow)}</td></tr>
+        <tr><th>Integration shape</th><td class="wrap-cell">${escapeHtml(c.integrationShape)}</td></tr>
+        <tr><th>Data that would flow</th><td class="wrap-cell">${escapeHtml(c.dataFlow)}</td></tr>
       </tbody>
     </table>`;
 }

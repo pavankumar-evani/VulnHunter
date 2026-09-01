@@ -19,7 +19,7 @@ function renderSummary(data) {
       <td>${escapeHtml(f.id)}</td>
       <td><span class="badge badge-priority-${(f.priority || "").toLowerCase()}">${escapeHtml(f.priority)}</span></td>
       <td>${escapeHtml(f.asset)}</td>
-      <td>${escapeHtml(f.title)}</td>
+      <td class="wrap-cell">${escapeHtml(f.title)}</td>
     </tr>`).join("");
 
   return `

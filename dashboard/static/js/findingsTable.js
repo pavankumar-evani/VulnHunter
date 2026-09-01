@@ -199,7 +199,7 @@ function rowHtml(f) {
       <td data-col="owner">${escapeHtml(f.owner || "Unowned")}</td>
       <td data-col="team">${escapeHtml(f.team || "—")}</td>
       <td data-col="remediation_mechanism">${remediationMechanismCellHtml(f)}</td>
-      <td data-col="title">${escapeHtml(f.title)}</td>
+      <td data-col="title" class="wrap-cell">${escapeHtml(f.title)}</td>
       <td data-col="cve"><code>${escapeHtml(f.cve || "—")}</code></td>
       <td data-col="kev">${kev}</td>
       <td data-col="epss">${epss}</td>

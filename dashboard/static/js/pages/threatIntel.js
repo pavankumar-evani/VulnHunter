@@ -58,11 +58,11 @@ function zeroDayRowHtml(f) {
       <td class="sticky-col sticky-col-truncate" style="left:${ZD_STICKY.id.left}px; width:${ZD_STICKY.id.width}px"><a href="/queue?highlight=${encodeURIComponent(f.id)}" data-link>${escapeHtml(f.id)}</a></td>
       <td class="sticky-col sticky-col-truncate" style="left:${ZD_STICKY.cveTitle.left}px; width:${ZD_STICKY.cveTitle.width}px" data-tooltip="${escapeHtml(f.cve || f.title)}">${escapeHtml(f.cve || f.title)}</td>
       <td><span class="badge badge-${(f.severity || "").toLowerCase()}">${escapeHtml(f.severity)}</span></td>
-      <td>${escapeHtml(f.domainLabel)}</td>
+      <td class="wrap-cell">${escapeHtml(f.domainLabel)}</td>
       <td>${escapeHtml(sourcesFor(f).join(", ") || "—")}</td>
       <td>${statusBadge}</td>
       <td>${f.assetsImpacted}</td>
-      <td>${escapeHtml((f.exploit_criteria_matches || []).map((m) => m.label).join("; "))}</td>
+      <td class="wrap-cell">${escapeHtml((f.exploit_criteria_matches || []).map((m) => m.label).join("; "))}</td>
       <td>${escapeHtml(f.asset && f.asset.name)}</td>
     </tr>`;
 }
@@ -83,7 +83,7 @@ function groupRowHtml(g) {
       <td class="sticky-col" style="left:0; width:${GROUP_STICKY_WIDTH}px"><strong>${escapeHtml(g.name)}</strong><br>
         <span class="muted" style="font-size:0.8rem">${escapeHtml(g.aliases.slice(0, 3).join(", "))}${g.aliases.length > 3 ? ", …" : ""}</span>
       </td>
-      <td>${escapeHtml(g.summary)}</td>
+      <td class="wrap-cell">${escapeHtml(g.summary)}</td>
       <td>${(g.targetIndustries || []).map((ind) => `<span class="attack-tag">${escapeHtml(ind)}</span>`).join(" ")}</td>
       <td><span class="badge badge-auto_approvable" data-tooltip="Per MITRE ATT&amp;CK's own current catalog - not a live detection signal from your environment.">Active</span></td>
       <td>${escapeHtml(g.mostRecentActivity)}</td>

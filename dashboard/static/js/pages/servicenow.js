@@ -7,7 +7,7 @@ function previewRows(previews) {
   return previews.map((p) => `
     <tr>
       <td>${escapeHtml(p.finding_id)}</td>
-      <td>${escapeHtml(p.body.short_description)}</td>
+      <td class="wrap-cell">${escapeHtml(p.body.short_description)}</td>
       <td>${escapeHtml(p.body.urgency)}</td>
       <td>${escapeHtml(p.body.impact)}</td>
     </tr>`).join("");

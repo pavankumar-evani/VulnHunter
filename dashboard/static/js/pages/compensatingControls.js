@@ -88,11 +88,11 @@ function rowHtml(row) {
     <tr>
       <td data-col="priority"><span class="badge badge-priority-${(f.priority || "").toLowerCase()}">${escapeHtml(f.priority)}</span></td>
       <td data-col="id"><button type="button" class="link-button finding-id-link" data-finding-id="${escapeHtml(f.id)}">${escapeHtml(f.id)}</button></td>
-      <td data-col="cve_title">${escapeHtml(f.cve || f.title)}</td>
+      <td data-col="cve_title" class="wrap-cell">${escapeHtml(f.cve || f.title)}</td>
       <td data-col="severity"><span class="badge badge-${(f.severity || "").toLowerCase()}">${escapeHtml(f.severity)}</span></td>
       <td data-col="threat_intel">${threatIntelCellHtml(f)}</td>
       <td data-col="why_flagged">${flagChipsHtml(flags)}</td>
-      <td data-col="controls">${controlsListHtml(f.compensating_controls)}</td>
+      <td data-col="controls" class="wrap-cell">${controlsListHtml(f.compensating_controls)}</td>
       <td data-col="owner">${escapeHtml(f.owner || "Unowned")}</td>
       <td data-col="team">${escapeHtml(f.team || "—")}</td>
       <td data-col="actions">
