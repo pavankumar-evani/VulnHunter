@@ -33,6 +33,8 @@ export const NAV = [
       tip: "Hub view across SAST, DAST, SCA, Secrets, Container, and API sub-categories - counts and links into each." },
     { path: "/infrastructure", label: "Infrastructure Vulnerabilities", icon: "infra",
       tip: "Hub view across OS, Network, Network Security, OT/IoT, and Cloud sub-categories (Tenable/Armis-style asset scanning)." },
+    { path: "/ot-vulnerabilities", label: "OT Vulnerabilities", icon: "container",
+      tip: "Dedicated hub for Operational Technology/IoT device findings (PLCs, SCADA/HMI, building automation, cameras, sensor gateways) - the same real data as Infrastructure Vulnerabilities' own OT/IoT sub-category, broken out for teams who own OT/ICS specifically." },
     { path: "/ai-vulnerabilities", label: "AI Vulnerabilities", icon: "aiVuln",
       tip: "Prompt injection, model poisoning, and other AI/ML risks - with an illustrative MITRE ATLAS heat map, summaries, and remediation guidance." },
     { path: "/certificate-vulnerabilities", label: "Certificate Vulnerabilities", icon: "certmgmt",
