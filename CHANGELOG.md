@@ -7,6 +7,49 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Production-readiness pass**, closing/mitigating four of the real blockers named
+  in a production-readiness assessment:
+  - **Closing the anonymous-read gap (opt-in)**: `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true`
+    is a new environment flag enabling `dashboard/app.py`'s `_require_login_for_api_reads`
+    middleware - every `/api/*` route then requires a real session except the login
+    flow itself. One middleware, not ~100 individual route changes, so the large
+    existing test suite (which exercises the still-default OFF state) is completely
+    unaffected. Also closes per-team RBAC's own documented anonymous-bypass caveat.
+    Requires a real `VULNHUNTER_SESSION_SECRET` too - `rbac.validate_production_requirements()`
+    (called at startup) refuses to start otherwise, since gating every read while
+    sessions reset on every restart would lock everyone out.
+  - **Real concurrent-write safety** for the highest-risk JSON stores: new
+    `remediation/utils/file_lock.py` (a dependency-free, cross-platform advisory
+    file lock - real threads/real filesystem tested, not just unit-tested in
+    isolation) now guards the read-modify-write cycle in `activity_log.py`,
+    `ai_usage_log.py`, `exceptions/store.py`, and `remediation_approvals/store.py`.
+    Found and fixed two real bugs while building this: a clock-domain mismatch
+    (comparing a monotonic-clock deadline against a wall-clock file mtime, which
+    made stale-lock detection silently never trigger) and a missed `PermissionError`
+    on Windows (a `CreateFile` racing another thread's concurrent unlink of the same
+    lock file can raise `PermissionError` instead of `FileExistsError` - especially
+    visible inside a OneDrive-synced directory - which was aborting the whole
+    acquire loop instead of retrying). `asset_inventory.py` and `auth/users.py` are
+    NOT locked yet - same real race, lower-frequency/admin-gated edits, disclosed as
+    real follow-up in `dashboard/README.md` rather than done in this pass.
+  - **Real deployment guidance**: new `.env.example` (every real environment
+    variable this app actually reads, audited file:line, nothing invented) and a
+    concrete nginx reverse-proxy + multi-worker `uvicorn` config in
+    `dashboard/README.md`, replacing a one-line "use a reverse proxy" mention.
+  - Corrected a stale claim in `dashboard/README.md`: Node.js/
+    npm ARE installed in this environment (checked directly) - the "no Node.js" reasoning
+    for staying on vanilla JS was accurate when originally written, on a different
+    machine, but the actual reason to keep the current architecture is cost/risk of
+    rewriting 30+ already-verified page modules, not a hard technical blocker.
+  - 20 new tests (`test_file_lock.py`'s real-thread concurrency proofs, plus one
+    concurrency test added to each of `test_activity_log.py` [new file],
+    `test_ai_usage_log.py`, `test_exceptions_store.py`, `test_remediation_approvals.py`,
+    plus the middleware/startup-check tests in `test_auth.py`/`test_dashboard.py`).
+  - **Fixed a real UI bug** (reported live): the Threat Intel page's feed
+    name+description table cells inherited the app-wide `.data-table` "no wrap"
+    rule (correct for short data cells like IDs/dates/badges, wrong for a real
+    descriptive sentence) and overflowed instead of wrapping - scoped fix via a new
+    `.feed-name-cell` class, not a change to the shared rule every other table relies on.
 - **Per-team RBAC on finding/asset views**: `dashboard/auth/users.py` gained a real
   `team` field (`create_user`, new `set_team()`/`set_role()`/`list_users()`), carried
   through the session cookie (`sessions.py`/`rbac.get_current_user()`) alongside

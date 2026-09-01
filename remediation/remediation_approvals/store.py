@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 
 from remediation.audit.activity_log import record_activity
+from remediation.utils.file_lock import FileLock
 
 DEFAULT_STORE_PATH = Path(__file__).resolve().parent / "remediation_approvals.json"
 
@@ -92,25 +93,31 @@ def create_approval_request(finding_id, requested_by, scheduled_window, path=Non
         raise ValueError("requested_by is required")
 
     as_of = as_of or datetime.date.today()
-    approvals = load_approvals(path)
-    record = {
-        "id": _next_id(approvals),
-        "finding_id": finding_id,
-        "requested_by": requested_by.strip(),
-        "scheduled_window": scheduled_window or {},
-        "created_on": as_of.isoformat(),
-        "status": "pending",
-        "approved_by": None,
-        "approved_at": None,
-        "ad_group_validated": None,
-        "rejected_by": None,
-        "rejected_at": None,
-        "rejection_reason": None,
-        "staging_validated_by": None,
-        "staging_validated_at": None,
-    }
-    approvals.append(record)
-    save_approvals(approvals, path)
+    # Locked for the full read-modify-write cycle: two approval requests filed at
+    # nearly the same real moment would otherwise both compute the same next APR-N
+    # id from the same stale `approvals` read, and whichever save() ran last would
+    # silently drop the other's real request.
+    store_path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    with FileLock(store_path):
+        approvals = load_approvals(path)
+        record = {
+            "id": _next_id(approvals),
+            "finding_id": finding_id,
+            "requested_by": requested_by.strip(),
+            "scheduled_window": scheduled_window or {},
+            "created_on": as_of.isoformat(),
+            "status": "pending",
+            "approved_by": None,
+            "approved_at": None,
+            "ad_group_validated": None,
+            "rejected_by": None,
+            "rejected_at": None,
+            "rejection_reason": None,
+            "staging_validated_by": None,
+            "staging_validated_at": None,
+        }
+        approvals.append(record)
+        save_approvals(approvals, path)
     record_activity(requested_by.strip(), "approval.request", record["id"], {"finding_id": finding_id})
     return record
 
@@ -128,15 +135,17 @@ def mark_staging_validated(approval_id, validated_by, path=None, as_of=None):
     control, not a real one)."""
     if not validated_by or not validated_by.strip():
         raise ValueError("validated_by is required")
-    approvals = load_approvals(path)
-    for a in approvals:
-        if a["id"] == approval_id:
-            a["staging_validated_by"] = validated_by.strip()
-            a["staging_validated_at"] = (as_of or datetime.date.today()).isoformat()
-            save_approvals(approvals, path)
-            record_activity(validated_by.strip(), "approval.staging_validated", approval_id, {"finding_id": a.get("finding_id")})
-            return a
-    raise KeyError(f"No approval request with id {approval_id!r}")
+    store_path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    with FileLock(store_path):
+        approvals = load_approvals(path)
+        found = next((a for a in approvals if a["id"] == approval_id), None)
+        if not found:
+            raise KeyError(f"No approval request with id {approval_id!r}")
+        found["staging_validated_by"] = validated_by.strip()
+        found["staging_validated_at"] = (as_of or datetime.date.today()).isoformat()
+        save_approvals(approvals, path)
+    record_activity(validated_by.strip(), "approval.staging_validated", approval_id, {"finding_id": found.get("finding_id")})
+    return found
 
 
 def mark_remediation_triggered(approval_id, actor=None, path=None, as_of=None):
@@ -148,21 +157,23 @@ def mark_remediation_triggered(approval_id, actor=None, path=None, as_of=None):
     happened yet. This never means the playbook was executed against real
     infrastructure - only that it was generated and is ready for a human/
     change-management process to run, same as every other playbook in this app."""
-    approvals = load_approvals(path)
-    for a in approvals:
-        if a["id"] == approval_id:
-            if a.get("status") != "approved":
-                raise ValueError(
-                    f"Approval {approval_id!r} must be 'approved' before remediation can be "
-                    f"triggered (currently {a.get('status')!r})."
-                )
-            a["status"] = "remediation_triggered"
-            a["triggered_by"] = actor or "unknown"
-            a["triggered_at"] = (as_of or datetime.date.today()).isoformat()
-            save_approvals(approvals, path)
-            record_activity(actor, "approval.trigger_remediation", approval_id, {"finding_id": a.get("finding_id")})
-            return a
-    raise KeyError(f"No approval request with id {approval_id!r}")
+    store_path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    with FileLock(store_path):
+        approvals = load_approvals(path)
+        found = next((a for a in approvals if a["id"] == approval_id), None)
+        if not found:
+            raise KeyError(f"No approval request with id {approval_id!r}")
+        if found.get("status") != "approved":
+            raise ValueError(
+                f"Approval {approval_id!r} must be 'approved' before remediation can be "
+                f"triggered (currently {found.get('status')!r})."
+            )
+        found["status"] = "remediation_triggered"
+        found["triggered_by"] = actor or "unknown"
+        found["triggered_at"] = (as_of or datetime.date.today()).isoformat()
+        save_approvals(approvals, path)
+    record_activity(actor, "approval.trigger_remediation", approval_id, {"finding_id": found.get("finding_id")})
+    return found
 
 
 def approve(approval_id, approved_by, ad_group_validated=None, path=None, as_of=None):
@@ -171,30 +182,34 @@ def approve(approval_id, approved_by, ad_group_validated=None, path=None, as_of=
     since that would misrepresent "we didn't check" as "we checked and it failed"."""
     if not approved_by or not approved_by.strip():
         raise ValueError("approved_by is required")
-    approvals = load_approvals(path)
-    for a in approvals:
-        if a["id"] == approval_id:
-            a["status"] = "approved"
-            a["approved_by"] = approved_by.strip()
-            a["approved_at"] = (as_of or datetime.date.today()).isoformat()
-            a["ad_group_validated"] = ad_group_validated
-            save_approvals(approvals, path)
-            record_activity(approved_by.strip(), "approval.approve", approval_id, {"finding_id": a.get("finding_id")})
-            return a
-    raise KeyError(f"No approval request with id {approval_id!r}")
+    store_path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    with FileLock(store_path):
+        approvals = load_approvals(path)
+        found = next((a for a in approvals if a["id"] == approval_id), None)
+        if not found:
+            raise KeyError(f"No approval request with id {approval_id!r}")
+        found["status"] = "approved"
+        found["approved_by"] = approved_by.strip()
+        found["approved_at"] = (as_of or datetime.date.today()).isoformat()
+        found["ad_group_validated"] = ad_group_validated
+        save_approvals(approvals, path)
+    record_activity(approved_by.strip(), "approval.approve", approval_id, {"finding_id": found.get("finding_id")})
+    return found
 
 
 def reject(approval_id, rejected_by, reason, path=None, as_of=None):
     if not rejected_by or not rejected_by.strip():
         raise ValueError("rejected_by is required")
-    approvals = load_approvals(path)
-    for a in approvals:
-        if a["id"] == approval_id:
-            a["status"] = "rejected"
-            a["rejected_by"] = rejected_by.strip()
-            a["rejected_at"] = (as_of or datetime.date.today()).isoformat()
-            a["rejection_reason"] = (reason or "").strip() or None
-            save_approvals(approvals, path)
-            record_activity(rejected_by.strip(), "approval.reject", approval_id, {"finding_id": a.get("finding_id"), "reason": a["rejection_reason"]})
-            return a
-    raise KeyError(f"No approval request with id {approval_id!r}")
+    store_path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    with FileLock(store_path):
+        approvals = load_approvals(path)
+        found = next((a for a in approvals if a["id"] == approval_id), None)
+        if not found:
+            raise KeyError(f"No approval request with id {approval_id!r}")
+        found["status"] = "rejected"
+        found["rejected_by"] = rejected_by.strip()
+        found["rejected_at"] = (as_of or datetime.date.today()).isoformat()
+        found["rejection_reason"] = (reason or "").strip() or None
+        save_approvals(approvals, path)
+    record_activity(rejected_by.strip(), "approval.reject", approval_id, {"finding_id": found.get("finding_id"), "reason": found["rejection_reason"]})
+    return found

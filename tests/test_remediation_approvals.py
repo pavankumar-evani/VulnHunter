@@ -55,6 +55,25 @@ class ApprovalLifecycle(unittest.TestCase):
         second = store.create_approval_request("FIND-2", "a@x.com", WINDOW, path=self.path, as_of=datetime.date(2026, 8, 1))
         self.assertEqual(second["id"], "APR-2")
 
+    def test_concurrent_create_approval_request_calls_never_lose_a_real_request(self):
+        """Real threads, real filesystem - proves create_approval_request()'s file-
+        lock actually serializes its read-modify-write cycle, so two requests filed
+        at nearly the same real moment don't race on the next APR-N id and silently
+        drop one of them."""
+        import threading
+
+        def create_one(n):
+            store.create_approval_request(f"FIND-{n}", "a@x.com", WINDOW, path=self.path, as_of=datetime.date(2026, 8, 1))
+
+        threads = [threading.Thread(target=create_one, args=(n,)) for n in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        approvals = store.load_approvals(self.path)
+        self.assertEqual(len(approvals), 20)
+        self.assertEqual(len({a["id"] for a in approvals}), 20)  # every id genuinely unique
+
     def test_missing_finding_id_is_rejected(self):
         with self.assertRaises(ValueError):
             store.create_approval_request("", "a@x.com", WINDOW, path=self.path)

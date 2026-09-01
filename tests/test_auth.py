@@ -5,6 +5,7 @@ shipped users.json). The OIDC client is tested entirely against mocked HTTP (no 
 no real identity provider) - same pattern as the Tenable/Armis/ServiceNow/Jira/Splunk/
 CrowdStrike connector tests.
 """
+import os
 import sys
 import tempfile
 import time
@@ -16,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "dashboard"))
 sys.path.insert(0, str(REPO_ROOT))
 
-from auth import oidc, passwords, sessions, users  # noqa: E402
+from auth import oidc, passwords, rbac, sessions, users  # noqa: E402
 
 
 class PasswordHashing(unittest.TestCase):
@@ -321,6 +322,42 @@ class OidcFlow(unittest.TestCase):
         mock_session.get.return_value.json.return_value = self.DISCOVERY_DOC
         oidc.discover("https://idp.example.com", session=mock_session)
         mock_session.get.assert_called_once_with("https://idp.example.com/.well-known/openid-configuration")
+
+
+class ProductionRequirementsValidation(unittest.TestCase):
+    """rbac.validate_production_requirements() - the startup check that refuses to
+    run VULNHUNTER_REQUIRE_LOGIN_FOR_READS without a real, stable session secret."""
+
+    def setUp(self):
+        self.patcher = patch.dict("os.environ", {}, clear=False)
+        self.patcher.start()
+        os.environ.pop("VULNHUNTER_REQUIRE_LOGIN_FOR_READS", None)
+        os.environ.pop("VULNHUNTER_SESSION_SECRET", None)
+
+    def tearDown(self):
+        self.patcher.stop()
+
+    def test_passes_when_the_flag_is_off_regardless_of_secret(self):
+        rbac.validate_production_requirements()  # must not raise
+
+    def test_raises_when_the_flag_is_on_with_no_real_secret(self):
+        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "true"
+        with self.assertRaises(RuntimeError):
+            rbac.validate_production_requirements()
+
+    def test_passes_when_the_flag_is_on_with_a_real_secret(self):
+        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "true"
+        os.environ["VULNHUNTER_SESSION_SECRET"] = "a-real-stable-secret"
+        rbac.validate_production_requirements()  # must not raise
+
+    def test_flag_value_is_case_insensitive(self):
+        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "TRUE"
+        with self.assertRaises(RuntimeError):
+            rbac.validate_production_requirements()
+
+    def test_flag_set_to_a_falsy_looking_string_does_not_enable_it(self):
+        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "false"
+        rbac.validate_production_requirements()  # must not raise
 
 
 if __name__ == "__main__":

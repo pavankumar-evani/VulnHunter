@@ -28,6 +28,7 @@ import json
 from pathlib import Path
 
 from remediation.audit.activity_log import record_activity
+from remediation.utils.file_lock import FileLock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_STORE_PATH = Path(__file__).resolve().parent / "exceptions.json"
@@ -111,19 +112,25 @@ def create_exception(finding_id, reason, requested_by, approved_by, expires_on,
     if expires_date <= as_of:
         raise ValueError("expires_on must be a future date")
 
-    exceptions = load_exceptions(path)
-    record = {
-        "id": _next_id(exceptions),
-        "finding_id": finding_id,
-        "reason": reason.strip(),
-        "requested_by": requested_by.strip(),
-        "approved_by": approved_by.strip(),
-        "created_on": as_of.isoformat(),
-        "expires_on": expires_on,
-        "status": "active",
-    }
-    exceptions.append(record)
-    save_exceptions(exceptions, path)
+    # Locked for the full read-modify-write cycle: two exceptions requested at
+    # nearly the same real moment would otherwise both compute the same next
+    # EXC-N id from the same stale `exceptions` read, and whichever save() ran last
+    # would silently drop the other's real exception record.
+    store_path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    with FileLock(store_path):
+        exceptions = load_exceptions(path)
+        record = {
+            "id": _next_id(exceptions),
+            "finding_id": finding_id,
+            "reason": reason.strip(),
+            "requested_by": requested_by.strip(),
+            "approved_by": approved_by.strip(),
+            "created_on": as_of.isoformat(),
+            "expires_on": expires_on,
+            "status": "active",
+        }
+        exceptions.append(record)
+        save_exceptions(exceptions, path)
     record_activity(requested_by.strip(), "exception.create", record["id"],
                      {"finding_id": finding_id, "approved_by": record["approved_by"], "expires_on": expires_on})
     return record
@@ -134,14 +141,16 @@ def revoke_exception(exception_id, revoked_by=None, path=None, as_of=None):
     expiring). Records who revoked it and when - previously this only flipped the
     status with no who/when trace at all. Raises KeyError if no exception with that ID
     exists."""
-    exceptions = load_exceptions(path)
     as_of = as_of or datetime.datetime.now(datetime.timezone.utc)
-    for e in exceptions:
-        if e["id"] == exception_id:
-            e["status"] = "revoked"
-            e["revoked_by"] = revoked_by or "unknown"
-            e["revoked_at"] = as_of.isoformat()
-            save_exceptions(exceptions, path)
-            record_activity(revoked_by, "exception.revoke", exception_id, {"finding_id": e.get("finding_id")}, as_of=as_of)
-            return e
-    raise KeyError(f"No exception with id {exception_id!r}")
+    store_path = Path(path) if path is not None else DEFAULT_STORE_PATH
+    with FileLock(store_path):
+        exceptions = load_exceptions(path)
+        found = next((e for e in exceptions if e["id"] == exception_id), None)
+        if not found:
+            raise KeyError(f"No exception with id {exception_id!r}")
+        found["status"] = "revoked"
+        found["revoked_by"] = revoked_by or "unknown"
+        found["revoked_at"] = as_of.isoformat()
+        save_exceptions(exceptions, path)
+    record_activity(revoked_by, "exception.revoke", exception_id, {"finding_id": found.get("finding_id")}, as_of=as_of)
+    return found

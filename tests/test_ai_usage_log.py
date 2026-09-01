@@ -93,6 +93,31 @@ class UsageLogStore(unittest.TestCase):
         self.assertAlmostEqual(by_user["alice@example.com"]["total_cost_usd"], 0.03)
         self.assertEqual(by_user["alice@example.com"]["unknown_cost_calls"], 1)
 
+    def test_concurrent_record_usage_calls_never_lose_a_real_call(self):
+        """Real threads, real filesystem - proves record_usage()'s file-lock actually
+        serializes its read-modify-write cycle. Before that lock existed, two AI calls
+        finishing at nearly the same real moment could read the same entries list,
+        both compute the same next id, and whichever save() ran last would silently
+        drop the other's real cost/token record - undercounting real spend against a
+        configured daily cap with no error anywhere."""
+        import threading
+
+        def record_one(n):
+            ai_usage_log.record_usage(
+                f"user{n}@example.com", "ai-assist", "claude-sonnet-5",
+                {"input_tokens": 10, "output_tokens": 5, "cache_creation_input_tokens": None, "cache_read_input_tokens": None},
+                0.001, True, path=self.path,
+            )
+
+        threads = [threading.Thread(target=record_one, args=(n,)) for n in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        entries = ai_usage_log.list_usage(path=self.path)
+        self.assertEqual(len(entries), 20)
+        self.assertEqual(len({e["id"] for e in entries}), 20)  # every id genuinely unique
+
     def test_tokens_used_today_excludes_earlier_days(self):
         yesterday = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
         today = datetime.datetime.now(datetime.timezone.utc)

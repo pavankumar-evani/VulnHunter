@@ -24,6 +24,8 @@ import datetime
 import json
 from pathlib import Path
 
+from remediation.utils.file_lock import FileLock
+
 DEFAULT_LOG_PATH = Path(__file__).resolve().parent / "ai_usage_log.json"
 
 # Every key spelling actually seen or plausible for this field across Claude Code
@@ -97,20 +99,26 @@ def record_usage(actor, route, model, usage, total_cost_usd, extraction_ok, path
     """Appends one real AI-call usage record and returns it. `route` is a short,
     machine-readable label for which feature made the call (e.g. "ai-assist",
     "ai-trend-analysis", "vulnhunt", "remediate")."""
-    entries = _load(path)
-    entry = {
-        "id": len(entries) + 1,
-        "actor": actor or "unknown",
-        "route": route,
-        "model": model,
-        "usage": usage,
-        "total_tokens": _total_tokens(usage) if extraction_ok else None,
-        "total_cost_usd": total_cost_usd,
-        "extraction_ok": extraction_ok,
-        "timestamp": (as_of or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
-    }
-    entries.append(entry)
-    _save(entries, path)
+    # Locked for the full read-modify-write cycle - see activity_log.py's
+    # record_activity() for the exact same reasoning (two concurrent real AI calls
+    # would otherwise race on `id` and one's real cost/token record could be
+    # silently dropped, undercounting real spend against a configured daily cap).
+    lock_path = Path(path) if path is not None else DEFAULT_LOG_PATH
+    with FileLock(lock_path):
+        entries = _load(path)
+        entry = {
+            "id": len(entries) + 1,
+            "actor": actor or "unknown",
+            "route": route,
+            "model": model,
+            "usage": usage,
+            "total_tokens": _total_tokens(usage) if extraction_ok else None,
+            "total_cost_usd": total_cost_usd,
+            "extraction_ok": extraction_ok,
+            "timestamp": (as_of or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
+        }
+        entries.append(entry)
+        _save(entries, path)
     return entry
 
 

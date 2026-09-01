@@ -54,6 +54,28 @@ class ExceptionLifecycle(unittest.TestCase):
                                           path=self.path, as_of=datetime.date(2026, 8, 1))
         self.assertEqual(second["id"], "EXC-2")
 
+    def test_concurrent_create_exception_calls_never_lose_a_real_request(self):
+        """Real threads, real filesystem - proves create_exception()'s file-lock
+        actually serializes its read-modify-write cycle, so two exceptions requested
+        at nearly the same real moment don't race on the next EXC-N id and silently
+        drop one of them."""
+        import threading
+
+        def create_one(n):
+            store.create_exception(
+                f"FIND-{n}", "concurrency test", "eng@example.com", "secops@example.com",
+                "2026-12-01", path=self.path, as_of=datetime.date(2026, 8, 1),
+            )
+
+        threads = [threading.Thread(target=create_one, args=(n,)) for n in range(20)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        exceptions = store.load_exceptions(self.path)
+        self.assertEqual(len(exceptions), 20)
+        self.assertEqual(len({e["id"] for e in exceptions}), 20)  # every id genuinely unique
+
     def test_missing_finding_id_is_rejected(self):
         with self.assertRaises(ValueError):
             store.create_exception("", "reason", "a@x.com", "b@x.com", "2026-12-01", path=self.path)

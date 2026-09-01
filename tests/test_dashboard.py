@@ -18,6 +18,7 @@ execute JavaScript.
 """
 import datetime
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -1595,6 +1596,68 @@ class ApiTeamScopedRbac(unittest.TestCase):
         finding_ids = {a["finding_id"] for a in approvals}
         self.assertIn(own_team_finding["id"], finding_ids)
         self.assertNotIn(other_team_finding["id"], finding_ids)
+
+
+class RequireLoginForReadsMiddleware(unittest.TestCase):
+    """VULNHUNTER_REQUIRE_LOGIN_FOR_READS - the opt-in, off-by-default middleware that
+    closes the "anonymous reads see everything" gap for a real deployment. Off is the
+    default and is exercised by literally every other test in this file that reads
+    /api/queue, /api/assets, etc. without a session; this class exercises the ON
+    state specifically."""
+
+    def setUp(self):
+        self.patcher = patch.dict(os.environ, {"VULNHUNTER_REQUIRE_LOGIN_FOR_READS": "true"})
+        self.patcher.start()
+
+    def tearDown(self):
+        _logout()
+        self.patcher.stop()
+
+    def test_flag_off_is_the_default_and_stays_public(self):
+        self.patcher.stop()  # simulate the real default (unset) for this one test
+        try:
+            resp = client.get("/api/queue")
+            self.assertEqual(resp.status_code, 200)
+        finally:
+            self.patcher.start()
+
+    def test_read_route_without_a_session_is_rejected(self):
+        for path in ("/api/queue", "/api/assets", "/api/exceptions", "/api/remediation-approvals", "/api/overview"):
+            with self.subTest(path=path):
+                self.assertEqual(client.get(path).status_code, 401)
+
+    def test_login_flow_routes_stay_reachable_with_no_session(self):
+        self.assertEqual(client.get("/api/auth/me").status_code, 200)
+        self.assertEqual(client.get("/api/auth/oidc/config").status_code, 200)
+        # A wrong password must still fail with 401 for the RIGHT reason (bad
+        # credentials), not because the middleware itself blocked the request before
+        # the real login logic ever ran.
+        resp = client.post("/api/auth/login", json={"email": TEST_USER_EMAIL, "password": "wrong"})
+        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.json()["detail"], "Invalid email or password")
+
+    def test_non_api_paths_stay_reachable_with_no_session(self):
+        # The SPA shell and static assets carry no data of their own - the client-side
+        # router (not this middleware) is what redirects an unauthenticated browser to
+        # /login, and it needs the shell HTML/JS to actually load first.
+        self.assertEqual(client.get("/").status_code, 200)
+        self.assertEqual(client.get("/queue").status_code, 200)
+
+    def test_read_route_with_a_real_session_returns_real_data(self):
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.get("/api/queue")
+        self.assertEqual(resp.status_code, 200)
+        self.assertGreater(len(resp.json()["findings"]), 0)
+
+    def test_admin_only_route_still_distinguishes_401_from_403(self):
+        # Already-gated routes (Depends(rbac.require_admin)) keep their own real
+        # status codes - the middleware doesn't flatten everything to a bare 401.
+        self.assertEqual(client.get("/api/admin/users").status_code, 401)
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        self.assertEqual(client.get("/api/admin/users").status_code, 403)
+        _logout()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        self.assertEqual(client.get("/api/admin/users").status_code, 200)
 
 
 class ApiReports(unittest.TestCase):

@@ -105,7 +105,7 @@ function feedCardHtml(c) {
 function feedRowHtml(f) {
   return `
     <tr>
-      <td><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${escapeHtml(f.name)} ↗</a>
+      <td class="feed-name-cell"><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${escapeHtml(f.name)} ↗</a>
         ${f.note ? `<br><span class="muted" style="font-size:0.8rem">${escapeHtml(f.note)}</span>` : ""}
       </td>
       <td>${escapeHtml(f.category)}</td>

@@ -27,6 +27,8 @@ import datetime
 import json
 from pathlib import Path
 
+from remediation.utils.file_lock import FileLock
+
 DEFAULT_LOG_PATH = Path(__file__).resolve().parent / "activity_log.json"
 
 
@@ -59,17 +61,26 @@ def record_activity(actor, action, target=None, details=None, path=None, as_of=N
     `details`: an optional, already-real dict describing what changed (e.g.
     {"owner": "New Name", "team": "New Team"}) - never a place to store a password or
     other secret."""
-    entries = _load(path)
-    entry = {
-        "id": len(entries) + 1,
-        "actor": actor or "unknown",
-        "action": action,
-        "target": target,
-        "details": details or {},
-        "timestamp": (as_of or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
-    }
-    entries.append(entry)
-    _save(entries, path)
+    # Locked for the full read-modify-write cycle, not just the final write: two
+    # concurrent real actions (two admins editing different assets at nearly the same
+    # moment, say) would otherwise both read the same `entries`, both compute the same
+    # next `id`, and whichever saves last would silently overwrite the other's real
+    # activity record - an audit log that can lose entries under real concurrent use
+    # isn't one. See remediation/utils/file_lock.py's own docstring for why this is a
+    # lock file, not a database transaction.
+    lock_path = Path(path) if path is not None else DEFAULT_LOG_PATH
+    with FileLock(lock_path):
+        entries = _load(path)
+        entry = {
+            "id": len(entries) + 1,
+            "actor": actor or "unknown",
+            "action": action,
+            "target": target,
+            "details": details or {},
+            "timestamp": (as_of or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
+        }
+        entries.append(entry)
+        _save(entries, path)
     return entry
 
 

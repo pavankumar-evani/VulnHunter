@@ -191,25 +191,72 @@ docstrings for the full design. Summary:
   [docs/REMEDIATION_WORKFLOWS.md](../docs/REMEDIATION_WORKFLOWS.md) for how this fits
   into the Remediation Policy/Approvals workflow, including the PAM (Vault/CyberArk)
   side, which never involves this application holding a live credential at all.
-- **RBAC scope decision (stated plainly)**: only sensitive *mutation* routes are
-  gated - real ServiceNow/Jira/Splunk sends, a real (paid) pipeline run, a real (paid)
-  AI-assist call, priority-rule edits (admin), exception create (any logged-in user) and
-  revoke (admin), asset owner/facing edits (any logged-in user). Every GET/read route
-  stays open, exactly as before this feature existed - gating every read route too would
-  mean retrofitting auth into the entire existing test suite in one pass; this scopes the
-  security-sensitive *actions* first, mirroring the project's existing dry-run-by-default
-  safety model. The client-side router also redirects an unauthenticated browser to
-  `/login` for every page (not just gated ones) for a coherent UX - but that's a UX gate,
-  not the real security boundary: `curl http://host/api/queue` still returns real data
-  with no cookie at all, by design in this pass.
+- **RBAC scope decision (stated plainly)**: sensitive *mutation* routes are gated -
+  real ServiceNow/Jira/Splunk sends, a real (paid) pipeline run, a real (paid) AI-assist
+  call, priority-rule edits (admin), exception create (any logged-in user) and revoke
+  (admin), asset owner/facing edits (any logged-in user). Every GET/read route stays
+  open **by default** - see "Closing the anonymous-read gap" just below for the real,
+  opt-in way to close that for a production deployment. Finding/asset-level views
+  (Queue, Asset Inventory, Exceptions, Remediation Approvals) additionally get real
+  server-side **per-team filtering** for any logged-in non-admin with a team assigned
+  (Admin Settings' "Team Management") - `dashboard/app.py`'s `_scope_to_team()`;
+  Overview, ML Insights, and Compliance stay org-wide by design. The client-side router
+  also redirects an unauthenticated browser to `/login` for every page (not just gated
+  ones) for a coherent UX - but that's a UX gate, not the real security boundary on its
+  own; see below for what actually closes it.
+- **Closing the anonymous-read gap**: set `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true` to
+  require a valid session on every `/api/*` route (the login flow itself stays
+  reachable) - one middleware (`dashboard/app.py`'s `_require_login_for_api_reads`),
+  not a change to any individual route, so it doesn't touch the large existing test
+  suite that exercises the (still-default) open-reads behavior. This also closes the
+  one real caveat on per-team filtering: without it, an anonymous request bypasses
+  `_scope_to_team()` the same way it bypasses everything else. Requires a real
+  `VULNHUNTER_SESSION_SECRET` too (below) - the app refuses to start otherwise, since
+  gating every read while sessions reset on every restart would lock everyone out.
+- **`VULNHUNTER_SESSION_SECRET`**: set this to a real, random, stable value before any
+  real deployment (`python -c "import secrets; print(secrets.token_hex(32))"` generates
+  one) - without it, a random secret is generated fresh per process, so every session is
+  invalidated on restart and multiple worker processes mint incompatible cookies.
 - **HTTPS**: opt-in for local dev via `SSL_KEYFILE`/`SSL_CERTFILE` environment variables
   (uvicorn's native TLS support - see `dashboard/app.py`'s `__main__` block). Generate a
   self-signed cert for local testing:
   ```bash
   openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 365 -subj "/CN=localhost"
   ```
-  A real deployment should terminate TLS at a reverse proxy (nginx/Caddy) instead of
-  uvicorn's own TLS directly - a self-signed cert is for local dev only, never production.
+  A real deployment should terminate TLS at a reverse proxy instead of uvicorn's own TLS
+  directly - a self-signed cert is for local dev only, never production. A minimal, real
+  nginx config doing that (real TLS + WebSocket-safe headers + no path rewriting, since
+  this app's own router expects the full path):
+  ```nginx
+  server {
+      listen 443 ssl;
+      server_name your-real-hostname;
+      ssl_certificate     /etc/letsencrypt/live/your-real-hostname/fullchain.pem;
+      ssl_certificate_key /etc/letsencrypt/live/your-real-hostname/privkey.pem;
+
+      location / {
+          proxy_pass http://127.0.0.1:5050;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+      }
+  }
+  server {
+      listen 80;
+      server_name your-real-hostname;
+      return 301 https://$host$request_uri;   # never serve real data over plain HTTP
+  }
+  ```
+  Run the app itself with a real process manager, not `python dashboard/app.py`'s bare
+  `uvicorn.run()` (that binds `127.0.0.1` only, by design, precisely so it's never
+  accidentally internet-reachable without the reverse proxy in front of it):
+  ```bash
+  uvicorn app:app --host 127.0.0.1 --port 5050 --workers 4
+  ```
+  Multiple `--workers` is safe for this app's own session mechanism as long as
+  `VULNHUNTER_SESSION_SECRET` is a real, shared, stable value (see above) - the signed-
+  cookie design has no server-side session state to fall out of sync between workers.
 
 **Demo credentials** (intentionally public - this is a demo seed file, not a real
 secret; change or remove before any real deployment):
@@ -301,7 +348,18 @@ layer:
   (SSO) is real, working client code but stays disabled until a real identity provider's
   credentials are configured (see "Authentication" above).
 - **No database** — findings/plans are re-read from disk on every request; there's no
-  historical trend view across multiple runs.
+  historical trend view across multiple runs. The real correctness risk this creates -
+  two concurrent requests racing on the same JSON store's read-modify-write cycle and
+  silently dropping one's write - has a real, tested mitigation for the
+  highest-traffic/highest-consequence stores only: `remediation/utils/file_lock.py`
+  (a dependency-free, cross-platform advisory lock; see its own module docstring) now
+  guards `activity_log.py`, `ai_usage_log.py`, `exceptions/store.py`, and
+  `remediation_approvals/store.py`. `asset_inventory.py` (owner/team/facing/
+  environment/network-info) and `auth/users.py` do **not** have this yet - both are
+  rarer, admin-gated edits, but the same race exists there and closing it is real,
+  scoped follow-up work, not done in this pass. None of this is a substitute for a
+  real database with real transactions - it's a genuine mitigation for a single-
+  machine deployment, not a distributed-lock or multi-machine story.
 - **Synchronous pipeline execution** — a real (non-dry-run) `/api/run` submission blocks
   the request until the pipeline finishes, which can be slow. A production version needs
   a job queue.

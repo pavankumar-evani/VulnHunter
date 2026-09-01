@@ -20,7 +20,7 @@ from pathlib import Path
 import uvicorn
 import yaml
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -91,6 +91,45 @@ async def _no_cache_static_assets(request: Request, call_next):
     return response
 
 
+# Every /api/* route the login flow itself needs BEFORE a session exists - must stay
+# reachable with no session even when VULNHUNTER_REQUIRE_LOGIN_FOR_READS is on, or
+# nobody could ever log in. Deliberately narrow: /api/auth/change-password and
+# /api/directory/status are informational/mutation routes that already require (or
+# can safely require) a real session, so they're not exempted here.
+_AUTH_FLOW_PATHS = frozenset({
+    "/api/auth/login", "/api/auth/logout", "/api/auth/me",
+    "/api/auth/oidc/config", "/api/auth/oidc/login", "/api/auth/oidc/callback",
+})
+
+
+def _require_login_for_reads_enabled():
+    # Read fresh from the environment on every call (not cached at import time) so
+    # tests can toggle this with patch.dict(os.environ, ...) without reloading the
+    # whole app module.
+    return os.environ.get("VULNHUNTER_REQUIRE_LOGIN_FOR_READS", "").strip().lower() in ("1", "true", "yes")
+
+
+@app.middleware("http")
+async def _require_login_for_api_reads(request: Request, call_next):
+    """Opt-in, OFF by default - see dashboard/README.md's "What this is NOT (yet)":
+    every GET/read API route is intentionally public in this MVP, by deliberate,
+    disclosed choice (see KNOWLEDGE_TRANSFER.md §13.1). Set
+    VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true for a real deployment that needs to close
+    that gap: every /api/* route then requires a valid session except the login flow
+    itself (_AUTH_FLOW_PATHS above). This is one middleware, not ~100 individual route
+    changes - it closes both "anonymous reads see everything" AND "an anonymous
+    request bypasses _scope_to_team()'s per-team filtering" in the same place, without
+    touching a single existing route signature or the large existing test suite that
+    calls these routes with no session (that suite exercises the OFF/default state,
+    which is unaffected). See rbac.validate_production_requirements() - this flag also
+    requires a real, stable VULNHUNTER_SESSION_SECRET, checked at startup."""
+    if (_require_login_for_reads_enabled() and request.url.path.startswith("/api/")
+            and request.url.path not in _AUTH_FLOW_PATHS
+            and rbac.get_current_user(request) is None):
+        return JSONResponse({"detail": "Login required"}, status_code=401)
+    return await call_next(request)
+
+
 # In-process notification scheduler - checks scheduled reports (report_schedule_rules.yaml)
 # and team alert subscriptions (alert_rules.yaml) on a timer, for as long as this server
 # process stays running. Explicitly NOT a durable/guaranteed-delivery scheduler: a
@@ -113,6 +152,11 @@ async def _notification_scheduler_loop():
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
+
+
+@app.on_event("startup")
+async def _validate_production_requirements():
+    rbac.validate_production_requirements()
 
 
 @app.on_event("startup")

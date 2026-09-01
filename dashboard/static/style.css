@@ -987,6 +987,12 @@ h2 { font-size: 1.15rem; margin-top: 32px; }
 .data-table th { background: #fafbfc; font-weight: 600; color: var(--text-muted); }
 .data-table tr:last-child td { border-bottom: none; }
 
+/* A handful of table cells carry a real descriptive sentence, not a short data
+   value (Threat Intel's feed name+note cell, e.g.) - the blanket nowrap above is
+   right for most columns (IDs, dates, badges) but would just push those sentences
+   into the table's own horizontal scrollbar instead of wrapping like normal prose. */
+.data-table td.feed-name-cell { white-space: normal; max-width: 360px; }
+
 code {
   background: #f1f3f5;
   padding: 1px 5px;

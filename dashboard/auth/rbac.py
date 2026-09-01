@@ -58,3 +58,23 @@ def require_admin(request: Request):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")
     return user
+
+
+def validate_production_requirements():
+    """Raises RuntimeError if VULNHUNTER_REQUIRE_LOGIN_FOR_READS (dashboard/app.py's
+    opt-in "close the anonymous-read gap" middleware) is on but no real
+    VULNHUNTER_SESSION_SECRET was configured - running that combination would log
+    every user out on every restart (or mint incompatible cookies across multiple
+    worker processes, see SESSION_SECRET's own comment above), defeating the point of
+    requiring login everywhere. Called from app.py's startup event (not at import
+    time here), so a test can exercise this directly with controlled env vars rather
+    than needing to reload this whole module."""
+    require_login_for_reads = os.environ.get("VULNHUNTER_REQUIRE_LOGIN_FOR_READS", "").strip().lower() in ("1", "true", "yes")
+    if require_login_for_reads and not os.environ.get("VULNHUNTER_SESSION_SECRET"):
+        raise RuntimeError(
+            "VULNHUNTER_REQUIRE_LOGIN_FOR_READS is set but VULNHUNTER_SESSION_SECRET is "
+            "not - refusing to start. Running with every read gated but no stable "
+            "session secret would log every user out on the next restart (and mint "
+            "incompatible cookies across multiple worker processes). Set a real, "
+            "stable VULNHUNTER_SESSION_SECRET first - see dashboard/README.md.",
+        )
