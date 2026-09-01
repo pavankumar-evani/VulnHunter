@@ -34,6 +34,7 @@ const routes = [
   { pattern: /^\/adaptors\/?$/, load: () => import("./pages/adaptors.js") },
   { pattern: /^\/run\/?$/, load: () => import("./pages/run.js") },
   { pattern: /^\/ai-assist\/?$/, load: () => import("./pages/aiAssist.js") },
+  { pattern: /^\/ask\/?$/, load: () => import("./pages/askVulnhunter.js") },
   { pattern: /^\/reports\/?$/, load: () => import("./pages/reports.js") },
   { pattern: /^\/support\/?$/, load: () => import("./pages/support.js") },
   { pattern: /^\/faq\/?$/, load: () => import("./pages/faq.js") },

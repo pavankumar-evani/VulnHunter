@@ -13,6 +13,8 @@ export const NAV = [
       tip: "KPIs, SLA status, and coverage across both pipelines at a glance." },
     { path: "/ai-assist", label: "AI Assist", icon: "ai",
       tip: "Ask Claude to explain a finding or draft remediation guidance - preview free, confirm to spend." },
+    { path: "/ask", label: "Ask VulnHunter", icon: "search",
+      tip: "Free, real search over your live data - findings, CVEs, assets, real counts. No AI call, no cost, never fabricates." },
     { path: "/inbox", label: "Inbox", icon: "bell",
       tip: "Real system-generated notifications - SLA breaches, KEV, expiring exceptions - not person-to-person messages." },
   ] },

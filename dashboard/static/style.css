@@ -572,6 +572,10 @@ a.notif-item:hover { background: var(--bg); }
 .lifecycle-funnel-wrap .chart-svg { flex: 1 1 380px; max-width: 480px; }
 .lifecycle-stats { display: flex; flex-direction: column; gap: 10px; flex: 0 0 200px; }
 
+/* --- Ask VulnHunter (askVulnhunter.js) - example-query quick-fill buttons --- */
+.ask-examples { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.ask-examples .link-button { font-size: 0.85rem; }
+
 /* Clickable chart elements (charts.js's optional data.href -> wireChartLinks()) -
    drill-down affordance, same brand-accent focus ring as the rest of the app. */
 .chart-bar-clickable, .chart-slice-clickable, .chart-legend-row-clickable { cursor: pointer; }

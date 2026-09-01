@@ -62,6 +62,7 @@ from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, cmdb_import, pattern_recognition  # noqa: E402
 from remediation.notifications import alert_checker, email_sender, report_scheduler  # noqa: E402
 from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
+from remediation.search import query_engine  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -1149,6 +1150,27 @@ def api_list_assets():
     for row in rows:
         row["suggestion"] = None if row.get("owner") else pattern_recognition.suggest_owner_team(row, known)
     return _fast_json({"assets": rows})
+
+
+class SearchAskBody(BaseModel):
+    query: str
+
+
+@app.post("/api/search/ask")
+def api_search_ask(body: SearchAskBody):
+    """Real, deterministic "ask your data" search - no external API call, no LLM, see
+    remediation/search/query_engine.py's own module docstring for the full honesty
+    rationale. Same no-login-required convention as /api/queue and /api/assets above
+    (a read-only query over the same data those already expose without auth)."""
+    queue_findings = dashboard_data.load_live_queue()
+    vh = dashboard_data.load_vulnhunt_data()
+    _, assets = dashboard_data._load_scored_assets()
+    return query_engine.answer_query(
+        body.query,
+        queue_findings=queue_findings,
+        vulnhunt_findings=vh.get("findings") if vh.get("available") else [],
+        assets=assets,
+    )
 
 
 @app.get("/api/ml-insights/anomalies")

@@ -74,6 +74,7 @@ export const api = {
   assetSetFacing: (name, facing) => request("POST", `/api/assets/${encodeURIComponent(name)}/facing`, { facing }),
   assetSetEnvironment: (name, environment) => request("POST", `/api/assets/${encodeURIComponent(name)}/environment`, { environment }),
   assetSetNetworkInfo: (name, body) => request("POST", `/api/assets/${encodeURIComponent(name)}/network-info`, body),
+  searchAsk: (query) => request("POST", "/api/search/ask", { query }),
   cmdbImportPreview: (csvText, columnMapping) => request("POST", "/api/assets/cmdb-import/preview", { csv_text: csvText, column_mapping: columnMapping || null }),
   cmdbImportApply: (entries) => request("POST", "/api/assets/cmdb-import/apply", { entries }),
   notifications: () => request("GET", "/api/notifications"),

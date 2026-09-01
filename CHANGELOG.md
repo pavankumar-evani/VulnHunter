@@ -54,6 +54,22 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   - 22 new tests (`test_pattern_recognition.py`, `test_asset_inventory.py`) for the
     new IP/MAC validation and asset-inventory merge behavior; full suite green
     (1066 tests).
+  - **"Ask VulnHunter"** (new `/ask` page, `remediation/search/query_engine.py`): a
+    real, deterministic "ask your data" search - the free/open alternative to an
+    LLM-based assistant the original request asked for. No external API call, no
+    signup, no cost, no data leaves the machine; it is pattern/keyword matching over
+    a fixed, disclosed set of real query shapes (finding ID, CVE, severity/KEV/SLA/
+    team/owner/asset filters combined into a real count or list, else a real
+    keyword-overlap match against `docs/FAQ.md`) - never an LLM, so it can never
+    hallucinate: a query with no confident match says so honestly instead of
+    guessing. New `POST /api/search/ask` route (no login required, same convention
+    as `/api/queue`/`/api/assets`). Designed so a real hosted or local open model
+    (e.g. Qwen3 via Ollama) could be layered on top later as an optional upgrade for
+    more flexible phrasing, without changing this module. 26 new tests
+    (`test_query_engine.py`) plus 4 new `/api/search/ask` integration tests; caught
+    and fixed one real bug along the way (a bold-text FAQ excerpt that line-wraps in
+    the markdown source wasn't being cleaned of `**`/`` ` `` markers, since `.` in a
+    non-DOTALL regex doesn't match the newline mid-span).
 - **Round 16 UX/scale pass (in progress)**: a large follow-on request driven by
   screenshots of the Asset Inventory, Exceptions, ML Insights, and Remediation
   Approvals pages at real data scale (thousands of rows) plus a request for session

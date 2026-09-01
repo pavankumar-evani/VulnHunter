@@ -32,6 +32,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from fastapi.testclient import TestClient  # noqa: E402
 
 import data as dashboard_data  # noqa: E402
+import vulnhunter as cli  # noqa: E402
 from app import app as fastapi_app  # noqa: E402
 from auth import rbac as rbac_module  # noqa: E402
 from auth import users as auth_users  # noqa: E402
@@ -689,6 +690,37 @@ class ApiStatus(unittest.TestCase):
         self.assertEqual(payload["status"], "degraded")
         self.assertEqual(payload["remediation_findings"], 0)
         self.assertIn("disk gremlins", payload["remediation_findings_error"])
+
+    def test_status_reports_real_uptime_and_scheduler_and_data_store_facts(self):
+        resp = client.get("/api/status")
+        payload = resp.json()
+        self.assertGreaterEqual(payload["uptime_seconds"], 0)
+        self.assertIn(payload["notification_scheduler_alive"], (True, False))
+        for store in ("exceptions", "remediation_approvals", "activity_log", "ai_usage_log"):
+            fact = payload["data_stores"][store]
+            self.assertIn("exists", fact)
+            self.assertIn("record_count", fact)
+
+    def test_data_store_fact_reports_a_missing_file_honestly(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_path = Path(tmpdir) / "does-not-exist.json"
+            with patch.object(ai_usage_log, "DEFAULT_LOG_PATH", missing_path):
+                resp = client.get("/api/status")
+        fact = resp.json()["data_stores"]["ai_usage_log"]
+        self.assertFalse(fact["exists"])
+        self.assertIsNone(fact["last_modified"])
+        self.assertIsNone(fact["record_count"])
+
+    def test_data_store_fact_reports_a_real_record_count(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            real_path = Path(tmpdir) / "ai_usage_log.json"
+            real_path.write_text("[{}, {}, {}]", encoding="utf-8")
+            with patch.object(ai_usage_log, "DEFAULT_LOG_PATH", real_path):
+                resp = client.get("/api/status")
+        fact = resp.json()["data_stores"]["ai_usage_log"]
+        self.assertTrue(fact["exists"])
+        self.assertEqual(fact["record_count"], 3)
+        self.assertIsNotNone(fact["last_modified"])
 
 
 class ApiAuth(unittest.TestCase):
@@ -1382,6 +1414,22 @@ class ApiAdminAiUsage(unittest.TestCase):
         self.assertIn("governance", payload)
         self.assertIn("recent_calls", payload)
 
+    def test_budget_reflects_real_recorded_spend_and_the_real_per_call_cap(self):
+        ai_usage_log.record_usage(
+            TEST_ADMIN_EMAIL, "ai-assist", "claude-sonnet-5",
+            {"input_tokens": 100, "output_tokens": 20, "cache_creation_input_tokens": None, "cache_read_input_tokens": None},
+            0.05, True,
+        )
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        payload = client.get("/api/admin/ai-usage").json()
+        budget = payload["budget"]
+        self.assertEqual(budget["max_cost_usd_per_call"], float(cli.DEFAULT_MAX_BUDGET_USD))
+        # >= (not ==) since this shared usage log can carry other real recorded calls
+        # from sibling tests in this module - same convention test_get_returns_real_
+        # recorded_usage_shape above already uses for the same reason.
+        for window in ("today", "last_7_days", "last_30_days", "all_time"):
+            self.assertGreaterEqual(budget[window]["total_cost_usd"], 0.05)
+
 
 class ApiReports(unittest.TestCase):
     def test_generate_returns_real_computed_kpis(self):
@@ -1969,6 +2017,54 @@ class ApiAssets(unittest.TestCase):
         self.assertEqual(resp.json()["applied"], 1)
         by_name = {a["name"]: a for a in client.get("/api/assets").json()["assets"]}
         self.assertEqual(by_name["WEB-PORTAL01"]["owner"], "Web Ops")
+
+    def test_set_network_info_persists_and_is_reflected_on_the_asset(self):
+        resp = client.post("/api/assets/WEB-PORTAL01/network-info", json={"ip": "10.20.30.41", "mac": "aa:bb:cc:dd:ee:ff"})
+        self.assertEqual(resp.status_code, 200)
+        by_name = {a["name"]: a for a in client.get("/api/assets").json()["assets"]}
+        self.assertEqual(by_name["WEB-PORTAL01"]["ip"], "10.20.30.41")
+        self.assertEqual(by_name["WEB-PORTAL01"]["ip_version"], 4)
+        self.assertEqual(by_name["WEB-PORTAL01"]["mac"], "aa:bb:cc:dd:ee:ff")
+
+    def test_set_network_info_rejects_an_invalid_ip_with_a_real_400(self):
+        resp = client.post("/api/assets/WEB-PORTAL01/network-info", json={"ip": "not-an-ip"})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("not-an-ip", resp.json()["detail"])
+
+    def test_set_network_info_without_login_is_rejected(self):
+        _logout()
+        resp = client.post("/api/assets/WEB-PORTAL01/network-info", json={"ip": "10.20.30.41"})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiSearchAsk(unittest.TestCase):
+    """/api/search/ask - the real, deterministic "ask your data" search route (see
+    remediation/search/query_engine.py). These assert the route wires real live data
+    through correctly; query_engine.py's own tests (tests/test_query_engine.py) cover
+    the matching/scoring logic itself in isolation."""
+
+    def test_requires_no_login_same_as_queue_and_assets(self):
+        _logout()
+        resp = client.post("/api/search/ask", json={"query": "how many critical findings are there"})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_finding_id_lookup_against_the_real_live_queue(self):
+        resp = client.post("/api/search/ask", json={"query": "FIND-12"})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["intent"], "finding_lookup")
+        self.assertIn("Log4Shell", payload["answer"])
+
+    def test_count_query_against_the_real_live_queue(self):
+        resp = client.post("/api/search/ask", json={"query": "how many KEV findings are there"})
+        payload = resp.json()
+        self.assertEqual(payload["intent"], "count")
+        self.assertRegex(payload["answer"], r"^\d+ finding\(s\) match")
+
+    def test_no_match_returns_200_with_an_honest_answer_not_an_error(self):
+        resp = client.post("/api/search/ask", json={"query": "xyzzy plugh quux"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["intent"], "no_match")
 
 
 class ApiAssetPolicy(unittest.TestCase):
