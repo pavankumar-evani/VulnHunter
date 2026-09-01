@@ -54,7 +54,8 @@ function assetRowHtml(a) {
 // A chart-block fragment - the caller places this inside its own .chart-row
 // (alongside a sub-category/methodology pie chart, if it has one).
 export function severityChartBlockHtml(findings) {
-  const severityData = countBy(findings, (f) => f.severity);
+  const severityData = countBy(findings, (f) => f.severity)
+    .map((d) => ({ ...d, href: `/queue?severity=${encodeURIComponent(d.label)}` }));
   // Explicit narrower width - the default 420px (sized for charts with many bars)
   // is needless padding around only 4-5 severity bars, and was wide enough on its
   // own to push a sibling chart-block onto its own row in a .chart-row at anything
@@ -74,8 +75,14 @@ export function severityChartBlockHtml(findings) {
 // already covers).
 export function teamPriorityChartBlockHtml(findings, teamByAssetName) {
   const teams = teamByAssetName || new Map();
-  const teamData = countBy(findings, (f) => teams.get(f.asset && f.asset.name) || "Unassigned");
-  const priorityData = countBy(findings, (f) => f.priority);
+  // No href for "Unassigned"/"Unknown" buckets - there's no single real team/priority
+  // value that would honestly represent "has none", so leave those bars non-clickable
+  // rather than link to a filter that either matches nothing or silently means
+  // something different from what was clicked.
+  const teamData = countBy(findings, (f) => teams.get(f.asset && f.asset.name) || "Unassigned")
+    .map((d) => (d.label === "Unassigned" ? d : { ...d, href: `/queue?team=${encodeURIComponent(d.label)}` }));
+  const priorityData = countBy(findings, (f) => f.priority)
+    .map((d) => (d.label === "Unknown" ? d : { ...d, href: `/queue?priority=${encodeURIComponent(d.label)}` }));
   return `
     <div class="chart-block">
       <h3>By team</h3>

@@ -13,7 +13,7 @@ import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
 import { findingsTableHtml, wireFindingsTable } from "../findingsTable.js";
 import { buildOwnerTeamMaps } from "../assetLookup.js";
 import { dateRangeHtml, wireDateRange, filterByDateRange, computeRange, dateRangeDisclaimerHtml } from "../dateRange.js";
-import { pieChartSvg, countBy } from "../charts.js";
+import { pieChartSvg, countBy, wireChartLinks } from "../charts.js";
 import { filterByTenant, tenantBannerHtml } from "../tenant.js";
 import {
   severityChartBlockHtml, buildTopRankings, topRankingsHtml, wireTopRankings,
@@ -170,6 +170,7 @@ export async function render(container) {
   wireDateRange(container, "infra-hub-daterange", (range) => { dateRange = range; rewireTable(); });
   rewireTable();
   wireTopRankings(container, "infra-hub", rankings);
+  wireChartLinks(container);
 
   wireAiTrendAnalysis(container, "infra-hub", "infrastructure", async () => {
     const severityData = countBy(infraFindings, (f) => f.severity);

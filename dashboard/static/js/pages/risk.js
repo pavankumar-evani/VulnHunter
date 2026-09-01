@@ -11,7 +11,7 @@ import {
   severityChartBlockHtml, buildTopRankings, topRankingsHtml, wireTopRankings, teamPriorityChartBlockHtml,
   agingChartBlockHtml, agingByPriorityTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
-import { countBy } from "../charts.js";
+import { countBy, wireChartLinks } from "../charts.js";
 import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
@@ -227,6 +227,7 @@ export async function render(container) {
     filenameBase: "vulnhunter-top-assets",
   });
   wireTopRankings(container, "risk-hub", rankings);
+  wireChartLinks(container);
 
   container.querySelector("#top-assets-body").addEventListener("change", async (e) => {
     const select = e.target.closest(".facing-select");

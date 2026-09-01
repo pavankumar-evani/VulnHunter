@@ -7,7 +7,7 @@
 // every other hub page.
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
-import { countBy } from "../charts.js";
+import { countBy, wireChartLinks } from "../charts.js";
 import { findingsTableHtml, wireFindingsTable } from "../findingsTable.js";
 import { buildOwnerTeamMaps } from "../assetLookup.js";
 import { dateRangeHtml, wireDateRange, filterByDateRange, computeRange, dateRangeDisclaimerHtml } from "../dateRange.js";
@@ -87,6 +87,7 @@ export async function render(container) {
   wireDateRange(container, "cert-hub-daterange", (range) => { dateRange = range; rewireTable(); });
   rewireTable();
   wireTopRankings(container, "cert-hub", rankings);
+  wireChartLinks(container);
 
   wireAiTrendAnalysis(container, "cert-hub", "certificate", async () => {
     const severityData = countBy(certFindings, (f) => f.severity);

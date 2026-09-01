@@ -15,7 +15,7 @@ import {
 } from "../findingsTable.js";
 import { buildOwnerTeamMaps } from "../assetLookup.js";
 import { dateRangeHtml, wireDateRange, filterByDateRange, computeRange, dateRangeDisclaimerHtml } from "../dateRange.js";
-import { pieChartSvg, countBy } from "../charts.js";
+import { pieChartSvg, countBy, wireChartLinks } from "../charts.js";
 import { filterByTenant, tenantBannerHtml } from "../tenant.js";
 import {
   severityChartBlockHtml, buildTopRankings, topRankingsHtml, wireTopRankings,
@@ -235,6 +235,7 @@ export async function render(container) {
   wireDateRange(container, "appsec-hub-daterange", (range) => { dateRange = range; rewireTable(); });
   rewireTable();
   wireTopRankings(container, "appsec-hub", rankings);
+  wireChartLinks(container);
 
   wireAiTrendAnalysis(container, "appsec-hub", "application", async () => {
     const teamData = countBy(scaDastFindings, (f) => teamByAssetName.get(f.asset && f.asset.name) || "Unassigned");

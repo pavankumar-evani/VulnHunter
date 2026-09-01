@@ -223,6 +223,8 @@ function applyFilters(findings, filters) {
     if (filters.cve && f.cve !== filters.cve) return false;
     if (filters.title && f.title !== filters.title) return false;
     if (filters.assetName && (f.asset && f.asset.name) !== filters.assetName) return false;
+    if (filters.severity && f.severity !== filters.severity) return false;
+    if (filters.team && f.team !== filters.team) return false;
     return true;
   });
   if (filters.dateRange && filters.dateRange.preset) {
@@ -267,6 +269,13 @@ export async function render(container) {
   const initialCve = new URLSearchParams(window.location.search).get("cve") || null;
   const initialTitle = new URLSearchParams(window.location.search).get("title") || null;
   const initialAssetName = new URLSearchParams(window.location.search).get("asset") || null;
+  // Clickable "By severity"/"By team"/"By priority" chart bars (domainSummary.js's
+  // severityChartBlockHtml/teamPriorityChartBlockHtml) deep-link here the same way -
+  // severity and team are silent (no dropdown, exact match, same pattern as cve/
+  // title/assetName above); priority reuses the filter bar's own existing dropdown.
+  const initialSeverity = new URLSearchParams(window.location.search).get("severity") || null;
+  const initialTeam = new URLSearchParams(window.location.search).get("team") || null;
+  const initialPriority = new URLSearchParams(window.location.search).get("priority") || "all";
   // A clickable KPI tile (Overview's "CISA KEV-listed") deep-links here with
   // ?kevOnly=true - same pattern as the other deep-link params above.
   const initialKevOnly = new URLSearchParams(window.location.search).get("kevOnly") === "true";
@@ -276,8 +285,9 @@ export async function render(container) {
   // ?slaStatus=breached|at_risk|on_track.
   const initialSlaStatus = new URLSearchParams(window.location.search).get("slaStatus") || "all";
   let filters = {
-    priority: "all", assetType: "all", environment: "all", category: initialCategory, infraType: initialInfraType,
+    priority: initialPriority, assetType: "all", environment: "all", category: initialCategory, infraType: initialInfraType,
     kevOnly: initialKevOnly, highEpssOnly: initialHighEpssOnly, slaStatus: initialSlaStatus, cve: initialCve, title: initialTitle, assetName: initialAssetName,
+    severity: initialSeverity, team: initialTeam,
     dateRange: { preset: "", customFrom: "", customTo: "" },
   };
   // A global-search result (search.js) deep-links here with ?highlight=<id> - the
@@ -430,11 +440,11 @@ export async function render(container) {
       <div class="filter-bar">
         <label>Priority
           <select id="f-priority">
-            <option value="all">All</option>
-            <option value="Critical">Critical</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
+            <option value="all" ${filters.priority === "all" ? "selected" : ""}>All</option>
+            <option value="Critical" ${filters.priority === "Critical" ? "selected" : ""}>Critical</option>
+            <option value="High" ${filters.priority === "High" ? "selected" : ""}>High</option>
+            <option value="Medium" ${filters.priority === "Medium" ? "selected" : ""}>Medium</option>
+            <option value="Low" ${filters.priority === "Low" ? "selected" : ""}>Low</option>
           </select>
         </label>
         <label>Environment
