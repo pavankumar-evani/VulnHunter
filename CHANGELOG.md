@@ -6,7 +6,62 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Fixed
+- **Flaky CI test on `tests/test_file_lock.py`**: `test_without_the_lock_concurrent_increments_are_unsafe`
+  relied on a `time.sleep()`-widened race actually manifesting within 50 iterations
+  across 4 threads - a probabilistic assertion that could pass on Windows (where it was
+  developed) while flaking on the Linux `ubuntu-latest` GitHub Actions runner, the
+  likely cause of a real, recurring CI failure. Replaced with
+  `test_without_the_lock_two_threads_reading_the_same_value_lose_an_update`, which uses
+  a `threading.Barrier` to force two threads to both finish reading before either
+  writes - a deterministic proof of the same lost-update race instead of hoping one
+  shows up. Full suite re-verified 1161/1161 locally.
+- **Broken Overview dashboard**: `overview.js` referenced `aiTrendAnalysisTileHtml()`
+  without importing it (only the old `aiTrendAnalysisSectionHtml` was imported) - a
+  `ReferenceError` that threw on every page load, confirmed live in-browser (showed the
+  "Failed to load page" error banner instead of the dashboard). Found via a smoke-test
+  sweep, not a targeted report.
+- **Charts silently stacking instead of sitting side by side** (reported on
+  Infrastructure Vulnerabilities, same root cause anywhere else two charts share a
+  `.chart-row`): `pieChartSvg()`'s legend had no width limit, so one long category label
+  could stretch the whole chart-block wide enough to push a sibling chart onto its own
+  row at any viewport narrower than a wide desktop. Reproduced with real data at 1180px
+  width (453.6px + 533.9px did not fit an 828.8px row) and fixed by capping
+  `.chart-legend` to 150px with wrapping text, plus narrowing
+  `severityChartBlockHtml`'s bar chart from its 420px default to 340px.
+
 ### Added
+- **Word-wrap sweep** across ~35 table columns app-wide (Threat Intel Feed/Zero-Days/
+  Matched Exploit Criteria, Certificate Vulnerabilities Title, Remediation Queue/Plan,
+  and others) via a new opt-in `.wrap-cell` class - the shared `.data-table` `nowrap`
+  default stays correct for short data cells, prose-like columns now wrap instead of
+  overflowing.
+- **Compact AI trend analysis tile** (`aiTrendAnalysisTileHtml()`) rolled out to all 5
+  pages that have the feature (Overview, AppSec, Certificate Vulnerabilities,
+  Infrastructure, Risk Management) - sits as a chart-block next to each page's
+  team/priority (or aging) chart instead of pushing the page down as a full-width
+  section at the bottom. `aiTrendAnalysisSectionHtml()` removed once confirmed unused
+  anywhere.
+- **Interactive Reports page**: every KPI (SLA breached/at-risk/on-track, CISA
+  KEV-listed, High EPSS, Infra findings, Code vulnerabilities, Playbooks generated) is
+  now a real deep link into a pre-filtered Queue/Code Scan/Remediation Plan view, and
+  Top Priority Findings rows link to `/queue?highlight=<id>`. Added a matching
+  `highEpssOnly` deep-link filter (mirrors the existing `kevOnly` one) since no
+  equivalent existed for that KPI. Added a "Schedule automatic email reports" section
+  directly on the Reports page (reuses the existing `/api/report-schedule` endpoint
+  Notification Settings already exposed) so scheduling doesn't require leaving the page.
+- **Clickable severity/team/priority chart bars** on AppSec, Certificate
+  Vulnerabilities, Infrastructure, and Risk Management, via two new `queue.js` deep-link
+  filters (`severity`, `team` - silent, exact-match, same pattern as the existing
+  `cve`/`title`/`assetName`) plus deep-link support for the `priority` filter's existing
+  dropdown. "Unassigned"/"Unknown" buckets are deliberately left non-clickable rather
+  than link to a filter value that would misrepresent what was clicked.
+- **[docs/VR_PLATFORM_COMPARISON.md](docs/VR_PLATFORM_COMPARISON.md)**: independently-
+  verified research (not the AI-drafted source deck's uncited numbers) comparing
+  VulnHunter and ServiceNow VR against Nucleus Security, DefectDojo, Brinqa, and
+  ArmorCode - real sourced pricing/connector-count facts, VulnHunter's actual current
+  gaps (no cross-scanner deduplication; only 8 connectors, 8 of 10 total integrations
+  never exercised against a live account), and a phased roadmap recommendation.
 - **Production-readiness pass**, closing/mitigating four of the real blockers named
   in a production-readiness assessment:
   - **Closing the anonymous-read gap (opt-in)**: `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true`

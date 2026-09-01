@@ -18,6 +18,7 @@ that context.
 | [INTEGRATIONS.md](INTEGRATIONS.md) | Every external system this connects to — Tenable, Armis, ServiceNow, Jira, Splunk, CrowdStrike Falcon, CISA KEV, FIRST.org EPSS — and precisely what's live-verified versus built-against-docs-but-unverified for each. Plus what's deliberately not built yet (Sentinel, QRadar, Defender, Qualys). |
 | [REMEDIATION_WORKFLOWS.md](REMEDIATION_WORKFLOWS.md) | The full `/remediate` lifecycle end to end: ingest → normalize → enrich → risk-tier/priority/SLA scoring (and why there are two separate scoring mechanisms) → playbook generation → human review → manual apply. Includes MITRE ATT&CK tagging, ServiceNow ticketing, and which asset classes have no fixer yet. |
 | [COMPLIANCE_MAPPING.md](COMPLIANCE_MAPPING.md) | An informational (**not certifying**) map of existing capabilities to NIST CSF / SOC 2 control categories, plus an explicit list of what's missing before any real compliance claim could be made. |
+| [VR_PLATFORM_COMPARISON.md](VR_PLATFORM_COMPARISON.md) | VulnHunter vs. ServiceNow VR and four modern alternatives (Nucleus Security, DefectDojo, Brinqa, ArmorCode) — independently-verified connector/pricing facts, VulnHunter's real current gaps (no dedup, only 8 unverified connectors), and a prioritized roadmap. |
 | [SUPPORT.md](SUPPORT.md) | How to get help, report a bug, or report a security issue — and where to look first. |
 
 ## Also see

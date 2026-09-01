@@ -673,6 +673,17 @@ Usable by someone who isn't running Claude Code interactively:
    replacing the flat JSON audit files the CLI writes today and the dashboard reads.
 
 Also planned in this tier, lower priority than the items above:
+- **Cross-scanner deduplication** — if two connectors (e.g. Tenable and a future Prisma
+  Cloud connector) both report the same CVE on the same asset, it's recorded twice
+  today; every competitor examined in
+  [docs/VR_PLATFORM_COMPARISON.md](docs/VR_PLATFORM_COMPARISON.md) treats deduplication
+  as a headline feature. Buildable entirely against data already ingested by the
+  existing normalizer - no new credentials or vendor relationship needed, which is why
+  that doc recommends it as the highest-leverage next investment.
+- **Prisma Cloud, XSIAM, and BitSight connectors** — named explicitly in
+  [docs/VR_PLATFORM_COMPARISON.md](docs/VR_PLATFORM_COMPARISON.md) as gaps versus the
+  four alternative platforms researched there; same "built against public docs, verify
+  before trusting live output" pattern as the existing 8 connectors.
 - **`remediation-fixer-network`** — vendor CLI config diffs (Cisco IOS/IOS XE, Junos) via
   Ansible's network collections, same `Read`/`Write`-only tool scoping as the existing
   fixers.
