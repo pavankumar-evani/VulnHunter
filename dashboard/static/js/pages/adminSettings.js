@@ -29,6 +29,30 @@ function usageRowHtml(email, allTime, today) {
     </tr>`;
 }
 
+const VALID_ROLES = ["user", "admin"];
+
+// Real per-user role/team - editable inline. Team is the field _scope_to_team()
+// (dashboard/app.py) enforces on Queue/Asset Inventory/Exceptions/Remediation
+// Approvals; a blank team means that account sees those views unfiltered (opt-in
+// narrowing, not deny-by-default - see that function's own docstring for why).
+function userRowHtml(u) {
+  return `
+    <tr data-user-email="${escapeHtml(u.email)}">
+      <td>${escapeHtml(u.email)}</td>
+      <td>${escapeHtml(u.name)}</td>
+      <td>
+        <select class="user-role-select" data-user-email="${escapeHtml(u.email)}">
+          ${VALID_ROLES.map((r) => `<option value="${r}" ${r === u.role ? "selected" : ""}>${r}</option>`).join("")}
+        </select>
+      </td>
+      <td>
+        <input type="text" class="user-team-input" data-user-email="${escapeHtml(u.email)}"
+               value="${escapeHtml(u.team || "")}" placeholder="(none - unfiltered)">
+        <button type="button" class="link-button" data-save-team="${escapeHtml(u.email)}">Save</button>
+      </td>
+    </tr>`;
+}
+
 function overrideRowHtml(email, limit) {
   return `
     <tr data-override-email="${escapeHtml(email)}">
@@ -179,11 +203,12 @@ export async function render(container) {
   }
 
   container.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const [governance, usageData, status] = await Promise.all([
-    api.getAiGovernance(), api.aiUsage(), api.status(),
+  const [governance, usageData, status, usersData] = await Promise.all([
+    api.getAiGovernance(), api.aiUsage(), api.status(), api.listUsers(),
   ]);
 
   let overrides = { ...governance.per_user_overrides };
+  let users = usersData.users;
 
   function renderOverrides() {
     const body = container.querySelector("#overrides-body");
@@ -191,6 +216,13 @@ export async function render(container) {
     body.innerHTML = rows.length
       ? rows.map(([email, limit]) => overrideRowHtml(email, limit)).join("")
       : `<tr><td colspan="3" class="empty-state">No per-user overrides - everyone uses the default limit above.</td></tr>`;
+  }
+
+  function renderUsers() {
+    const body = container.querySelector("#users-body");
+    body.innerHTML = users.length
+      ? users.map(userRowHtml).join("")
+      : `<tr><td colspan="4" class="empty-state">No users found.</td></tr>`;
   }
 
   function usersUnion() {
@@ -324,9 +356,36 @@ export async function render(container) {
     </div>
 
     <h2 style="margin-top:28px">Connector / Adaptor Health</h2>
-    ${connectorHealthHtml()}`;
+    ${connectorHealthHtml()}
+
+    <h2 style="margin-top:28px">Team Management</h2>
+    <p class="filter-count" style="margin:-4px 0 8px">
+      Setting a real team here restricts that account's Queue, Asset Inventory,
+      Exceptions, and Remediation Approvals to that team's own findings/assets only -
+      Overview, ML Insights, and Compliance always stay org-wide. Leave Team blank for
+      unfiltered access (the default for every account today).
+    </p>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Team</th></tr></thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+    <form class="run-form" id="add-user-form" style="margin-top:12px">
+      <label>Email<input type="email" name="email" placeholder="user@example.com" required></label>
+      <label>Name<input type="text" name="name" required></label>
+      <label>Password (min. 8 characters)<input type="password" name="password" minlength="8" required></label>
+      <label>Role
+        <select name="role">
+          ${VALID_ROLES.map((r) => `<option value="${r}">${r}</option>`).join("")}
+        </select>
+      </label>
+      <label>Team (optional)<input type="text" name="team" placeholder="(none - unfiltered)"></label>
+      <button type="submit">Add user</button>
+    </form>`;
 
   renderOverrides();
+  renderUsers();
 
   container.querySelector("#model-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -394,6 +453,51 @@ export async function render(container) {
       overrides = next;
       renderOverrides();
       flash(`Override removed for ${email}.`, "success");
+    } catch (err) {
+      flash(err.message, "error");
+    }
+  });
+
+  container.querySelector("#users-body").addEventListener("change", async (e) => {
+    const select = e.target.closest(".user-role-select");
+    if (!select) return;
+    const email = select.dataset.userEmail;
+    try {
+      const saved = await api.setUserRole(email, select.value);
+      users = users.map((u) => (u.email === email ? saved : u));
+      flash(`Role updated for ${email}.`, "success");
+    } catch (err) {
+      flash(err.message, "error");
+      renderUsers();
+    }
+  });
+
+  container.querySelector("#users-body").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-save-team]");
+    if (!btn) return;
+    const email = btn.dataset.saveTeam;
+    const input = container.querySelector(`.user-team-input[data-user-email="${CSS.escape(email)}"]`);
+    try {
+      const saved = await api.setUserTeam(email, input.value.trim());
+      users = users.map((u) => (u.email === email ? saved : u));
+      flash(`Team updated for ${email}.`, "success");
+    } catch (err) {
+      flash(err.message, "error");
+    }
+  });
+
+  container.querySelector("#add-user-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    try {
+      const created = await api.createUser({
+        email: form.email.value.trim(), password: form.password.value,
+        name: form.name.value.trim(), role: form.role.value, team: form.team.value.trim() || null,
+      });
+      users = [...users, created].sort((a, b) => a.email.localeCompare(b.email));
+      renderUsers();
+      flash(`User ${created.email} created.`, "success");
+      form.reset();
     } catch (err) {
       flash(err.message, "error");
     }

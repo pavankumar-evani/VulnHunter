@@ -160,6 +160,62 @@ class UserStore(unittest.TestCase):
         with self.assertRaises(KeyError):
             users.set_password("nobody@example.com", "newpassword12345", path=self.path)
 
+    def test_create_user_accepts_a_real_team(self):
+        users.create_user("someone@example.com", "correcthorsebatterystaple", "Someone", team="Platform", path=self.path)
+        result = users.verify_login("someone@example.com", "correcthorsebatterystaple", path=self.path)
+        self.assertEqual(result["team"], "Platform")
+
+    def test_create_user_with_no_team_reports_none_not_a_missing_key(self):
+        users.create_user("someone@example.com", "correcthorsebatterystaple", "Someone", path=self.path)
+        result = users.verify_login("someone@example.com", "correcthorsebatterystaple", path=self.path)
+        self.assertIsNone(result["team"])
+
+    def test_set_team_persists_and_is_reflected_on_login(self):
+        users.create_user("someone@example.com", "correcthorsebatterystaple", "Someone", path=self.path)
+        users.set_team("someone@example.com", "Identity", path=self.path)
+        result = users.verify_login("someone@example.com", "correcthorsebatterystaple", path=self.path)
+        self.assertEqual(result["team"], "Identity")
+
+    def test_set_team_blank_clears_a_previous_team(self):
+        users.create_user("someone@example.com", "correcthorsebatterystaple", "Someone", team="Platform", path=self.path)
+        users.set_team("someone@example.com", "", path=self.path)
+        result = users.verify_login("someone@example.com", "correcthorsebatterystaple", path=self.path)
+        self.assertIsNone(result["team"])
+
+    def test_set_team_on_unknown_user_raises_keyerror(self):
+        with self.assertRaises(KeyError):
+            users.set_team("nobody@example.com", "Platform", path=self.path)
+
+    def test_set_role_persists_and_is_reflected_on_login(self):
+        users.create_user("someone@example.com", "correcthorsebatterystaple", "Someone", role="user", path=self.path)
+        users.set_role("someone@example.com", "admin", path=self.path)
+        result = users.verify_login("someone@example.com", "correcthorsebatterystaple", path=self.path)
+        self.assertEqual(result["role"], "admin")
+
+    def test_set_role_rejects_an_invalid_role(self):
+        users.create_user("someone@example.com", "correcthorsebatterystaple", "Someone", path=self.path)
+        with self.assertRaises(ValueError):
+            users.set_role("someone@example.com", "superuser", path=self.path)
+
+    def test_set_role_on_unknown_user_raises_keyerror(self):
+        with self.assertRaises(KeyError):
+            users.set_role("nobody@example.com", "admin", path=self.path)
+
+    def test_list_users_never_includes_the_password_hash(self):
+        users.create_user("someone@example.com", "correcthorsebatterystaple", "Someone", role="admin", team="Platform", path=self.path)
+        listed = users.list_users(path=self.path)
+        self.assertEqual(len(listed), 1)
+        self.assertEqual(listed[0], {"email": "someone@example.com", "name": "Someone", "role": "admin", "team": "Platform"})
+
+    def test_list_users_is_sorted_by_email(self):
+        users.create_user("zeta@example.com", "correcthorsebatterystaple", "Zeta", path=self.path)
+        users.create_user("alpha@example.com", "correcthorsebatterystaple", "Alpha", path=self.path)
+        listed = users.list_users(path=self.path)
+        self.assertEqual([u["email"] for u in listed], ["alpha@example.com", "zeta@example.com"])
+
+    def test_list_users_from_missing_file_returns_empty_list(self):
+        self.assertEqual(users.list_users(self.path), [])
+
 
 class RealSeedFileIsValid(unittest.TestCase):
     def test_shipped_users_file_is_well_formed_and_has_both_demo_roles(self):

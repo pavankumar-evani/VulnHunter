@@ -7,6 +7,36 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Per-team RBAC on finding/asset views**: `dashboard/auth/users.py` gained a real
+  `team` field (`create_user`, new `set_team()`/`set_role()`/`list_users()`), carried
+  through the session cookie (`sessions.py`/`rbac.get_current_user()`) alongside
+  `role`. New `dashboard/app.py` `_scope_to_team()` filters Queue, Asset Inventory,
+  Exceptions, and Remediation Approvals to a logged-in non-admin's own team - a real
+  server-side check (NIST AC-3/AC-4/AC-6, OWASP API1:2023 BOLA), not a client-side
+  UI restriction. Findings don't carry their own team (only their asset does), so
+  `_team_by_asset_name()`/`_annotate_finding_teams()` do the same asset→team join
+  server-side that `assetLookup.js`'s `buildOwnerTeamMaps()` already does
+  client-side. Overview/Dashboard, ML Insights, and Compliance stay org-wide by
+  design (per the confirmed scope). Team-scoping is opt-in narrowing, not
+  deny-by-default: no session, an admin, or an account with no team assigned all see
+  everything unfiltered - see `_scope_to_team()`'s own docstring and
+  `dashboard/README.md`'s new "What this is NOT (yet)" bullet for the full,
+  disclosed limitation (it inherits this app's existing "reads are public" MVP
+  posture; an anonymous request bypasses team-scoping the same way it bypasses
+  every other read-route restriction today).
+  - New Admin Settings "Team Management" section (list/create users, edit
+    role/team inline) and a real `POST /api/admin/users`, `/team`, `/role` route
+    family - there was previously no way to onboard a user or change a role at all
+    through the running app, only by hand-editing `users.json`.
+  - Profile page now shows the logged-in user's own team and an honest explanation
+    of what it does/doesn't restrict.
+  - Caught a real bug while testing this live: the first draft's queue/exceptions/
+    approvals filtering read a `team` field that doesn't exist on a raw finding
+    (only `assetLookup.js`'s client-side join adds it) - would have silently
+    returned zero results for every team-scoped user regardless of team. Fixed by
+    doing the same asset→team join server-side before filtering.
+  - 42 new tests (`test_auth.py`, `test_dashboard.py`); full suite green
+    (1132 tests).
 - **Round 17 (in progress)**: production-readiness pass driven by a request for a
   searchable finding picker, real admin observability/billing, MAC/IPv4/IPv6 asset
   identification, and richer lifecycle visualizations.

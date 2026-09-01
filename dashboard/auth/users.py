@@ -61,10 +61,13 @@ def verify_login(email, password, path=None):
     if not user or not password_ok:
         return None
     key = email.strip().lower()
-    return {"email": key, "name": user.get("name", key), "role": user.get("role", "user")}
+    return {
+        "email": key, "name": user.get("name", key), "role": user.get("role", "user"),
+        "team": user.get("team"),
+    }
 
 
-def create_user(email, password, name, role="user", path=None):
+def create_user(email, password, name, role="user", team=None, path=None):
     if not email or "@" not in email:
         raise ValueError("A valid email is required")
     if not password or len(password) < MIN_PASSWORD_LENGTH:
@@ -75,9 +78,53 @@ def create_user(email, password, name, role="user", path=None):
     key = email.strip().lower()
     if key in users:
         raise ValueError(f"A user with email {email!r} already exists")
-    users[key] = {"name": name or email, "role": role, "password_hash": passwords.hash_password(password)}
+    users[key] = {
+        "name": name or email, "role": role, "team": team or None,
+        "password_hash": passwords.hash_password(password),
+    }
     save_users(users, path)
-    return {"email": key, "name": users[key]["name"], "role": role}
+    return {"email": key, "name": users[key]["name"], "role": role, "team": users[key]["team"]}
+
+
+def list_users(path=None):
+    """Every real user account, sorted by email - never the password hash. The Admin
+    Settings "Team Management" section's own data source; also used wherever a real
+    team name needs to be validated against accounts that actually exist."""
+    users = load_users(path)
+    return [
+        {"email": email, "name": info.get("name", email), "role": info.get("role", "user"), "team": info.get("team")}
+        for email, info in sorted(users.items())
+    ]
+
+
+def set_team(email, team, path=None):
+    """Real, admin-set per-user team assignment - the field dashboard/app.py's
+    _scope_to_team() reads to enforce per-team RBAC on finding/asset views. Pass ""
+    (or None) to clear a user's team back to unassigned. Raises KeyError for an
+    unknown email, same convention as set_password()."""
+    users = load_users(path)
+    key = (email or "").strip().lower()
+    if key not in users:
+        raise KeyError(f"No user with email {email!r}")
+    users[key]["team"] = (team or "").strip() or None
+    save_users(users, path)
+    return {"email": key, "name": users[key].get("name", key), "role": users[key].get("role", "user"), "team": users[key]["team"]}
+
+
+def set_role(email, role, path=None):
+    """Real, admin-set role change for an EXISTING user (create_user() only sets the
+    initial role at creation time - this is the missing "promote/demote later"
+    counterpart). Raises ValueError for an invalid role, KeyError for an unknown
+    email."""
+    if role not in VALID_ROLES:
+        raise ValueError(f"role must be one of {VALID_ROLES}, got {role!r}")
+    users = load_users(path)
+    key = (email or "").strip().lower()
+    if key not in users:
+        raise KeyError(f"No user with email {email!r}")
+    users[key]["role"] = role
+    save_users(users, path)
+    return {"email": key, "name": users[key].get("name", key), "role": role, "team": users[key].get("team")}
 
 
 def set_password(email, new_password, path=None):

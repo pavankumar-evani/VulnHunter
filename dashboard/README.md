@@ -248,10 +248,10 @@ changes.
 ## Why FastAPI + vanilla JS, not Node/React (or staying on Flask/Jinja2)
 
 The ask behind this rewrite was a genuinely modern, commercial-grade interface. A
-from-scratch React/TypeScript build was the obvious first thought — but this machine has
-no Node.js/npm installed, so a React build couldn't be *written and verified running*
-here; shipping an untested frontend isn't "modern," it's just unverified. Two real
-options remained:
+from-scratch React/TypeScript build was the obvious first thought — but at the time this
+choice was made, the machine running this had no Node.js/npm installed, so a React build
+couldn't be *written and verified running* there; shipping an untested frontend isn't
+"modern," it's just unverified. Two real options remained:
 
 1. **Stay on Flask + server-rendered Jinja2** (the original MVP's choice) — safe, but not
    what "modern JS interface" actually means, and doesn't showcase real client-side
@@ -263,11 +263,16 @@ options remained:
    wrong. Every page was clicked through and verified live in a browser during
    development (not just unit-tested) - see KNOWLEDGE_TRANSFER.md §11.1.
 
-That's what this dashboard now is. If Node.js becomes available in the target
-environment, `/api/*`'s JSON contract is the exact seam a React (or any other) frontend
-would build against - `dashboard/data.py`'s parsing logic underneath doesn't change
-either way, and neither would the FastAPI routes, which are already framework-appropriate
-JSON endpoints rather than Flask's `render_template` calls.
+That's what this dashboard now is. Node.js/npm are available in later environments this
+has run in, but that alone isn't a reason to migrate now: this SPA has grown to 30+ page
+modules, each already clicked through and verified live in a browser, and a from-scratch
+React rewrite would mean re-verifying all of it for a visual upgrade well-built hand-
+rolled SVG (`dashboard/static/js/charts.js`) already delivers - real risk for marginal
+gain, not free just because the runtime constraint that originally ruled it out is gone.
+If a React (or any other) frontend is ever built here, `/api/*`'s JSON contract is the
+exact seam it would build against - `dashboard/data.py`'s parsing logic underneath
+doesn't change either way, and neither would the FastAPI routes, which are already
+framework-appropriate JSON endpoints rather than Flask's `render_template` calls.
 
 ## What this is NOT (yet)
 
@@ -280,6 +285,18 @@ layer:
   still returns real data with no login at all if called directly (`curl`, etc). Do not
   expose this beyond localhost/a trusted network as-is - see "Authentication" above for
   the full scope decision.
+- **Per-team RBAC follows the same "reads are public" limitation above** — Queue, Asset
+  Inventory, Exceptions, and Remediation Approvals are real, server-side filtered to a
+  logged-in non-admin's own team (`dashboard/app.py`'s `_scope_to_team()`, set via Admin
+  Settings' "Team Management"; see `dashboard/auth/users.py`). An admin, or any account
+  with no team assigned, sees everything unfiltered - by design, this is opt-in
+  *narrowing*, not deny-by-default, so it never makes a logged-in-but-unassigned account
+  more restricted than an anonymous `curl`. That also means it's bypassable the same way
+  every other read is: an anonymous request (no session cookie) always sees everything,
+  team-scoping included. Closing that gap means making these four routes login-required
+  outright - a separate, larger change from team-scoping itself (see the bullet above).
+  Overview/Dashboard, ML Insights, and Compliance badges are deliberately never
+  team-filtered - they're cross-cutting, org-wide views by design.
 - **Local users only by default** — the shipped `users.json` has two demo accounts; OIDC
   (SSO) is real, working client code but stays disabled until a real identity provider's
   credentials are configured (see "Authentication" above).

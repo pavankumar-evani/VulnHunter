@@ -7,6 +7,7 @@
   "analyst@vulnhunter.local": {
     "name": "Demo Analyst",
     "password_hash": "pbkdf2_sha256$600000$18f9ff5c2f00c9fa3229a88ddcf8a8dd$f245c05993b445cfcde5495ba34a0595655b692d324f800513297e7cb055349b",
-    "role": "user"
+    "role": "user",
+    "team": "Platform"
   }
 }

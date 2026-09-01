@@ -29,16 +29,21 @@ else:
 
 
 def get_current_user(request: Request):
-    """Returns {email, name, role} if a valid, unexpired session cookie is present,
-    else None - never raises, since "not logged in" is an ordinary, expected state for
-    most requests in this dashboard (only mutation routes require login at all)."""
+    """Returns {email, name, role, team} if a valid, unexpired session cookie is
+    present, else None - never raises, since "not logged in" is an ordinary, expected
+    state for most requests in this dashboard (only mutation routes, plus per-team
+    filtering on finding/asset views, require login at all). `team` is None for an
+    admin or any user with no team assigned - see app.py's _scope_to_team()."""
     cookie_value = request.cookies.get(SESSION_COOKIE_NAME)
     if not cookie_value:
         return None
     claims = sessions.verify_session_cookie(cookie_value, SESSION_SECRET)
     if not claims:
         return None
-    return {"email": claims.get("email"), "name": claims.get("name"), "role": claims.get("role")}
+    return {
+        "email": claims.get("email"), "name": claims.get("name"),
+        "role": claims.get("role"), "team": claims.get("team"),
+    }
 
 
 def require_login(request: Request):

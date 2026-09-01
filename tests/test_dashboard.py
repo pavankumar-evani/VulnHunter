@@ -1431,6 +1431,172 @@ class ApiAdminAiUsage(unittest.TestCase):
             self.assertGreaterEqual(budget[window]["total_cost_usd"], 0.05)
 
 
+class ApiAdminUsers(unittest.TestCase):
+    def tearDown(self):
+        _logout()
+
+    def test_list_requires_admin(self):
+        resp = client.get("/api/admin/users")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_list_returns_real_users_without_a_password_hash(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        users_by_email = {u["email"]: u for u in client.get("/api/admin/users").json()["users"]}
+        self.assertIn(TEST_ADMIN_EMAIL, users_by_email)
+        self.assertNotIn("password_hash", users_by_email[TEST_ADMIN_EMAIL])
+        self.assertIsNone(users_by_email[TEST_USER_EMAIL]["team"])
+
+    def test_create_requires_admin(self):
+        resp = client.post("/api/admin/users", json={"email": "rbac-new@test.local", "password": "somepassword1", "name": "New"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_create_then_appears_in_the_list_with_its_real_team(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.post("/api/admin/users", json={
+            "email": "rbac-new@test.local", "password": "somepassword1", "name": "New Person", "team": "Platform",
+        })
+        self.assertEqual(resp.status_code, 200)
+        users_by_email = {u["email"]: u for u in client.get("/api/admin/users").json()["users"]}
+        self.assertEqual(users_by_email["rbac-new@test.local"]["team"], "Platform")
+
+    def test_create_rejects_a_duplicate_email(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.post("/api/admin/users", json={"email": TEST_ADMIN_EMAIL, "password": "somepassword1", "name": "Dup"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_set_team_requires_admin(self):
+        resp = client.post(f"/api/admin/users/{TEST_USER_EMAIL}/team", json={"team": "Platform"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_set_team_on_unknown_user_is_404(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.post("/api/admin/users/nobody@test.local/team", json={"team": "Platform"})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_set_role_requires_admin(self):
+        resp = client.post(f"/api/admin/users/{TEST_USER_EMAIL}/role", json={"role": "admin"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_set_role_rejects_an_invalid_role(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.post(f"/api/admin/users/{TEST_USER_EMAIL}/role", json={"role": "superuser"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_set_role_on_unknown_user_is_404(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.post("/api/admin/users/nobody@test.local/role", json={"role": "admin"})
+        self.assertEqual(resp.status_code, 404)
+
+
+class ApiTeamScopedRbac(unittest.TestCase):
+    """Real per-team RBAC on finding/asset views. Uses a DEDICATED test account
+    (never TEST_USER_EMAIL, which many unrelated tests elsewhere in this module log in
+    as expecting full, unfiltered access - giving it a team would silently break all
+    of them) so this class's own team assignment can't leak into any other test.
+    Exceptions/remediation-approvals tests use their own temp store files, same
+    pattern as ApiExceptions/ApiRemediationApprovals, so this class never mutates the
+    real, shipped exceptions.json/remediation_approvals.json."""
+
+    TEAM_USER_EMAIL = "rbac-team-member@test.local"
+    TEAM_USER_PASSWORD = "rbac-team-password-1"
+
+    @classmethod
+    def setUpClass(cls):
+        auth_users.create_user(cls.TEAM_USER_EMAIL, cls.TEAM_USER_PASSWORD, "Team Member", role="user")
+        # A real team that real assets/findings in the shipped sample data actually
+        # carry - discovered from real data, not assumed, so this stays correct if the
+        # sample data's specific team names ever change.
+        assets = client.get("/api/assets").json()["assets"]
+        cls.real_team = next(a["team"] for a in assets if a.get("team"))
+        auth_users.set_team(cls.TEAM_USER_EMAIL, cls.real_team)
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.exceptions_patcher = patch.object(exceptions_store, "DEFAULT_STORE_PATH", Path(self.tmpdir.name) / "exceptions.json")
+        self.approvals_patcher = patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", Path(self.tmpdir.name) / "remediation_approvals.json")
+        self.exceptions_patcher.start()
+        self.approvals_patcher.start()
+
+    def tearDown(self):
+        _logout()
+        self.approvals_patcher.stop()
+        self.exceptions_patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_admin_sees_the_same_unfiltered_view_as_anonymous(self):
+        anonymous_count = len(client.get("/api/assets").json()["assets"])
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        admin_count = len(client.get("/api/assets").json()["assets"])
+        self.assertEqual(admin_count, anonymous_count)
+
+    def test_anonymous_access_remains_unfiltered(self):
+        unfiltered_count = len(client.get("/api/assets").json()["assets"])
+        self.assertGreater(unfiltered_count, 0)
+
+    def test_non_admin_with_no_team_sees_everything_unfiltered(self):
+        # TEST_USER_EMAIL has no team assigned - opt-in narrowing, not deny-by-default
+        # (see _scope_to_team()'s own docstring for why).
+        unfiltered_count = len(client.get("/api/assets").json()["assets"])
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        self.assertEqual(len(client.get("/api/assets").json()["assets"]), unfiltered_count)
+
+    def test_non_admin_with_a_team_sees_only_that_teams_assets(self):
+        unfiltered = client.get("/api/assets").json()["assets"]
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        scoped = client.get("/api/assets").json()["assets"]
+        self.assertLess(len(scoped), len(unfiltered))
+        self.assertTrue(scoped)
+        self.assertTrue(all(a["team"] == self.real_team for a in scoped))
+
+    def test_non_admin_with_a_team_sees_only_that_teams_queue_findings(self):
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        findings = client.get("/api/queue").json()["findings"]
+        self.assertTrue(findings)
+        self.assertTrue(all(f.get("team") == self.real_team for f in findings))
+
+    def test_scoped_queue_sla_summary_reflects_only_the_scoped_findings(self):
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        payload = client.get("/api/queue").json()
+        expected_total = sum(payload["sla"].values())
+        self.assertEqual(expected_total, len(payload["findings"]))
+
+    def test_non_admin_with_a_team_sees_only_that_teams_exceptions(self):
+        unfiltered = client.get("/api/queue").json()["findings"]
+        own_team_finding = next(f for f in unfiltered if f.get("team") == self.real_team)
+        other_team_finding = next(f for f in unfiltered if f.get("team") and f.get("team") != self.real_team)
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        client.post("/api/exceptions", json={
+            "finding_id": own_team_finding["id"], "reason": "rbac test - own team",
+            "requested_by": "tester@test.local", "approved_by": "manager@test.local",
+            "expires_on": "2099-01-01",
+        })
+        client.post("/api/exceptions", json={
+            "finding_id": other_team_finding["id"], "reason": "rbac test - other team",
+            "requested_by": "tester@test.local", "approved_by": "manager@test.local",
+            "expires_on": "2099-01-01",
+        })
+        _logout()
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        exceptions = client.get("/api/exceptions").json()["exceptions"]
+        finding_ids = {e["finding_id"] for e in exceptions}
+        self.assertIn(own_team_finding["id"], finding_ids)
+        self.assertNotIn(other_team_finding["id"], finding_ids)
+
+    def test_non_admin_with_a_team_sees_only_that_teams_remediation_approvals(self):
+        unfiltered = client.get("/api/queue").json()["findings"]
+        own_team_finding = next(f for f in unfiltered if f.get("team") == self.real_team)
+        other_team_finding = next(f for f in unfiltered if f.get("team") and f.get("team") != self.real_team)
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        client.post("/api/remediation-approvals", json={"finding_id": own_team_finding["id"], "requested_by": "eng@example.com"})
+        client.post("/api/remediation-approvals", json={"finding_id": other_team_finding["id"], "requested_by": "eng@example.com"})
+        _logout()
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        approvals = client.get("/api/remediation-approvals").json()["approvals"]
+        finding_ids = {a["finding_id"] for a in approvals}
+        self.assertIn(own_team_finding["id"], finding_ids)
+        self.assertNotIn(other_team_finding["id"], finding_ids)
+
+
 class ApiReports(unittest.TestCase):
     def test_generate_returns_real_computed_kpis(self):
         resp = client.get("/api/reports/generate", params={"period": "weekly"})

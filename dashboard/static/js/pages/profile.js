@@ -26,6 +26,10 @@ export async function render(container) {
         <div class="kpi-value" style="font-size:1.1rem;text-transform:capitalize">${escapeHtml(user.role)}</div>
         <div class="kpi-label">Role</div>
       </div>
+      <div class="kpi-card ${user.team ? "" : "kpi-warn"}">
+        <div class="kpi-value" style="font-size:1.1rem">${user.team ? escapeHtml(user.team) : "Not assigned"}</div>
+        <div class="kpi-label">Team</div>
+      </div>
     </div>
 
     <div class="callout">
@@ -35,6 +39,15 @@ export async function render(container) {
       create exceptions and edit asset owner/facing metadata. Every read-only page (Queue,
       Code Scan, Reports, etc.) stays open regardless of login - see the FAQ for the full
       scope note on what this MVP does and doesn't gate.
+      ${user.role !== "admin" ? `
+        <br><br>
+        <strong>Team</strong> narrows what a non-admin account sees on Queue, Asset
+        Inventory, Exceptions, and Remediation Approvals to that team's own
+        findings/assets only - Overview, ML Insights, and Compliance stay org-wide
+        regardless. ${user.team
+          ? `You're on real-time queue/asset views scoped to <strong>${escapeHtml(user.team)}</strong>.`
+          : `You have no team assigned yet, so those views are currently unfiltered - ask an admin to assign one on Admin Settings' Team Management section.`}
+      ` : ""}
     </div>
 
     <h2>Change password</h2>

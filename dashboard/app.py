@@ -205,9 +205,69 @@ def api_playbook_detail(filename: str):
     return playbook
 
 
+def _scope_to_team(rows, user, team_field="team"):
+    """Real, server-side per-team RBAC for finding/asset-level views (Queue, Asset
+    Inventory, Exceptions, Remediation Approvals) - NIST AC-3/AC-4/AC-6, OWASP
+    API1:2023 BOLA. Derived entirely from `user` (the server-verified session from
+    Depends(rbac.get_current_user)), never a client-supplied parameter.
+
+    Team-scoping is opt-in NARROWING, not deny-by-default: it only takes effect once
+    an admin has actually assigned a real user a real team (dashboard/auth/users.py's
+    set_team(), via the Admin Settings "Team Management" section). No session
+    (`user` is None), an admin, or a non-admin with no team assigned all see
+    unfiltered rows - the same baseline this app's own documented "reads are
+    intentionally public" MVP convention (dashboard/README.md) already gives an
+    anonymous request, so "logged in but not yet assigned a team" is never a MORE
+    restrictive state than "not logged in at all," which would be a confusing
+    (and easy to accidentally trigger) UX regression for every existing account
+    that predates this feature. Closing the anonymous-access gap entirely means
+    making these routes login-required outright, a separate, larger change from
+    team-scoping itself."""
+    if user is None or user.get("role") == "admin" or not user.get("team"):
+        return rows
+    return [r for r in rows if r.get(team_field) == user["team"]]
+
+
+def _team_by_asset_name():
+    """{asset_name: team} from the real, current asset ownership data - the
+    server-side equivalent of assetLookup.js's buildOwnerTeamMaps(), which every page
+    needing a finding's team currently computes client-side (a finding carries no
+    team of its own - see asset_inventory.build_asset_inventory()). Backed by the
+    same short-TTL, mtime-keyed cache as /api/assets (_load_scored_assets()), so
+    calling this on every /api/queue request is a cheap cache hit, not a
+    recomputation."""
+    _, assets = dashboard_data._load_scored_assets()
+    return {a["name"]: a.get("team") for a in assets}
+
+
+def _annotate_finding_teams(findings, team_by_asset_name=None):
+    """Adds a real `team` field to each finding, resolved via its own asset's real
+    ownership team - mutates and returns `findings` in place. Safe to do
+    unconditionally: load_live_queue() already hands back fresh per-call shallow
+    copies specifically so a caller can do exactly this without corrupting the
+    shared cache other routes read from."""
+    team_by_asset_name = team_by_asset_name if team_by_asset_name is not None else _team_by_asset_name()
+    for f in findings:
+        asset = f.get("asset") or {}
+        f["team"] = team_by_asset_name.get(asset.get("name"))
+    return findings
+
+
+def _finding_team_by_id(queue_findings, team_by_asset_name=None):
+    """{finding_id: team} for every real finding in the live queue - the join
+    exceptions/remediation-approvals need to team-scope their own records, since
+    those are stored keyed by finding_id, not with a team (or asset) of their own."""
+    team_by_asset_name = team_by_asset_name if team_by_asset_name is not None else _team_by_asset_name()
+    result = {}
+    for f in queue_findings:
+        asset = f.get("asset") or {}
+        result[f["id"]] = team_by_asset_name.get(asset.get("name"))
+    return result
+
+
 @app.get("/api/queue")
-def api_queue():
-    scored = dashboard_data.load_live_queue()
+def api_queue(user: dict = Depends(rbac.get_current_user)):
+    scored = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
     return _fast_json({"findings": scored, "sla": dashboard_data.sla_summary(scored)})
 
 
@@ -304,7 +364,7 @@ def api_save_remediation_policy(body: RemediationPolicyBody, user: dict = Depend
 
 
 @app.get("/api/remediation-approvals")
-def api_list_remediation_approvals():
+def api_list_remediation_approvals(user: dict = Depends(rbac.get_current_user)):
     # Joins in each finding's real generated-playbook rollback procedure (ISO/IEC
     # 27002:2022 §8.32) - a real "# Rollback: ..." comment the fixer subagent wrote for
     # that specific fix (see dashboard_data.load_playbooks()'s _parse_rollback_plan()),
@@ -316,6 +376,11 @@ def api_list_remediation_approvals():
     for a in approvals:
         playbook = playbooks_by_finding.get(a["finding_id"])
         a["rollback_plan"] = playbook["rollback_plan"] if playbook else None
+    if user is not None and user.get("role") != "admin":
+        team_by_finding = _finding_team_by_id(dashboard_data.load_live_queue())
+        for a in approvals:
+            a["team"] = team_by_finding.get(a["finding_id"])
+        approvals = _scope_to_team(approvals, user)
     return {"approvals": approvals}
 
 
@@ -1080,6 +1145,56 @@ def api_get_ai_usage(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
     }
 
 
+@app.get("/api/admin/users")
+def api_list_users(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Real user accounts (never a password hash) - the Admin Settings "Team
+    Management" section's data source. A user's `team` here is exactly what
+    _scope_to_team() enforces on Queue/Assets/Exceptions/Remediation Approvals."""
+    return {"users": auth_users.list_users()}
+
+
+class CreateUserBody(BaseModel):
+    email: str
+    password: str
+    name: str
+    role: str = "user"
+    team: str | None = None
+
+
+@app.post("/api/admin/users")
+def api_create_user(body: CreateUserBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        return auth_users.create_user(body.email, body.password, body.name, role=body.role, team=body.team)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class SetUserTeamBody(BaseModel):
+    team: str | None = None
+
+
+@app.post("/api/admin/users/{email}/team")
+def api_set_user_team(email: str, body: SetUserTeamBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        return auth_users.set_team(email, body.team)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class SetUserRoleBody(BaseModel):
+    role: str
+
+
+@app.post("/api/admin/users/{email}/role")
+def api_set_user_role(email: str, body: SetUserRoleBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        return auth_users.set_role(email, body.role)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/reports/generate")
 def api_generate_report(period: str = "weekly", scope: str = "all", team: str = ""):
     try:
@@ -1102,8 +1217,14 @@ def api_generate_report_html(period: str = "weekly", scope: str = "all", team: s
 
 
 @app.get("/api/exceptions")
-def api_list_exceptions():
-    return {"exceptions": exceptions_store.list_exceptions_with_status()}
+def api_list_exceptions(user: dict = Depends(rbac.get_current_user)):
+    exceptions = exceptions_store.list_exceptions_with_status()
+    if user is not None and user.get("role") != "admin":
+        team_by_finding = _finding_team_by_id(dashboard_data.load_live_queue())
+        for e in exceptions:
+            e["team"] = team_by_finding.get(e["finding_id"])
+        exceptions = _scope_to_team(exceptions, user)
+    return {"exceptions": exceptions}
 
 
 class ExceptionCreateBody(BaseModel):
@@ -1134,7 +1255,7 @@ def api_revoke_exception(exception_id: str, user: dict = Depends(rbac.require_ad
 
 
 @app.get("/api/assets")
-def api_list_assets():
+def api_list_assets(user: dict = Depends(rbac.get_current_user)):
     # Shared, short-TTL-cached scoring pipeline (see dashboard_data._load_scored_assets()'s
     # own docstring) - also used by /api/overview and load_live_queue().
     _, cached_rows = dashboard_data._load_scored_assets()
@@ -1149,7 +1270,7 @@ def api_list_assets():
     known = [r for r in rows if r.get("owner")]
     for row in rows:
         row["suggestion"] = None if row.get("owner") else pattern_recognition.suggest_owner_team(row, known)
-    return _fast_json({"assets": rows})
+    return _fast_json({"assets": _scope_to_team(rows, user)})
 
 
 class SearchAskBody(BaseModel):

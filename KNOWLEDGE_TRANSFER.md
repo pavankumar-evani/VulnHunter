@@ -805,12 +805,15 @@ reasoning behind the RBAC scope decision, the OIDC and CrowdStrike honesty patte
 the CSV-as-Excel choice, plus two things this wave deliberately did NOT build and why.
 
 **Not started, needs a business/architecture decision first:**
-- **Full RBAC (read-gating), SSO in practice, multi-tenancy** — logins and mutation-route
-  gating are real now (see above), but every GET/read route is still open with no
-  session at all, real SSO has never been exercised against a live identity provider,
-  and "one tenant = one client" MSSP architecture still needs a real database and a
-  real per-tenant data boundary — see §11 and §13.1 below for why none of these three
-  can be bolted on incrementally beyond what's already there.
+- **Read-gating (closing the anonymous-access gap), SSO in practice, multi-tenancy** —
+  logins, mutation-route gating, and real per-team filtering for logged-in sessions are
+  all real now (see above and §13.1's Round 17 follow-up), but every GET/read route is
+  still open with no session at all (team-scoping included - an anonymous request
+  bypasses it the same way it bypasses everything else), real SSO has never been
+  exercised against a live identity provider, and "one tenant = one client" MSSP
+  architecture still needs a real database and a real per-tenant data boundary — see
+  §11 and §13.1 below for why none of these three can be bolted on incrementally
+  beyond what's already there.
 - **Compliance certification (SOC2, NIST, etc.)** — not a coding task. SOC2 is an audit
   by a licensed CPA firm over months of operational evidence; NIST CSF alignment is a
   self-attestation or third-party assessment. This repo can build toward the *controls*
@@ -1054,6 +1057,23 @@ client-side router's redirect-to-`/login` (a UX nicety) for a real security boun
 `curl http://host/api/queue` with no cookie at all still returns real findings data,
 by design, in this pass. Closing that gap — gating reads too — is real, scoped,
 follow-up work, not a bug in what shipped.
+
+**Follow-up (Round 17): real per-team filtering, same scope boundary held.** A later
+round added actual server-side per-team RBAC — `dashboard/app.py`'s `_scope_to_team()`
+restricts Queue/Asset Inventory/Exceptions/Remediation Approvals to a logged-in
+non-admin's own team (`dashboard/auth/users.py`'s new `team` field, set via Admin
+Settings' "Team Management"). This did **not** reverse the "gate mutations, not reads"
+decision above: team-scoping only ever narrows what a request *with a real session*
+sees; an anonymous request (no cookie) still sees everything, exactly as it did before
+this feature existed, for the exact sequencing reason already given. The alternative —
+requiring login on those four routes outright, so team-scoping can't be bypassed by
+simply not authenticating — was evaluated and explicitly deferred again: it would touch
+roughly 50 existing `TestClient` call sites across unrelated test classes (the same
+"large blast radius for a single wave" concern this section already raised), for a gap
+this project's threat model doesn't currently treat as urgent (a cooperating-teams
+workflow feature, not a defense against an adversarial insider). See
+`dashboard/README.md`'s "What this is NOT (yet)" for the equivalent disclosure, and
+`_scope_to_team()`'s own docstring for the full reasoning.
 
 ### 13.2 Two honesty patterns applied again: OIDC, and CrowdStrike as a pull connector
 
