@@ -8,7 +8,7 @@ import {
   agingChartBlockHtml, agingByPriorityTableHtml, agingBreakdownTableHtml, agingDisclaimerHtml,
   remediationTriggeredDisclaimerHtml,
 } from "../domainSummary.js";
-import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Security Posture Overview";
@@ -303,10 +303,10 @@ function riskScoringSection(assets, riskRules) {
     </div>
 
     <div class="chart-row">
-      <div class="chart-block">
+      <div class="chart-block" style="max-width:380px">
         <h3>Assets by risk tier</h3>
         <p class="filter-count" style="margin:-4px 0 8px">Hover a bar for its top asset types; click to see those assets in Asset Inventory.</p>
-        ${tierChartData.length ? barChartSvg(tierChartData) : `<p class="empty-state">No scored assets yet.</p>`}
+        ${tierChartData.length ? barChartSvg(tierChartData, { width: 340 }) : `<p class="empty-state">No scored assets yet.</p>`}
       </div>
       <div class="chart-block">
         <h3>Top 5 highest-risk assets</h3>
@@ -381,6 +381,8 @@ function methodologySection(findings, vh) {
         <h3>Application, by methodology</h3>
         ${appMethodologyData.length ? pieChartSvg(appMethodologyData) : `<p class="empty-state">No application findings.</p>`}
       </div>
+    </div>
+    <div class="chart-row-grid">
       <a class="chart-block chart-block-link" href="/certificate-vulnerabilities" data-link>
         <h3>Certificate</h3>
         <div class="kpi-value">${certTotal}</div>
@@ -458,11 +460,11 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
     <div class="chart-row">
       <div class="chart-block">
         <h3>Severity distribution, entire landscape</h3>
-        ${barChartSvg(severityData)}
+        ${barChartSvg(severityData, { width: 340 })}
       </div>
       <div class="chart-block">
         <h3>EOL/EOS exposure (by distinct asset)</h3>
-        ${eolData.length ? barChartSvg(eolData) : `<p class="empty-state">No asset OS data to classify.</p>`}
+        ${eolData.length ? barChartSvg(eolData, { width: 340 }) : `<p class="empty-state">No asset OS data to classify.</p>`}
       </div>
     </div>
 
@@ -518,22 +520,22 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
     </div>
 
     <div class="chart-row">
-      <div class="chart-block">
+      <div class="chart-block" style="max-width:380px">
         <h3>Findings by month first seen (Infrastructure)</h3>
         <p class="filter-count" style="margin:-4px 0 8px">
           No historical-snapshot storage exists in this app, so this shows which of
           today's Infrastructure findings originated in each month - not what total
           counts looked like on a past date.
         </p>
-        ${infraByMonth.length ? barChartSvg(infraByMonth) : `<p class="empty-state">No dated findings to chart.</p>`}
+        ${infraByMonth.length ? barChartSvg(infraByMonth, { width: 340 }) : `<p class="empty-state">No dated findings to chart.</p>`}
       </div>
-      <div class="chart-block">
+      <div class="chart-block" style="max-width:380px">
         <h3>Findings by month first seen (Application)</h3>
         <p class="filter-count" style="margin:-4px 0 8px">
           Same honest caveat as Infrastructure's chart, left of this one - SAST/Code Scan
           findings aren't included either way (no comparable first-seen date in that data path).
         </p>
-        ${appsecByMonth.length ? barChartSvg(appsecByMonth) : `<p class="empty-state">No dated findings to chart.</p>`}
+        ${appsecByMonth.length ? barChartSvg(appsecByMonth, { width: 340 }) : `<p class="empty-state">No dated findings to chart.</p>`}
       </div>
     </div>`;
 }
@@ -661,19 +663,14 @@ export async function render(container) {
   const topbarExtra = document.getElementById("topbar-extra");
   let lastFetched = null;
 
-  // The AI trend analysis panel lives OUTSIDE #overview-body on purpose - #overview-body
+  // The AI trend analysis FAB lives OUTSIDE #overview-body on purpose - #overview-body
   // is fully replaced every 20s by the auto-refresh below, which would otherwise wipe an
   // in-progress prompt preview or a just-received (real API cost!) AI response the
-  // moment it arrived.
-  // The AI Trend tile stays OUTSIDE #overview-body (which the 20s auto-refresh below
-  // fully replaces) on purpose - an in-progress prompt preview or a just-received
-  // (real API cost!) response must survive that refresh, so it can't live inside the
-  // same region as the chart row it'd otherwise sit beside (moving it there would
-  // wipe it mid-read every 20 seconds). Still the compact tile, just in its own
-  // narrow row rather than the old full-width section.
-  container.innerHTML = `<div id="overview-body"></div><div class="chart-row" style="max-width:300px">${aiTrendAnalysisTileHtml("overview", "the whole landscape (Infrastructure + AppSec + AI/ML + Certificate)")}</div>`;
+  // moment it arrived. Being position:fixed, it doesn't occupy row space either way.
+  container.innerHTML = `<div id="overview-body"></div>${aiTrendAnalysisFabHtml("overview")}`;
   const bodyEl = container.querySelector("#overview-body");
-  wireAiTrendAnalysis(container, "overview", "landscape-wide", buildOverviewAiStats);
+  wireAiTrendAnalysis(container, "overview", "landscape-wide", buildOverviewAiStats,
+    "the whole landscape (Infrastructure + AppSec + AI/ML + Certificate)");
 
   function renderLiveBadge() {
     if (!topbarExtra) return;

@@ -557,16 +557,61 @@ a.notif-item:hover { background: var(--bg); }
 .chart-row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin: 14px 0 20px; }
 .chart-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
 .chart-block h3 { margin: 0 0 8px; font-size: 0.92rem; }
+/* A CSS-grid sibling of .chart-row, for .chart-block content that ISN'T a fixed-width
+   SVG (a plain KPI-style total tile, e.g. methodologySection's Certificate/AI-ML
+   cards) - auto-fit/minmax fills the row responsively (unlike flex, where a fixed-
+   width chart can't grow to fill leftover space without leaving empty space past its
+   own SVG). Never mix a fixed-width chart into this grid - use .chart-row for those. */
+.chart-row-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; margin: 14px 0 20px; }
 
-/* Compact AI Trend Analysis tile (aiTrendAnalysisTileHtml) - a real .chart-block
-   sized to sit next to whatever real chart(s) already share its .chart-row, not a
-   full-width section. Form is a single row (checkbox + button), not the stacked
-   full-width .run-form layout - deliberately narrow. */
-.ai-trend-tile { min-width: 220px; max-width: 280px; }
-.ai-trend-tile-form { display: flex; flex-direction: column; gap: 8px; }
-.ai-trend-tile-form .checkbox-label { font-size: 0.78rem; }
-.ai-trend-tile-result { margin-top: 10px; max-height: 220px; overflow-y: auto; font-size: 0.85rem; }
-.ai-trend-tile-result .code-block { font-size: 0.78rem; }
+/* AI Trend Analysis floating button (aiTrendAnalysisFabHtml) - copilot-style: a fixed
+   circular launcher, bottom-right, with a small anchored panel instead of a chart-block
+   sharing a .chart-row. Previously a fixed-size tile competing for row space, which
+   pushed sibling charts onto their own row whenever a row got tight - this fixes that
+   by not occupying row space at all. */
+.ai-trend-fab-wrap { position: fixed; bottom: 24px; right: 24px; z-index: 90; }
+.ai-trend-fab {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--brand-accent); color: white; border: none;
+  font-size: 1.4rem; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s ease;
+}
+.ai-trend-fab:hover { transform: scale(1.06); }
+.ai-trend-fab:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 3px; }
+.ai-trend-panel {
+  position: absolute; bottom: 64px; right: 0;
+  width: 320px; max-height: 60vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.ai-trend-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 0.9rem;
+}
+.ai-trend-panel-close {
+  background: none; border: none; font-size: 1.2rem; line-height: 1;
+  cursor: pointer; color: var(--text-muted);
+}
+.ai-trend-panel-close:hover { color: var(--text); }
+.ai-trend-panel-body { padding: 12px 14px; font-size: 0.85rem; }
+.ai-trend-scope { color: var(--text-muted); font-size: 0.78rem; margin: 0 0 10px; }
+.ai-trend-menu-option {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; text-align: left; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer;
+  color: var(--text); text-decoration: none; font: inherit; box-sizing: border-box;
+}
+.ai-trend-menu-option:hover, .ai-trend-menu-option:focus-visible { border-color: var(--brand-accent); }
+.ai-trend-menu-option-title { font-weight: 600; font-size: 0.85rem; }
+.ai-trend-menu-option-note { font-size: 0.75rem; color: var(--text-muted); }
+.ai-trend-panel-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.ai-trend-panel-body .code-block { font-size: 0.78rem; }
+@media (max-width: 480px) {
+  .ai-trend-fab-wrap { bottom: 16px; right: 16px; }
+  .ai-trend-panel { width: calc(100vw - 32px); right: -8px; }
+}
 .chart-svg { display: block; overflow: visible; }
 .chart-bar-value { font-size: 10px; fill: var(--text); font-weight: 600; }
 .chart-bar-label { font-size: 9px; fill: var(--text-muted); }

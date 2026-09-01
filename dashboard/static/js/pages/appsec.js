@@ -22,7 +22,7 @@ import {
   totalVulnerabilitiesKpiHtml, severityBreakdownTableHtml, teamPriorityChartBlockHtml,
   agingChartBlockHtml, agingByPriorityTableHtml, agingBreakdownTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
-import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Application Vulnerabilities";
@@ -162,7 +162,6 @@ export async function render(container) {
 
     <div class="chart-row">
       ${teamPriorityChartBlockHtml(scaDastFindings, teamByAssetName)}
-      ${aiTrendAnalysisTileHtml("appsec-hub", "Application Security (SAST/DAST/SCA/Secrets/Container/API)")}
     </div>
     <p class="filter-count" style="margin:-4px 0 12px">
       Team/priority breakdown covers DAST/SCA/Repo Secret Scanning findings only - SAST
@@ -217,7 +216,8 @@ export async function render(container) {
       ${dateRangeHtml("appsec-hub-daterange", dateRange)}
     </div>
     ${dateRangeDisclaimerHtml()}
-    ${findingsTableHtml("appsec-hub")}`;
+    ${findingsTableHtml("appsec-hub")}
+    ${aiTrendAnalysisFabHtml("appsec-hub")}`;
 
   function rewireTable() {
     let filteredFindings = applyFindingsFilters(scaDastFindings, colFilters, { ownerByAssetName, teamByAssetName });
@@ -251,7 +251,7 @@ export async function render(container) {
       "Priority breakdown (SCA/DAST/Repo Secret Scanning only)": priorityData.map((d) => `${d.label}=${d.value}`).join(", "),
       "Findings by team, top 5 (SCA/DAST/Repo Secret Scanning only)": teamData.slice(0, 5).map((d) => `${d.label}=${d.value}`).join(", "),
     };
-  });
+  }, "Application Security (SAST/DAST/SCA/Secrets/Container/API)");
 
   const teamAssignedCount = scaDastFindings.filter((f) => teamByAssetName.get(f.asset && f.asset.name)).length;
   const teamAssignedPct = scaDastFindings.length ? Math.round((teamAssignedCount / scaDastFindings.length) * 100) : 0;

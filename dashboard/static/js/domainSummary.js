@@ -83,14 +83,18 @@ export function teamPriorityChartBlockHtml(findings, teamByAssetName) {
     .map((d) => (d.label === "Unassigned" ? d : { ...d, href: `/queue?team=${encodeURIComponent(d.label)}` }));
   const priorityData = countBy(findings, (f) => f.priority)
     .map((d) => (d.label === "Unknown" ? d : { ...d, href: `/queue?priority=${encodeURIComponent(d.label)}` }));
+  // Same explicit-narrower-width reasoning as severityChartBlockHtml above - two
+  // 420px-default bar charts together need ~932px (2x420 + padding + gap), which
+  // wraps onto separate rows at almost every real laptop viewport (measured: fails
+  // starting under ~1000px available row width). 340 each fits comfortably.
   return `
     <div class="chart-block">
       <h3>By team</h3>
-      ${teamData.length ? barChartSvg(teamData) : `<p class="empty-state">No findings.</p>`}
+      ${teamData.length ? barChartSvg(teamData, { width: 340 }) : `<p class="empty-state">No findings.</p>`}
     </div>
     <div class="chart-block">
       <h3>By priority</h3>
-      ${priorityData.length ? barChartSvg(priorityData) : `<p class="empty-state">No findings.</p>`}
+      ${priorityData.length ? barChartSvg(priorityData, { width: 340 }) : `<p class="empty-state">No findings.</p>`}
     </div>`;
 }
 
@@ -259,10 +263,15 @@ export function agingChartBlockHtml(findings, heading = "Open-finding age", empt
     if (bucket) counts[bucket] += 1;
   }
   const data = AGE_BUCKETS.map((b) => ({ label: AGE_BUCKET_LABELS[b], value: counts[b] }));
+  // This chart-block is always alone in its own .chart-row (no natural second chart to
+  // pair it with on any page that uses it) - explicit wider width so it fills a
+  // meaningful share of the row instead of sitting narrow with a large empty gap
+  // beside it. Only ever 4 bars (0-30/31-60/61-90/90+), so the extra width just gives
+  // each bar more room, no label-crowding risk the way a many-category chart has.
   return `
     <div class="chart-block">
       <h3>${escapeHtml(heading)}</h3>
-      ${data.some((d) => d.value > 0) ? barChartSvg(data) : `<p class="empty-state">${escapeHtml(emptyLabel)}</p>`}
+      ${data.some((d) => d.value > 0) ? barChartSvg(data, { width: 600 }) : `<p class="empty-state">${escapeHtml(emptyLabel)}</p>`}
     </div>`;
 }
 

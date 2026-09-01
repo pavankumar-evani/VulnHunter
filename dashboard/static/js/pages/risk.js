@@ -12,7 +12,7 @@ import {
   agingChartBlockHtml, agingByPriorityTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
 import { countBy, wireChartLinks } from "../charts.js";
-import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Risk Management";
@@ -151,7 +151,6 @@ export async function render(container) {
 
     <div class="chart-row">
       ${teamPriorityChartBlockHtml(queueData.findings, teamByAssetName)}
-      ${aiTrendAnalysisTileHtml("risk-hub", "Risk Management (facing classification, critical findings, Risk Score)")}
     </div>
 
     <h2 style="margin-top:28px">Open-finding age (30/60/90-day backlog aging)</h2>
@@ -219,7 +218,8 @@ export async function render(container) {
     </div>
     <p class="filter-count">Per the
       <a href="https://www.first.org/cvss/v3.1/specification-document" target="_blank" rel="noopener">FIRST.org CVSS v3.1 specification</a> -
-      the industry-standard scale, not a VulnHunter-specific invention.</p>`;
+      the industry-standard scale, not a VulnHunter-specific invention.</p>
+    ${aiTrendAnalysisFabHtml("risk-hub")}`;
 
   wireExportButtons(container, "top-assets", {
     getRows: () => topCritical,
@@ -252,7 +252,7 @@ export async function render(container) {
       "Priority breakdown (live queue)": priorityData.map((d) => `${d.label}=${d.value}`).join(", "),
       "Top 5 assets by risk score": topCritical.map((a) => `${a.name}=${a.risk_score}`).join(", "),
     };
-  });
+  }, "Risk Management (facing classification, critical findings, Risk Score)");
 
   const unclassifiedPct = assets.length ? Math.round((facingCounts.unknown / assets.length) * 100) : 0;
 

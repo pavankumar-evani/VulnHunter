@@ -47,6 +47,16 @@ export function barChartSvg(data, { width = 420, height = 200, barColor = null }
   const max = Math.max(1, ...data.map((d) => d.value));
   const barGap = 10;
   const barW = data.length ? Math.max(8, (chartW - barGap * (data.length - 1)) / data.length) : chartW;
+  // A fixed 14-char truncation (truncateLabel's own default) looks fine with a
+  // handful of bars, but with many bars (e.g. a 14-category breakdown) each bar's own
+  // width shrinks well below what 14 characters at 9px actually renders as, so
+  // neighboring labels visually overlap even though each is correctly centered under
+  // its own bar - a real, confirmed defect (not a container-width problem: it happens
+  // even when the chart is nearly full-width). ~5.2px/char at .chart-bar-label's 9px
+  // font size is a deliberately conservative estimate (better to truncate a bit more
+  // than necessary than to still overlap); capped at 14 so few-bar charts keep their
+  // existing, already-fine label length.
+  const maxLabelChars = Math.max(3, Math.min(14, Math.floor((barW + barGap * 0.5) / 5.2)));
 
   const bars = data.map((d, i) => {
     const barH = (d.value / max) * chartH;
@@ -58,7 +68,7 @@ export function barChartSvg(data, { width = 420, height = 200, barColor = null }
       <g class="${d.href ? "chart-bar-group chart-bar-clickable" : "chart-bar-group"}" data-tooltip="${escapeHtml(tooltipText)}"${clickable}>
         <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(barH, 1)}" rx="3" fill="${d.color || barColor || colorFor(d.label, i)}"></rect>
         <text x="${x + barW / 2}" y="${y - 5}" text-anchor="middle" class="chart-bar-value">${d.value}</text>
-        <text x="${x + barW / 2}" y="${height - 12}" text-anchor="middle" class="chart-bar-label">${escapeHtml(truncateLabel(d.label))}</text>
+        <text x="${x + barW / 2}" y="${height - 12}" text-anchor="middle" class="chart-bar-label">${escapeHtml(truncateLabel(d.label, maxLabelChars))}</text>
       </g>`;
   }).join("");
 

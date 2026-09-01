@@ -20,7 +20,7 @@ import {
   totalVulnerabilitiesKpiHtml, severityBreakdownTableHtml, teamPriorityChartBlockHtml,
   agingChartBlockHtml, agingByPriorityTableHtml, agingBreakdownTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
-import { aiTrendAnalysisTileHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Infrastructure Vulnerabilities";
@@ -135,7 +135,6 @@ export async function render(container) {
 
     <div class="chart-row">
       ${teamPriorityChartBlockHtml(infraFindings, teamByAssetName)}
-      ${aiTrendAnalysisTileHtml("infra-hub", "Infrastructure Vulnerability Management")}
     </div>
 
     <h2 style="margin-top:28px">Open-finding age (30/60/90-day backlog aging)</h2>
@@ -154,7 +153,8 @@ export async function render(container) {
     <h2 style="margin-top:28px">All infrastructure findings</h2>
     <div class="filter-bar" id="infra-hub-filters">${dateRangeHtml("infra-hub-daterange", dateRange)}</div>
     ${dateRangeDisclaimerHtml()}
-    ${findingsTableHtml("infra-hub")}`;
+    ${findingsTableHtml("infra-hub")}
+    ${aiTrendAnalysisFabHtml("infra-hub")}`;
 
   function rewireTable() {
     const filteredFindings = dateRange.preset
@@ -184,7 +184,7 @@ export async function render(container) {
       "Priority breakdown": priorityData.map((d) => `${d.label}=${d.value}`).join(", "),
       "Findings by team (top 5)": teamData.slice(0, 5).map((d) => `${d.label}=${d.value}`).join(", "),
     };
-  });
+  }, "Infrastructure Vulnerability Management");
 
   const zeroCategories = INFRA_CATEGORIES.filter((c) => counts[c] === 0);
   const teamAssignedCount = infraFindings.filter((f) => teamByAssetName.get(f.asset && f.asset.name)).length;
