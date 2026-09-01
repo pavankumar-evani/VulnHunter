@@ -4,7 +4,10 @@
 import { icon } from "./icons.js";
 import { wireSidebarScroll } from "./sidebarScroll.js";
 
-const NAV = [
+// Exported so commandPalette.js can reuse this exact list (one definition, not a
+// second, potentially-drifting copy of every real route) for its own Ctrl/Cmd+K
+// instant-navigation search.
+export const NAV = [
   { group: "Overview", items: [
     { path: "/", label: "Dashboard", icon: "dashboard", exact: true,
       tip: "KPIs, SLA status, and coverage across both pipelines at a glance." },
@@ -74,6 +77,8 @@ const NAV = [
       tip: "Cadence, ITIL 4 change type, maintenance windows, and PAM backend per remediation domain - the real config driving the Remediation Queue's approval/auto-remediate treatment." },
     { path: "/asset-policy", label: "Asset Policy", icon: "rules",
       tip: "Bulk, rule-based asset owner/team/environment/facing/remediation-schedule editing - match a group of real assets and set fields on all of them in one action." },
+    { path: "/admin", label: "Admin Settings", icon: "rules",
+      tip: "Admin-only: which real Claude Code model to use, per-user daily token limits (enforced server-side), real usage/cost by user, and read-only system health." },
   ] },
   // A single hub instead of four separate "Adaptors — X" groups (was: Ticketing/SOAR,
   // SIEM, XDR/EDR, Asset Discovery/IPAM as four flat sidebar sections) - /adaptors has

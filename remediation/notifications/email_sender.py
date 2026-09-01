@@ -25,7 +25,24 @@ import os
 import smtplib
 from email.message import EmailMessage
 
+from remediation.utils.retry import retry_with_backoff
+
 REQUIRED_ENV_VARS = ("SMTP_HOST", "SMTP_PORT", "SMTP_FROM_ADDRESS")
+
+# Self-healing scope, deliberately narrow: retry a dropped/refused/timed-out connection
+# (the genuinely transient failure modes for a real SMTP relay) up to 3 times with
+# exponential backoff. Does NOT retry SMTPAuthenticationError, SMTPRecipientsRefused, or
+# SMTPSenderRefused - those are OSError subclasses too (smtplib's whole exception
+# hierarchy inherits from OSError), but retrying wrong credentials or a rejected
+# recipient 3 times wastes 7 seconds arriving at the same permanent failure, so they're
+# deliberately excluded rather than caught by a broad OSError net.
+_RETRYABLE_EXCEPTIONS = (
+    smtplib.SMTPConnectError,
+    smtplib.SMTPServerDisconnected,
+    ConnectionRefusedError,
+    ConnectionResetError,
+    TimeoutError,
+)
 
 
 class EmailNotConfiguredError(RuntimeError):
@@ -73,9 +90,12 @@ def send_email(to_addrs, subject, body_text, body_html=None):
     username = os.environ.get("SMTP_USERNAME")
     password = os.environ.get("SMTP_PASSWORD")
 
-    with smtplib.SMTP(host, port, timeout=15) as client:
-        if _use_tls():
-            client.starttls()
-        if username and password:
-            client.login(username, password)
-        client.send_message(msg)
+    def _do_send():
+        with smtplib.SMTP(host, port, timeout=15) as client:
+            if _use_tls():
+                client.starttls()
+            if username and password:
+                client.login(username, password)
+            client.send_message(msg)
+
+    retry_with_backoff(_do_send, retryable_exceptions=_RETRYABLE_EXCEPTIONS)

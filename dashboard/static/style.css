@@ -565,6 +565,13 @@ a.notif-item:hover { background: var(--bg); }
 .chart-legend-row { display: flex; align-items: center; gap: 6px; }
 .chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; display: inline-block; }
 
+/* Vulnerability Lifecycle funnel (overview.js's lifecycleSection - funnelChartSvg in
+   charts.js) - funnel on the left, avg-time-in-stage KPIs stacked on the right; wraps
+   to a column on narrow viewports since the funnel already reads top-to-bottom. */
+.lifecycle-funnel-wrap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 12px 0 20px; }
+.lifecycle-funnel-wrap .chart-svg { flex: 1 1 380px; max-width: 480px; }
+.lifecycle-stats { display: flex; flex-direction: column; gap: 10px; flex: 0 0 200px; }
+
 /* Clickable chart elements (charts.js's optional data.href -> wireChartLinks()) -
    drill-down affordance, same brand-accent focus ring as the rest of the app. */
 .chart-bar-clickable, .chart-slice-clickable, .chart-legend-row-clickable { cursor: pointer; }
@@ -1432,6 +1439,97 @@ th.sortable:hover { color: var(--text); }
   line-height: 1; cursor: pointer; color: var(--text-muted);
 }
 .modal-close:hover { color: var(--text); }
+
+/* --- Command palette (Ctrl/Cmd+K instant page navigation - commandPalette.js) --- */
+.command-palette-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(15,18,20,0.5);
+  display: flex; align-items: flex-start; justify-content: center;
+  z-index: 200;
+  padding: 20px;
+  padding-top: 12vh;
+}
+.command-palette {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-width: 560px; width: 100%;
+  max-height: 60vh;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+}
+.command-palette input {
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 16px 18px;
+  font-size: 1.05rem;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+.command-palette-results { overflow-y: auto; padding: 6px; }
+.command-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text);
+}
+.command-palette-item .command-palette-item-icon { flex-shrink: 0; display: flex; color: var(--text-muted); }
+.command-palette-item-label { flex: 1; }
+.command-palette-item-group { color: var(--text-muted); font-size: 0.78rem; }
+.command-palette-item:hover, .command-palette-item.active { background: var(--bg); }
+.command-palette-item.active .command-palette-item-group { color: var(--text); }
+
+/* --- Searchable select (type-to-filter combobox - searchableSelect.js) ---
+   Enhances a native <select> with many options; the native element stays in the DOM
+   (visually hidden, still participates in form.fieldName.value / change events) while
+   this input+dropdown pair becomes the actual UI. */
+select.searchable-select-native {
+  position: absolute;
+  opacity: 0;
+  height: 1px;
+  width: 1px;
+  pointer-events: none;
+}
+.searchable-select { position: relative; display: inline-block; width: 100%; }
+.searchable-select-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.searchable-select-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+  padding: 4px;
+}
+.searchable-select-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.searchable-select-item:hover, .searchable-select-item.active { background: var(--bg); }
+.searchable-select-more, .searchable-select-empty {
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
 
 /* --- FAQ accordion --- */
 .faq-list { display: flex; flex-direction: column; gap: 10px; }

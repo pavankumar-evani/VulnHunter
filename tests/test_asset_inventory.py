@@ -182,6 +182,72 @@ class OwnershipStore(unittest.TestCase):
         with self.assertRaises(ValueError):
             asset_inventory.set_facing("", "external", path=self.path)
 
+    def test_set_network_info_persists_valid_ip_and_mac(self):
+        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", "aa:bb:cc:dd:ee:ff", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["ip"], "10.20.30.41")
+        self.assertEqual(loaded["WIN-DC01"]["mac"], "aa:bb:cc:dd:ee:ff")
+
+    def test_set_network_info_accepts_a_real_ipv6_address(self):
+        asset_inventory.set_network_info("WIN-DC01", "2001:db8::1", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["ip"], "2001:db8::1")
+
+    def test_set_network_info_rejects_an_invalid_ip(self):
+        with self.assertRaises(ValueError):
+            asset_inventory.set_network_info("WIN-DC01", "not-an-ip", path=self.path)
+
+    def test_set_network_info_rejects_an_invalid_mac(self):
+        with self.assertRaises(ValueError):
+            asset_inventory.set_network_info("WIN-DC01", mac="not-a-mac", path=self.path)
+
+    def test_set_network_info_blank_clears_a_previous_value(self):
+        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", "aa:bb:cc:dd:ee:ff", path=self.path)
+        asset_inventory.set_network_info("WIN-DC01", "", "", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertIsNone(loaded["WIN-DC01"]["ip"])
+        self.assertIsNone(loaded["WIN-DC01"]["mac"])
+
+    def test_set_network_info_does_not_clobber_existing_owner(self):
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
+        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", path=self.path)
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
+        self.assertEqual(loaded["WIN-DC01"]["ip"], "10.20.30.41")
+
+    def test_set_network_info_requires_an_asset_name(self):
+        with self.assertRaises(ValueError):
+            asset_inventory.set_network_info("", "10.20.30.41", path=self.path)
+
+
+class BuildAssetInventoryNetworkInfo(unittest.TestCase):
+    def test_ip_mac_come_from_the_finding_when_no_override_exists(self):
+        findings = [{
+            "id": "FIND-1", "asset": {"name": "WIN-DC01", "type": "windows-server", "ip": "10.1.1.1", "mac": "aa:bb:cc:dd:ee:ff"},
+            "severity": "Low", "kev": None,
+        }]
+        rows = asset_inventory.build_asset_inventory(findings, ownership={})
+        self.assertEqual(rows[0]["ip"], "10.1.1.1")
+        self.assertEqual(rows[0]["mac"], "aa:bb:cc:dd:ee:ff")
+        self.assertEqual(rows[0]["ip_version"], 4)
+
+    def test_ownership_override_wins_over_the_findings_reported_ip(self):
+        findings = [{
+            "id": "FIND-1", "asset": {"name": "WIN-DC01", "type": "windows-server", "ip": "10.1.1.1"},
+            "severity": "Low", "kev": None,
+        }]
+        ownership = {"WIN-DC01": {"ip": "2001:db8::1", "mac": "11:22:33:44:55:66"}}
+        rows = asset_inventory.build_asset_inventory(findings, ownership=ownership)
+        self.assertEqual(rows[0]["ip"], "2001:db8::1")
+        self.assertEqual(rows[0]["mac"], "11:22:33:44:55:66")
+        self.assertEqual(rows[0]["ip_version"], 6)
+
+    def test_no_ip_anywhere_reports_none_not_a_guess(self):
+        findings = [{"id": "FIND-1", "asset": {"name": "WIN-DC01", "type": "windows-server"}, "severity": "Low", "kev": None}]
+        rows = asset_inventory.build_asset_inventory(findings, ownership={})
+        self.assertIsNone(rows[0]["ip"])
+        self.assertIsNone(rows[0]["ip_version"])
+
 
 class RealSeedFileIsValid(unittest.TestCase):
     def test_shipped_ownership_file_is_well_formed(self):

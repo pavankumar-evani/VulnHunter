@@ -64,3 +64,34 @@ export function groupFindingsByAsset(findings, ownerByAssetName, teamByAssetName
     .map((g) => ({ ...g, vulnCount: g.vulnKeys.size }))
     .sort((a, b) => b.vulnCount - a.vulnCount);
 }
+
+// A third grouping axis, orthogonal to the two above: same real per-asset distinct-
+// vulnerability data (groupFindingsByAsset()'s own `vulnKeys` Set, unioned - not
+// summed, so a vulnerability shared by 3 assets in one subnet still counts once), but
+// bucketed by real IP subnet (/24 for IPv4, /64 for IPv6 - see
+// remediation/inventory/pattern_recognition.py's ip_subnet()/ipv6_subnet(), computed
+// server-side onto every /api/assets row as `subnet`/`ip_version`) instead of by
+// individual asset. Answers "which network segment has the most exposure," not just
+// "which single asset does" - assets with no recorded IP land in one honest "Unknown"
+// bucket rather than being silently dropped.
+export function groupAssetsBySubnet(assetVulnGroups, assets) {
+  const assetsByName = new Map(assets.map((a) => [a.name, a]));
+  const bySubnet = new Map();
+  for (const g of assetVulnGroups) {
+    const a = assetsByName.get(g.name);
+    const key = (a && a.subnet) || "Unknown / no IP recorded";
+    if (!bySubnet.has(key)) {
+      bySubnet.set(key, {
+        subnet: key, ipVersion: a ? a.ip_version : null,
+        assetNames: [], vulnKeys: new Set(), criticalCount: 0,
+      });
+    }
+    const bucket = bySubnet.get(key);
+    bucket.assetNames.push(g.name);
+    for (const k of g.vulnKeys) bucket.vulnKeys.add(k);
+    bucket.criticalCount += g.criticalCount;
+  }
+  return [...bySubnet.values()]
+    .map((b) => ({ ...b, assetCount: b.assetNames.length, vulnCount: b.vulnKeys.size }))
+    .sort((a, b) => b.vulnCount - a.vulnCount);
+}

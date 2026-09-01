@@ -3,6 +3,7 @@ import { escapeHtml, flash } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
 import { paginate, paginationHtml, wirePagination } from "../pagination.js";
 import { groupLabelFor } from "../domainGrouping.js";
+import { enhanceSelect } from "../searchableSelect.js";
 
 export const title = "Vulnerability Exceptions";
 
@@ -275,6 +276,7 @@ export async function render(container) {
   }
 
   const form = container.querySelector("#exception-form");
+  enhanceSelect(form.finding_id, { placeholder: "Type a finding ID or title…" });
   renderSuggestedControls(form.finding_id.value);
   renderApprovalConflictWarning(form.finding_id.value);
   form.finding_id.addEventListener("change", () => {

@@ -9,6 +9,7 @@ decide WHAT would be run, and use --dry-run for the one end-to-end path that's e
 import subprocess
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -72,6 +73,15 @@ class CommandConstruction(unittest.TestCase):
         self.assertNotIn("--allowedTools", cmd)
         self.assertNotIn("--max-budget-usd", cmd)
 
+    def test_build_command_includes_model_when_set(self):
+        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude", model="sonnet")
+        idx = cmd.index("--model")
+        self.assertEqual(cmd[idx + 1], "sonnet")
+
+    def test_build_command_omits_model_flag_when_not_set(self):
+        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude", model=None)
+        self.assertNotIn("--model", cmd)
+
     def test_build_command_never_includes_dangerous_skip_permissions(self):
         """Regression guard: this wrapper must never default to bypassing permission
         checks entirely - that flag exists in the underlying CLI but this project's
@@ -117,6 +127,30 @@ class DryRunEndToEnd(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
         self.assertIn("/remediate --generate", result.stdout)
+
+
+class RunFunctionOnResultCallback(unittest.TestCase):
+    """Calls cli.run() directly (not via subprocess) so this can assert on_result's
+    behavior without ever spending real API usage - a dry run returns before the real
+    subprocess.run() call, so on_result must never fire for one."""
+
+    def test_dry_run_never_invokes_on_result(self):
+        calls = []
+        exit_code = cli.run(
+            "/vulnhunt foo", "vulnhunt", dry_run=True, on_result=lambda result: calls.append(result),
+            claude_bin="claude",
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(calls, [])
+
+    def test_missing_binary_never_invokes_on_result(self):
+        calls = []
+        with unittest.mock.patch.object(cli, "find_claude_binary", side_effect=cli.ClaudeBinaryNotFound("nope")):
+            exit_code = cli.run(
+                "/vulnhunt foo", "vulnhunt", dry_run=False, on_result=lambda result: calls.append(result),
+            )
+        self.assertEqual(exit_code, 127)
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":

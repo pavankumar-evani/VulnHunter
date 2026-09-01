@@ -67,10 +67,16 @@ def build_command(
     permission_mode=DEFAULT_PERMISSION_MODE,
     allowed_tools=DEFAULT_ALLOWED_TOOLS,
     max_budget_usd=DEFAULT_MAX_BUDGET_USD,
+    model=None,
 ):
     """Pure function: builds the subprocess argument list for a headless Claude Code
     invocation. Deliberately has no side effects and does not touch the filesystem or
-    network, so it can be unit tested without spending API credits."""
+    network, so it can be unit tested without spending API credits. `model` (an alias
+    like "sonnet"/"opus"/"fable", or a full model name) is passed straight through to
+    Claude Code's own real --model flag (verified via `claude --help`) when set - None
+    (the default) omits the flag entirely, letting Claude Code pick its own default,
+    same as every call in this app before the AI governance policy
+    (remediation/config/ai_governance.yaml) existed."""
     cmd = [claude_bin, "-p", prompt, "--output-format", output_format]
     if permission_mode:
         cmd += ["--permission-mode", permission_mode]
@@ -78,6 +84,8 @@ def build_command(
         cmd += ["--allowedTools", allowed_tools]
     if max_budget_usd:
         cmd += ["--max-budget-usd", str(max_budget_usd)]
+    if model:
+        cmd += ["--model", model]
     return cmd
 
 
@@ -115,7 +123,13 @@ def write_audit_log(pipeline, command, result):
     return log_path
 
 
-def run(prompt, pipeline_name, dry_run=False, **build_kwargs):
+def run(prompt, pipeline_name, dry_run=False, on_result=None, **build_kwargs):
+    """`on_result`, when given, is called with the real subprocess.CompletedProcess
+    right after a real (non-dry-run) call returns - lets a caller like dashboard/app.py
+    record real per-user AI usage (remediation/audit/ai_usage_log.py) using the
+    actually-authenticated request's user, without this function needing to know
+    anything about who's calling it or changing its own int-exit-code return contract
+    that main() below (and every existing caller) already depends on."""
     try:
         claude_bin = build_kwargs.pop("claude_bin", None) or find_claude_binary()
     except ClaudeBinaryNotFound as exc:
@@ -135,6 +149,9 @@ def run(prompt, pipeline_name, dry_run=False, **build_kwargs):
 
     log_path = write_audit_log(pipeline_name, command, result)
     print(f"Audit log written to {log_path}")
+
+    if on_result:
+        on_result(result)
 
     if result.returncode != 0:
         print(result.stderr, file=sys.stderr)

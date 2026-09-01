@@ -90,15 +90,22 @@ There's a tenant switcher in the dashboard sidebar (`dashboard/static/js/tenant.
 "All Tenants (MSSP view)", "Acme Financial Corp (demo)", "Northwind Bank (demo)" — that
 partitions the same real findings by asset-type category, so the Remediation Queue page
 demos what an MSSP-style per-client view could look like. **This is explicitly a UI-only
-illustration, not real per-tenant authentication or data isolation**: there is one
-process, one dataset on disk, and no auth layer at all — anyone who can reach the
-dashboard's port can switch "tenants" freely and see everything regardless of which one
-is selected. A banner on the Queue page repeats this whenever a non-"All" tenant is
-active. Building *real* multi-tenant MSSP support needs a database and an auth/RBAC layer
+illustration, not real per-tenant authentication or data isolation** - it's stored in
+the browser's `localStorage` and is completely unconnected to the app's real login
+system: any logged-in user (any role) can switch "tenants" freely from the same single
+shared dataset, regardless of which one is selected, because there is no server-side
+tenant concept anywhere to gate it against - there is one process and one dataset on
+disk. A banner on the Queue page repeats this whenever a non-"All" tenant is active.
+Audited directly (2026-09-01): no server route accepts or trusts a client-supplied
+tenant identifier today, so there's no cross-tenant leakage to have - only a standard to
+hold real per-team/per-tenant work to once it's built (NIST SP 800-53 AC-3/AC-4/AC-6,
+OWASP API1:2023 Broken Object Level Authorization, and OWASP's own
+[Multi-Tenant Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Multi_Tenant_Security_Cheat_Sheet.html)).
+Building *real* multi-tenant MSSP support needs a database and an auth/RBAC layer
 first — a business/architecture decision, not something that can be bolted onto the
 current filesystem-reading MVP incrementally without rebuilding it. See
 [KNOWLEDGE_TRANSFER.md §11](../KNOWLEDGE_TRANSFER.md#11-the-enterprisemssp-platform-ask--scope-reality-check)
-and its subsection
+(including the 2026-09-01 audit and standards citations) and its subsection
 [§11.1](../KNOWLEDGE_TRANSFER.md#111-the-commercial-grade-polyglot-ask--what-actually-happened)
 for the full reasoning on what's real here and what isn't.
 

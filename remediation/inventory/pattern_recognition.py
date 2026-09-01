@@ -38,6 +38,7 @@ this module's supervised one (needs labeled owner/team examples - this repo's re
 pool is on the order of a dozen assets, still nowhere near enough). Read that module's
 own docstring for the full reasoning; this one's conclusion is unchanged.
 """
+import ipaddress
 import re
 from collections import Counter
 
@@ -74,16 +75,56 @@ def ip_subnet(ip):
     return ".".join(parts[:3])
 
 
+def ip_version(ip):
+    """Returns 4 or 6 for a real, valid IPv4/IPv6 address (using the stdlib
+    `ipaddress` module, so compressed/mixed-case/embedded-IPv4 IPv6 forms are all
+    handled correctly - not a hand-rolled parser), or None for anything else
+    (missing, malformed, or not an IP address at all)."""
+    if not ip or not isinstance(ip, str):
+        return None
+    try:
+        return ipaddress.ip_address(ip.strip()).version
+    except ValueError:
+        return None
+
+
+def ipv6_subnet(ip):
+    """The /64 network portion of an IPv6 address as a string, e.g.
+    "2001:db8::1" -> "2001:db8::/64" - /64 is the conventional single-LAN-segment
+    size for IPv6 (unlike IPv4's /24 used by ip_subnet() above, chosen to mirror real
+    subnetting practice rather than an arbitrary matching prefix length). Returns None
+    for anything that isn't a real IPv6 address, including valid IPv4 addresses -
+    use ip_subnet() for those."""
+    if not ip or not isinstance(ip, str):
+        return None
+    try:
+        addr = ipaddress.ip_address(ip.strip())
+    except ValueError:
+        return None
+    if addr.version != 6:
+        return None
+    return str(ipaddress.ip_network(f"{addr}/64", strict=False))
+
+
+def is_valid_mac(mac):
+    """True for a real 6-octet MAC address in colon- or hyphen-separated hex form
+    (e.g. "aa:bb:cc:dd:ee:ff" or "AA-BB-CC-11-22-33"), False otherwise. Shared
+    validation used by both mac_oui() below and asset_inventory.set_network_info()'s
+    real input validation."""
+    if not mac or not isinstance(mac, str):
+        return False
+    octets = re.split("[:-]", mac.strip())
+    return len(octets) == 6 and all(len(o) == 2 and all(c in "0123456789abcdefABCDEF" for c in o) for o in octets)
+
+
 def mac_oui(mac):
     """The vendor OUI (first 3 octets) of a MAC address, normalized to uppercase
     colon-separated form, e.g. "aa:bb:cc:dd:ee:ff" -> "AA:BB:CC". Devices from the same
     vendor are often the same device class (useful for type inference, not ownership).
     Returns None for anything that doesn't look like a MAC address."""
-    if not mac or not isinstance(mac, str):
+    if not is_valid_mac(mac):
         return None
     octets = re.split("[:-]", mac.strip())
-    if len(octets) != 6 or not all(len(o) == 2 for o in octets):
-        return None
     return ":".join(o.upper() for o in octets[:3])
 
 
@@ -112,6 +153,7 @@ def suggest_owner_team(asset, known_assets):
     name = asset.get("name")
     prefix = hostname_prefix(name)
     subnet = ip_subnet(asset.get("ip"))
+    subnet6 = ipv6_subnet(asset.get("ip"))
     asset_type = asset.get("type")
 
     votes = []  # list of ((owner, team), weight, reason)
@@ -127,6 +169,10 @@ def suggest_owner_team(asset, known_assets):
         if subnet and ip_subnet(known.get("ip")) == subnet:
             votes.append((pair, _WEIGHT_SUBNET,
                           f"Same /24 subnet ({subnet}.0/24) as {known['name']} "
+                          f"(owned by {known['owner']})"))
+        if subnet6 and ipv6_subnet(known.get("ip")) == subnet6:
+            votes.append((pair, _WEIGHT_SUBNET,
+                          f"Same /64 subnet ({subnet6}) as {known['name']} "
                           f"(owned by {known['owner']})"))
         if asset_type and asset_type != "unknown" and known.get("type") == asset_type:
             votes.append((pair, _WEIGHT_TYPE,
@@ -162,6 +208,7 @@ def suggest_type(asset, known_assets):
     name = asset.get("name")
     prefix = hostname_prefix(name)
     subnet = ip_subnet(asset.get("ip"))
+    subnet6 = ipv6_subnet(asset.get("ip"))
     oui = mac_oui(asset.get("mac"))
 
     votes = []
@@ -177,6 +224,9 @@ def suggest_type(asset, known_assets):
         if subnet and ip_subnet(known.get("ip")) == subnet:
             votes.append((known_type, _WEIGHT_SUBNET,
                           f"Same /24 subnet ({subnet}.0/24) as {known['name']} ({known_type})"))
+        if subnet6 and ipv6_subnet(known.get("ip")) == subnet6:
+            votes.append((known_type, _WEIGHT_SUBNET,
+                          f"Same /64 subnet ({subnet6}) as {known['name']} ({known_type})"))
         if oui and mac_oui(known.get("mac")) == oui:
             votes.append((known_type, _WEIGHT_MAC_OUI,
                           f"Same MAC vendor prefix ({oui}) as {known['name']} ({known_type})"))

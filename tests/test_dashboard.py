@@ -17,6 +17,7 @@ development - see KNOWLEDGE_TRANSFER.md - not by this Python suite, which cannot
 execute JavaScript.
 """
 import datetime
+import json
 import sys
 import tempfile
 import unittest
@@ -35,6 +36,8 @@ from app import app as fastapi_app  # noqa: E402
 from auth import rbac as rbac_module  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
+from remediation.audit import ai_usage_log  # noqa: E402
+from remediation.config import ai_governance  # noqa: E402
 from remediation.config import priority_engine  # noqa: E402
 from remediation.config import remediation_policy_engine  # noqa: E402
 from remediation.enrichment import exploit_criteria  # noqa: E402
@@ -56,10 +59,12 @@ TEST_USER_PASSWORD = "user-test-password-1"
 _auth_tmpdir = None
 _auth_patcher = None
 _activity_log_patcher = None
+_ai_usage_log_patcher = None
+_ai_governance_patcher = None
 
 
 def setUpModule():
-    global _auth_tmpdir, _auth_patcher, _activity_log_patcher
+    global _auth_tmpdir, _auth_patcher, _activity_log_patcher, _ai_usage_log_patcher, _ai_governance_patcher
     _auth_tmpdir = tempfile.TemporaryDirectory()
     tmp_users_path = Path(_auth_tmpdir.name) / "users.json"
     _auth_patcher = patch.object(auth_users, "DEFAULT_USERS_PATH", tmp_users_path)
@@ -76,8 +81,20 @@ def setUpModule():
     _activity_log_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", tmp_activity_log_path)
     _activity_log_patcher.start()
 
+    # Same reasoning as activity_log above - every confirm=True AI-assist/AI-trend-
+    # analysis/run test in this file writes a real usage record and reads the real
+    # governance policy unless redirected.
+    tmp_ai_usage_log_path = Path(_auth_tmpdir.name) / "ai_usage_log.json"
+    _ai_usage_log_patcher = patch.object(ai_usage_log, "DEFAULT_LOG_PATH", tmp_ai_usage_log_path)
+    _ai_usage_log_patcher.start()
+    tmp_ai_governance_path = Path(_auth_tmpdir.name) / "ai_governance.yaml"
+    _ai_governance_patcher = patch.object(ai_governance, "DEFAULT_PATH", tmp_ai_governance_path)
+    _ai_governance_patcher.start()
+
 
 def tearDownModule():
+    _ai_governance_patcher.stop()
+    _ai_usage_log_patcher.stop()
     _activity_log_patcher.stop()
     _auth_patcher.stop()
     _auth_tmpdir.cleanup()
@@ -656,6 +673,23 @@ class ApiStatus(unittest.TestCase):
         self.assertGreaterEqual(payload["remediation_findings"], 7440)
         self.assertEqual(payload["app_version"], fastapi_app.version)
 
+    def test_status_reports_real_checked_facts_not_hardcoded_ones(self):
+        resp = client.get("/api/status")
+        payload = resp.json()
+        self.assertIsNone(payload["remediation_findings_error"])
+        self.assertIn(payload["smtp_configured"], (True, False))
+        self.assertIn(payload["session_secret_configured"], (True, False))
+        self.assertIn("available", payload["threat_intel"])
+
+    def test_status_degrades_honestly_when_findings_file_is_unreadable(self):
+        with patch.object(dashboard_data, "load_remediation_findings", side_effect=RuntimeError("disk gremlins")):
+            resp = client.get("/api/status")
+        payload = resp.json()
+        self.assertEqual(resp.status_code, 200)  # a broken health check must not itself 500
+        self.assertEqual(payload["status"], "degraded")
+        self.assertEqual(payload["remediation_findings"], 0)
+        self.assertIn("disk gremlins", payload["remediation_findings_error"])
+
 
 class ApiAuth(unittest.TestCase):
     def tearDown(self):
@@ -798,6 +832,26 @@ class ApiLiveQueue(unittest.TestCase):
         windows_server = [f for f in findings if (f.get("asset") or {}).get("type") == "windows-server"]
         self.assertTrue(windows_server)
         self.assertTrue(all(not f.get("remediation_mechanism") for f in windows_server))
+
+    def test_live_queue_cache_reflects_a_real_approval_immediately(self):
+        """load_live_queue() is real-time-cached (see data.py's _live_queue_cache_key())
+        for performance at real dataset scale - this proves that cache still shows a
+        genuine change (a real approval decision) on the very next call, not a stale
+        pre-approval snapshot, regardless of the cache being warm."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir) / "remediation_approvals.json"
+            with patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", tmp_path):
+                before = client.get("/api/queue").json()
+                find_1_before = next(f for f in before["findings"] if f["id"] == "FIND-1")
+                self.assertIsNone(find_1_before["remediation_approval"])
+
+                remediation_approvals_store.create_approval_request(
+                    "FIND-1", "tester@example.com", find_1_before["remediation_policy"]["next_window"],
+                )
+                after = client.get("/api/queue").json()
+                find_1_after = next(f for f in after["findings"] if f["id"] == "FIND-1")
+                self.assertIsNotNone(find_1_after["remediation_approval"])
+                self.assertEqual(find_1_after["remediation_approval"]["requested_by"], "tester@example.com")
 
     def test_queue_findings_carry_eol_eos_status(self):
         """Real, dated vendor-lifecycle classification (remediation/enrichment/
@@ -1203,6 +1257,130 @@ class ApiAiAssist(unittest.TestCase):
             "finding_id": "FIND-1", "action": "explain", "confirm": True,
         })
         self.assertEqual(resp.status_code, 401)
+
+    def test_confirm_true_extracts_result_and_records_real_usage_from_json_response(self):
+        fake_stdout = json.dumps({
+            "result": "The real JSON-extracted response.",
+            "total_cost_usd": 0.0042,
+            "usage": {"input_tokens": 300, "output_tokens": 80},
+        })
+        fake_result = MagicMock(returncode=0, stdout=fake_stdout, stderr="")
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+                 patch("app.subprocess.run", return_value=fake_result):
+                resp = client.post("/api/ai-assist", json={
+                    "finding_id": "FIND-1", "action": "explain", "confirm": True,
+                })
+            self.assertEqual(resp.json()["response"], "The real JSON-extracted response.")
+            recorded = ai_usage_log.list_usage(limit=1)[0]
+            self.assertEqual(recorded["actor"], TEST_ADMIN_EMAIL)
+            self.assertEqual(recorded["route"], "ai-assist")
+            self.assertEqual(recorded["total_tokens"], 380)
+            self.assertEqual(recorded["total_cost_usd"], 0.0042)
+        finally:
+            _logout()
+
+    def test_confirm_true_rejected_with_429_once_daily_limit_reached(self):
+        fake_result = MagicMock(returncode=0, stdout=json.dumps({
+            "result": "won't get here", "usage": {"input_tokens": 10**9, "output_tokens": 0},
+        }), stderr="")
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            # Other tests in this class/module also record real usage against the same
+            # module-wide patched log (see setUpModule) - reset it so this test's "first
+            # call is under the limit" assumption holds regardless of run order.
+            ai_usage_log._save([], path=ai_usage_log.DEFAULT_LOG_PATH)
+            ai_governance.save_governance("sonnet", 100, {})
+            # First call: under the limit (0 used so far), goes through and pushes
+            # this user's real recorded usage past 100 tokens.
+            with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+                 patch("app.subprocess.run", return_value=fake_result):
+                first = client.post("/api/ai-assist", json={
+                    "finding_id": "FIND-1", "action": "explain", "confirm": True,
+                })
+            self.assertEqual(first.status_code, 200)
+            # Second call: now over the configured 100-token daily cap - must be
+            # rejected BEFORE any subprocess call is made.
+            with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+                 patch("app.subprocess.run", return_value=fake_result) as mock_run:
+                second = client.post("/api/ai-assist", json={
+                    "finding_id": "FIND-2", "action": "explain", "confirm": True,
+                })
+            self.assertEqual(second.status_code, 429)
+            mock_run.assert_not_called()
+        finally:
+            ai_governance.save_governance(None, None, {})
+            _logout()
+
+
+class ApiAdminAiGovernance(unittest.TestCase):
+    def tearDown(self):
+        ai_governance.save_governance(None, None, {})
+        _logout()
+
+    def test_get_requires_admin(self):
+        resp = client.get("/api/admin/ai-governance")
+        self.assertEqual(resp.status_code, 401)
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.get("/api/admin/ai-governance")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_get_returns_honest_unconfigured_defaults(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.get("/api/admin/ai-governance")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertIsNone(payload["default_model"])
+        self.assertIsNone(payload["daily_token_limit_per_user"])
+
+    def test_post_saves_and_get_reflects_it(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.post("/api/admin/ai-governance", json={
+            "default_model": "opus", "daily_token_limit_per_user": 200000, "per_user_overrides": {},
+        })
+        self.assertEqual(resp.status_code, 200)
+        resp = client.get("/api/admin/ai-governance")
+        self.assertEqual(resp.json()["default_model"], "opus")
+        self.assertEqual(resp.json()["daily_token_limit_per_user"], 200000)
+
+    def test_post_rejects_unknown_model_with_400(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.post("/api/admin/ai-governance", json={
+            "default_model": "gpt-5", "daily_token_limit_per_user": None, "per_user_overrides": {},
+        })
+        self.assertEqual(resp.status_code, 400)
+
+    def test_post_requires_admin(self):
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/admin/ai-governance", json={
+            "default_model": "sonnet", "daily_token_limit_per_user": None, "per_user_overrides": {},
+        })
+        self.assertEqual(resp.status_code, 403)
+
+
+class ApiAdminAiUsage(unittest.TestCase):
+    def tearDown(self):
+        _logout()
+
+    def test_get_requires_admin(self):
+        resp = client.get("/api/admin/ai-usage")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_get_returns_real_recorded_usage_shape(self):
+        ai_usage_log.record_usage(
+            TEST_ADMIN_EMAIL, "ai-assist", "claude-sonnet-5",
+            {"input_tokens": 100, "output_tokens": 20, "cache_creation_input_tokens": None, "cache_read_input_tokens": None},
+            0.01, True,
+        )
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        resp = client.get("/api/admin/ai-usage")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertIn(TEST_ADMIN_EMAIL, payload["all_time_by_user"])
+        self.assertGreaterEqual(payload["all_time_by_user"][TEST_ADMIN_EMAIL]["total_tokens"], 120)
+        self.assertIn("governance", payload)
+        self.assertIn("recent_calls", payload)
 
 
 class ApiReports(unittest.TestCase):

@@ -14,6 +14,8 @@ const PAGE_SIZE = 20;
 const ASSET_COLUMNS = [
   { id: "asset", label: "Asset" },
   { id: "type", label: "Type" },
+  { id: "ip", label: "IP Address" },
+  { id: "mac", label: "MAC Address", defaultVisible: false },
   { id: "findings", label: "Findings" },
   { id: "severity", label: "Highest Severity" },
   { id: "kev", label: "KEV Exposure", defaultVisible: false },
@@ -29,6 +31,9 @@ const ASSET_COLUMNS = [
 const EXPORT_COLUMNS = [
   { label: "Asset", value: (a) => a.name },
   { label: "Type", value: (a) => a.type },
+  { label: "IP Address", value: (a) => a.ip },
+  { label: "IP Version", value: (a) => (a.ip_version ? `IPv${a.ip_version}` : "") },
+  { label: "MAC Address", value: (a) => a.mac },
   { label: "OS", value: (a) => a.os },
   { label: "Findings", value: (a) => a.finding_count },
   { label: "Critical Findings", value: (a) => a.critical_count },
@@ -111,6 +116,20 @@ function scheduleCellHtml(a) {
   return `<span class="badge badge-medium" data-tooltip="Overrides this asset's remediation-domain default cadence - see /asset-policy">${escapeHtml(CADENCE_LABELS[cadence] || cadence)}</span>`;
 }
 
+// IP/MAC come from whatever a scan finding reported, or a human-set override (see
+// asset_inventory.set_network_info) which always wins - see build_asset_inventory()'s
+// merge. ip_version (4/6/None) is computed server-side (pattern_recognition.ip_version,
+// via the real stdlib `ipaddress` module) so this page never re-implements IP parsing.
+function networkCellHtml(a) {
+  if (!a.ip) return `<span class="muted">Unknown</span>`;
+  const versionBadge = a.ip_version ? `<span class="badge badge-outline" style="margin-left:6px">IPv${a.ip_version}</span>` : "";
+  return `${escapeHtml(a.ip)}${versionBadge}`;
+}
+
+function macCellHtml(a) {
+  return a.mac ? `<code>${escapeHtml(a.mac)}</code>` : `<span class="muted">Unknown</span>`;
+}
+
 function assetRow(a) {
   const kev = a.kev_count > 0
     ? `<span class="badge badge-critical">${a.kev_count} KEV</span>`
@@ -122,6 +141,8 @@ function assetRow(a) {
     <tr data-asset-name="${escapeHtml(a.name)}">
       <td data-col="asset">${escapeHtml(a.name)}</td>
       <td data-col="type" class="asset-type-cell">${escapeHtml(a.type)}</td>
+      <td data-col="ip">${networkCellHtml(a)}</td>
+      <td data-col="mac">${macCellHtml(a)}</td>
       <td data-col="findings">${a.finding_count}</td>
       <td data-col="severity">${severity}</td>
       <td data-col="kev">${kev}</td>
@@ -240,7 +261,7 @@ export async function render(container) {
       <table class="data-table" id="assets-table">
         <thead>
           <tr>
-            <th data-col="asset">Asset</th><th data-col="type">Type</th><th data-col="findings">Findings</th><th data-col="severity">Highest Severity</th>
+            <th data-col="asset">Asset</th><th data-col="type">Type</th><th data-col="ip">IP Address</th><th data-col="mac">MAC Address</th><th data-col="findings">Findings</th><th data-col="severity">Highest Severity</th>
             <th data-col="kev">KEV Exposure</th><th data-col="risk">Risk Score</th><th data-col="environment">Environment</th><th data-col="schedule">Remediation Schedule</th><th data-col="owner">Owner</th><th data-col="team">Team</th><th data-col="eol">EOL/EOS</th><th data-col="edit"></th>
           </tr>
         </thead>
@@ -355,6 +376,16 @@ export async function render(container) {
           <label>Team
             <input type="text" name="team" value="${escapeHtml(asset.team || "")}">
           </label>
+          <label>IP address (IPv4 or IPv6)
+            <input type="text" name="ip" placeholder="e.g. 10.20.30.41 or 2001:db8::1" value="${escapeHtml(asset.ip || "")}">
+          </label>
+          <label>MAC address
+            <input type="text" name="mac" placeholder="e.g. aa:bb:cc:dd:ee:ff" value="${escapeHtml(asset.mac || "")}">
+          </label>
+          <p class="filter-count" style="margin:-4px 0 8px">
+            Overrides whatever a scan finding reported for this asset (or fills it in
+            if none did) - clear either field to fall back to the scan-reported value.
+          </p>
           <label>Environment
             <select name="environment">
               ${Object.keys(ENVIRONMENT_LABELS).map((v) =>
@@ -386,6 +417,10 @@ export async function render(container) {
         await api.assetSetOwner(name, {
           owner: event.target.owner.value,
           team: event.target.team.value,
+        });
+        await api.assetSetNetworkInfo(name, {
+          ip: event.target.ip.value,
+          mac: event.target.mac.value,
         });
         await api.assetSetEnvironment(name, event.target.environment.value);
         const cadence = event.target.cadence.value || null;

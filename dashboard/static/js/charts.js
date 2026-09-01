@@ -146,6 +146,52 @@ export function pieChartSvg(data, { size = 180 } = {}) {
     </div>`;
 }
 
+// stages: [{label, value, href?, detail?, color?}, ...] in funnel order (widest/first
+// stage first - real counts, never assumed already-sorted or already-normalized).
+// Renders each stage as a horizontally-centered bar scaled to the FIRST stage's value
+// (not the max of the array - a real funnel should only narrow, and using the first
+// stage as 100% keeps every bar's width a true "% of detected" reading), stacked in
+// rows top to bottom, with each stage's label/count/percentage printed above its own
+// bar (same "text outside the shape" convention as barChartSvg above, since
+// .chart-bar-label/.chart-bar-value are styled to sit on the page background, not on a
+// colored fill). Same tooltip/data-tooltip + data-chart-href/wireChartLinks() contract
+// as barChartSvg/pieChartSvg - see those functions' own comments.
+export function funnelChartSvg(stages, { width = 480, height = 260 } = {}) {
+  const padding = { top: 4, right: 16, bottom: 4, left: 16 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const first = stages[0] ? stages[0].value : 0;
+  const scale = Math.max(1, first);
+  const rowH = stages.length ? chartH / stages.length : chartH;
+  const labelH = 16;
+  const barH = Math.max(2, rowH - labelH - 6);
+
+  const rows = stages.map((s, i) => {
+    const barW = Math.max(2, (s.value / scale) * chartW);
+    const x = padding.left + (chartW - barW) / 2;
+    const rowTop = padding.top + i * rowH;
+    const barY = rowTop + labelH;
+    const pctOfFirst = first > 0 ? Math.round((s.value / first) * 100) : 0;
+    const prevValue = i > 0 ? stages[i - 1].value : null;
+    // Only from the THIRD stage on - stage 1's "previous stage" IS stage 0 (the same
+    // value pctOfFirst already reports), so a stepNote there would just repeat it.
+    const stepNote = i > 1 && prevValue ? `, ${Math.round((s.value / prevValue) * 100)}% of "${stages[i - 1].label}"` : "";
+    // The first stage is trivially "100% of itself" - only worth stating from the
+    // second stage on, where it's real drop-off information.
+    const pctNote = i > 0 ? ` (${pctOfFirst}% of ${stages[0].label}${stepNote})` : "";
+    const tooltipText = `${s.label}: ${s.value.toLocaleString()}${pctNote}${s.detail ? ` - ${s.detail}` : ""}`;
+    const clickable = s.href ? ` data-chart-href="${escapeHtml(s.href)}" tabindex="0"` : "";
+    return `
+      <g class="${s.href ? "chart-bar-group chart-bar-clickable" : "chart-bar-group"}" data-tooltip="${escapeHtml(tooltipText)}"${clickable}>
+        <text x="${width / 2}" y="${rowTop + labelH - 4}" text-anchor="middle" class="chart-bar-label">${escapeHtml(s.label)} - <tspan class="chart-bar-value">${s.value.toLocaleString()}</tspan>${i > 0 ? ` (${pctOfFirst}%)` : ""}</text>
+        <rect x="${x}" y="${barY}" width="${barW}" height="${barH}" rx="4" fill="${s.color || colorFor(s.label, i)}"></rect>
+      </g>`;
+  }).join("");
+
+  return `<svg class="chart-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label="Funnel chart of ${escapeHtml(stages.map((s) => `${s.label} (${s.value})`).join(" -> "))}">${rows}</svg>`;
+}
+
 // Groups an array of items by a key function into [{label, value}, ...] pairs sorted
 // by value descending - the common shape both chart functions above expect.
 export function countBy(items, keyFn) {

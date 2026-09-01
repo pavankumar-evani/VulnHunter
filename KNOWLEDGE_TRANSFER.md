@@ -865,6 +865,36 @@ dashboard nav.
 - **Multi-tenant MSSP architecture** — requires the database + auth foundation from Tier
   3 above *first*. Building tenant isolation on top of a filesystem-reading MVP (FastAPI
   or not) would mean rebuilding it twice.
+
+  **Audited (2026-09-01) for a real vulnerability, not just a missing feature**: does
+  today's app trust a client-supplied tenant/team identifier for authorization anywhere?
+  No. `tenant.js`'s "(demo) tenant switcher" is confirmed 100% client-side -
+  `localStorage`-backed, filtering findings already returned by an unfiltered
+  `/api/queue` call; no page ever sends a tenant value to the server, and grepping all of
+  `app.py`/`data.py` for "tenant" returns zero matches. `users.json` has no
+  `tenant_id`/`org_id`/`team_id` field at all. There is exactly one shared dataset and no
+  server-side tenant boundary to violate - so there's nothing to fix today, only a
+  principle to hold the line on *before* real per-team/per-tenant scoping gets built
+  (see the RBAC roadmap item below and in §9).
+
+  **The standard to build that against, when it happens**: authorization must be
+  enforced server-side, derived from the authenticated session's own server-verified
+  identity - never from a client-supplied parameter (query string, body field, header),
+  even if the UI never intentionally sends a manipulated one. This is NIST SP 800-53
+  Rev 5 **AC-3** (Access Enforcement) + **AC-6** (Least Privilege), and for the
+  cross-tenant-leakage failure mode specifically, **AC-4** (Information Flow
+  Enforcement) and OWASP's **API1:2023 Broken Object Level Authorization (BOLA)** - the
+  named vulnerability class for exactly this ("an API trusts a caller-supplied
+  object/tenant ID without re-checking that caller's own authorization to it"). OWASP's
+  [Multi-Tenant Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Multi_Tenant_Security_Cheat_Sheet.html)
+  is the directly-on-point reference; OWASP Top 10:2025 **A01 Broken Access Control**
+  (still the #1 category) and ASVS 5.0 **V8 Authorization §8.3.1** ("enforce
+  authorization at a trusted service layer... not... controls an untrusted consumer
+  could manipulate") are the general backing standards. Concretely: any future
+  per-team/per-tenant route must compute its scope from `request.state.user` (the
+  server-verified session), never from `?team=`/`?tenant=`-style input, and the RBAC
+  work in §9's roadmap should be designed against this from its first commit rather than
+  retrofitted.
 - **NIST/SOC2/"any relevant compliance"** — see Tier 3 above. Not a code deliverable.
 
 None of this is a "no" — it's each of these being its own real scope of work, most of

@@ -7,6 +7,53 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Round 17 (in progress)**: production-readiness pass driven by a request for a
+  searchable finding picker, real admin observability/billing, MAC/IPv4/IPv6 asset
+  identification, and richer lifecycle visualizations.
+  - **Searchable finding picker** (`searchableSelect.js`, new): replaces the native
+    `<select>` on AI Assist and Exceptions (both dump 9,000+ findings into one
+    unstyleable, overflowing OS popup) with a type-to-filter combobox - same
+    interaction model as the Ctrl/Cmd+K command palette. The underlying `<select>`
+    stays in the DOM so every existing `form.finding_id.value`/`change`-listener call
+    site works unchanged.
+  - **Admin Settings gained three real sections**, all sourced from data this app
+    already collects (no new fabricated numbers):
+    - **AI Spend vs. Budget**: real cumulative Claude API spend (today/7d/30d/all-time,
+      `/api/admin/ai-usage`'s new `budget` field) against the real per-call spend cap
+      (`cli.DEFAULT_MAX_BUDGET_USD`) - the only honest "billing" figure in an app with
+      no subscription/invoice system.
+    - **System Health**: `/api/status` now also reports real process uptime, whether
+      the in-process notification scheduler is actually still running, and freshness/
+      size of every gitignored runtime data store (exceptions, remediation approvals,
+      activity log, AI usage log).
+    - **Connector/Adaptor Health**: reuses `adaptorCatalog.js`'s own live/reference
+      distinction (one source of truth, not a second copy) to report which connectors
+      have a real wired preview/send form vs. are catalogued but not yet wired -
+      honestly framed as "no stored credentials to health-ping," not a fake green
+      check.
+  - **Real MAC/IPv4/IPv6 asset support**: `asset_inventory.py`'s `ip`/`mac` fields
+    existed but `mac` was always unpopulated and `ip` assumed IPv4-only.
+    `pattern_recognition.py` gained `ip_version()`/`ipv6_subnet()`/`is_valid_mac()`
+    (stdlib `ipaddress`, not hand-rolled parsing) and now votes on IPv6 subnet
+    matches too, not just IPv4. New `set_network_info()` lets a human set/correct an
+    asset's IP/MAC (validated, takes precedence over whatever a scan finding
+    reported) via a new `POST /api/assets/{name}/network-info` route and Asset
+    Inventory's existing edit modal. `/api/assets` rows now carry `ip_version` and a
+    real `/24`-or-`/64` `subnet` grouping key.
+  - **Subnet-based asset grouping**: Asset Mapping gained a "Group by: IP Subnet"
+    view (`rankings.js`'s new `groupAssetsBySubnet()`) - which network segment
+    carries the most distinct vulnerabilities, unioned correctly (not summed) across
+    every asset in that subnet.
+  - **Vulnerability Lifecycle funnel on Overview**: new `funnelChartSvg()` in
+    `charts.js` (same hand-rolled-SVG, no-library convention as the existing bar/pie
+    charts) renders Detected → Entered remediation workflow → Approved → Remediated,
+    with real average time-in-stage, computed entirely from
+    `remediation_approvals`' own real dated fields (`created_on`/`approved_at`/
+    `triggered_at`) - reports an honest "—" (never a fabricated `0d`) when no record
+    has completed that stage yet.
+  - 22 new tests (`test_pattern_recognition.py`, `test_asset_inventory.py`) for the
+    new IP/MAC validation and asset-inventory merge behavior; full suite green
+    (1066 tests).
 - **Round 16 UX/scale pass (in progress)**: a large follow-on request driven by
   screenshots of the Asset Inventory, Exceptions, ML Insights, and Remediation
   Approvals pages at real data scale (thousands of rows) plus a request for session
@@ -58,6 +105,72 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
     makes an overlap between them visible instead of invisible), and the exceptions
     table shows each row's approval status too, both via the existing
     `remediation-approvals`/`queue` APIs, no new backend fields.
+  - **Cross-tenant isolation audit**: confirmed via direct code audit (not assumed) that
+    no server route trusts a client-supplied tenant identifier today - the "(demo)
+    tenant switcher" (`tenant.js`) is 100% client-side/`localStorage`, unconnected to
+    the real login system. Documented the real standards (NIST SP 800-53 AC-3/AC-4/AC-6,
+    OWASP API1:2023 Broken Object Level Authorization, OWASP's Multi-Tenant Security
+    Cheat Sheet) that any future per-team/tenant scoping (see the RBAC roadmap item)
+    must be built against from its first commit - `KNOWLEDGE_TRANSFER.md` §11,
+    `docs/FAQ.md`. Also fixed a stale FAQ claim ("no auth layer at all") that predated
+    the real login system built earlier in this same round.
+  - **Self-healing**: new `remediation/utils/retry.py` - a small retry-with-backoff
+    helper (5 tests), wired into the two real network calls that can transiently fail
+    (`kev_epss.py`'s CISA KEV/FIRST.org EPSS fetches, `email_sender.py`'s SMTP send),
+    deliberately scoped to retry only genuinely transient exceptions (dropped
+    connections, timeouts) - never authentication/permanent failures, which retrying
+    can't fix. `/api/status` is now a real health check instead of a hardcoded
+    `"status": "ok"` - reports actual checked facts (is the findings file readable, is
+    SMTP configured, is a real session secret set, real threat-intel freshness), each
+    check independently guarded so one broken check can't crash the others or the whole
+    endpoint. Caught a real bug while testing this: the threat-intel-freshness check
+    internally re-reads the findings file through an unguarded second call - fixed by
+    giving each independent check its own try/except rather than one shared one.
+  - **AI model/token governance + Admin Settings page**: new `/admin` page (admin-only,
+    both server- and client-gated) covering everything asked for - which real model
+    (`sonnet`/`opus`/`fable`, verified real aliases via `claude --help`'s own
+    `--model` flag) every AI Assist/AI Trend Analysis/`/vulnhunt`/`/remediate` call
+    should use, a real per-user daily token cap actually enforced server-side before a
+    call is made (never trusted from the client), real per-user usage/cost (not
+    estimated), and read-only system health (SMTP/session-secret/threat-intel status,
+    reusing `/api/status`). New `remediation/config/ai_governance.py` (5 tests) and
+    `remediation/audit/ai_usage_log.py` (12 tests) - usage/cost extraction from Claude
+    Code's `--output-format json` response is deliberately defensive (tries multiple
+    real key spellings, never guesses a number that wasn't actually present) since
+    there's no officially published schema for that response envelope. `/api/ai-assist`
+    and `/api/ai-trend-analysis` switched from `--output-format text` to `json`
+    specifically so usage could be read at all. Caught and fixed a real bug while
+    testing this: saving the model policy got silently reverted to null by a
+    subsequent token-limit or override save, because only the limit form synced its
+    own field back into the shared client-side state after saving - the model form
+    didn't.
+  - **Competitor-UX proposals**: clickable KPI tiles (Overview's SLA/KEV/code-scan/
+    playbook tiles now use the existing `kpiLink()` pattern instead of the dead
+    `kpi()` one, each landing on a REAL matching filtered view - added a new
+    `slaStatus` deep-link filter to `queue.js` mirroring `dashboard_data.sla_summary()`'s
+    exact breached/at_risk/on_track definition so the count on the tile always matches
+    the count on the page it links to, and made `?kevOnly=true` deep-linkable +
+    fixed the KEV-only checkbox to actually reflect that state visually, which it
+    never did before); a new Ctrl/Cmd+K command palette (`commandPalette.js`, reuses
+    `nav.js`'s own route list rather than a second copy) for instant keyboard-driven
+    navigation to any page, from anywhere. Deferred saved-views, bulk actions on
+    findings, and a first-visit tour as lower-value for this round.
+  - **Real page-load performance fix** (found live-testing the above, not simulated):
+    `dashboard_data.load_live_queue()` - the function behind `/api/queue` and
+    `/api/overview` - was recomputing real priority scoring, exceptions, and
+    remediation-policy resolution over all ~9,400 findings on *every single call*, by
+    original design ("recomputed every call since those can change between
+    requests"). That tradeoff stopped being free as the real sample dataset grew:
+    profiled at **4.4 real seconds per call**. Fixed the same way `_load_scored_assets()`
+    already was earlier this round - a cache keyed on the real mtime of every file
+    that can actually change the output (findings, ownership, priority/risk/
+    exploit-criteria/remediation-policy rules, exceptions, approvals), so a real edit
+    to any of them is reflected on the very next call regardless of cache state, but
+    an unchanged state now costs **~0.25s instead of 4.4s (~18x)**. Also bumped that
+    cache's and `_load_scored_assets()`'s TTL from 5s to 30s (both are pure mtime-keyed
+    backstops, so this costs zero real freshness) - measured live: Overview went from
+    ~1.1-4.4s to ~0.3-0.5s per load. Shallow-copies every row before returning from
+    cache, same in-place-mutation guard `_load_scored_assets()`'s cache already needed.
   - **Cloud provider (AWS/Azure/GCP/OCI/Alibaba Cloud) attribution + showcase data**:
     asked "I am not seeing the cloud vulnerabilities" - the real gap was
     discoverability, not data (1,388 real `cloud-infrastructure` findings already

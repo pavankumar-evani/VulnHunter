@@ -20,3 +20,7 @@ remediation/sample-data/bulk/_nvd_cache/
 # actually using the app (who did what, when), not seed/reference data - same reasoning
 # as .vulnhunter/ above. The activity_log.py module itself is still committed.
 remediation/audit/activity_log.json
+
+# Real AI-call usage log (remediation/audit/ai_usage_log.py) - same reasoning as
+# activity_log.json above.
+remediation/audit/ai_usage_log.json

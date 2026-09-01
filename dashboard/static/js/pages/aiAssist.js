@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, flash } from "../dom.js";
+import { enhanceSelect } from "../searchableSelect.js";
 
 export const title = "AI Assist";
 
@@ -49,6 +50,7 @@ export async function render(container) {
 
   const form = container.querySelector("#ai-form");
   const resultEl = container.querySelector("#ai-result");
+  enhanceSelect(form.finding_id, { placeholder: "Type a finding ID or title…" });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();

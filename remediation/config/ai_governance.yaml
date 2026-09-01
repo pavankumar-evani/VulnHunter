@@ -1,0 +1,22 @@
+# AI model + token governance policy - which model every real Claude Code invocation
+# this app makes (ai-assist, ai-trend-analysis, the /vulnhunt and /remediate pipelines)
+# is asked to use, and an optional daily per-user token/cost cap. Edited by an admin via
+# the Admin Settings page (dashboard/app.py's /api/admin/ai-governance); takes effect
+# immediately on the next real AI call - no restart needed.
+#
+# `default_model` is passed as claude CLI's own real --model flag (confirmed via
+# `claude --help`: accepts an alias - "sonnet"/"opus"/"fable" - or a full model name
+# like "claude-sonnet-5"). null means "don't pass --model at all" - Claude Code picks
+# its own default for the session, same as every call in this app made before this
+# governance layer existed.
+default_model: null
+
+# Optional per-user daily cap on total real Claude API spend, enforced server-side
+# BEFORE a real call is made (see remediation/audit/ai_usage_log.py's would_exceed_limit()) -
+# never trusted from the client, always computed from this app's own real usage log.
+# null means unlimited (the default - this is opt-in, not a surprise restriction).
+daily_token_limit_per_user: null
+
+# Per-user overrides - {"user@example.com": <daily token limit>} - takes precedence over
+# daily_token_limit_per_user above for that specific user. Empty by default.
+per_user_overrides: {}

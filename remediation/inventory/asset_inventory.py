@@ -16,6 +16,7 @@ from pathlib import Path
 
 from remediation.audit.activity_log import record_activity
 from remediation.enrichment.eol_lookup import classify_eol
+from remediation.inventory import pattern_recognition
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_OWNERSHIP_PATH = Path(__file__).resolve().parent / "asset_ownership.json"
@@ -125,6 +126,33 @@ def set_remediation_schedule(asset_name, cadence=None, maintenance_window=None, 
     return entry
 
 
+def set_network_info(asset_name, ip=None, mac=None, actor=None, path=None):
+    """Real, editable IP/MAC override for one asset - same manually-set,
+    validated-not-guessed pattern as set_facing/set_environment above. A vendor scan
+    finding sometimes already carries an ip/mac (see build_asset_inventory()'s
+    per-finding extraction), but often doesn't (e.g. a scanner that only reports a
+    hostname) or reports a stale one after a DHCP lease change - this lets a human
+    correct or fill that in, and it takes precedence over whatever a finding reported
+    (see build_asset_inventory()'s merge below). Pass "" (or None) for either field to
+    clear it back to whatever the finding data itself provides. Raises ValueError for
+    a value that doesn't parse as a real IPv4/IPv6 address or a real 6-octet MAC."""
+    if not asset_name:
+        raise ValueError("asset_name is required")
+    ip = (ip or "").strip()
+    mac = (mac or "").strip()
+    if ip and pattern_recognition.ip_version(ip) is None:
+        raise ValueError(f"{ip!r} is not a valid IPv4 or IPv6 address")
+    if mac and not pattern_recognition.is_valid_mac(mac):
+        raise ValueError(f"{mac!r} is not a valid MAC address (expected e.g. aa:bb:cc:dd:ee:ff)")
+    ownership = load_ownership(path)
+    entry = ownership.setdefault(asset_name, {})
+    entry["ip"] = ip or None
+    entry["mac"] = mac or None
+    save_ownership(ownership, path)
+    record_activity(actor, "asset.set_network_info", asset_name, {"ip": entry["ip"], "mac": entry["mac"]})
+    return entry
+
+
 def build_asset_inventory(findings, ownership=None):
     """Groups findings by asset.name into one inventory row each. Returns a list
     sorted by finding_count descending (busiest assets first), then name."""
@@ -174,6 +202,18 @@ def build_asset_inventory(findings, ownership=None):
         row["facing"] = owner_info.get("facing") or DEFAULT_FACING
         row["environment"] = owner_info.get("environment") or DEFAULT_ENVIRONMENT
         row["remediation_schedule"] = owner_info.get("remediation_schedule")
+        # A human-set ip/mac override (set_network_info) takes precedence over
+        # whatever a scan finding reported - real operational ground truth (or a
+        # correction for a stale/missing scanner-reported value) beats a possibly
+        # stale or absent per-finding field, same override-wins convention as
+        # owner/team/facing/environment above.
+        row["ip"] = owner_info.get("ip") or row["ip"]
+        row["mac"] = owner_info.get("mac") or row["mac"]
+        row["ip_version"] = pattern_recognition.ip_version(row["ip"])
+        # Whichever applies (an address is never both) - the /24 (IPv4) or /64 (IPv6)
+        # grouping key used by the Asset Mapping page's "group by subnet" view, so it
+        # never has to re-implement IP parsing itself.
+        row["subnet"] = pattern_recognition.ip_subnet(row["ip"]) or pattern_recognition.ipv6_subnet(row["ip"])
         row["eol_status"] = classify_eol(row["os"])
         rows.append(row)
 

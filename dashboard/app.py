@@ -8,11 +8,13 @@ Run with: python dashboard/app.py
 Then open http://127.0.0.1:5050
 """
 import asyncio
+import datetime
 import json
 import os
 import secrets
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import uvicorn
@@ -33,6 +35,8 @@ import vulnhunter as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
+from remediation.audit import ai_usage_log  # noqa: E402
+from remediation.config import ai_governance  # noqa: E402
 from remediation.connectors.generic_connector import (  # noqa: E402
     normalize_generic_finding, validate_generic_payload,
 )
@@ -62,6 +66,12 @@ from remediation.remediation_approvals import store as remediation_approvals_sto
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="VulnHunter Dashboard API", version="1.0.0")
+
+# Real process-uptime clock (monotonic, so a system clock change can't skew it) and a
+# handle onto the background scheduler task, both purely for honest self-reporting in
+# /api/status - neither is load-bearing for the app's own behavior.
+_PROCESS_STARTED_AT = time.monotonic()
+_scheduler_task: asyncio.Task | None = None
 
 
 @app.middleware("http")
@@ -106,7 +116,8 @@ async def _notification_scheduler_loop():
 
 @app.on_event("startup")
 async def _start_notification_scheduler():
-    asyncio.create_task(_notification_scheduler_loop())
+    global _scheduler_task
+    _scheduler_task = asyncio.create_task(_notification_scheduler_loop())
 
 
 # ---------------------------------------------------------------------------
@@ -827,9 +838,24 @@ def api_run_post(body: RunBody, request: Request):
 
     dry_run = not body.confirm
     user = None
+    governance = ai_governance.load_governance()
     if not dry_run:
         user = rbac.require_admin(request)
-    exit_code = cli.run(prompt, pipeline_name, dry_run=dry_run, max_budget_usd=body.max_budget_usd)
+        _enforce_ai_usage_limit(user["email"])
+
+    def _record_pipeline_usage(result):
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            parsed = {}
+        model, usage, total_cost_usd, extraction_ok = ai_usage_log.extract_usage(parsed)
+        ai_usage_log.record_usage(user["email"], pipeline_name, model, usage, total_cost_usd, extraction_ok)
+
+    exit_code = cli.run(
+        prompt, pipeline_name, dry_run=dry_run, max_budget_usd=body.max_budget_usd,
+        model=governance.get("default_model"),
+        on_result=_record_pipeline_usage if not dry_run else None,
+    )
 
     if dry_run:
         message = ("Dry run only (nothing was executed, no API usage spent). "
@@ -871,6 +897,56 @@ def _find_any_finding(finding_id):
     return None
 
 
+def _enforce_ai_usage_limit(actor):
+    """Real, server-side check - never trusts a client-supplied usage figure - called
+    right before every real (confirm=True) AI-spending route below actually spends
+    anything. Raises 429 if the admin-configured daily per-user token cap
+    (remediation/config/ai_governance.yaml) has already been reached."""
+    governance = ai_governance.load_governance()
+    exceeded, limit, used = ai_usage_log.would_exceed_limit(actor, governance)
+    if exceeded:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily AI token limit reached ({used:,}/{limit:,} tokens used today) - "
+                    "contact an admin to raise it on the Admin Settings page.",
+        )
+    return governance
+
+
+def _run_ai_call_and_record_usage(prompt, route, actor, governance):
+    """Shared by /api/ai-assist and /api/ai-trend-analysis: calls the real claude CLI
+    with the admin-configured model, parses its --output-format json response, records
+    real usage (remediation/audit/ai_usage_log.py) regardless of whether extraction
+    succeeds, and returns the plain-text response. Uses --output-format json (not the
+    "text" this used before AI governance existed) specifically so real usage/cost can
+    be read at all - see ai_usage_log.py's own docstring on why that parsing is
+    deliberately defensive rather than assuming one fixed schema."""
+    try:
+        claude_bin = cli.find_claude_binary()
+    except cli.ClaudeBinaryNotFound as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    command = [claude_bin, "-p", prompt, "--output-format", "json"]
+    if governance.get("default_model"):
+        command += ["--model", governance["default_model"]]
+
+    result = subprocess.run(  # noqa: S603 - fixed binary + a prompt string, no shell
+        command, cwd=cli.REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
+    )
+    if result.returncode != 0:
+        raise HTTPException(status_code=502, detail=f"AI call failed: {result.stderr.strip()[:500]}")
+
+    try:
+        parsed = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        parsed = {}
+    model, usage, total_cost_usd, extraction_ok = ai_usage_log.extract_usage(parsed)
+    ai_usage_log.record_usage(actor, route, model, usage, total_cost_usd, extraction_ok)
+
+    response_text = parsed.get("result") if isinstance(parsed, dict) else None
+    return response_text if response_text is not None else result.stdout.strip()
+
+
 class AiAssistBody(BaseModel):
     finding_id: str
     action: str = "explain"
@@ -902,24 +978,10 @@ def api_ai_assist(body: AiAssistBody, request: Request):
                        "the AI - this spends real API usage/credits.",
         }
 
-    rbac.require_admin(request)
-
-    try:
-        claude_bin = cli.find_claude_binary()
-    except cli.ClaudeBinaryNotFound as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    command = [claude_bin, "-p", prompt, "--output-format", "text"]
-    result = subprocess.run(  # noqa: S603 - fixed binary + a prompt string, no shell
-        command, cwd=cli.REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
-    )
-    if result.returncode != 0:
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI assist call failed: {result.stderr.strip()[:500]}",
-        )
-
-    return {"dry_run": False, "prompt": prompt, "response": result.stdout.strip()}
+    user = rbac.require_admin(request)
+    governance = _enforce_ai_usage_limit(user["email"])
+    response = _run_ai_call_and_record_usage(prompt, "ai-assist", user["email"], governance)
+    return {"dry_run": False, "prompt": prompt, "response": response.strip() if isinstance(response, str) else response}
 
 
 class AiTrendAnalysisBody(BaseModel):
@@ -946,24 +1008,75 @@ def api_ai_trend_analysis(body: AiTrendAnalysisBody, request: Request):
                        "the AI - this spends real API usage/credits.",
         }
 
-    rbac.require_admin(request)
+    user = rbac.require_admin(request)
+    governance = _enforce_ai_usage_limit(user["email"])
+    response = _run_ai_call_and_record_usage(prompt, "ai-trend-analysis", user["email"], governance)
+    return {"dry_run": False, "prompt": prompt, "response": response.strip() if isinstance(response, str) else response}
 
+
+@app.get("/api/admin/ai-governance")
+def api_get_ai_governance(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return ai_governance.load_governance()
+
+
+class AiGovernanceBody(BaseModel):
+    default_model: str | None = None
+    daily_token_limit_per_user: int | None = None
+    per_user_overrides: dict[str, int | None] = {}
+
+
+@app.post("/api/admin/ai-governance")
+def api_save_ai_governance(body: AiGovernanceBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
     try:
-        claude_bin = cli.find_claude_binary()
-    except cli.ClaudeBinaryNotFound as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    command = [claude_bin, "-p", prompt, "--output-format", "text"]
-    result = subprocess.run(  # noqa: S603 - fixed binary + a prompt string, no shell
-        command, cwd=cli.REPO_ROOT, capture_output=True, text=True, encoding="utf-8",
-    )
-    if result.returncode != 0:
-        raise HTTPException(
-            status_code=502,
-            detail=f"AI trend analysis call failed: {result.stderr.strip()[:500]}",
+        data = ai_governance.save_governance(
+            body.default_model, body.daily_token_limit_per_user, body.per_user_overrides,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"message": "AI governance policy saved - takes effect on the next real AI call.", **data}
 
-    return {"dry_run": False, "prompt": prompt, "response": result.stdout.strip()}
+
+def _rollup(by_user):
+    """Sums a usage_by_user()-shaped dict across every actor into one real total -
+    the aggregate row Admin's spend-vs-budget view needs, computed from the same
+    per-user figures the table below it already shows (no separate estimate)."""
+    return {
+        "call_count": sum(u["call_count"] for u in by_user.values()),
+        "total_tokens": sum(u["total_tokens"] for u in by_user.values()),
+        "total_cost_usd": sum(u["total_cost_usd"] for u in by_user.values()),
+        "unknown_cost_calls": sum(u["unknown_cost_calls"] for u in by_user.values()),
+    }
+
+
+@app.get("/api/admin/ai-usage")
+def api_get_ai_usage(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Real per-user AI usage totals for the Admin Settings page - every figure comes
+    straight from remediation/audit/ai_usage_log.py's own recorded calls, nothing
+    computed here. `today_by_user` is the same-shaped subset used for daily-limit
+    context (how close each user is to today's cap, if one is configured). `budget`
+    is the real aggregate spend/token rollup (today/7d/30d/all-time) plus the actual
+    per-call spend cap this app passes to every real Claude Code invocation
+    (cli.DEFAULT_MAX_BUDGET_USD) - there is no subscription/invoice concept in this
+    app, so this is the only honest "billing" figure there is to show."""
+    governance = ai_governance.load_governance()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    today_start = datetime.datetime.combine(now.date(), datetime.time.min, tzinfo=datetime.timezone.utc)
+    since_7d = now - datetime.timedelta(days=7)
+    since_30d = now - datetime.timedelta(days=30)
+    today_by_user = ai_usage_log.usage_by_user(since=today_start)
+    return {
+        "all_time_by_user": ai_usage_log.usage_by_user(),
+        "today_by_user": today_by_user,
+        "governance": governance,
+        "recent_calls": ai_usage_log.list_usage(limit=50),
+        "budget": {
+            "max_cost_usd_per_call": float(cli.DEFAULT_MAX_BUDGET_USD),
+            "today": _rollup(today_by_user),
+            "last_7_days": _rollup(ai_usage_log.usage_by_user(since=since_7d)),
+            "last_30_days": _rollup(ai_usage_log.usage_by_user(since=since_30d)),
+            "all_time": _rollup(ai_usage_log.usage_by_user()),
+        },
+    }
 
 
 @app.get("/api/reports/generate")
@@ -1093,6 +1206,19 @@ class AssetEnvironmentBody(BaseModel):
 def api_set_asset_environment(asset_name: str, body: AssetEnvironmentBody, user: dict = Depends(rbac.require_login)):
     try:
         return asset_inventory.set_environment(asset_name, body.environment, actor=user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class AssetNetworkInfoBody(BaseModel):
+    ip: str = ""
+    mac: str = ""
+
+
+@app.post("/api/assets/{asset_name}/network-info")
+def api_set_asset_network_info(asset_name: str, body: AssetNetworkInfoBody, user: dict = Depends(rbac.require_login)):
+    try:
+        return asset_inventory.set_network_info(asset_name, body.ip, body.mac, actor=user["email"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1417,18 +1543,77 @@ def api_auth_oidc_callback(code: str, state: str):
     return redirect
 
 
+def _data_store_fact(path):
+    """Real, cheap facts about one gitignored runtime JSON store (exceptions, approvals,
+    activity log, AI usage log) - exists/last-modified/record-count, so Admin can see
+    real data freshness instead of a guess. Never raises: a corrupt/unreadable file
+    reports its own error string instead of taking down the whole health check."""
+    if not path.exists():
+        return {"exists": False, "last_modified": None, "record_count": None}
+    try:
+        record_count = len(json.loads(path.read_text(encoding="utf-8")))
+        error = None
+    except Exception as exc:  # noqa: BLE001 - report the read failure, don't crash /api/status
+        record_count, error = None, str(exc)
+    fact = {
+        "exists": True,
+        "last_modified": datetime.datetime.fromtimestamp(
+            path.stat().st_mtime, tz=datetime.timezone.utc,
+        ).isoformat(),
+        "record_count": record_count,
+    }
+    if error:
+        fact["error"] = error
+    return fact
+
+
+def _safe_check(fn, default):
+    """Runs one independent health check, catching any exception so one broken check
+    (e.g. a corrupted findings file) can't take down the whole health report or hide
+    the other checks' real results - each check's own failure is reported honestly
+    instead. Returns (value, error_str_or_None)."""
+    try:
+        return fn(), None
+    except Exception as exc:  # noqa: BLE001 - a health check must never itself crash
+        return default, str(exc)
+
+
 @app.get("/api/status")
 def api_status():
-    """A trivial machine-readable health/status endpoint."""
+    """A real machine-readable health/status endpoint - every field below is an actual
+    checked fact, not a hardcoded claim. `status` is "degraded" only when something
+    genuinely load-bearing (the findings file itself) can't be read - SMTP/a real
+    session secret not being configured are expected, documented, optional-by-default
+    states in this MVP, not degradation, so they're reported honestly but don't flip
+    `status`."""
     vh = dashboard_data.load_vulnhunt_data()
-    findings = dashboard_data.load_remediation_findings()
+    findings, findings_error = _safe_check(dashboard_data.load_remediation_findings, [])
+    playbooks, playbooks_error = _safe_check(dashboard_data.load_playbooks, [])
+    threat_intel, threat_intel_error = _safe_check(
+        dashboard_data.load_threat_intel_freshness, {"available": False},
+    )
+    if threat_intel_error:
+        threat_intel = {**threat_intel, "error": threat_intel_error}
+
     return {
-        "status": "ok",
+        "status": "degraded" if (findings_error or playbooks_error) else "ok",
         "app_version": app.version,
         "vulnhunt_available": vh.get("available", False),
         "vulnhunt_findings": vh.get("total", 0),
         "remediation_findings": len(findings),
-        "remediation_playbooks": len(dashboard_data.load_playbooks()),
+        "remediation_findings_error": findings_error,
+        "remediation_playbooks": len(playbooks),
+        "smtp_configured": email_sender.is_configured(),
+        "session_secret_configured": bool(os.environ.get("VULNHUNTER_SESSION_SECRET")),
+        "threat_intel": threat_intel,
+        "uptime_seconds": round(time.monotonic() - _PROCESS_STARTED_AT, 1),
+        "notification_scheduler_alive": _scheduler_task is not None and not _scheduler_task.done(),
+        "data_stores": {
+            "exceptions": _data_store_fact(exceptions_store.DEFAULT_STORE_PATH),
+            "remediation_approvals": _data_store_fact(remediation_approvals_store.DEFAULT_STORE_PATH),
+            "activity_log": _data_store_fact(activity_log.DEFAULT_LOG_PATH),
+            "ai_usage_log": _data_store_fact(ai_usage_log.DEFAULT_LOG_PATH),
+        },
     }
 
 

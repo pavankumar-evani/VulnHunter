@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, timeAgo } from "../dom.js";
-import { barChartSvg, pieChartSvg, countBy, wireChartLinks } from "../charts.js";
+import { barChartSvg, pieChartSvg, funnelChartSvg, countBy, wireChartLinks } from "../charts.js";
 import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
 import { buildOwnerTeamMaps } from "../assetLookup.js";
 import {
@@ -109,6 +109,63 @@ function assetDefinitionsPanel(rules) {
 // - Secrets Management/Container/API are CWE-based sub-classifications of the same SAST
 // findings, not separate ones, so summing all of appsec.js's cards would double-count.
 // Each tile is clickable, opening that domain's own dashboard.
+// Average whole days between two ISO date fields, across only the records that
+// actually have BOTH dates set - never guesses a duration for a record still
+// mid-workflow (e.g. approved but not yet triggered has no triggered_at). Returns
+// null (never 0, which would misreport "no data" as "instant") when no record has
+// both dates.
+function daysBetweenAll(records, startField, endField) {
+  const durations = records
+    .filter((r) => r[startField] && r[endField])
+    .map((r) => (new Date(r[endField]) - new Date(r[startField])) / 86400000);
+  if (!durations.length) return null;
+  return Math.round((durations.reduce((sum, d) => sum + d, 0) / durations.length) * 10) / 10;
+}
+
+// Real, dated remediation-lifecycle stages - Detected -> Entered remediation workflow
+// -> Approved -> Remediated - each a real query over real data (the live queue and
+// remediation/remediation_approvals/store.py's own records), not simulated. There is
+// no "closed"/"remediated" concept in this app outside the approval workflow, so a
+// finding fixed some other way (e.g. a manual change with no approval request) is
+// honestly invisible to this funnel rather than silently guessed at - same
+// disclosed-scope honesty as every other stat on this page.
+function lifecycleSection(queue, remediationApprovals) {
+  const stages = [
+    { label: "Detected", value: queue.findings.length, href: "/queue",
+      detail: "Every finding currently in the live remediation queue" },
+    { label: "Entered remediation workflow", value: remediationApprovals.length, href: "/remediation-approvals",
+      detail: "Has a real remediation-approval request (any status)" },
+    { label: "Approved", value: remediationApprovals.filter((a) => a.computed_status === "approved" || a.computed_status === "remediation_triggered").length,
+      href: "/remediation-approvals", detail: "Approval request approved (or already remediated)" },
+    { label: "Remediated", value: remediationApprovals.filter((a) => a.computed_status === "remediation_triggered").length,
+      href: "/remediation-approvals", detail: "Real playbook generated and marked remediation-triggered" },
+  ];
+  const approvalDays = daysBetweenAll(remediationApprovals, "created_on", "approved_at");
+  const remediationDays = daysBetweenAll(remediationApprovals, "approved_at", "triggered_at");
+
+  return `
+    <h2>Vulnerability Lifecycle: Detection → Remediation</h2>
+    <p class="subtitle">
+      Real counts at each real stage of the remediation-approval workflow - a finding
+      fixed outside this workflow (e.g. a manual change with no approval record on
+      <a href="/remediation-approvals" data-link>Remediation Approvals</a>) isn't
+      reflected here, same disclosed-scope honesty as everywhere else on this page.
+    </p>
+    <div class="lifecycle-funnel-wrap">
+      ${funnelChartSvg(stages)}
+      <div class="lifecycle-stats">
+        <div class="kpi-card">
+          <div class="kpi-value">${approvalDays === null ? "—" : `${approvalDays}d`}</div>
+          <div class="kpi-label">Avg. time to approve${approvalDays === null ? " (no completed approvals yet)" : ""}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-value">${remediationDays === null ? "—" : `${remediationDays}d`}</div>
+          <div class="kpi-label">Avg. time approved → remediated${remediationDays === null ? " (none triggered yet)" : ""}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
 function domainTotalsSection(queue, vh) {
   const infraTotal = queue.findings.filter((f) => f.scan_type === "infra-vm").length;
   const sastTotal = vh.available ? vh.findings.length : 0;
@@ -511,21 +568,23 @@ function renderBody(data, queue, vh, rankings, assets, teamByAssetName, remediat
     ${exposureScoreSectionHtml(data.exposure_score, data.exposure_score_rules)}
 
     <div class="kpi-grid">
-      ${kpi(data.sla.breached, "SLA breached", "kpi-danger")}
-      ${kpi(data.sla.at_risk, "SLA at risk (≤3 days)", "kpi-warn")}
-      ${kpi(data.sla.on_track, "SLA on track", "kpi-good")}
-      ${kpi(data.kev_count, "CISA KEV-listed (actively exploited)", "kpi-danger")}
+      ${kpiLink("/queue?slaStatus=breached", data.sla.breached, "SLA breached", "kpi-danger")}
+      ${kpiLink("/queue?slaStatus=at_risk", data.sla.at_risk, "SLA at risk (≤3 days)", "kpi-warn")}
+      ${kpiLink("/queue?slaStatus=on_track", data.sla.on_track, "SLA on track", "kpi-good")}
+      ${kpiLink("/queue?kevOnly=true", data.kev_count, "CISA KEV-listed (actively exploited)", "kpi-danger")}
       ${kpi(data.high_epss_count, "High EPSS (≥50% exploit probability)", "kpi-warn")}
     </div>
 
     <div class="kpi-grid">
-      ${kpi(data.vulnhunt.total || 0, "Code vulnerabilities found")}
-      ${kpi(data.vulnhunt.auto_fixable || 0, "Auto-fixed on a branch", "kpi-good")}
-      ${kpi(data.remediation.total, "Infra findings normalized")}
+      ${kpiLink("/vulnhunt", data.vulnhunt.total || 0, "Code vulnerabilities found")}
+      ${kpiLink("/vulnhunt", data.vulnhunt.auto_fixable || 0, "Auto-fixed on a branch", "kpi-good")}
+      ${kpiLink("/queue", data.remediation.total, "Infra findings normalized")}
       ${kpi(data.remediation.eligible, "Auto-remediable today", "kpi-good")}
       ${kpi(data.remediation.manual_only, "Manual-only (no fixer yet)", "kpi-warn")}
-      ${kpi(data.playbook_count, "Playbooks generated")}
+      ${kpiLink("/remediate", data.playbook_count, "Playbooks generated")}
     </div>
+
+    ${lifecycleSection(queue, remediationApprovals)}
 
     ${domainTotalsSection(queue, vh)}
 

@@ -29,18 +29,32 @@ from pathlib import Path
 
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 KEV_FEED_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_API_URL = "https://api.first.org/data/v1/epss"
 EPSS_BATCH_SIZE = 100  # keep well under any practical query-length limit
+
+# Self-healing scope, deliberately narrow: retry a dropped connection or timeout (the
+# genuinely transient failure modes for a real network call) up to 3 times with
+# exponential backoff. Does NOT retry an HTTP error status (4xx/5xx) - a 404/500 from
+# these two specific, stable, unauthenticated feeds means something real is wrong (a
+# changed URL, a CISA/FIRST.org outage) that a same-second retry won't fix, and retrying
+# it anyway would just delay the honest failure instead of self-healing anything real.
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 def fetch_cisa_kev(session=None, url=KEV_FEED_URL):
     """Returns {cve_id: {date_added, vulnerability_name, known_ransomware_campaign_use,
     due_date}} for every CVE in CISA's current KEV catalog."""
     session = session or requests
-    resp = session.get(url, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
+
+    def _do_fetch():
+        resp = session.get(url, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+
+    data = retry_with_backoff(_do_fetch, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
     return {
         v["cveID"]: {
             "date_added": v.get("dateAdded"),
@@ -62,9 +76,13 @@ def fetch_epss_scores(cve_ids, session=None, url=EPSS_API_URL):
     scores = {}
     for i in range(0, len(unique_ids), EPSS_BATCH_SIZE):
         batch = unique_ids[i:i + EPSS_BATCH_SIZE]
-        resp = session.get(url, params={"cve": ",".join(batch)}, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+
+        def _do_fetch(batch=batch):
+            resp = session.get(url, params={"cve": ",".join(batch)}, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_fetch, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         for row in data.get("data", []):
             scores[row["cve"]] = {
                 "score": float(row["epss"]),

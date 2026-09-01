@@ -56,6 +56,62 @@ class MacOui(unittest.TestCase):
         self.assertIsNone(pr.mac_oui("not-a-mac"))
         self.assertIsNone(pr.mac_oui("aa:bb:cc"))
 
+    def test_right_shape_but_non_hex_octets_returns_none(self):
+        # Structurally 6 groups of 2 chars, but "zz" isn't hex - a real MAC address
+        # must be actual hex digits, not just the right shape.
+        self.assertIsNone(pr.mac_oui("zz:zz:zz:zz:zz:zz"))
+
+
+class IpVersion(unittest.TestCase):
+    def test_ipv4_returns_4(self):
+        self.assertEqual(pr.ip_version("10.20.30.41"), 4)
+
+    def test_ipv6_returns_6(self):
+        self.assertEqual(pr.ip_version("2001:db8::1"), 6)
+
+    def test_ipv6_compressed_and_mixed_case_still_recognized(self):
+        self.assertEqual(pr.ip_version("2001:DB8::1"), 6)
+        self.assertEqual(pr.ip_version("::1"), 6)
+
+    def test_none_or_malformed_returns_none(self):
+        self.assertIsNone(pr.ip_version(None))
+        self.assertIsNone(pr.ip_version(""))
+        self.assertIsNone(pr.ip_version("not-an-ip"))
+        self.assertIsNone(pr.ip_version("10.20.30.999"))
+        self.assertIsNone(pr.ip_version("2001:db8::1::2"))  # two "::" is invalid
+
+
+class Ipv6Subnet(unittest.TestCase):
+    def test_valid_ipv6_returns_64_network(self):
+        self.assertEqual(pr.ipv6_subnet("2001:db8::1"), "2001:db8::/64")
+
+    def test_different_host_bits_same_subnet(self):
+        self.assertEqual(pr.ipv6_subnet("2001:db8::1"), pr.ipv6_subnet("2001:db8::ffff"))
+
+    def test_different_64_prefix_different_subnet(self):
+        self.assertNotEqual(pr.ipv6_subnet("2001:db8:0:1::1"), pr.ipv6_subnet("2001:db8:0:2::1"))
+
+    def test_ipv4_returns_none(self):
+        # ip_subnet() (IPv4) and ipv6_subnet() are deliberately non-overlapping -
+        # each returns None for the other version's addresses.
+        self.assertIsNone(pr.ipv6_subnet("10.20.30.41"))
+
+    def test_none_or_malformed_returns_none(self):
+        self.assertIsNone(pr.ipv6_subnet(None))
+        self.assertIsNone(pr.ipv6_subnet("not-an-ip"))
+
+
+class IsValidMac(unittest.TestCase):
+    def test_colon_and_hyphen_forms_are_valid(self):
+        self.assertTrue(pr.is_valid_mac("aa:bb:cc:dd:ee:ff"))
+        self.assertTrue(pr.is_valid_mac("AA-BB-CC-11-22-33"))
+
+    def test_wrong_shape_or_non_hex_is_invalid(self):
+        self.assertFalse(pr.is_valid_mac("aa:bb:cc"))
+        self.assertFalse(pr.is_valid_mac("zz:zz:zz:zz:zz:zz"))
+        self.assertFalse(pr.is_valid_mac(None))
+        self.assertFalse(pr.is_valid_mac(""))
+
 
 class SuggestOwnerTeam(unittest.TestCase):
     def test_hostname_pattern_match_suggests_the_shared_owner(self):

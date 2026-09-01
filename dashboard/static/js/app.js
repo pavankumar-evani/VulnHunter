@@ -13,6 +13,7 @@ import { initPageFooter } from "./pageFooter.js";
 import { initTopbarTenant } from "./topbarTenant.js";
 import { initInsightsPanel, resetInsightsContent } from "./insightsPanel.js";
 import { initIdleTimeout } from "./idleTimeout.js";
+import { initCommandPalette } from "./commandPalette.js";
 
 const routes = [
   { pattern: /^\/$/, load: () => import("./pages/overview.js") },
@@ -55,6 +56,7 @@ const routes = [
   { pattern: /^\/login\/?$/, load: () => import("./pages/login.js") },
   { pattern: /^\/logout\/?$/, load: () => import("./pages/logout.js") },
   { pattern: /^\/profile\/?$/, load: () => import("./pages/profile.js") },
+  { pattern: /^\/admin\/?$/, load: () => import("./pages/adminSettings.js") },
   { pattern: /^\/playbooks\/([^/]+)$/, load: () => import("./pages/playbookDetail.js") },
 ];
 
@@ -152,4 +154,5 @@ initTooltips();
 initThreatTip();
 initPageFooter();
 initIdleTimeout();
+initCommandPalette();
 renderRoute();

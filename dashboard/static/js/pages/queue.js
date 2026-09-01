@@ -198,6 +198,17 @@ function sortFindings(findings, key, dir) {
   });
 }
 
+// Mirrors dashboard/data.py's sla_summary() exactly - "breached"/"at_risk"/"on_track",
+// so Overview's SLA KPI tiles can deep-link here with ?slaStatus=breached etc. and the
+// count that lands on this filtered page matches the number on the tile that linked to
+// it. A finding with no SLA date at all falls into "on_track" here too, same as that
+// real server-side definition (not itself a bug this filter should paper over).
+function slaStatusOf(f) {
+  if (f.sla && f.sla.breached) return "breached";
+  if (f.sla && f.sla.days_remaining !== null && f.sla.days_remaining !== undefined && f.sla.days_remaining <= 3) return "at_risk";
+  return "on_track";
+}
+
 function applyFilters(findings, filters) {
   let result = findings.filter((f) => {
     if (filters.priority !== "all" && f.priority !== filters.priority) return false;
@@ -206,6 +217,7 @@ function applyFilters(findings, filters) {
     if (filters.category !== "all" && f.scan_type !== filters.category) return false;
     if (filters.infraType !== "all" && f.infra_category !== filters.infraType) return false;
     if (filters.kevOnly && !(f.kev && f.kev.listed)) return false;
+    if (filters.slaStatus && filters.slaStatus !== "all" && slaStatusOf(f) !== filters.slaStatus) return false;
     if (filters.cve && f.cve !== filters.cve) return false;
     if (filters.title && f.title !== filters.title) return false;
     if (filters.assetName && (f.asset && f.asset.name) !== filters.assetName) return false;
@@ -253,9 +265,15 @@ export async function render(container) {
   const initialCve = new URLSearchParams(window.location.search).get("cve") || null;
   const initialTitle = new URLSearchParams(window.location.search).get("title") || null;
   const initialAssetName = new URLSearchParams(window.location.search).get("asset") || null;
+  // A clickable KPI tile (Overview's "CISA KEV-listed") deep-links here with
+  // ?kevOnly=true - same pattern as the other deep-link params above.
+  const initialKevOnly = new URLSearchParams(window.location.search).get("kevOnly") === "true";
+  // Overview's SLA breached/at-risk/on-track KPI tiles deep-link here with
+  // ?slaStatus=breached|at_risk|on_track.
+  const initialSlaStatus = new URLSearchParams(window.location.search).get("slaStatus") || "all";
   let filters = {
     priority: "all", assetType: "all", environment: "all", category: initialCategory, infraType: initialInfraType,
-    kevOnly: false, cve: initialCve, title: initialTitle, assetName: initialAssetName,
+    kevOnly: initialKevOnly, slaStatus: initialSlaStatus, cve: initialCve, title: initialTitle, assetName: initialAssetName,
     dateRange: { preset: "", customFrom: "", customTo: "" },
   };
   // A global-search result (search.js) deep-links here with ?highlight=<id> - the
@@ -431,7 +449,7 @@ export async function render(container) {
         <label>Infra sub-category
           <select id="f-infra-type"><option value="all" ${filters.infraType === "all" ? "selected" : ""}>All</option>${infraTypeOptions()}</select>
         </label>`}
-        <label class="checkbox-label"><input type="checkbox" id="f-kev-only"> CISA KEV-listed only</label>
+        <label class="checkbox-label"><input type="checkbox" id="f-kev-only" ${filters.kevOnly ? "checked" : ""}> CISA KEV-listed only</label>
         ${dateRangeHtml("f-daterange", filters.dateRange)}
         <span class="filter-count" id="queue-count"></span>
       </div>
