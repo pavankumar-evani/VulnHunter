@@ -3,8 +3,14 @@ import { escapeHtml, flash } from "../dom.js";
 
 export const title = "Jira Integration";
 
+// A real send always covers every current finding (that's the actual point of the
+// integration) - only the DISPLAY is sampled, so this page doesn't render a table with
+// thousands of rows just to show what the payload shape looks like. Capped small (4)
+// on purpose: it's illustrating a format, not auditing a full run.
+const SAMPLE_SIZE = 4;
+
 function previewRows(previews) {
-  return previews.map((p) => `
+  return previews.slice(0, SAMPLE_SIZE).map((p) => `
     <tr>
       <td>${escapeHtml(p.finding_id)}</td>
       <td class="wrap-cell">${escapeHtml(p.body.fields.summary)}</td>
@@ -13,8 +19,14 @@ function previewRows(previews) {
     </tr>`).join("");
 }
 
+function sampleNoteHtml(total) {
+  return total > SAMPLE_SIZE
+    ? `<p class="filter-count" style="margin:-4px 0 8px">Showing a sample of ${SAMPLE_SIZE} of ${total} matching finding(s) - a real send covers all ${total}, not just the sample shown here.</p>`
+    : "";
+}
+
 function resultRows(results) {
-  return results.map((r) => `
+  return results.slice(0, SAMPLE_SIZE).map((r) => `
     <tr>
       <td>${escapeHtml(r.finding_id)}</td>
       <td>${escapeHtml(r.status)}</td>
@@ -44,8 +56,9 @@ export async function render(container) {
       <label>Issue type<input type="text" name="issue_type" value="Bug"></label>
       <label class="checkbox-label checkbox-danger">
         <input type="checkbox" name="confirm">
-        I have real credentials and want to actually create issues (leave unchecked for a
-        preview of exactly what would be sent, no network call made)
+        I have real credentials and want to actually create issues for all
+        ${data.previews.length} matching finding(s) - not just the sample below (leave
+        unchecked for a preview of exactly what would be sent, no network call made)
       </label>
       <button type="submit">Submit</button>
     </form>
@@ -53,6 +66,7 @@ export async function render(container) {
     <div id="jira-results"></div>
 
     <h2>Preview — what would be sent for each finding</h2>
+    <div id="jira-sample-note">${sampleNoteHtml(data.previews.length)}</div>
     <div class="table-scroll">
       <table class="data-table">
         <thead><tr><th>Finding</th><th>Summary</th><th>Issue Type</th><th>Labels</th></tr></thead>
@@ -75,9 +89,11 @@ export async function render(container) {
       const result = await api.jiraSend(body);
       flash(result.message, result.preview_only ? "info" : "success");
       container.querySelector("#jira-preview-body").innerHTML = previewRows(result.previews);
+      container.querySelector("#jira-sample-note").innerHTML = sampleNoteHtml(result.previews.length);
       if (result.results) {
         container.querySelector("#jira-results").innerHTML = `
           <h2>Results</h2>
+          ${sampleNoteHtml(result.results.length)}
           <div class="table-scroll">
             <table class="data-table">
               <thead><tr><th>Finding</th><th>Status</th><th>Issue Key</th><th>Error</th></tr></thead>
