@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, timeAgo, kpiLink } from "../dom.js";
 import { barChartSvg, pieChartSvg, countBy, wireChartLinks } from "../charts.js";
+import { makeChartsReorderable } from "../chartLayout.js";
 import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
 import { buildOwnerTeamMaps } from "../assetLookup.js";
 import {
@@ -759,6 +760,7 @@ export async function render(container) {
     renderLiveBadge();
     wireTopRankings(bodyEl, "overview", rankings);
     wireChartLinks(bodyEl);
+    makeChartsReorderable(bodyEl, "overview");
 
     const unownedCount = assetsData.assets.filter((a) => !a.owner).length;
     const unownedPct = assetsData.assets.length ? Math.round((unownedCount / assetsData.assets.length) * 100) : 0;

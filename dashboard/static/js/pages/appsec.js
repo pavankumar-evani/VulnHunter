@@ -23,6 +23,7 @@ import {
   agingChartBlockHtml, agingByPriorityTableHtml, agingBreakdownTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { makeChartsReorderable } from "../chartLayout.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Application Vulnerabilities";
@@ -236,6 +237,7 @@ export async function render(container) {
   rewireTable();
   wireTopRankings(container, "appsec-hub", rankings);
   wireChartLinks(container);
+  makeChartsReorderable(container, "appsec");
 
   wireAiTrendAnalysis(container, "appsec-hub", "application", async () => {
     const teamData = countBy(scaDastFindings, (f) => teamByAssetName.get(f.asset && f.asset.name) || "Unassigned");

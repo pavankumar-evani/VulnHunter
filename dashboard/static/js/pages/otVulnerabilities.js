@@ -20,6 +20,7 @@ import {
   agingChartBlockHtml, agingByPriorityTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { makeChartsReorderable } from "../chartLayout.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "OT Vulnerabilities";
@@ -117,6 +118,7 @@ export async function render(container) {
   rewireTable();
   wireTopRankings(container, "ot-hub", rankings);
   wireChartLinks(container);
+  makeChartsReorderable(container, "ot-vulnerabilities");
 
   wireAiTrendAnalysis(container, "ot-hub", "OT/IoT", async () => {
     const severityData = countBy(otFindings, (f) => f.severity);

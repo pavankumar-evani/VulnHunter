@@ -557,6 +557,20 @@ a.notif-item:hover { background: var(--bg); }
 .chart-row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin: 14px 0 20px; }
 .chart-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
 .chart-block h3 { margin: 0 0 8px; font-size: 0.92rem; }
+
+/* Drag-to-rearrange (chartLayout.js) - a real grip handle rather than making the
+   whole card draggable outright, so clicking a bar/slice/legend row still works
+   normally; only a drag that starts on the handle (or its own chart-block, since the
+   drag listener is on the block) moves the tile. */
+.chart-block-draggable { position: relative; cursor: default; }
+.chart-drag-handle {
+  position: absolute; top: 6px; right: 8px;
+  color: var(--text-muted); font-size: 0.9rem; line-height: 1;
+  cursor: grab; opacity: 0.35; user-select: none;
+}
+.chart-block-draggable:hover .chart-drag-handle { opacity: 0.8; }
+.chart-block-dragging { opacity: 0.4; }
+.chart-block-dragging .chart-drag-handle { cursor: grabbing; }
 /* A CSS-grid sibling of .chart-row, for .chart-block content that ISN'T a fixed-width
    SVG (a plain KPI-style total tile, e.g. methodologySection's Certificate/AI-ML
    cards) - auto-fit/minmax fills the row responsively (unlike flex, where a fixed-

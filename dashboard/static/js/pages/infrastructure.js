@@ -21,6 +21,7 @@ import {
   agingChartBlockHtml, agingByPriorityTableHtml, agingBreakdownTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { makeChartsReorderable } from "../chartLayout.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Infrastructure Vulnerabilities";
@@ -175,6 +176,7 @@ export async function render(container) {
   rewireTable();
   wireTopRankings(container, "infra-hub", rankings);
   wireChartLinks(container);
+  makeChartsReorderable(container, "infrastructure");
 
   wireAiTrendAnalysis(container, "infra-hub", "infrastructure", async () => {
     const severityData = countBy(infraFindings, (f) => f.severity);

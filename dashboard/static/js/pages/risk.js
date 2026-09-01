@@ -13,6 +13,7 @@ import {
 } from "../domainSummary.js";
 import { countBy, wireChartLinks } from "../charts.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { makeChartsReorderable } from "../chartLayout.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Risk Management";
@@ -228,6 +229,7 @@ export async function render(container) {
   });
   wireTopRankings(container, "risk-hub", rankings);
   wireChartLinks(container);
+  makeChartsReorderable(container, "risk");
 
   container.querySelector("#top-assets-body").addEventListener("change", async (e) => {
     const select = e.target.closest(".facing-select");

@@ -18,6 +18,7 @@ import {
   agingChartBlockHtml, agingByPriorityTableHtml, agingDisclaimerHtml,
 } from "../domainSummary.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { makeChartsReorderable } from "../chartLayout.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 
 export const title = "Certificate Vulnerabilities";
@@ -88,6 +89,7 @@ export async function render(container) {
   rewireTable();
   wireTopRankings(container, "cert-hub", rankings);
   wireChartLinks(container);
+  makeChartsReorderable(container, "certificate-vulnerabilities");
 
   wireAiTrendAnalysis(container, "cert-hub", "certificate", async () => {
     const severityData = countBy(certFindings, (f) => f.severity);
