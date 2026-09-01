@@ -11,6 +11,14 @@ export function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+// A KPI card that navigates to a deep-linked, pre-filtered view instead of just
+// displaying a static number - same shell markup as a plain .kpi-card, plus a real
+// href so the value/label are actually clickable.
+export function kpiLink(href, value, label, cls = "") {
+  return `<a class="kpi-card kpi-card-link ${cls}" href="${escapeHtml(href)}" data-link>
+    <div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></a>`;
+}
+
 // Renders a transient message into the persistent #flash-container (which lives
 // in the shell, outside #app, so it survives page-to-page re-renders).
 export function flash(message, category = "info") {

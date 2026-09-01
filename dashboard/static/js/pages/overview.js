@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, timeAgo } from "../dom.js";
+import { escapeHtml, timeAgo, kpiLink } from "../dom.js";
 import { barChartSvg, pieChartSvg, funnelChartSvg, countBy, wireChartLinks } from "../charts.js";
 import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
 import { buildOwnerTeamMaps } from "../assetLookup.js";
@@ -17,11 +17,6 @@ const REFRESH_MS = 20000;
 
 function kpi(value, label, cls = "") {
   return `<div class="kpi-card ${cls}"><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div>`;
-}
-
-function kpiLink(href, value, label, cls = "") {
-  return `<a class="kpi-card kpi-card-link ${cls}" href="${escapeHtml(href)}" data-link>
-    <div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></a>`;
 }
 
 const PRIORITY_ORDER = ["Critical", "High", "Medium", "Low"];

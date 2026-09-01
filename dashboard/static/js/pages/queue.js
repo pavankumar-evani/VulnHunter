@@ -217,6 +217,8 @@ function applyFilters(findings, filters) {
     if (filters.category !== "all" && f.scan_type !== filters.category) return false;
     if (filters.infraType !== "all" && f.infra_category !== filters.infraType) return false;
     if (filters.kevOnly && !(f.kev && f.kev.listed)) return false;
+    // 0.5 mirrors dashboard_data.count_high_epss()'s own default threshold.
+    if (filters.highEpssOnly && !(f.epss && f.epss.score >= 0.5)) return false;
     if (filters.slaStatus && filters.slaStatus !== "all" && slaStatusOf(f) !== filters.slaStatus) return false;
     if (filters.cve && f.cve !== filters.cve) return false;
     if (filters.title && f.title !== filters.title) return false;
@@ -268,12 +270,14 @@ export async function render(container) {
   // A clickable KPI tile (Overview's "CISA KEV-listed") deep-links here with
   // ?kevOnly=true - same pattern as the other deep-link params above.
   const initialKevOnly = new URLSearchParams(window.location.search).get("kevOnly") === "true";
+  // Reports' "High EPSS" KPI deep-links here with ?highEpssOnly=true - same pattern.
+  const initialHighEpssOnly = new URLSearchParams(window.location.search).get("highEpssOnly") === "true";
   // Overview's SLA breached/at-risk/on-track KPI tiles deep-link here with
   // ?slaStatus=breached|at_risk|on_track.
   const initialSlaStatus = new URLSearchParams(window.location.search).get("slaStatus") || "all";
   let filters = {
     priority: "all", assetType: "all", environment: "all", category: initialCategory, infraType: initialInfraType,
-    kevOnly: initialKevOnly, slaStatus: initialSlaStatus, cve: initialCve, title: initialTitle, assetName: initialAssetName,
+    kevOnly: initialKevOnly, highEpssOnly: initialHighEpssOnly, slaStatus: initialSlaStatus, cve: initialCve, title: initialTitle, assetName: initialAssetName,
     dateRange: { preset: "", customFrom: "", customTo: "" },
   };
   // A global-search result (search.js) deep-links here with ?highlight=<id> - the
@@ -400,6 +404,7 @@ export async function render(container) {
     const infraTypeEl = container.querySelector("#f-infra-type");
     if (infraTypeEl) infraTypeEl.addEventListener("change", (e) => { filters.infraType = e.target.value; page = 1; renderRows(); });
     container.querySelector("#f-kev-only").addEventListener("change", (e) => { filters.kevOnly = e.target.checked; page = 1; renderRows(); });
+    container.querySelector("#f-high-epss-only").addEventListener("change", (e) => { filters.highEpssOnly = e.target.checked; page = 1; renderRows(); });
     wireDateRange(container, "f-daterange", (dateRange) => { filters.dateRange = dateRange; page = 1; renderRows(); });
   }
 
@@ -450,6 +455,7 @@ export async function render(container) {
           <select id="f-infra-type"><option value="all" ${filters.infraType === "all" ? "selected" : ""}>All</option>${infraTypeOptions()}</select>
         </label>`}
         <label class="checkbox-label"><input type="checkbox" id="f-kev-only" ${filters.kevOnly ? "checked" : ""}> CISA KEV-listed only</label>
+        <label class="checkbox-label"><input type="checkbox" id="f-high-epss-only" ${filters.highEpssOnly ? "checked" : ""}> High EPSS (≥50%) only</label>
         ${dateRangeHtml("f-daterange", filters.dateRange)}
         <span class="filter-count" id="queue-count"></span>
       </div>
