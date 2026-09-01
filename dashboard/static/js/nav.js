@@ -89,8 +89,8 @@ export const NAV = [
   // a dropdown/filter selecting among all of them (6 with a working preview + a broad
   // researched-but-not-yet-wired-up catalog), consistent settings panel reflecting
   // whichever one is selected. See adaptorCatalog.js.
-  { group: "Adaptors", items: [
-    { path: "/adaptors", label: "Adaptors", icon: "adaptor",
+  { group: "Connectors / Adaptors", items: [
+    { path: "/adaptors", label: "Connectors / Adaptors", icon: "adaptor",
       tip: "Every external system VulnHunter talks to (or has researched), in one place - pick a connector from the dropdown." },
   ] },
   { group: "Operations", items: [

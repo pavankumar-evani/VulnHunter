@@ -8,7 +8,7 @@ import { escapeHtml } from "../dom.js";
 import { icon } from "../icons.js";
 import { CATEGORIES, CONNECTORS, connectorByKey } from "../adaptorCatalog.js";
 
-export const title = "Adaptors";
+export const title = "Connectors / Adaptors";
 
 function referencePanelHtml(c) {
   return `
@@ -28,6 +28,33 @@ function referencePanelHtml(c) {
         <tr><th>Auth model</th><td>${escapeHtml(c.authMethod)}</td></tr>
         <tr><th>Integration shape</th><td class="wrap-cell">${escapeHtml(c.integrationShape)}</td></tr>
         <tr><th>Data that would flow</th><td class="wrap-cell">${escapeHtml(c.dataFlow)}</td></tr>
+      </tbody>
+    </table>`;
+}
+
+// The real "settings" story for this catalog, stated plainly rather than a form that
+// doesn't actually persist anything: live connectors take credentials fresh on every
+// request (typed into that connector's own page, never written to disk/DB) - a real,
+// deliberate security property (no stored secret to leak), not a missing feature.
+// Reference entries have no code wired up yet, so there's nothing to configure at all.
+function connectionSettingsHtml(c) {
+  if (c.status !== "live") {
+    return `
+      <div class="callout callout-warn">
+        ⚠️ No connection settings to show - <strong>${escapeHtml(c.label)}</strong> has no
+        working code in this repo yet (see the Reference panel below for its real,
+        researched API facts).
+      </div>`;
+  }
+  const credNote = c.credentialShape === "none"
+    ? "No credentials involved."
+    : "Entered fresh on every request below - never written to disk or a database. Restarting the server or navigating away clears them; nothing is stored server-side.";
+  return `
+    <table class="data-table finding-detail-table">
+      <tbody>
+        <tr><th>Auth model</th><td class="wrap-cell">${escapeHtml(c.authMethod || "—")}</td></tr>
+        <tr><th>Credential storage</th><td class="wrap-cell">${escapeHtml(credNote)}</td></tr>
+        <tr><th>Direction</th><td>${escapeHtml(c.blurb)}</td></tr>
       </tbody>
     </table>`;
 }
@@ -64,10 +91,17 @@ export async function render(container) {
     </div>
 
     <div class="adaptor-summary" id="adaptor-summary"></div>
+
+    <h2 style="margin-top:20px">Connection &amp; settings</h2>
+    <div id="adaptor-connection-settings"></div>
+
+    <div id="adaptor-panel-heading"></div>
     <div id="adaptor-panel"><div class="empty-state">Loading…</div></div>`;
 
   const select = container.querySelector("#adaptor-select");
   const summaryEl = container.querySelector("#adaptor-summary");
+  const connectionSettingsEl = container.querySelector("#adaptor-connection-settings");
+  const panelHeadingEl = container.querySelector("#adaptor-panel-heading");
   const panelEl = container.querySelector("#adaptor-panel");
 
   async function showConnector(key, { pushState = true } = {}) {
@@ -82,6 +116,8 @@ export async function render(container) {
         <p class="filter-count" style="margin:2px 0 0">${escapeHtml(c.blurb)}</p>
       </div>`;
 
+    connectionSettingsEl.innerHTML = connectionSettingsHtml(c);
+
     if (pushState) {
       const url = new URL(window.location.href);
       url.searchParams.set("connector", key);
@@ -89,10 +125,17 @@ export async function render(container) {
     }
 
     if (c.status === "live") {
+      panelHeadingEl.innerHTML = `
+        <h2 style="margin-top:28px">Preview / test this connector</h2>
+        <p class="filter-count" style="margin:-4px 0 8px">
+          Findings-based preview - builds the exact payload real findings would produce,
+          without sending anything unless you enter real credentials above and confirm.
+        </p>`;
       panelEl.innerHTML = "";
       const mod = await c.module();
       await mod.render(panelEl);
     } else {
+      panelHeadingEl.innerHTML = "";
       panelEl.innerHTML = referencePanelHtml(c);
     }
   }
