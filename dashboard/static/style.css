@@ -571,9 +571,15 @@ a.notif-item:hover { background: var(--bg); }
 .chart-bar-value { font-size: 10px; fill: var(--text); font-weight: 600; }
 .chart-bar-label { font-size: 9px; fill: var(--text-muted); }
 .chart-pie-wrap { display: flex; align-items: center; gap: 16px; }
-.chart-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--text); }
-.chart-legend-row { display: flex; align-items: center; gap: 6px; }
-.chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; display: inline-block; }
+/* max-width forces long category labels (e.g. "Server Vulnerabilities (Windows,
+   Linux/Unix)") to wrap onto multiple lines instead of stretching the legend - and
+   with it, the whole .chart-block - wide enough to push a sibling chart onto its own
+   row in a .chart-row. Without this, two normally-side-by-side charts silently stack
+   as soon as any pie slice's label is long, on any moderate/laptop-width viewport. */
+.chart-legend { display: flex; flex-direction: column; gap: 5px; font-size: 0.8rem; color: var(--text); max-width: 150px; }
+.chart-legend-row { display: flex; align-items: flex-start; gap: 6px; }
+.chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; display: inline-block; margin-top: 3px; }
+.chart-legend-label { min-width: 0; overflow-wrap: break-word; }
 
 /* Vulnerability Lifecycle funnel (overview.js's lifecycleSection - funnelChartSvg in
    charts.js) - funnel on the left, avg-time-in-stage KPIs stacked on the right; wraps

@@ -55,10 +55,14 @@ function assetRowHtml(a) {
 // (alongside a sub-category/methodology pie chart, if it has one).
 export function severityChartBlockHtml(findings) {
   const severityData = countBy(findings, (f) => f.severity);
+  // Explicit narrower width - the default 420px (sized for charts with many bars)
+  // is needless padding around only 4-5 severity bars, and was wide enough on its
+  // own to push a sibling chart-block onto its own row in a .chart-row at anything
+  // narrower than a very wide desktop viewport.
   return `
     <div class="chart-block">
       <h3>By severity</h3>
-      ${severityData.length ? barChartSvg(severityData) : `<p class="empty-state">No findings.</p>`}
+      ${severityData.length ? barChartSvg(severityData, { width: 340 }) : `<p class="empty-state">No findings.</p>`}
     </div>`;
 }
 

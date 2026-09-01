@@ -134,7 +134,7 @@ export function pieChartSvg(data, { size = 180 } = {}) {
     return `
     <div class="${cls}"${tooltipText ? ` data-tooltip="${escapeHtml(tooltipText)}"` : ""}${clickAttrs}>
       <span class="chart-legend-swatch" style="background:${d.color || colorFor(d.label, i)}"></span>
-      ${escapeHtml(d.label)} <span class="muted">(${d.value})</span>
+      <span class="chart-legend-label">${escapeHtml(d.label)} <span class="muted">(${d.value})</span></span>
     </div>`;
   }).join("");
 
