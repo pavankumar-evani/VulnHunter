@@ -31,6 +31,51 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   `severityChartBlockHtml`'s bar chart from its 420px default to 340px.
 
 ### Added
+- **Dashboard Test Connection + Fetch forms for 7 connectors, plus 4 brand-new
+  connectors** (Qualys VMDR, Prisma Cloud, Cortex XSIAM, Active Directory
+  asset-inventory) - closes the gap between "a real connector class exists" and "a real
+  person can actually try connecting it from the dashboard," for Tenable, Qualys, Prisma
+  Cloud, Cortex XSIAM, Infoblox, Axonius, and Active Directory. Every form takes
+  credentials fresh on every request (never stored server-side), offers a real,
+  immediate **Test Connection** action (the smallest real authenticated call each
+  vendor's API has), and a confirm-gated **Fetch Live Data** action:
+  - Tenable/Qualys (CVE-scoped host-vulnerability sources) write a raw export file to
+    `remediation/live-data/` - Qualys deliberately reuses Tenable's exact CSV column
+    shape rather than teaching the ingest normalizer a second format. Bringing either
+    into this dashboard's own pages still needs the existing, agent-driven
+    `/remediate <file>` step (asset-type classification needs judgment, not a
+    deterministic script).
+  - Prisma Cloud/Cortex XSIAM (posture/correlated-detection sources, not CVE-scoped)
+    normalize directly into the Finding schema and write straight to
+    `remediation/live-data/*_findings.json`, ID-sequenced like the generic ingest
+    adapter - deliberately not auto-merged into the live queue, same disclosed choice
+    that adapter already makes for its own output.
+  - Infoblox/Axonius/Active Directory (asset-inventory sources) reconcile real ip/mac
+    ground truth directly into `asset_ownership.json` via a new
+    `asset_inventory.reconcile_pulled_assets()` helper - the same real, bounded action
+    CMDB CSV import already performs, now driven by a live API/LDAP pull instead of an
+    uploaded file.
+  - The Active Directory connector (`remediation/connectors/active_directory_connector.py`)
+    is a new, separate concern from the pre-existing AD group-membership check
+    (`dashboard/auth/ad_directory.py`) that gates Remediation Approvals - this one pulls
+    the domain's computer inventory via LDAP instead, reusing the same `ldap3` dependency
+    and mirroring `tests/test_ad_directory.py`'s fake-connection test-double convention.
+  - All 4 new connectors follow the existing "real implementation of the vendor's
+    documented API contract, unit-tested against mocked HTTP (or a fake LDAP connection
+    for AD), never exercised against a live account" honesty convention - 91 new tests
+    across 4 connector test files plus `asset_inventory`'s reconcile tests, and 35 new
+    dashboard-route safety-boundary tests (rbac gating, field validation, the
+    without-confirm dry-run guarantee) in `tests/test_dashboard.py`. Live-verified in a
+    real browser against real external endpoints: a fake Tenable credential produced a
+    genuine `401` from `cloud.tenable.com`, a fake Infoblox grid master produced a
+    genuine DNS resolution failure, and a fake AD server produced a genuine `ldap3`
+    connection error - proof the full credential → connector → real network path works
+    end to end, not just that the code compiles.
+  - `docs/INTEGRATIONS.md`, `docs/GOING_LIVE.md`, `docs/README.md`,
+    `KNOWLEDGE_TRANSFER.md`, and `docs/VR_PLATFORM_COMPARISON.md` updated accordingly -
+    Qualys/Prisma Cloud/Cortex XSIAM moved out of the "reference catalog, not yet built"
+    tables into full connector sections; the cross-scanner dedup engine and Prisma
+    Cloud/XSIAM roadmap items marked done where they'd been tracked as open.
 - **[docs/GOING_LIVE.md](docs/GOING_LIVE.md)**: the operational checklist for actually
   connecting a real account - exact credentials needed per connector, exact commands/
   steps, and an honest split between what's ready today with zero code changes

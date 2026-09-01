@@ -862,10 +862,11 @@ dashboard nav.
   adapter** (same connector pattern as Tenable/Armis/ServiceNow) once a specific vendor
   and contract exists — not a scraper.
 - **SIEM/XDR/pentest-tool adapters (beyond ServiceNow)** — the connector *pattern* was
-  proven three times over (Tenable, Armis, ServiceNow) and has since been proven three
-  more times (Jira, Splunk, CrowdStrike Falcon — see §13 below); adding Sentinel, QRadar,
-  Defender, or Qualys adapters is the same pattern again, gated on picking one and having
-  its API docs (or better, a real sandbox) to build against.
+  proven three times over (Tenable, Armis, ServiceNow) and has since been proven nine
+  more times (Jira, Splunk, CrowdStrike Falcon, Infoblox, Axonius, Qualys, Prisma Cloud,
+  Cortex XSIAM, Active Directory — see §13 below and [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md));
+  adding Sentinel, QRadar, or Defender adapters is the same pattern again, gated on
+  picking one and having its API docs (or better, a real sandbox) to build against.
 - ~~**"AI-based anomaly/behavioral detection"**~~ — **built** (see `/ml-insights`,
   `remediation/enrichment/ml_insights.py`): real scikit-learn `IsolationForest` asset
   anomaly detection, `KMeans` finding risk-archetype clustering, and TF-IDF +
@@ -1132,8 +1133,11 @@ actually does, not what would sound more impressive.
 ### 13.4 What this wave deliberately did NOT build, and why
 
 Two asks came up this wave that were deliberately deferred/declined, for reasons
-consistent with why Qualys/Sentinel/QRadar/Defender adapters, GPO/SCCM policy pushes, and
-network-device policy writes were already declined earlier in this document (§9, §11):
+consistent with why Sentinel/QRadar/Defender adapters, GPO/SCCM policy pushes, and
+network-device policy writes were already declined earlier in this document (§9, §11) -
+Qualys was in that same "declined for now" list at the time, but has since been built
+(a later wave; see [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and
+[docs/GOING_LIVE.md](docs/GOING_LIVE.md)):
 
 - **Splitting the finding-category taxonomy into separate container vs. host
   vulnerability categories** — the current taxonomy
@@ -1148,8 +1152,9 @@ network-device policy writes were already declined earlier in this document (§9
 - **A full remediation-engine-automation ask (live infrastructure pushes)** — turning a
   generated Ansible playbook from a reviewable artifact into something that actually
   executes against real Windows/Unix servers, network gear, or IoT/OT devices. This is
-  the same reasoning already used to decline Qualys, GPO, SCCM, and network-device
-  policy writes elsewhere in this document: it needs real credentials to real
+  the same reasoning already used to decline GPO, SCCM, and network-device policy
+  writes elsewhere in this document (Qualys was declined for the same reason at the
+  time, but has since been built - see above): it needs real credentials to real
   production infrastructure, which this project has never had and was never asked to
   be given. Building "live push" capability without ever being able to verify it
   against a real target would produce exactly the kind of unverified, plausible-looking

@@ -98,6 +98,24 @@ class AxoniusFetchDevices(unittest.TestCase):
             conn.fetch_devices()
 
 
+class AxoniusTestConnection(unittest.TestCase):
+    def test_test_connection_fetches_a_single_device(self):
+        session = MagicMock()
+        session.post.return_value = fake_response({"assets": [{"hostname": "h1"}]})
+        conn = AxoniusConnector("https://axonius.example.com", "key", "secret", session=session)
+        result = conn.test_connection()
+        body = session.post.call_args.kwargs["json"]
+        self.assertEqual(body["page"], {"offset": 0, "limit": 1})
+        self.assertEqual(result, {"ok": True})
+
+    def test_test_connection_raises_on_http_error(self):
+        session = MagicMock()
+        session.post.return_value = fake_response(None, raise_error=True)
+        conn = AxoniusConnector("https://axonius.example.com", "key", "secret", session=session)
+        with self.assertRaises(Exception):
+            conn.test_connection()
+
+
 class AxoniusNormalizeDevice(unittest.TestCase):
     def test_normalize_maps_documented_flattened_shape(self):
         device = {

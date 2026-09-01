@@ -120,19 +120,24 @@ Real strengths already shipped (from the codebase, not aspiration):
 Confirmed real gaps (from [INTEGRATIONS.md](INTEGRATIONS.md) and the codebase, not
 assumption):
 
-- **Only 8 real connectors** (Tenable, Armis, ServiceNow, Jira, Splunk, CrowdStrike,
-  Infoblox, Axonius) versus 200–350+ for each alternative above. **8 of VulnHunter's 10
-  total integrations — including both threat-intel feeds' connector-side counterparts —
-  have never been exercised against a real live account**, only mocked HTTP built
-  against public docs. Every competitor's connector count implicitly assumes
-  production-tested-by-paying-customers; VulnHunter's cannot make that claim yet.
-- **No cross-scanner deduplication at all.** If Tenable and a second scanner both report
-  the same CVE on the same asset, VulnHunter records it twice today. This is the single
-  most consistently-cited differentiator across all four alternatives researched here —
-  and the one gap most directly reachable without a new vendor relationship or
-  credentials.
-- **No Prisma Cloud, XSIAM, BitSight, or BishopFox connector** — all four explicitly
-  named as pain points/requirements. None exist in this codebase today.
+- **Only 12 real connectors** (Tenable, Armis, Qualys, ServiceNow, Jira, Splunk,
+  CrowdStrike, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory) versus
+  200–350+ for each alternative above. **12 of VulnHunter's 14 total integrations —
+  including both threat-intel feeds' connector-side counterparts — have never been
+  exercised against a real live account**, only mocked HTTP (or, for Active Directory, a
+  fake LDAP connection) built against public docs. Every competitor's connector count
+  implicitly assumes production-tested-by-paying-customers; VulnHunter's cannot make
+  that claim yet.
+- ~~**No cross-scanner deduplication at all.**~~ — **built** (`remediation/enrichment/dedup.py`):
+  matches by `(cve, asset.name)`, falling back to `(normalized_title, asset.name)` when
+  no CVE is present; never deletes a record, only tags each finding with its dedup group
+  and a deterministic primary selection. This was the single most consistently-cited
+  differentiator across all four alternatives researched here, and Phase 1 item 1 below.
+- **No BitSight or BishopFox connector** — both explicitly named as pain points/
+  requirements, neither exists in this codebase today. Prisma Cloud and Cortex XSIAM
+  (also named here) were built in a later wave that additionally added Qualys and
+  Active Directory - see [INTEGRATIONS.md](INTEGRATIONS.md) and
+  [GOING_LIVE.md](GOING_LIVE.md).
 - **No log-correlation feature** — the Splunk connector only pushes findings *out* to
   Splunk; it doesn't correlate incoming SIEM/log data back onto a finding. "Log
   correlation" wasn't precisely scoped anywhere in this research or the codebase — it
@@ -141,25 +146,29 @@ assumption):
 ## 5. Prioritized roadmap
 
 **Phase 1 — highest value, no new vendor dependency:**
-1. **Cross-scanner deduplication engine.** Closes the single most-cited gap versus every
-   alternative researched, and is buildable entirely against data VulnHunter already
-   ingests (Tenable/Armis/manual JSON via the existing normalizer) — no new credentials,
-   no new vendor relationship.
+1. ~~**Cross-scanner deduplication engine.**~~ — **done** (see §4 above). Closed the
+   single most-cited gap versus every alternative researched.
 2. **Live-verify at least the two highest-value existing connectors** (Tenable,
-   ServiceNow) against a real sandbox/test tenant. Adding more unverified connectors on
-   top of 8 that have never touched a live account compounds the credibility gap rather
-   than closing it.
+   ServiceNow) against a real sandbox/test tenant. **Still not done** — adding more
+   unverified connectors on top of the 12 that have never touched a live account
+   compounds the credibility gap rather than closing it; this remains the single
+   highest-leverage next move once real credentials exist for anything (see
+   [GOING_LIVE.md](GOING_LIVE.md)'s "Recommended next step").
 
 **Phase 2 — new connectors, in the order pavane named them:**
-3. Prisma Cloud, then XSIAM, then BitSight — all three are live API integrations in the
-   same shape as the existing 8 connectors. BishopFox needs its integration shape
-   confirmed first (see §3) since a pentest vendor likely means a findings-import format,
-   not a live API pull like the others.
+3. ~~Prisma Cloud, then XSIAM~~ — **done**. Both now have full connector implementations
+   *and* a dashboard Test Connection + Fetch form (a step beyond what this phase
+   originally scoped) - see [INTEGRATIONS.md](INTEGRATIONS.md). A later, more specific
+   ask additionally named Tenable, Qualys, Infoblox, Axonius, and Active Directory for
+   the same dashboard-form treatment, all now done too.
+4. **BitSight — still not built.** BishopFox still needs its integration shape confirmed
+   first (see §3) since a pentest vendor likely means a findings-import format, not a
+   live API pull like the others.
 
 **Phase 3 — deferred until scoped:**
-4. Log correlation — define concretely what this means for VulnHunter (which log
+5. Log correlation — define concretely what this means for VulnHunter (which log
    sources, what "correlation" produces) before estimating or building anything.
-5. No-code-style remediation actions — grow the existing Ansible-playbook generator
+6. No-code-style remediation actions — grow the existing Ansible-playbook generator
    toward a "one-click apply" mode for auto-approvable, low-risk fixes only, rather than
    promising full no-code automation VulnHunter doesn't have the safety rails for yet.
 
@@ -168,11 +177,13 @@ assumption):
 Don't try to out-feature all four alternatives at once. VulnHunter's real, already-true
 advantages are **cost** ($0 internal vs. a real $40K–$120K/year ServiceNow VR benchmark)
 and **simplicity** (one dashboard vs. VR's workflow engine) — both directly answer
-pavane's original complaint and don't need new work to be true today. The highest-
-leverage next move is Phase 1, item 1 (deduplication): it's the most consistently-cited
-gap across every alternative researched, and — unlike a new connector — needs no new
-credentials or vendor relationship to start. Happy to scope and build that next, or
-reprioritize based on what matters most.
+pavane's original complaint and don't need new work to be true today. Phase 1 item 1
+(deduplication) and Phase 2 (Prisma Cloud/XSIAM, plus Tenable/Qualys/Infoblox/Axonius/
+Active Directory dashboard forms) are both done now. The highest-leverage next move is
+Phase 1, item 2 (live-verifying Tenable/ServiceNow against a real sandbox tenant): it's
+the one gap that can't be closed by writing more code - it needs a real credential,
+which this project has never had for any system. Happy to scope Phase 3, or reprioritize
+based on what matters most.
 
 ## Sources
 

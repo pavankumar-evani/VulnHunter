@@ -108,4 +108,18 @@ export const api = {
   applyAssetPolicy: () => request("POST", "/api/asset-policy/apply", {}),
   setAssetRemediationSchedule: (name, cadence, maintenanceWindow) =>
     request("POST", `/api/assets/${encodeURIComponent(name)}/remediation-schedule`, { cadence, maintenance_window: maintenanceWindow }),
+  tenableTestConnection: (body) => request("POST", "/api/tenable/test-connection", body),
+  tenableFetch: (body) => request("POST", "/api/tenable/fetch", body),
+  qualysTestConnection: (body) => request("POST", "/api/qualys/test-connection", body),
+  qualysFetch: (body) => request("POST", "/api/qualys/fetch", body),
+  prismacloudTestConnection: (body) => request("POST", "/api/prismacloud/test-connection", body),
+  prismacloudFetch: (body) => request("POST", "/api/prismacloud/fetch", body),
+  cortexXsiamTestConnection: (body) => request("POST", "/api/cortex-xsiam/test-connection", body),
+  cortexXsiamFetch: (body) => request("POST", "/api/cortex-xsiam/fetch", body),
+  infobloxTestConnection: (body) => request("POST", "/api/infoblox/test-connection", body),
+  infobloxFetch: (body) => request("POST", "/api/infoblox/fetch", body),
+  axoniusTestConnection: (body) => request("POST", "/api/axonius/test-connection", body),
+  axoniusFetch: (body) => request("POST", "/api/axonius/fetch", body),
+  activeDirectoryTestConnection: (body) => request("POST", "/api/active-directory/test-connection", body),
+  activeDirectoryFetch: (body) => request("POST", "/api/active-directory/fetch", body),
 };

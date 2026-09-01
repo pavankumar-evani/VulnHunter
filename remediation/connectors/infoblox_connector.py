@@ -54,6 +54,13 @@ class InfobloxConnector:
         resp.raise_for_status()
         return resp.json()
 
+    def test_connection(self):
+        """Cheap, real connectivity/credential check - WAPI has no dedicated 'ping'
+        endpoint, so the smallest real authenticated call is a record:host fetch
+        capped to a single result. Used by the dashboard's "Test Connection" action."""
+        self.fetch_host_records(max_results=1)
+        return {"ok": True}
+
     @staticmethod
     def normalize_host_record(record):
         """Maps one raw WAPI record:host object into VulnHunter's shared asset shape:

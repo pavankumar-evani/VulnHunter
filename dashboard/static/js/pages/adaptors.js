@@ -2,9 +2,11 @@
 // connector-management pages use - a category list on the left, cards with a status
 // badge on the right, click a card for its detail) instead of six separate sidebar
 // entries or a single dropdown selector. Clicking a card opens the app's existing
-// modal (dom.js) with real connection/settings info, then either the connector's
-// existing preview/send page module (servicenow.js, jira.js, etc. - reused as-is, no
-// changes to those modules) for "live" entries, or a documented-facts panel for
+// modal (dom.js) with real connection/settings info, then either the connector's own
+// page module - a preview/send form for push connectors (servicenow.js, jira.js,
+// splunk.js) or a Test Connection + Fetch form for pull connectors (tenable.js,
+// qualys.js, prismacloud.js, cortexXsiam.js, infoblox.js, axonius.js,
+// activeDirectory.js) - for "live" entries, or a documented-facts panel for
 // "reference" catalog entries with no working code yet - see adaptorCatalog.js.
 import { escapeHtml, openModal } from "../dom.js";
 import { icon } from "../icons.js";
@@ -18,9 +20,9 @@ function referencePanelHtml(c) {
       ⚠️ <strong>${escapeHtml(c.label)}</strong> is a reference catalog entry, not a
       working preview/send connector yet - the facts below are real (auth model, API
       shape, what data would flow), but there's no code in this repo talking to it yet.
-      This is one step earlier than the "live" connectors (ServiceNow, Jira, Splunk,
-      CrowdStrike, Infoblox, Axonius), which do have a working, documented-contract
-      implementation - see <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
+      This is one step earlier than this catalog's "live" connectors, which do have a
+      working, documented-contract implementation - see
+      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
       for the full catalog in doc form.
     </div>
     <table class="data-table finding-detail-table">
@@ -84,8 +86,8 @@ function cardHtml(c) {
       </div>
       <p class="adaptor-card-blurb">${escapeHtml(c.blurb)}</p>
       <div class="adaptor-card-footer">
-        <span class="adaptor-option-status adaptor-status-${c.status}">${c.status === "live" ? "Preview available" : "Reference"}</span>
-        <span class="link-button">${c.status === "live" ? "Configure / Preview →" : "View facts →"}</span>
+        <span class="adaptor-option-status adaptor-status-${c.status}">${c.status === "live" ? "Configure & connect" : "Reference"}</span>
+        <span class="link-button">${c.status === "live" ? "Configure →" : "View facts →"}</span>
       </div>
     </div>`;
 }
@@ -101,7 +103,7 @@ async function openConnectorModal(c) {
       <span class="adaptor-card-icon">${icon(c.iconName, 24)}</span>
       <div>
         <h2 style="margin:0 0 2px">${escapeHtml(c.label)}</h2>
-        <span class="adaptor-option-status adaptor-status-${c.status}">${c.status === "live" ? "Preview available" : "Reference"}</span>
+        <span class="adaptor-option-status adaptor-status-${c.status}">${c.status === "live" ? "Configure & connect" : "Reference"}</span>
       </div>
     </div>
     <p class="filter-count">${escapeHtml(c.blurb)}</p>
@@ -114,12 +116,16 @@ async function openConnectorModal(c) {
   const panelEl = body.querySelector("#adaptor-modal-panel");
 
   if (c.status === "live") {
-    panelHeadingEl.innerHTML = `
+    // Only push connectors (findings out -> a real send) get this specific heading -
+    // it describes their "preview the exact payload, confirm to send" shape, which
+    // doesn't apply to pull connectors (Test Connection + Fetch) - those modules
+    // introduce themselves with their own subtitle/callout instead.
+    panelHeadingEl.innerHTML = c.kind === "push" ? `
       <h3 style="margin-top:22px">Preview / test this connector</h3>
       <p class="filter-count" style="margin:-4px 0 8px">
         Findings-based preview - builds the exact payload real findings would produce,
         without sending anything unless you enter real credentials above and confirm.
-      </p>`;
+      </p>` : "";
     const mod = await c.module();
     await mod.render(panelEl);
   } else {
@@ -139,7 +145,8 @@ export async function render(container) {
     <p class="subtitle">
       Every external system VulnHunter talks to (or has a documented, real API contract
       researched for) - browse by category, click a card for its real connection
-      settings and (for "Preview available" connectors) a working preview/send form.
+      settings and (for "Configure &amp; connect" connectors) a working preview/send or
+      Test Connection + Fetch form.
     </p>
     <div class="adaptor-layout">
       <div class="adaptor-categories" id="adaptor-categories">${categoryListHtml(activeCategory)}</div>

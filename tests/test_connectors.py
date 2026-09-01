@@ -69,6 +69,23 @@ class TenableAuthAndExportRequest(unittest.TestCase):
             conn.request_export()
 
 
+class TenableTestConnection(unittest.TestCase):
+    def test_test_connection_hits_session_endpoint(self):
+        session = MagicMock()
+        session.get.return_value = fake_response({"username": "alice", "email": "alice@example.com"})
+        conn = TenableConnector("k", "s", session=session)
+        result = conn.test_connection()
+        session.get.assert_called_once_with(f"{conn.base_url}/session")
+        self.assertEqual(result, {"ok": True, "username": "alice", "email": "alice@example.com"})
+
+    def test_test_connection_raises_on_http_error(self):
+        session = MagicMock()
+        session.get.return_value = fake_response(None, raise_error=True)
+        conn = TenableConnector("k", "s", session=session)
+        with self.assertRaises(Exception):
+            conn.test_connection()
+
+
 class TenablePollAndDownload(unittest.TestCase):
     def test_poll_returns_chunks_when_finished(self):
         session = MagicMock()

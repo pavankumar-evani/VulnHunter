@@ -20,61 +20,121 @@ get and where to put it.
 
 Two genuinely different situations, by connector:
 
-- **Ready today, zero code changes needed**: ServiceNow, Jira, Splunk. Real credentials
-  typed into that connector's own page and never stored server-side - per-request, by
-  design (see [ADR-style reasoning in adaptors.js](../dashboard/static/js/pages/adaptors.js)).
-- **Needs a script or Python session run outside the dashboard**: Tenable, Armis,
-  CrowdStrike Falcon, Infoblox, Axonius. These pull data rather than push it, and
-  (except CMDB import) have no dashboard form - see each one's own section below for
-  exactly what to run.
+- **Ready today, entirely from the dashboard - no CLI, no script**: ServiceNow, Jira,
+  Splunk (push - findings out), and Tenable, Qualys, Prisma Cloud, Cortex XSIAM,
+  Infoblox, Axonius, Active Directory (pull - data in). Every one of these takes real
+  credentials fresh on every request, typed into that connector's own page under
+  **Connectors / Adaptors** - never stored server-side, by design (see the "Credential
+  storage" note each connector's connection-settings panel already shows).
+- **Needs a script or Python session run outside the dashboard**: CrowdStrike Falcon
+  only, for now. It pulls data rather than pushing it, and has no dashboard form yet -
+  see its own section below for exactly what to run. The same Test Connection + Fetch
+  pattern the pull connectors above already have is straightforward to add for
+  CrowdStrike too, once there's a real credential to build and test it against.
 
-None of the 8 API-based connectors below have ever been exercised against a real
-account - every one of them is a real, complete implementation of its vendor's
-documented API contract, tested against mocked HTTP that mimics that documentation, but
-"mimics the documentation" and "confirmed against your actual tenant" are different
-claims. Treat your first real run of each as a validation pass, not a guaranteed-correct
-production cutover - see each section's "first real run" note.
+None of the 12 connectors below have ever been exercised against a real account - every
+one of them is a real, complete implementation of its vendor's documented API contract,
+tested against mocked HTTP (or, for Active Directory, a hand-rolled fake LDAP
+connection) that mimics that documentation, but "mimics the documentation" and
+"confirmed against your actual tenant" are different claims. Treat your first real run
+of each as a validation pass, not a guaranteed-correct production cutover - see each
+section's "first real run" note.
 
 ## Finding-source connectors (replace the sample dataset with real data)
 
-These are the two that actually change what findings the dashboard shows.
+These four change what findings this dashboard's own pages show - the rest either push
+findings out to another system, or pull asset-inventory data (not findings).
 
 ### Tenable.io
 
 **What you need:** a Tenable.io API access key + secret key (Tenable.io → Settings →
 My Account → API Keys - requires an account with API access enabled on your license).
 
-**Steps:**
-1. Set real environment variables on the server: `TENABLE_ACCESS_KEY`, `TENABLE_SECRET_KEY`
-   (see [.env.example](../.env.example)).
-2. Run `python remediation/connectors/fetch_live_data.py --source tenable`. This calls
-   the real Tenable.io Vulnerability Export API and writes
-   `remediation/live-data/tenable_export.csv` - can take several minutes for a large
-   tenant (it's a real async export job, not a quick call).
-3. Run `/remediate remediation/live-data/tenable_export.csv` in an interactive Claude
-   Code session. This is the step that actually normalizes real Tenable rows into
-   `remediation/output/normalized-findings.json` - the one file the dashboard reads.
-   It's an agent-driven step, not a plain script, because the real normalizer
-   classifies each asset's type from free-text fields the same way a person would -
-   see [INTEGRATIONS.md](INTEGRATIONS.md) for why.
-4. Reload the dashboard - it now reflects your real Tenable data.
+**From the dashboard (recommended):** open **Connectors / Adaptors** → Tenable.io card
+(or go straight to `/tenable`). Enter the access key + secret key, click **Test
+Connection** for an immediate real credential check (`GET /session`, Tenable's lightest
+authenticated call), then check the confirm box and click **Fetch Live Data** to run the
+real export workflow - writes to `remediation/live-data/tenable_export.csv`, reporting
+the real row count. Then run `/remediate remediation/live-data/tenable_export.csv` in an
+interactive Claude Code session (see below for why this one step stays agent-driven),
+and reload the dashboard.
+
+**Equivalent, from a terminal:**
+```bash
+export TENABLE_ACCESS_KEY=...
+export TENABLE_SECRET_KEY=...
+python remediation/connectors/fetch_live_data.py --source tenable
+/remediate remediation/live-data/tenable_export.csv
+```
+Useful for scripting/automation; the dashboard form above calls the same connector code.
+
+**Why `/remediate` stays a manual, agent-driven step:** the real normalizer classifies
+each asset's type (windows-server vs. unix-server vs. ...) from free-text OS fields the
+same way a person would - that's judgment, not a deterministic mapping, so neither the
+dashboard's Fetch button nor `fetch_live_data.py` skip straight to updating this
+dashboard's own pages. See [INTEGRATIONS.md](INTEGRATIONS.md) for why.
 
 **First real run:** `TenableConnector.to_csv_row()` is the adjustment point if real
 field names/nesting differ from the documented shape (API version and tenant
 configuration can both affect this) - diff a handful of real rows against what Tenable's
 own UI shows for the same assets before trusting the output at scale.
 
-### Armis
+### Qualys VMDR
 
-**What you need:** an Armis Secret Key and your tenant's API base URL (Armis console →
-Settings → API Management).
+**What you need:** a Qualys username + password with API access, and your subscription's
+platform URL (Qualys → Help → About, or your onboarding email - e.g.
+`https://qualysapi.qualys.com` for US Platform 1; Qualys assigns a different one per
+platform/region, so there's no single default that works for every subscription).
 
-**Steps:** same shape as Tenable - set `ARMIS_SECRET_KEY`/`ARMIS_BASE_URL`, run
-`python remediation/connectors/fetch_live_data.py --source armis` (writes
-`remediation/live-data/armis_export.json`), then `/remediate remediation/live-data/armis_export.json`.
+**From the dashboard:** **Connectors / Adaptors** → Qualys VMDR card (or `/qualys`).
+Enter platform URL + username + password, **Test Connection**, then confirm + **Fetch
+Live Data** - writes to `remediation/live-data/qualys_export.csv` in the exact same
+column shape as Tenable's export (a deliberate reuse decision - see
+[INTEGRATIONS.md](INTEGRATIONS.md)). Then run
+`/remediate remediation/live-data/qualys_export.csv` the same way as Tenable above.
 
-**First real run:** `ArmisConnector._alert_to_sample_shape()` is the adjustment point if
-your tenant's AQL search response shape differs from the documented one.
+**First real run:** `QualysConnector.fetch_host_detections_page()`/`fetch_knowledge_base()`
+are the adjustment points if your pod's real XML response differs from the documented
+shape.
+
+### Prisma Cloud
+
+**What you need:** a Prisma Cloud access key ID + secret key (Prisma Cloud console →
+Settings → Access Control → Access Keys), and your stack's base URL (e.g.
+`https://api.prismacloud.io`, `https://api2.prismacloud.io`,
+`https://api.eu.prismacloud.io` - check your login URL's region).
+
+**From the dashboard:** **Connectors / Adaptors** → Prisma Cloud card (or
+`/prismacloud`). Enter base URL + access key ID + secret key, **Test Connection** (the
+login call itself), then confirm + **Fetch Live Data**. Unlike Tenable/Qualys, this
+writes already-normalized findings straight to
+`remediation/live-data/prismacloud_findings.json` - no `/remediate` step needed, since
+Prisma Cloud alerts are cloud posture/compliance violations (not CVE-scoped host
+vulnerabilities), so no asset-type classification judgment is required. That said, this
+output is deliberately **not** auto-merged into the live queue, the same explicit choice
+the generic ingest adapter makes for its own output - see
+[INTEGRATIONS.md](INTEGRATIONS.md) for why, and for what merging it in for real would
+involve.
+
+**First real run:** `PrismaCloudConnector.fetch_alerts()` fetches a single page only (a
+documented scope limit) - a real integration at scale needs the pagination loop
+described in that method's own docstring.
+
+### Cortex XSIAM
+
+**What you need:** a Cortex XSIAM API key + API Key ID (XSIAM console → Settings →
+Configurations → API Keys - create a "Standard" key, not "Advanced"), and your tenant's
+base URL (tenant- and region-specific, e.g.
+`https://api-yourfqdn.xdr.us.paloaltonetworks.com`).
+
+**From the dashboard:** **Connectors / Adaptors** → Palo Alto Cortex XSIAM card (or
+`/cortex-xsiam`). Enter base URL + API key ID + API key, **Test Connection**, then
+confirm + **Fetch Live Data**. Same "already-normalized, not auto-merged" behavior as
+Prisma Cloud above, writing to `remediation/live-data/cortex_xsiam_findings.json`.
+
+**First real run:** if your tenant requires "Advanced" auth (an HMAC request
+signature) instead of "Standard," this connector needs that signing logic added - not
+implemented here, see `cortex_xsiam_connector.py`'s module docstring.
 
 ## Ticketing / SIEM connectors (push real findings out - ready today)
 
@@ -113,12 +173,59 @@ the HEC input is enabled).
 this against the same findings later is expected behavior, not a bug (see the page's own
 disclosure).
 
-## Pull connectors with no dashboard form yet (Python-only today)
+## Asset-inventory connectors (real ip/mac ground truth - ready today)
 
-These fetch data FROM the vendor rather than pushing to it, and - unlike Tenable/Armis -
-don't have a `fetch_live_data.py` entry either. Going live with any of these today means
-running a short Python script yourself (or asking for one to be written - see
-"Recommended next step" below).
+These reconcile real network/directory data into `asset_ownership.json` (the same store
+the Asset Inventory page's "Edit owner" form and CMDB CSV import already write to), not
+findings. An asset with no existing findings against it is still stored (so its data is
+already correct the moment a finding against it does show up) but won't appear on the
+Asset Inventory table until then - that table is built from findings, not a separate
+asset registry.
+
+### Infoblox
+
+**What you need:** your grid master hostname, a username, and a password with WAPI
+read access to `record:host`.
+
+**From the dashboard:** **Connectors / Adaptors** → Infoblox card (or `/infoblox`).
+Enter grid master + username + password, **Test Connection** (a record:host fetch
+capped to one result), then confirm + **Fetch Live Data** to pull real host records and
+reconcile their real `ip` into the asset inventory.
+
+### Axonius
+
+**What you need:** an Axonius API key + API secret, and your tenant's base URL
+(Axonius console → API page).
+
+**From the dashboard:** **Connectors / Adaptors** → Axonius card (or `/axonius`). Same
+shape as Infoblox - base URL + API key + API secret, Test Connection, confirm + Fetch.
+
+### Active Directory (asset inventory)
+
+**What you need:** an AD domain controller hostname (or `ldap://`/`ldaps://` URL), a
+base DN (e.g. `DC=corp,DC=local`), and optionally a bind DN + password (a real AD often
+requires an authenticated bind - anonymous works only if your directory allows it).
+
+**From the dashboard:** **Connectors / Adaptors** → Active Directory card (or
+`/active-directory`). Enter server + base DN (+ bind DN/password if needed), **Test
+Connection** (a real LDAP simple bind + a trivial search), then confirm + **Fetch Live
+Data** to pull the domain's computer objects. Note: AD computer objects carry no ip/mac
+(that's DHCP/DNS's job, not AD's), so there's usually nothing for this specific fetch to
+write into the asset inventory - it mainly proves connectivity and shows what the
+domain's computer inventory looks like. For real ip/mac ground truth, use
+Tenable/Qualys/Infoblox/Axonius above.
+
+**A separate, pre-existing feature worth knowing about:** this dashboard already has a
+*different* Active Directory integration - a read-only group-membership check
+(`dashboard/auth/ad_directory.py`) that gates the Remediation Approval workflow,
+configured server-wide via `AD_SERVER`/`AD_BASE_DN` environment variables. That one only
+checks whether a named approver is in a specific AD group; it has nothing to do with the
+asset-inventory connector above, and configuring one doesn't configure the other.
+
+## Pull connector with no dashboard form yet (Python-only today)
+
+Fetches data FROM the vendor rather than pushing to it, and has no `fetch_live_data.py`
+entry either. Going live with it today means running a short Python script yourself.
 
 ### CrowdStrike Falcon
 
@@ -132,35 +239,7 @@ conn = CrowdStrikeConnector(client_id="...", client_secret="...")
 findings = conn.fetch_and_normalize_alerts()
 ```
 `findings` is a list already shaped like this repo's normalized-finding schema - write
-it to `remediation/live-data/crowdstrike_export.json` yourself and feed it into
-`/remediate` the same way as Tenable/Armis above.
-
-### Infoblox
-
-**What you need:** your grid master hostname, a username, and a password with WAPI
-read access to `record:host`.
-
-**How to use it today:**
-```python
-from remediation.connectors.infoblox_connector import InfobloxConnector
-conn = InfobloxConnector(grid_master="grid.example.com", username="...", password="...")
-assets = conn.fetch_and_normalize_hosts()
-```
-`assets` is asset-inventory data (name/ip/mac/type), not findings - reconcile it into
-`remediation/inventory/asset_inventory.py` the same way CMDB CSV import already does on
-the **Asset Inventory** page.
-
-### Axonius
-
-**What you need:** an Axonius API key + API secret (Axonius console → API page).
-
-**How to use it today:**
-```python
-from remediation.connectors.axonius_connector import AxoniusConnector
-conn = AxoniusConnector(base_url="...", api_key="...", api_secret="...")
-devices = conn.fetch_and_normalize_devices()
-```
-Same asset-inventory reconciliation as Infoblox above.
+it to `remediation/live-data/crowdstrike_export.json` yourself.
 
 ## Already fully ready, no credentials needed
 
@@ -171,10 +250,11 @@ configure - it's genuinely production-ready as-is today.
 ## Recommended next step
 
 The highest-leverage single thing that would move this from "capable of going live" to
-"actually live" is picking **one** real credential set and running it end to end - Tenable
-is the natural first choice, since it's the connector that would change what the
-dashboard's own findings actually are, not just where they get pushed. Once real
-credentials exist for anything, I can also close the remaining gap noted above (adding
-a `fetch_live_data.py`-style script, or a dashboard form, for CrowdStrike/Infoblox/
-Axonius) - that's real, bounded engineering work, just not yet built because there was
-never a credential to build and test it against.
+"actually live" is picking **one** real credential set and running it end to end -
+Tenable is the natural first choice, since it's a connector that would change what the
+dashboard's own findings actually are, not just where they get pushed or what asset data
+gets reconciled. Once real credentials exist for anything, I can also close the
+remaining gap noted above (adding a dashboard Test Connection + Fetch form for
+CrowdStrike, the same pattern every other pull connector now has) - that's real, bounded
+engineering work, just not yet built because there was never a credential to build and
+test it against.

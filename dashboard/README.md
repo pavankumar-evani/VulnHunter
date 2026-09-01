@@ -77,13 +77,25 @@ empty state with instructions instead of erroring.
   **`crowdstrike_connector.py`** — same "built against public docs, unverified against a
   live tenant" pattern as the ServiceNow/Tenable/Armis connectors. Jira and Splunk are
   push connectors with dashboard preview/send pages (`/jira`, `/splunk`); CrowdStrike is a
-  pull connector like Tenable/Armis, with a reference page (`/xdr`) instead of a send form.
-- **`remediation/connectors/infoblox_connector.py`**, **`axonius_connector.py`** — the
-  sidebar's "Integrations" groups are now "Adaptors"; these two are pull connectors for
-  DNS/IPAM and cyber-asset-management data (WAPI `record:host` and the `/api/devices`
-  API, respectively), each with a reference page (`/infoblox`, `/axonius`). Unlike every
-  connector above, they normalize into a plain asset-inventory record, not a
-  vulnerability Finding — see "Adaptors — Asset Discovery / IPAM" below.
+  pull connector with no dashboard form yet, only a reference page (`/xdr`).
+- **`remediation/connectors/qualys_connector.py`**, **`prismacloud_connector.py`**,
+  **`cortex_xsiam_connector.py`** — three more pull connectors, each with a real
+  dashboard **Test Connection + Fetch** page (`/qualys`, `/prismacloud`,
+  `/cortex-xsiam`). Qualys is CVE-scoped like Tenable (reuses its exact CSV shape);
+  Prisma Cloud/Cortex XSIAM are posture/correlated-detection sources like CrowdStrike
+  (normalize directly into the Finding schema, `cve`/`cvss`/`kev`/`epss` stay `null`).
+- **`remediation/connectors/infoblox_connector.py`**, **`axonius_connector.py`**,
+  **`active_directory_connector.py`** — the sidebar's "Integrations" groups are now
+  "Adaptors"; these three are pull connectors for DNS/IPAM, cyber-asset-management, and
+  on-prem AD data (WAPI `record:host`, the `/api/devices` API, and LDAP computer-object
+  search, respectively), each with a real dashboard **Test Connection + Fetch** page
+  (`/infoblox`, `/axonius`, `/active-directory`). Unlike every connector above, they
+  normalize into a plain asset-inventory record, not a vulnerability Finding — Fetch
+  reconciles real ip/mac into `asset_ownership.json` instead of writing an export file
+  or normalized findings - see "Adaptors — Asset Discovery / IPAM" below. The Active
+  Directory connector here is a distinct concern from `dashboard/auth/ad_directory.py`'s
+  read-only AD group-membership check (gates Remediation Approvals) - see that module's
+  own docstring.
 - **`dashboard/auth/`** — local login MVP + OIDC-ready SSO client. See "Authentication"
   below.
 - **`dashboard/static/js/sidebarToggle.js`** — the topbar's sidebar-collapse toggle. A
@@ -117,8 +129,10 @@ empty state with instructions instead of erroring.
 | `/priority-rules` | Live YAML editor for `remediation/config/priority_rules.yaml`, with one-click presets for a pure-CVSS/severity model vs. the shipped VPR-style (threat-intel-aware) model - both are the same underlying weighted-score engine, just with the KEV/EPSS overrides toggled |
 | `/exploit-criteria` | Live YAML editor for `remediation/config/exploit_criteria_rules.yaml` - defines which combinations of real signals (CISA KEV, NVD-derived `poc_available`/`user_interaction_required`, FIRST.org EPSS) count as a customizable "exploit criteria" match; shows a live match-count preview per rule before saving |
 | `/servicenow`, `/jira`, `/splunk` | Ticketing/SIEM Incident/Issue/Event preview (no credentials needed) and send form, one page per connector |
-| `/xdr` | CrowdStrike Falcon reference page - a pull connector like Tenable/Armis, so no send form; shows what the connector does and how to use it from Python |
-| `/infoblox`, `/axonius` | Infoblox NIOS and Axonius asset-discovery/IPAM reference pages - pull connectors like Tenable/Armis/CrowdStrike, so no send form; normalize into asset-inventory records, not vulnerability findings |
+| `/xdr` | CrowdStrike Falcon reference page - a pull connector with no dashboard form yet; shows what the connector does and how to use it from Python |
+| `/tenable`, `/qualys` | Tenable.io and Qualys VMDR Test Connection + Fetch pages - CVE-scoped host-vulnerability pull connectors; Fetch writes a raw export file, still needing `/remediate <file>` to reach this dashboard's own pages (asset-type classification needs judgment - see `docs/GOING_LIVE.md`) |
+| `/prismacloud`, `/cortex-xsiam` | Prisma Cloud and Cortex XSIAM Test Connection + Fetch pages - posture/correlated-detection pull connectors (not CVE-scoped); Fetch writes already-normalized findings straight to `remediation/live-data/`, deliberately not auto-merged into the live queue |
+| `/infoblox`, `/axonius`, `/active-directory` | Infoblox NIOS, Axonius, and Active Directory (LDAP) Test Connection + Fetch pages - asset-discovery pull connectors; Fetch reconciles real ip/mac into the asset inventory (`asset_inventory.reconcile_pulled_assets()`), not vulnerability findings |
 | `/run` | Form to trigger a pipeline run (dry-run by default), plus recent-run audit log |
 | `/reports` | Generate a real, downloadable KPI/SLA/coverage snapshot report (daily through yearly framing) |
 | `/support` | How to get help, known limitations, before-you-file-a-bug checklist |

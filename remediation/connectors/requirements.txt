@@ -1,1 +1,2 @@
 requests>=2.31
+ldap3>=2.9  # real Active Directory/LDAP asset-inventory pulls (active_directory_connector.py) - already a project dependency, see dashboard/auth/ad_directory.py

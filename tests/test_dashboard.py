@@ -1219,6 +1219,231 @@ class ApiSplunk(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
 
+class ApiTenable(unittest.TestCase):
+    """Route-level safety-boundary tests only (rbac gating, field validation, the
+    dry-run guarantee) - same economy-of-testing philosophy as ApiServiceNow/ApiSplunk
+    above. The actual fetch/normalize business logic is already thoroughly unit-tested
+    against mocked HTTP in tests/test_connectors.py, so it isn't re-proven here."""
+
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/tenable/test-connection", json={"access_key": "k", "secret_key": "s"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/tenable/test-connection", json={"access_key": "", "secret_key": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("required", resp.json()["detail"])
+
+    def test_fetch_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/tenable/fetch", json={"access_key": "k", "secret_key": "s"})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["preview_only"])
+        self.assertIsNone(payload["written_to"])
+
+    def test_fetch_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/tenable/fetch", json={"access_key": "", "secret_key": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/tenable/fetch", json={"access_key": "k", "secret_key": "s", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiQualys(unittest.TestCase):
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/qualys/test-connection", json={"username": "u", "password": "p", "platform_url": "https://qualysapi.qualys.com"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/qualys/test-connection", json={"username": "", "password": "", "platform_url": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/qualys/fetch", json={"username": "u", "password": "p", "platform_url": "https://qualysapi.qualys.com"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_fetch_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/qualys/fetch", json={"username": "", "password": "", "platform_url": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/qualys/fetch", json={"username": "u", "password": "p", "platform_url": "https://qualysapi.qualys.com", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiPrismaCloud(unittest.TestCase):
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/prismacloud/test-connection", json={"access_key_id": "k", "secret_key": "s", "base_url": "https://api.prismacloud.io"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/prismacloud/test-connection", json={"access_key_id": "", "secret_key": "", "base_url": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/prismacloud/fetch", json={"access_key_id": "k", "secret_key": "s", "base_url": "https://api.prismacloud.io"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_fetch_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/prismacloud/fetch", json={"access_key_id": "", "secret_key": "", "base_url": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/prismacloud/fetch", json={"access_key_id": "k", "secret_key": "s", "base_url": "https://api.prismacloud.io", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiCortexXsiam(unittest.TestCase):
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/cortex-xsiam/test-connection", json={"api_key": "k", "api_key_id": "1", "base_url": "https://x.example.com"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/cortex-xsiam/test-connection", json={"api_key": "", "api_key_id": "", "base_url": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/cortex-xsiam/fetch", json={"api_key": "k", "api_key_id": "1", "base_url": "https://x.example.com"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_fetch_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/cortex-xsiam/fetch", json={"api_key": "", "api_key_id": "", "base_url": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/cortex-xsiam/fetch", json={"api_key": "k", "api_key_id": "1", "base_url": "https://x.example.com", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiInfoblox(unittest.TestCase):
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/infoblox/test-connection", json={"grid_master": "gm.example.com", "username": "u", "password": "p"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/infoblox/test-connection", json={"grid_master": "", "username": "", "password": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/infoblox/fetch", json={"grid_master": "gm.example.com", "username": "u", "password": "p"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_fetch_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/infoblox/fetch", json={"grid_master": "", "username": "", "password": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/infoblox/fetch", json={"grid_master": "gm.example.com", "username": "u", "password": "p", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiAxonius(unittest.TestCase):
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/axonius/test-connection", json={"base_url": "https://axonius.example.com", "api_key": "k", "api_secret": "s"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/axonius/test-connection", json={"base_url": "", "api_key": "", "api_secret": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/axonius/fetch", json={"base_url": "https://axonius.example.com", "api_key": "k", "api_secret": "s"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_fetch_with_confirm_but_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/axonius/fetch", json={"base_url": "", "api_key": "", "api_secret": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/axonius/fetch", json={"base_url": "https://axonius.example.com", "api_key": "k", "api_secret": "s", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
+class ApiActiveDirectory(unittest.TestCase):
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/active-directory/test-connection", json={"server": "dc01.example.com", "base_dn": "DC=example,DC=com"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_fields_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/active-directory/test-connection", json={"server": "", "base_dn": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/active-directory/fetch", json={"server": "dc01.example.com", "base_dn": "DC=example,DC=com"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_fetch_with_confirm_but_missing_fields_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/active-directory/fetch", json={"server": "", "base_dn": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_fetch_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/active-directory/fetch", json={"server": "dc01.example.com", "base_dn": "DC=example,DC=com", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
 class ApiAiAssist(unittest.TestCase):
     def test_preview_builds_a_real_prompt_with_no_confirm(self):
         resp = client.post("/api/ai-assist", json={"finding_id": "FIND-12", "action": "explain"})

@@ -37,18 +37,25 @@ from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.audit import ai_usage_log  # noqa: E402
 from remediation.config import ai_governance  # noqa: E402
+from remediation.connectors.active_directory_connector import ActiveDirectoryConnector  # noqa: E402
+from remediation.connectors.axonius_connector import AxoniusConnector  # noqa: E402
+from remediation.connectors.cortex_xsiam_connector import CortexXsiamConnector  # noqa: E402
 from remediation.connectors.generic_connector import (  # noqa: E402
     normalize_generic_finding, validate_generic_payload,
 )
+from remediation.connectors.infoblox_connector import InfobloxConnector  # noqa: E402
 from remediation.connectors.jira_connector import (  # noqa: E402
     DEFAULT_ISSUE_TYPE as JIRA_DEFAULT_ISSUE_TYPE, JiraConnector, build_issue_body,
 )
+from remediation.connectors.prismacloud_connector import PrismaCloudConnector  # noqa: E402
+from remediation.connectors.qualys_connector import QualysConnector  # noqa: E402
 from remediation.connectors.servicenow_connector import (  # noqa: E402
     ServiceNowConnector, build_incident_body,
 )
 from remediation.connectors.splunk_connector import (  # noqa: E402
     DEFAULT_SOURCETYPE as SPLUNK_DEFAULT_SOURCETYPE, SplunkConnector, build_hec_event,
 )
+from remediation.connectors.tenable_connector import TenableConnector  # noqa: E402
 from remediation.enrichment.ai_vuln_taxonomy import (  # noqa: E402
     AI_VULNERABILITIES, build_ai_atlas_heatmap, tag_findings as tag_ai_vulnerabilities,
 )
@@ -910,6 +917,430 @@ def api_splunk_send(body: SplunkSendBody, request: Request):
         "message": f"Attempted {len(results)} event(s) against {body.hec_url}.",
         "previews": previews,
         "results": results,
+    }
+
+
+
+# ---------------------------------------------------------------------------
+# Tenable / Qualys / Prisma Cloud / Cortex XSIAM / Infoblox / Axonius / Active
+# Directory - "Test Connection" + "Fetch" actions for the pull connectors that,
+# unlike ServiceNow/Jira/Splunk, have no "preview what would be sent" concept (there's
+# nothing to preview without first pulling real data). Every one of these:
+#   - takes credentials fresh on every request, exactly like ServiceNow/Jira/Splunk -
+#     never written to disk or a database (see adaptors.js's connectionSettingsHtml()).
+#   - gates the real network call behind rbac.require_admin, same as every other
+#     real-credentialed action in this file.
+#   - test-connection makes one cheap, real, read-only call (see each connector's own
+#     test_connection() for what that call actually is) - no confirm checkbox, since
+#     there's no bulk/destructive action to scale-warn about.
+#   - fetch is confirm-gated like ServiceNow/Jira/Splunk's real send, because it's a
+#     real, potentially slow (Tenable/Qualys can be minutes for a large tenant) call
+#     against a real production system.
+#
+# What "fetch" actually produces differs by source, and each route says so honestly:
+#   - Tenable/Qualys are CVE-scoped host-vulnerability sources - fetch writes a raw
+#     export file to remediation/live-data/ and the response says plainly that
+#     `/remediate <file>` (an interactive, agent-driven step - see docs/GOING_LIVE.md
+#     for why asset-type classification needs that, not a deterministic script) is
+#     still required to actually see it reflected on this dashboard's own pages.
+#   - Prisma Cloud/Cortex XSIAM are already-normalized Finding-schema sources (no
+#     classification judgment needed, see their connectors' own docstrings) - fetch
+#     writes normalized findings straight to remediation/live-data/, ID-sequenced the
+#     same way the generic ingest adapter's _next_finding_id already is, but - like
+#     that adapter's own explicit, disclosed choice - deliberately NOT auto-merged into
+#     remediation/output/normalized-findings.json or the live queue.
+#   - Infoblox/Axonius/Active Directory are asset-inventory sources - fetch reconciles
+#     real ip/mac ground truth directly into asset_ownership.json via
+#     asset_inventory.reconcile_pulled_assets(), the same real, bounded action
+#     cmdb_import's CSV upload already performs, and the same honest scope limit
+#     applies: an asset with no existing findings against it won't appear on the Asset
+#     Inventory table until one does, since that table is built from findings, not a
+#     separate asset registry.
+# ---------------------------------------------------------------------------
+
+def _next_finding_id_for(existing_findings):
+    """Same FIND-N sequencing generic_connector.py's own ingest route already uses -
+    duplicated here (2 lines) rather than imported, since it's private to that module
+    and this is the same small, well-understood pattern, not a shared abstraction
+    worth introducing across an unrelated file."""
+    existing = [int(f["id"].split("-")[1]) for f in existing_findings if f.get("id", "").startswith("FIND-")]
+    return f"FIND-{max(existing, default=0) + 1}"
+
+
+LIVE_DATA_DIR = dashboard_data.REPO_ROOT / "remediation" / "live-data"
+
+
+class TenableTestConnectionBody(BaseModel):
+    access_key: str = ""
+    secret_key: str = ""
+
+
+@app.post("/api/tenable/test-connection")
+def api_tenable_test_connection(body: TenableTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.access_key or not body.secret_key:
+        raise HTTPException(status_code=400, detail="Access key and secret key are both required.")
+    conn = TenableConnector(body.access_key, body.secret_key)
+    try:
+        result = conn.test_connection()
+    except Exception as exc:  # noqa: BLE001 - surface any connection failure to the caller
+        raise HTTPException(status_code=502, detail=f"Tenable connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to Tenable.io as {result.get('username') or result.get('email') or 'an authenticated user'}."}
+
+
+class TenableFetchBody(BaseModel):
+    access_key: str = ""
+    secret_key: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/tenable/fetch")
+def api_tenable_fetch(body: TenableFetchBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm and provide real credentials to fetch a live Tenable vulnerability export.", "written_to": None, "count": None}
+    rbac.require_admin(request)
+    if not body.access_key or not body.secret_key:
+        raise HTTPException(status_code=400, detail="Access key and secret key are both required to fetch live data.")
+    conn = TenableConnector(body.access_key, body.secret_key)
+    out_path = LIVE_DATA_DIR / "tenable_export.csv"
+    try:
+        conn.fetch_and_write_csv(out_path)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Tenable export failed: {exc}") from exc
+    with out_path.open(encoding="utf-8") as f:
+        count = max(sum(1 for _ in f) - 1, 0)
+    return {
+        "preview_only": False,
+        "message": f"Wrote {count} row(s) to remediation/live-data/tenable_export.csv. Run "
+                   f"`/remediate remediation/live-data/tenable_export.csv` in an interactive Claude "
+                   f"Code session to bring this into the dashboard - see docs/GOING_LIVE.md.",
+        "written_to": "remediation/live-data/tenable_export.csv",
+        "count": count,
+    }
+
+
+class QualysTestConnectionBody(BaseModel):
+    username: str = ""
+    password: str = ""
+    platform_url: str = ""
+
+
+@app.post("/api/qualys/test-connection")
+def api_qualys_test_connection(body: QualysTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.username or not body.password or not body.platform_url:
+        raise HTTPException(status_code=400, detail="Username, password, and platform URL are all required.")
+    conn = QualysConnector(body.username, body.password, platform_url=body.platform_url)
+    try:
+        conn.test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Qualys connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to {body.platform_url}."}
+
+
+class QualysFetchBody(BaseModel):
+    username: str = ""
+    password: str = ""
+    platform_url: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/qualys/fetch")
+def api_qualys_fetch(body: QualysFetchBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm and provide real credentials to fetch a live Qualys host-detection export.", "written_to": None, "count": None}
+    rbac.require_admin(request)
+    if not body.username or not body.password or not body.platform_url:
+        raise HTTPException(status_code=400, detail="Username, password, and platform URL are all required to fetch live data.")
+    conn = QualysConnector(body.username, body.password, platform_url=body.platform_url)
+    out_path = LIVE_DATA_DIR / "qualys_export.csv"
+    try:
+        conn.fetch_and_write_csv(out_path)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Qualys export failed: {exc}") from exc
+    with out_path.open(encoding="utf-8") as f:
+        count = max(sum(1 for _ in f) - 1, 0)
+    return {
+        "preview_only": False,
+        "message": f"Wrote {count} row(s) to remediation/live-data/qualys_export.csv. Run "
+                   f"`/remediate remediation/live-data/qualys_export.csv` in an interactive Claude "
+                   f"Code session to bring this into the dashboard - see docs/GOING_LIVE.md.",
+        "written_to": "remediation/live-data/qualys_export.csv",
+        "count": count,
+    }
+
+
+class PrismaCloudTestConnectionBody(BaseModel):
+    access_key_id: str = ""
+    secret_key: str = ""
+    base_url: str = ""
+
+
+@app.post("/api/prismacloud/test-connection")
+def api_prismacloud_test_connection(body: PrismaCloudTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.access_key_id or not body.secret_key or not body.base_url:
+        raise HTTPException(status_code=400, detail="Access key ID, secret key, and base URL are all required.")
+    conn = PrismaCloudConnector(body.access_key_id, body.secret_key, base_url=body.base_url)
+    try:
+        conn.test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Prisma Cloud connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to {body.base_url}."}
+
+
+class PrismaCloudFetchBody(BaseModel):
+    access_key_id: str = ""
+    secret_key: str = ""
+    base_url: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/prismacloud/fetch")
+def api_prismacloud_fetch(body: PrismaCloudFetchBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm and provide real credentials to fetch live Prisma Cloud alerts.", "written_to": None, "count": None}
+    rbac.require_admin(request)
+    if not body.access_key_id or not body.secret_key or not body.base_url:
+        raise HTTPException(status_code=400, detail="Access key ID, secret key, and base URL are all required to fetch live data.")
+    conn = PrismaCloudConnector(body.access_key_id, body.secret_key, base_url=body.base_url)
+    try:
+        findings = conn.fetch_and_normalize_alerts()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Prisma Cloud fetch failed: {exc}") from exc
+
+    out_path = LIVE_DATA_DIR / "prismacloud_findings.json"
+    existing = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else []
+    real_findings = dashboard_data.load_remediation_findings()
+    for finding in findings:
+        finding["id"] = _next_finding_id_for(real_findings + existing)
+        existing.append(finding)
+    LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+
+    return {
+        "preview_only": False,
+        "message": f"Wrote {len(findings)} normalized finding(s) to remediation/live-data/prismacloud_findings.json. "
+                   f"Like the generic ingest adapter's own output, this is deliberately not auto-merged into the "
+                   f"live queue - see docs/INTEGRATIONS.md.",
+        "written_to": "remediation/live-data/prismacloud_findings.json",
+        "count": len(findings),
+    }
+
+
+class CortexXsiamTestConnectionBody(BaseModel):
+    api_key: str = ""
+    api_key_id: str = ""
+    base_url: str = ""
+
+
+@app.post("/api/cortex-xsiam/test-connection")
+def api_cortex_xsiam_test_connection(body: CortexXsiamTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.api_key or not body.api_key_id or not body.base_url:
+        raise HTTPException(status_code=400, detail="API key, API key ID, and base URL are all required.")
+    conn = CortexXsiamConnector(body.api_key, body.api_key_id, base_url=body.base_url)
+    try:
+        conn.test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Cortex XSIAM connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to {body.base_url}."}
+
+
+class CortexXsiamFetchBody(BaseModel):
+    api_key: str = ""
+    api_key_id: str = ""
+    base_url: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/cortex-xsiam/fetch")
+def api_cortex_xsiam_fetch(body: CortexXsiamFetchBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm and provide real credentials to fetch live Cortex XSIAM incidents.", "written_to": None, "count": None}
+    rbac.require_admin(request)
+    if not body.api_key or not body.api_key_id or not body.base_url:
+        raise HTTPException(status_code=400, detail="API key, API key ID, and base URL are all required to fetch live data.")
+    conn = CortexXsiamConnector(body.api_key, body.api_key_id, base_url=body.base_url)
+    try:
+        findings = conn.fetch_and_normalize_incidents()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Cortex XSIAM fetch failed: {exc}") from exc
+
+    out_path = LIVE_DATA_DIR / "cortex_xsiam_findings.json"
+    existing = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else []
+    real_findings = dashboard_data.load_remediation_findings()
+    for finding in findings:
+        finding["id"] = _next_finding_id_for(real_findings + existing)
+        existing.append(finding)
+    LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+
+    return {
+        "preview_only": False,
+        "message": f"Wrote {len(findings)} normalized finding(s) to remediation/live-data/cortex_xsiam_findings.json. "
+                   f"Like the generic ingest adapter's own output, this is deliberately not auto-merged into the "
+                   f"live queue - see docs/INTEGRATIONS.md.",
+        "written_to": "remediation/live-data/cortex_xsiam_findings.json",
+        "count": len(findings),
+    }
+
+
+class InfobloxTestConnectionBody(BaseModel):
+    grid_master: str = ""
+    username: str = ""
+    password: str = ""
+
+
+@app.post("/api/infoblox/test-connection")
+def api_infoblox_test_connection(body: InfobloxTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.grid_master or not body.username or not body.password:
+        raise HTTPException(status_code=400, detail="Grid master, username, and password are all required.")
+    conn = InfobloxConnector(body.grid_master, body.username, body.password)
+    try:
+        conn.test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Infoblox connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to {body.grid_master}."}
+
+
+class InfobloxFetchBody(BaseModel):
+    grid_master: str = ""
+    username: str = ""
+    password: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/infoblox/fetch")
+def api_infoblox_fetch(body: InfobloxFetchBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm and provide real credentials to fetch and reconcile live Infoblox host records.", "matched": None, "unmatched": None, "skipped": None}
+    rbac.require_admin(request)
+    if not body.grid_master or not body.username or not body.password:
+        raise HTTPException(status_code=400, detail="Grid master, username, and password are all required to fetch live data.")
+    conn = InfobloxConnector(body.grid_master, body.username, body.password)
+    try:
+        assets = conn.fetch_and_normalize_hosts()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Infoblox fetch failed: {exc}") from exc
+    known_names = [a["name"] for a in asset_inventory.build_asset_inventory(dashboard_data.load_remediation_findings())]
+    result = asset_inventory.reconcile_pulled_assets(assets, known_names)
+    return {
+        "preview_only": False,
+        "message": f"Fetched {len(assets)} host record(s): {len(result['matched'])} matched an existing asset "
+                   f"(ip/mac updated), {len(result['unmatched'])} had no existing findings yet (ip/mac stored, will "
+                   f"appear on Asset Inventory once one does), {len(result['skipped'])} skipped.",
+        **result,
+    }
+
+
+class AxoniusTestConnectionBody(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
+    api_secret: str = ""
+
+
+@app.post("/api/axonius/test-connection")
+def api_axonius_test_connection(body: AxoniusTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.base_url or not body.api_key or not body.api_secret:
+        raise HTTPException(status_code=400, detail="Base URL, API key, and API secret are all required.")
+    conn = AxoniusConnector(body.base_url, body.api_key, body.api_secret)
+    try:
+        conn.test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Axonius connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to {body.base_url}."}
+
+
+class AxoniusFetchBody(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
+    api_secret: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/axonius/fetch")
+def api_axonius_fetch(body: AxoniusFetchBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm and provide real credentials to fetch and reconcile live Axonius device records.", "matched": None, "unmatched": None, "skipped": None}
+    rbac.require_admin(request)
+    if not body.base_url or not body.api_key or not body.api_secret:
+        raise HTTPException(status_code=400, detail="Base URL, API key, and API secret are all required to fetch live data.")
+    conn = AxoniusConnector(body.base_url, body.api_key, body.api_secret)
+    try:
+        assets = conn.fetch_and_normalize_devices()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Axonius fetch failed: {exc}") from exc
+    known_names = [a["name"] for a in asset_inventory.build_asset_inventory(dashboard_data.load_remediation_findings())]
+    result = asset_inventory.reconcile_pulled_assets(assets, known_names)
+    return {
+        "preview_only": False,
+        "message": f"Fetched {len(assets)} device record(s): {len(result['matched'])} matched an existing asset "
+                   f"(ip/mac updated), {len(result['unmatched'])} had no existing findings yet (ip/mac stored, will "
+                   f"appear on Asset Inventory once one does), {len(result['skipped'])} skipped.",
+        **result,
+    }
+
+
+class ActiveDirectoryTestConnectionBody(BaseModel):
+    server: str = ""
+    base_dn: str = ""
+    bind_dn: str = ""
+    bind_password: str = ""
+    use_ssl: bool = False
+
+
+@app.post("/api/active-directory/test-connection")
+def api_active_directory_test_connection(body: ActiveDirectoryTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.server or not body.base_dn:
+        raise HTTPException(status_code=400, detail="Server and base DN are both required.")
+    conn = ActiveDirectoryConnector(
+        body.server, body.base_dn,
+        bind_dn=body.bind_dn or None, bind_password=body.bind_password or None, use_ssl=body.use_ssl,
+    )
+    try:
+        conn.test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Active Directory connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to {body.server}."}
+
+
+class ActiveDirectoryFetchBody(BaseModel):
+    server: str = ""
+    base_dn: str = ""
+    bind_dn: str = ""
+    bind_password: str = ""
+    use_ssl: bool = False
+    confirm: bool = False
+
+
+@app.post("/api/active-directory/fetch")
+def api_active_directory_fetch(body: ActiveDirectoryFetchBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm and provide a real server/base DN to fetch and reconcile live AD computer objects.", "matched": None, "unmatched": None, "skipped": None}
+    rbac.require_admin(request)
+    if not body.server or not body.base_dn:
+        raise HTTPException(status_code=400, detail="Server and base DN are both required to fetch live data.")
+    conn = ActiveDirectoryConnector(
+        body.server, body.base_dn,
+        bind_dn=body.bind_dn or None, bind_password=body.bind_password or None, use_ssl=body.use_ssl,
+    )
+    try:
+        assets = conn.fetch_and_normalize_computers()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Active Directory fetch failed: {exc}") from exc
+    known_names = [a["name"] for a in asset_inventory.build_asset_inventory(dashboard_data.load_remediation_findings())]
+    result = asset_inventory.reconcile_pulled_assets(assets, known_names)
+    return {
+        "preview_only": False,
+        "message": f"Fetched {len(assets)} computer object(s) from Active Directory. AD computer objects carry no "
+                   f"ip/mac (see active_directory_connector.py's module docstring), so there is nothing to "
+                   f"reconcile into asset_ownership.json from this source alone: {len(result['skipped'])} skipped "
+                   f"for that reason. Use Tenable/Qualys/Infoblox/Axonius to establish real ip/mac ground truth.",
+        **result,
     }
 
 

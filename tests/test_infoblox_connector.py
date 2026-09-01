@@ -99,6 +99,24 @@ class InfobloxFetchHostRecords(unittest.TestCase):
             conn.fetch_host_records()
 
 
+class InfobloxTestConnection(unittest.TestCase):
+    def test_test_connection_fetches_a_single_host_record(self):
+        session = MagicMock()
+        session.get.return_value = fake_response([{"name": "host1"}])
+        conn = InfobloxConnector("gm.example.com", "admin", "pw", session=session)
+        result = conn.test_connection()
+        params = session.get.call_args.kwargs["params"]
+        self.assertEqual(params["_max_results"], 1)
+        self.assertEqual(result, {"ok": True})
+
+    def test_test_connection_raises_on_http_error(self):
+        session = MagicMock()
+        session.get.return_value = fake_response(None, raise_error=True)
+        conn = InfobloxConnector("gm.example.com", "admin", "pw", session=session)
+        with self.assertRaises(Exception):
+            conn.test_connection()
+
+
 class InfobloxNormalizeHostRecord(unittest.TestCase):
     def test_normalize_maps_documented_shape(self):
         record = {

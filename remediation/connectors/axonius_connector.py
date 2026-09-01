@@ -71,6 +71,14 @@ class AxoniusConnector:
         resp.raise_for_status()
         return resp.json()
 
+    def test_connection(self):
+        """Cheap, real connectivity/credential check - Axonius's REST API has no
+        dedicated 'ping' endpoint, so the smallest real authenticated call is a
+        devices fetch capped to a single result. Used by the dashboard's "Test
+        Connection" action."""
+        self.fetch_devices(page_size=1, offset=0)
+        return {"ok": True}
+
     @staticmethod
     def normalize_device(device):
         """Maps one raw (assumed-flattened, see module docstring) Axonius device

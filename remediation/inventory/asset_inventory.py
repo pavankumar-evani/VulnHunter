@@ -153,6 +153,47 @@ def set_network_info(asset_name, ip=None, mac=None, actor=None, path=None):
     return entry
 
 
+def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, path=None):
+    """Reconciles asset records pulled from a live connector (Infoblox/Axonius/Active
+    Directory - see their fetch_and_normalize_*() output shape:
+    {name, ip, mac, type, source, source_ref, extra}) against the real, finding-derived
+    asset list, writing any real ip/mac ground truth into asset_ownership.json via
+    set_network_info() - the same override-wins mechanism the single-asset "Edit owner"
+    panel's IP/MAC fields already use. Same case-insensitive matched/unmatched split as
+    cmdb_import.reconcile_rows(), and the same honest scope limit that module's docstring
+    already states: an unmatched pulled asset's ip/mac is still stored (so it's already
+    correct the moment a finding against it does show up), but it won't appear on the
+    Asset Inventory table until then, since that table is built from findings, not a
+    separate asset registry.
+
+    A pulled record with neither ip nor mac (e.g. an Infoblox host record with no IPs,
+    or an AD computer object - which never carries either) is skipped rather than
+    calling set_network_info with nothing to actually set."""
+    known_lower = {n.lower(): n for n in known_asset_names}
+    matched, unmatched, skipped = [], [], []
+
+    for pulled in pulled_assets:
+        name = (pulled.get("name") or "").strip()
+        if not name:
+            skipped.append({"reason": "No name on this pulled record", "asset_name": None})
+            continue
+        if not pulled.get("ip") and not pulled.get("mac"):
+            skipped.append({"reason": "No ip or mac to reconcile", "asset_name": name})
+            continue
+
+        real_name = known_lower.get(name.lower(), name)
+        try:
+            set_network_info(real_name, ip=pulled.get("ip"), mac=pulled.get("mac"), actor=actor, path=path)
+        except ValueError as exc:
+            skipped.append({"reason": str(exc), "asset_name": real_name})
+            continue
+
+        entry = {"asset_name": real_name, "ip": pulled.get("ip"), "mac": pulled.get("mac")}
+        (matched if real_name.lower() in known_lower else unmatched).append(entry)
+
+    return {"matched": matched, "unmatched": unmatched, "skipped": skipped}
+
+
 def build_asset_inventory(findings, ownership=None):
     """Groups findings by asset.name into one inventory row each. Returns a list
     sorted by finding_count descending (busiest assets first), then name."""

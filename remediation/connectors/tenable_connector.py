@@ -45,6 +45,18 @@ class TenableConnector:
             "Accept": "application/json",
         })
 
+    def test_connection(self):
+        """Cheap, real connectivity/credential check - GET /session returns the
+        authenticated API user's own profile, Tenable.io's lightest documented
+        authenticated endpoint (no export job, no pagination). Used by the
+        dashboard's "Test Connection" action so a real access/secret key pair can be
+        verified in under a second, before anyone kicks off a full (multi-minute)
+        vulnerability export."""
+        resp = self.session.get(f"{self.base_url}/session")
+        resp.raise_for_status()
+        data = resp.json()
+        return {"ok": True, "username": data.get("username"), "email": data.get("email")}
+
     def request_export(self, since=None, num_assets=50):
         """Kick off an export job. `since` is a unix timestamp (only vulns last seen
         on/after this time are included) - omit for a full export."""

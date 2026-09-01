@@ -220,6 +220,77 @@ class OwnershipStore(unittest.TestCase):
             asset_inventory.set_network_info("", "10.20.30.41", path=self.path)
 
 
+class ReconcilePulledAssets(unittest.TestCase):
+    """reconcile_pulled_assets() drives set_network_info() per matched/unmatched
+    record, so it needs the same tmpdir + patched activity-log setup as
+    OwnershipStore above."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmpdir.name) / "asset_ownership.json"
+        self.activity_log_path = Path(self.tmpdir.name) / "activity_log.json"
+        self.activity_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", self.activity_log_path)
+        self.activity_patcher.start()
+
+    def tearDown(self):
+        self.activity_patcher.stop()
+        self.tmpdir.cleanup()
+
+    def test_matched_asset_gets_ip_mac_written(self):
+        pulled = [{"name": "win-dc01", "ip": "10.1.1.5", "mac": None, "type": "windows-server",
+                   "source": "infoblox", "source_ref": "ref1", "extra": {}}]
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        self.assertEqual(result["matched"], [{"asset_name": "WIN-DC01", "ip": "10.1.1.5", "mac": None}])
+        self.assertEqual(result["unmatched"], [])
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["WIN-DC01"]["ip"], "10.1.1.5")
+
+    def test_matching_is_case_insensitive_and_normalizes_to_real_casing(self):
+        pulled = [{"name": "WEB01.CORP.LOCAL", "ip": "10.0.0.9", "mac": None}]
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["web01.corp.local"], path=self.path)
+        self.assertEqual(result["matched"][0]["asset_name"], "web01.corp.local")
+
+    def test_unmatched_asset_is_still_stored_but_reported_unmatched(self):
+        pulled = [{"name": "new-host", "ip": "10.0.0.1", "mac": None}]
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        self.assertEqual(result["unmatched"], [{"asset_name": "new-host", "ip": "10.0.0.1", "mac": None}])
+        loaded = asset_inventory.load_ownership(self.path)
+        self.assertEqual(loaded["new-host"]["ip"], "10.0.0.1")
+
+    def test_record_with_no_name_is_skipped(self):
+        pulled = [{"name": "", "ip": "10.0.0.1", "mac": None}]
+        result = asset_inventory.reconcile_pulled_assets(pulled, [], path=self.path)
+        self.assertEqual(len(result["skipped"]), 1)
+        self.assertEqual(result["matched"], [])
+        self.assertEqual(result["unmatched"], [])
+
+    def test_record_with_neither_ip_nor_mac_is_skipped_without_writing(self):
+        pulled = [{"name": "ad-computer-01", "ip": None, "mac": None}]
+        result = asset_inventory.reconcile_pulled_assets(pulled, [], path=self.path)
+        self.assertEqual(len(result["skipped"]), 1)
+        self.assertEqual(asset_inventory.load_ownership(self.path), {})
+
+    def test_invalid_ip_from_source_is_skipped_not_raised(self):
+        pulled = [{"name": "bad-ip-host", "ip": "not-an-ip", "mac": None}]
+        result = asset_inventory.reconcile_pulled_assets(pulled, [], path=self.path)
+        self.assertEqual(len(result["skipped"]), 1)
+        self.assertIn("not a valid", result["skipped"][0]["reason"])
+
+    def test_mac_only_record_is_reconciled(self):
+        pulled = [{"name": "WIN-DC01", "ip": None, "mac": "aa:bb:cc:dd:ee:ff"}]
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        self.assertEqual(result["matched"][0]["mac"], "aa:bb:cc:dd:ee:ff")
+
+    def test_one_bad_record_does_not_abort_the_batch(self):
+        pulled = [
+            {"name": "bad-ip-host", "ip": "not-an-ip", "mac": None},
+            {"name": "WIN-DC01", "ip": "10.1.1.5", "mac": None},
+        ]
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        self.assertEqual(len(result["skipped"]), 1)
+        self.assertEqual(len(result["matched"]), 1)
+
+
 class BuildAssetInventoryNetworkInfo(unittest.TestCase):
     def test_ip_mac_come_from_the_finding_when_no_override_exists(self):
         findings = [{
