@@ -23,6 +23,7 @@
   --info-bg: #e0f2fe;
   --info-text: #075985;
   --sidebar-w: 232px;
+  --sidebar-w-mini: 64px;
   /* Categorical chart palette (nominal data only - team names, asset types, months,
      sub-categories: series with no inherent order) - 8 hues, fixed order, CVD-validated
      (protanopia/deuteranopia simulated, OKLab ΔE) against this app's own light/dark
@@ -76,18 +77,37 @@ body {
   transition: width 0.22s ease, min-width 0.22s ease, opacity 0.12s ease;
 }
 
-/* Collapsed via the topbar's sidebar-toggle button (sidebarToggle.js) - the sidebar
-   slides to zero width for a full-screen content view. `min-width` has to be
-   overridden alongside `width` - a flex item's automatic minimum width is otherwise
-   its content's min-content size, which would stop it shrinking past ~232px
-   regardless of the `width: 0` above it. State persists across page loads via
-   localStorage, not a server-side preference. */
-.app-shell.sidebar-collapsed .sidebar {
-  width: 0;
-  min-width: 0;
-  opacity: 0;
-  pointer-events: none;
+/* "Collapsed" via the topbar's sidebar-toggle button (sidebarToggle.js) means a
+   compact icon-only rail (like Traceable's own left nav), not fully hidden - icons,
+   tooltips (data-tooltip, unaffected), and clicks all keep working, just without the
+   text labels taking up width. Redefining the --sidebar-w custom property itself
+   (rather than overriding .sidebar's width directly) means .content's own
+   margin-left formula below - already written in terms of var(--sidebar-w) - just
+   recalculates correctly for the narrower rail too, with no separate content-side
+   override needed (a previous version of this rule gave collapsed content the full
+   viewport width instead, which was correct back when "collapsed" meant fully
+   hidden, and wrong now that a real, space-occupying mini rail remains). This is
+   also the default for a new visitor (no localStorage preference saved yet) - see
+   sidebarToggle.js - and sidebarToggle.js also re-applies it automatically right
+   after a nav click, so the rail minimizes itself once a page is selected, same as
+   it does on first load. State persists across page loads via localStorage, not a
+   server-side preference. */
+.app-shell.sidebar-collapsed { --sidebar-w: var(--sidebar-w-mini); }
+.app-shell.sidebar-collapsed .nav-label,
+.app-shell.sidebar-collapsed .nav-group-label,
+.app-shell.sidebar-collapsed .brand-text,
+.app-shell.sidebar-collapsed .tenant-info,
+.app-shell.sidebar-collapsed .tenant-location {
+  display: none;
 }
+.app-shell.sidebar-collapsed .side-nav a,
+.app-shell.sidebar-collapsed .sidebar .brand,
+.app-shell.sidebar-collapsed .tenant-switcher {
+  justify-content: center;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.app-shell.sidebar-collapsed .side-nav a.active { border-left-width: 3px; }
 .sidebar .brand {
   display: flex;
   align-items: center;
@@ -969,12 +989,6 @@ a.notif-item:hover { background: var(--bg); }
   min-height: 0;
   overflow-y: auto;
 }
-/* Collapsing the sidebar (sidebarToggle.js) is meant to give a genuine full-screen
-   content view - a fixed max-width would defeat that on a wide monitor, so drop the
-   cap entirely while collapsed instead of just widening it. The margin-left formula
-   above assumes a present, --sidebar-w-wide sidebar, so it's reset to 0 here too -
-   with no sidebar there's nothing to compensate for. */
-.app-shell.sidebar-collapsed .content { width: 100%; margin-left: 0; margin-right: auto; }
 
 h1 { font-size: 1.5rem; margin-bottom: 4px; }
 h2 { font-size: 1.15rem; margin-top: 32px; }
