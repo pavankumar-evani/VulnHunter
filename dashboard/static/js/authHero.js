@@ -1,60 +1,76 @@
-// Shared branded illustration + tagline for the login and logout screens (the only two
+// Shared branded background + tagline for the login and logout screens (the only two
 // pages that render inside `.auth-page` - see style.css's `.auth-shell`/`.auth-hero`
 // rules) - one definition so both pages stay visually identical instead of two
 // independently-drifting copies of the same inline SVG.
+//
+// Two independent layers, deliberately: authHeroBackgroundHtml() is a full-bleed,
+// absolutely-positioned network/scan-line graphic meant to sit behind BOTH the
+// illustration half and the form half (see .auth-shell's own ::before aurora-gradient
+// layer for the color underneath it) - this is what makes the page read as one
+// continuous animated scene rather than "a nice graphic on the left, a plain card on
+// the right" (the literal complaint this redesign responds to). authHeroHtml() is just
+// the copy block (brand/tagline/points), unchanged in content, now with no background
+// of its own since the shell provides one shared background for everything.
+export function authHeroBackgroundHtml() {
+  return `
+    <svg class="auth-hero-art" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <g class="auth-hero-sweep" stroke="#7ea6f5" stroke-width="1.5" fill="none" stroke-opacity="0.55">
+        <circle cx="330" cy="330" r="80"/>
+        <circle cx="330" cy="330" r="140"/>
+        <circle cx="330" cy="330" r="205"/>
+        <circle cx="330" cy="330" r="275"/>
+        <path d="M 330 330 L 330 55" stroke-dasharray="3 9"/>
+      </g>
+
+      <g class="auth-hero-nodes" fill="#7ea6f5">
+        <circle class="auth-hero-node" cx="150" cy="180" r="3.5"/>
+        <circle class="auth-hero-node" cx="480" cy="120" r="3.5"/>
+        <circle class="auth-hero-node" cx="600" cy="300" r="3.5"/>
+        <circle class="auth-hero-node" cx="130" cy="420" r="3.5"/>
+        <circle class="auth-hero-node" cx="260" cy="560" r="3.5"/>
+        <circle class="auth-hero-node" cx="500" cy="530" r="3.5"/>
+        <circle class="auth-hero-node" cx="760" cy="180" r="3.5"/>
+        <circle class="auth-hero-node" cx="820" cy="420" r="3.5"/>
+        <circle class="auth-hero-node" cx="650" cy="560" r="3.5"/>
+        <circle class="auth-hero-node" cx="900" cy="280" r="3.5"/>
+      </g>
+      <g stroke="#4d84f0" stroke-opacity="0.32">
+        <line x1="150" y1="180" x2="330" y2="330"/>
+        <line x1="480" y1="120" x2="330" y2="330"/>
+        <line x1="600" y1="300" x2="330" y2="330"/>
+        <line x1="130" y1="420" x2="330" y2="330"/>
+        <line x1="260" y1="560" x2="330" y2="330"/>
+        <line x1="500" y1="530" x2="330" y2="330"/>
+        <line x1="600" y1="300" x2="760" y2="180"/>
+        <line x1="600" y1="300" x2="820" y2="420"/>
+        <line x1="500" y1="530" x2="650" y2="560"/>
+        <line x1="760" y1="180" x2="900" y2="280"/>
+        <line x1="820" y1="420" x2="900" y2="280"/>
+      </g>
+      <g class="auth-hero-pulse-line">
+        <circle class="auth-hero-pulse-dot" r="4" fill="#bcd2fb">
+          <animateMotion dur="3.2s" repeatCount="indefinite"
+            path="M 330 330 L 600 300 L 760 180 L 900 280" />
+        </circle>
+      </g>
+
+      <g transform="translate(280, 265) scale(1.55)">
+        <path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#2f6fed" fill-opacity="0.9"/>
+        <circle cx="27" cy="27" r="11" fill="none" stroke="#ffffff" stroke-width="3.6"/>
+        <line x1="35.2" y1="35.2" x2="45" y2="45" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+      </g>
+    </svg>`;
+}
+
 export function authHeroHtml() {
   return `
-    <div class="auth-hero">
-      <svg class="auth-hero-art" viewBox="0 0 480 460" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <radialGradient id="auth-hero-glow" cx="50%" cy="42%" r="60%">
-            <stop offset="0%" stop-color="#2f6fed" stop-opacity="0.35"/>
-            <stop offset="100%" stop-color="#2f6fed" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <rect x="0" y="0" width="480" height="460" fill="url(#auth-hero-glow)"/>
-
-        <g stroke="#4d84f0" stroke-opacity="0.35" fill="none">
-          <circle cx="240" cy="230" r="90"/>
-          <circle cx="240" cy="230" r="140"/>
-          <circle cx="240" cy="230" r="190"/>
-        </g>
-        <g class="auth-hero-sweep" stroke="#7ea6f5" stroke-width="2" fill="none" stroke-opacity="0.8">
-          <path d="M 240 230 L 240 40" stroke-dasharray="4 10"/>
-        </g>
-
-        <g class="auth-hero-nodes" fill="#7ea6f5">
-          <circle class="auth-hero-node" cx="95" cy="120" r="4"/>
-          <circle class="auth-hero-node" cx="380" cy="95" r="4"/>
-          <circle class="auth-hero-node" cx="415" cy="270" r="4"/>
-          <circle class="auth-hero-node" cx="70" cy="340" r="4"/>
-          <circle class="auth-hero-node" cx="150" cy="410" r="4"/>
-          <circle class="auth-hero-node" cx="360" cy="400" r="4"/>
-        </g>
-        <g stroke="#4d84f0" stroke-opacity="0.4">
-          <line x1="95" y1="120" x2="240" y2="230"/>
-          <line x1="380" y1="95" x2="240" y2="230"/>
-          <line x1="415" y1="270" x2="240" y2="230"/>
-          <line x1="70" y1="340" x2="240" y2="230"/>
-          <line x1="150" y1="410" x2="240" y2="230"/>
-          <line x1="360" y1="400" x2="240" y2="230"/>
-        </g>
-
-        <g transform="translate(190, 165) scale(1.55)">
-          <path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#2f6fed"/>
-          <circle cx="27" cy="27" r="11" fill="none" stroke="#ffffff" stroke-width="3.6"/>
-          <line x1="35.2" y1="35.2" x2="45" y2="45" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
-        </g>
-      </svg>
-
-      <div class="auth-hero-copy">
-        <div class="auth-hero-brand">VulnHunter</div>
-        <p class="auth-hero-tagline">Real-time vulnerability intelligence — from first scan to verified fix.</p>
-        <ul class="auth-hero-points">
-          <li>Live CISA KEV + FIRST.org EPSS threat intel</li>
-          <li>Human-approved, change-managed remediation</li>
-          <li>Real, live-trained ML insights - not keyword heuristics</li>
-        </ul>
-      </div>
+    <div class="auth-hero-copy">
+      <div class="auth-hero-brand">VulnHunter</div>
+      <p class="auth-hero-tagline">Real-time vulnerability intelligence — from first scan to verified fix.</p>
+      <ul class="auth-hero-points">
+        <li>Live CISA KEV + FIRST.org EPSS threat intel</li>
+        <li>Human-approved, change-managed remediation</li>
+        <li>Real, live-trained ML insights - not keyword heuristics</li>
+      </ul>
     </div>`;
 }

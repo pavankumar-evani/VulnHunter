@@ -130,18 +130,29 @@ def run(prompt, pipeline_name, dry_run=False, on_result=None, **build_kwargs):
     actually-authenticated request's user, without this function needing to know
     anything about who's calling it or changing its own int-exit-code return contract
     that main() below (and every existing caller) already depends on."""
+    claude_bin = build_kwargs.pop("claude_bin", None)
+
+    if dry_run:
+        # A dry run never actually invokes claude, so it must never require one to be
+        # resolvable either - real bug this masked until CI (a clean runner with no
+        # `claude` on PATH and none of the env vars below) actually exercised it:
+        # every local run of this suite happens inside an active Claude Code session,
+        # where CLAUDE_CODE_EXECPATH is already set, so find_claude_binary() always
+        # succeeded and this ordering issue never surfaced. Falls back to the literal
+        # string "claude" purely for display - a dry run only needs to show what
+        # command WOULD run, never a verified, resolved absolute path.
+        command = build_command(prompt, claude_bin=claude_bin or "claude", **build_kwargs)
+        print("Would run:", " ".join(command))
+        print(f"(working directory: {REPO_ROOT})")
+        return 0
+
     try:
-        claude_bin = build_kwargs.pop("claude_bin", None) or find_claude_binary()
+        claude_bin = claude_bin or find_claude_binary()
     except ClaudeBinaryNotFound as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 127
 
     command = build_command(prompt, claude_bin=claude_bin, **build_kwargs)
-
-    if dry_run:
-        print("Would run:", " ".join(command))
-        print(f"(working directory: {REPO_ROOT})")
-        return 0
 
     print("Running:", " ".join(command))
     print("This calls the real Claude API and will spend usage/credits.")

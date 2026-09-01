@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { escapeHtml, flash } from "../dom.js";
 import { setCurrentUser } from "../auth.js";
-import { authHeroHtml } from "../authHero.js";
+import { authHeroBackgroundHtml, authHeroHtml } from "../authHero.js";
 
 export const title = "Sign in";
 
@@ -21,7 +21,8 @@ export async function render(container) {
 
   container.innerHTML = `
     <div class="auth-shell">
-      ${authHeroHtml()}
+      <div class="auth-hero-background" aria-hidden="true">${authHeroBackgroundHtml()}</div>
+      <div class="auth-hero">${authHeroHtml()}</div>
       <div class="auth-form-panel">
         <div class="login-card">
           <div class="login-brand">

@@ -5,7 +5,7 @@
 // page renders (see auth.js's initAccountChip()/profile.js/idleTimeout.js) - this page
 // only ever displays that fact and offers a way back in, it never calls
 // api.authLogout() itself.
-import { authHeroHtml } from "../authHero.js";
+import { authHeroBackgroundHtml, authHeroHtml } from "../authHero.js";
 
 export const title = "Signed out";
 
@@ -15,7 +15,8 @@ export async function render(container) {
 
   container.innerHTML = `
     <div class="auth-shell">
-      ${authHeroHtml()}
+      <div class="auth-hero-background" aria-hidden="true">${authHeroBackgroundHtml()}</div>
+      <div class="auth-hero">${authHeroHtml()}</div>
       <div class="auth-form-panel">
         <div class="login-card">
           <div class="logout-icon">

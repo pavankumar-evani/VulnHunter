@@ -1,11 +1,16 @@
 // Infrastructure Vulnerabilities hub: rolls up Infrastructure Vulnerability
 // Management findings into the sub-categories a real infra/security team actually
 // organizes around - OS-level patching, network hardware, network security
-// appliances, OT/IoT devices, and cloud infrastructure - rather than one flat
-// "Infrastructure Vulnerabilities" list. Same rollup-view pattern as /appsec: every
-// count here comes straight from /api/queue (already tagged with `infra_category` by
+// appliances, and cloud infrastructure - rather than one flat "Infrastructure
+// Vulnerabilities" list. Same rollup-view pattern as /appsec: every count here comes
+// straight from /api/queue (already tagged with `infra_category` by
 // remediation/enrichment/infra_classification.py via dashboard/data.py's
 // load_live_queue()), not a separate data source.
+//
+// OT/IoT deliberately excluded from every rollup below (KPI total, card grid, charts,
+// tables) - it has its own dedicated hub at /ot-vulnerabilities now, not a slice of
+// this page too. HUB_CATEGORIES (not the full INFRA_CATEGORIES import) is what drives
+// this exclusion; queue.js's category filter and other pages still use the full list.
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
 import { icon } from "../icons.js";
@@ -26,12 +31,15 @@ import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../ins
 
 export const title = "Infrastructure Vulnerabilities";
 
+// See module docstring - OT/IoT moved to its own dedicated hub (/ot-vulnerabilities),
+// so it's excluded here rather than re-included alongside it.
+const HUB_CATEGORIES = INFRA_CATEGORIES.filter((c) => c !== "ot");
+
 const CATEGORY_ICONS = {
   "os": "infra",
   "endpoint": "endpoint",
   "network": "sca",
   "network-security": "certmgmt",
-  "ot": "container",
   "virtualization": "virtualization",
   "cloud": "cloud",
   "apps": "assets",
@@ -45,7 +53,6 @@ const CATEGORY_NOTES = {
   "endpoint": "Laptops/desktops (patched via SCCM/Microsoft Configuration Manager) and mobile devices (patched via MDM, e.g. Intune) - see a finding's Remediation Mechanism field.",
   "network": "Routers, switches, and other core network hardware.",
   "network-security": "Firewalls, IDS/IPS, and other security appliances.",
-  "ot": "Operational technology and IoT devices.",
   "virtualization": "Hypervisor/VM platform CVEs (VMware ESXi/vCenter, Hyper-V, Proxmox, Citrix Hypervisor, KVM).",
   "cloud": "Cloud asset/posture findings (AWS/Azure/GCP/OCI/Alibaba Cloud) - see the by-provider breakdown below.",
   "apps": "Browsers, PDF readers, dev tools, media/utility software, and drivers on end-user workstations.",
@@ -69,8 +76,8 @@ export async function render(container) {
   const [queue, assetsData] = await Promise.all([api.queue(), api.assetsList()]);
   const { ownerByAssetName, teamByAssetName, environmentByAssetName } = buildOwnerTeamMaps(assetsData.assets);
 
-  const counts = Object.fromEntries(INFRA_CATEGORIES.map((c) => [c, 0]));
-  const findingsByCategory = Object.fromEntries(INFRA_CATEGORIES.map((c) => [c, []]));
+  const counts = Object.fromEntries(HUB_CATEGORIES.map((c) => [c, 0]));
+  const findingsByCategory = Object.fromEntries(HUB_CATEGORIES.map((c) => [c, []]));
   const infraFindings = [];
   for (const f of filterByTenant(queue.findings)) {
     if (f.infra_category && f.infra_category in counts) {
@@ -82,7 +89,7 @@ export async function render(container) {
 
   let dateRange = { preset: "", customFrom: "", customTo: "" };
   const rankings = buildTopRankings(infraFindings, ownerByAssetName, teamByAssetName);
-  const subgroups = INFRA_CATEGORIES.map((c) => ({
+  const subgroups = HUB_CATEGORIES.map((c) => ({
     label: INFRA_CATEGORY_LABELS[c], findings: findingsByCategory[c],
     href: `/queue?category=infra-vm&infraType=${c}`,
   }));
@@ -97,7 +104,7 @@ export async function render(container) {
     <div class="kpi-grid">${totalVulnerabilitiesKpiHtml(subgroups)}</div>
 
     <div class="domain-card-grid">
-      ${INFRA_CATEGORIES.map((c) => domainCard({
+      ${HUB_CATEGORIES.map((c) => domainCard({
         href: `/queue?category=infra-vm&infraType=${c}`,
         iconName: CATEGORY_ICONS[c],
         label: INFRA_CATEGORY_LABELS[c],
@@ -118,7 +125,7 @@ export async function render(container) {
       ${severityChartBlockHtml(infraFindings)}
       <div class="chart-block">
         <h3>By sub-category</h3>
-        ${pieChartSvg(INFRA_CATEGORIES.filter((c) => counts[c] > 0).map((c) => ({
+        ${pieChartSvg(HUB_CATEGORIES.filter((c) => counts[c] > 0).map((c) => ({
           label: INFRA_CATEGORY_LABELS[c], value: counts[c],
           href: `/queue?category=infra-vm&infraType=${encodeURIComponent(c)}`,
         })))}
@@ -184,7 +191,7 @@ export async function render(container) {
     const teamData = countBy(infraFindings, (f) => teamByAssetName.get(f.asset && f.asset.name) || "Unassigned");
     return {
       "Total infrastructure findings": infraFindings.length,
-      "By sub-category": INFRA_CATEGORIES.filter((c) => counts[c] > 0)
+      "By sub-category": HUB_CATEGORIES.filter((c) => counts[c] > 0)
         .map((c) => `${INFRA_CATEGORY_LABELS[c]}=${counts[c]}`).join(", "),
       "Severity breakdown": severityData.map((d) => `${d.label}=${d.value}`).join(", "),
       "Priority breakdown": priorityData.map((d) => `${d.label}=${d.value}`).join(", "),
@@ -192,7 +199,7 @@ export async function render(container) {
     };
   }, "Infrastructure Vulnerability Management");
 
-  const zeroCategories = INFRA_CATEGORIES.filter((c) => counts[c] === 0);
+  const zeroCategories = HUB_CATEGORIES.filter((c) => counts[c] === 0);
   const teamAssignedCount = infraFindings.filter((f) => teamByAssetName.get(f.asset && f.asset.name)).length;
   const teamAssignedPct = infraFindings.length ? Math.round((teamAssignedCount / infraFindings.length) * 100) : 0;
   const kevCount = infraFindings.filter((f) => f.kev && f.kev.listed).length;

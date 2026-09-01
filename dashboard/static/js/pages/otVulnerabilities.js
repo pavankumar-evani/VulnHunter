@@ -4,10 +4,11 @@
 // to the same shape as the Infrastructure/Application/Certificate hubs - a
 // total-vulnerabilities KPI, severity/device-type/team/priority/aging charts, top-5
 // rankings, an AI trend analysis assistant, and real page-specific insights content.
-// Not a separate data source - every count here comes straight from /api/queue, same
-// data Infrastructure Vulnerabilities' own "OT / IoT" sub-category already rolls up;
-// this page exists alongside that rollup for teams who own OT/ICS specifically and
-// need their own dedicated dashboard rather than one slice of a broader infra view.
+// Not a separate data source - every count here comes straight from /api/queue. This is
+// the ONLY hub-style rollup for OT/IoT findings - Infrastructure Vulnerabilities
+// deliberately excludes the "ot" category from its own KPI/cards/charts (see that
+// page's module docstring) so OT/ICS data lives in exactly one dedicated place, not
+// duplicated across two hubs.
 import { api } from "../api.js";
 import { pieChartSvg, countBy, wireChartLinks } from "../charts.js";
 import { findingsTableHtml, wireFindingsTable } from "../findingsTable.js";
@@ -50,8 +51,10 @@ export async function render(container) {
   container.innerHTML = `
     <p class="subtitle">Operational Technology and IoT device findings - industrial
     control systems (PLCs, SCADA/HMI), building automation, IP cameras, sensor
-    gateways, and similar devices. Remediation Queue pre-filtered underneath, same
-    data Infrastructure Vulnerabilities' own "OT / IoT" sub-category already shows.</p>
+    gateways, and similar devices. The one dedicated home for this data - Infrastructure
+    Vulnerabilities deliberately excludes OT/IoT from its own rollup so it isn't shown
+    in two places. Remediation Queue pre-filtered underneath, not a separate data
+    source.</p>
 
     ${tenantBannerHtml()}
 

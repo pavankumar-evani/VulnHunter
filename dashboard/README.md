@@ -71,9 +71,10 @@ empty state with instructions instead of erroring.
   `/ai-vulnerabilities`. Same "keyword heuristic, verify before citing formally"
   honesty pattern as `attack_mapping.py`'s ATT&CK tagging.
 - **`remediation/enrichment/infra_classification.py`** — splits Infrastructure
-  Vulnerability Management findings into OS/Network/Network Security/OT-IoT/Cloud
-  sub-categories by `asset.type`, shown on `/infrastructure`. Tagged onto every live
-  queue finding in `load_live_queue()`, alongside `scan_type`/`attack_techniques`.
+  Vulnerability Management findings into OS/Network/Network Security/OT-IoT/Cloud/...
+  sub-categories by `asset.type`, tagged onto every live queue finding in
+  `load_live_queue()` alongside `scan_type`/`attack_techniques`. OT-IoT is rolled up on
+  its own dedicated `/ot-vulnerabilities` hub, not `/infrastructure` - see below.
 - **`remediation/connectors/jira_connector.py`**, **`splunk_connector.py`**,
   **`crowdstrike_connector.py`** — same "built against public docs, unverified against a
   live tenant" pattern as the ServiceNow/Tenable/Armis connectors. Jira and Splunk are
@@ -114,7 +115,8 @@ empty state with instructions instead of erroring.
 | `/ai-assist` | Ask Claude to explain/remediate/summarize a finding - dry-run preview by default, explicit confirm to spend real API usage |
 | `/inbox` | Real system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not person-to-person messaging; also a bell icon + dropdown in the topbar on every page |
 | `/appsec` | Application Vulnerabilities hub - rolls up SAST/DAST/SCA/Secrets/Container/API/Repository-Secret-Scanning counts with links into each pre-filtered view (plus a by-category pie chart) and a date-range filter (real first-seen date) on the SCA/DAST/Secrets findings table. These are sidebar-menu-only reachable through this hub, not separate top-level nav entries |
-| `/infrastructure` | Infrastructure Vulnerabilities hub - rolls up OS/Network/Network Security/OT-IoT/Cloud/OS Applications/Infrastructure-as-Code/Runtime counts (`remediation/enrichment/infra_classification.py`) with links into each pre-filtered `/queue` view; a severity bar chart and sub-category pie chart (`charts.js`, hand-rolled SVG, no dependency), plus a date-range filter (by real first-seen date, honestly caveated - see the FAQ) on the findings table below |
+| `/infrastructure` | Infrastructure Vulnerabilities hub - rolls up OS/Network/Network Security/Cloud/OS Applications/Infrastructure-as-Code/Runtime counts (`remediation/enrichment/infra_classification.py`) with links into each pre-filtered `/queue` view; a severity bar chart and sub-category pie chart (`charts.js`, hand-rolled SVG, no dependency), plus a date-range filter (by real first-seen date, honestly caveated - see the FAQ) on the findings table below. OT-IoT is deliberately excluded here - see `/ot-vulnerabilities` |
+| `/ot-vulnerabilities` | OT Vulnerabilities hub - the one dedicated home for `infra_category="ot"` findings (Operational Technology/IoT devices), same shape as the other Security Domains hubs: total-vulnerabilities KPI, severity/device-type/team/priority/aging charts, top-5 rankings, AI trend analysis, and the full findings table |
 | `/queue?category=infra-vm` / `?category=dast` / `?category=sca` / `?category=cert-mgmt` | The Security Domains menu's deep links into `/queue`, pre-filtered by category |
 | `/vulnhunt` / `/vulnhunt?category=Secrets` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category; also serves as the SAST and Secrets Management nav entries |
 | `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK/Owner/Team), sortable and filterable client-side (priority, asset type, category, infra sub-category, KEV-only, date range by real first-seen date), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link, CSV/JSON/MD export. Also accepts `?cve=`/`?title=`/`?asset=` deep-links from the Vulnerability/Asset Mapping dashboards for pre-filtered drill-down |

@@ -160,9 +160,11 @@ anymore. They're listed as cards on the Application Vulnerabilities hub (`/appse
 instead, so the main menu shows one entry per real domain (Application,
 Infrastructure, AI, Certificate) rather than every sub-category flattened into the
 sidebar. Same idea for Infrastructure Vulnerabilities: `/infrastructure` now splits
-it into OS, Network, Network Security, OT/IoT, and Cloud Infrastructure cards
+it into OS, Network, Network Security, and Cloud Infrastructure cards
 (`remediation/enrichment/infra_classification.py`, a lookup against `asset.type`)
-rather than one flat link. Cloud Infrastructure and DAST both used to show 0 findings
+rather than one flat link - OT/IoT gets its own dedicated hub (`/ot-vulnerabilities`)
+instead of a card here, since it's a distinct enough team/domain to warrant its own
+page rather than one slice of a broader infra view. Cloud Infrastructure and DAST both used to show 0 findings
 honestly (no sample data for either); both now have real sample data (~300 each,
 sourced from NVD's public CVE API for Cloud, real CWE/OWASP vulnerability classes for
 DAST since dynamic-testing bugs aren't CVE-numbered - see

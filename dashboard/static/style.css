@@ -595,7 +595,18 @@ a.notif-item:hover { background: var(--bg); }
    very row this fix is meant to make uniform. Centering the chart's own intrinsic
    size within its now-wider block is the safe tradeoff: the tile (block) fills the
    row either way, this only affects whether the chart drawing itself also grows. */
-.chart-row .chart-block > svg.chart-svg { display: block; margin: 0 auto; }
+.chart-row .chart-block > svg.chart-svg {
+  display: block;
+  margin: 0 auto;
+  /* Safety ceiling, not an active resize: a chart wider than its own (capped, see
+     above) block - e.g. the Open-finding age chart's 600px SVG vs. this row's 560px
+     cap - would otherwise overflow the block's border rather than shrinking to fit,
+     since max-width on the block can't force its content to shrink below the SVG's
+     own intrinsic size. height:auto preserves the viewBox aspect ratio when this
+     actually triggers; on any block wide enough for the SVG already, it's a no-op. */
+  max-width: 100%;
+  height: auto;
+}
 .chart-block h3 { margin: 0 0 8px; font-size: 0.92rem; }
 
 /* Drag-to-rearrange (chartLayout.js) - a real grip handle rather than making the
@@ -868,6 +879,15 @@ a.notif-item:hover { background: var(--bg); }
 }
 .app-shell.auth-page .content {
   display: flex;
+  /* flex-direction is row by default - without setting it to column here, this row
+     was laying #threat-tip-banner/#app/#page-footer out SIDE BY SIDE as sibling flex
+     items (each shrink-wrapped, sharing the row) instead of stacked as a normal page
+     body - the real bug behind "the login card renders squeezed into a narrow strip
+     with banner/footer text bleeding in on either side" once any of those siblings
+     actually has content (they're hidden entirely below regardless, but a flex
+     container's own direction should never depend on which children happen to be
+     empty). */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
@@ -879,6 +899,27 @@ a.notif-item:hover { background: var(--bg); }
      the auth-page split hero (.auth-shell) needs to run truly edge-to-edge instead. */
   padding: 0;
 }
+/* An unauthenticated sign-in/signed-out screen showing live threat-intel alerts or the
+   app-wide footer's finding-count/compliance badges is out of place - real content
+   meant for after you're in, not before. initThreatTip()/initPageFooter() still run
+   unconditionally (see app.js) and populate these normally; hiding them here is
+   simpler and lower-risk than threading an auth-page check into either module.
+   #flash-container deliberately NOT included - that's where a real "wrong password"
+   error message renders (see login.js's flash() call), which must stay visible. */
+.app-shell.auth-page #threat-tip-banner,
+.app-shell.auth-page #page-footer {
+  display: none;
+}
+/* #flash-container still needs to sit ABOVE the full-bleed .auth-shell (which has no
+   layout height reserved for it) rather than as an invisible zero-height flex sibling
+   that pushes nothing - an error message should interrupt the scene, not vanish. */
+.app-shell.auth-page #flash-container:not(:empty) {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  max-width: 420px;
+  margin: 16px auto 0;
+}
 /* #app is a plain flex item inside .content (a sibling of #flash-container/
    #threat-tip-banner/#page-footer - see index.html), sized by the default flex
    shrink-to-fit algorithm - fine for the old single centered card (which naturally
@@ -887,55 +928,109 @@ a.notif-item:hover { background: var(--bg); }
    shrink-wrap its own content. */
 .app-shell.auth-page .content #app { width: 100%; }
 
-/* --- Auth screens (login/logout) - split hero + form panel, in the same spirit as
-   the branded split-screen sign-in pages common across enterprise security products
-   (CrowdStrike, Prisma Cloud, Palo Alto XSIAM, etc.): a dark branded panel with an
-   illustrative graphic on one side, the actual form in a plain card on the other.
-   This is an original illustration/palette (this app's own shield mark + brand-blue
-   network motif), not a copy of any one product's proprietary design. */
-.auth-shell { display: flex; width: 100%; min-height: 100vh; }
+/* --- Auth screens (login/logout) - one continuous animated scene behind BOTH the
+   illustration half and the form half, rather than "a nice graphic on the left, a
+   plain flat card on the right" (the old version, and the literal shape of the
+   generic-enterprise-form-page look this redesign replaces). Three stacked layers on
+   .auth-shell: an animated gradient-mesh ("aurora") backdrop (::before), a full-bleed
+   network/scan-line SVG on top of that (.auth-hero-background), then the real content
+   (copy + a glass-morphism form card) on top of both. This is an original
+   illustration/palette (this app's own shield mark + brand-blue network motif), not a
+   copy of any one product's proprietary design - researched against the current
+   commercial pattern for premium sign-in pages (animated gradient mesh + glassmorphism
+   + a live-feeling illustration, the same real direction Stripe/Linear/Vercel-style
+   auth pages and dedicated tools like Auth0's Universal Login templates use today) and
+   built fresh for VulnHunter's own security-network visual language. */
+.auth-shell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #0a1230;
+}
+.auth-shell::before {
+  content: "";
+  position: absolute;
+  inset: -15%;
+  background:
+    radial-gradient(closest-side, rgba(47,111,237,0.55), transparent 70%) 18% 28% / 46% 46% no-repeat,
+    radial-gradient(closest-side, rgba(126,166,245,0.40), transparent 70%) 82% 18% / 50% 50% no-repeat,
+    radial-gradient(closest-side, rgba(77,132,240,0.45), transparent 70%) 72% 82% / 55% 55% no-repeat,
+    radial-gradient(closest-side, rgba(47,111,237,0.30), transparent 70%) 12% 86% / 42% 42% no-repeat;
+  filter: blur(60px);
+  animation: vh-aurora-drift 24s ease-in-out infinite alternate;
+  z-index: 0;
+}
+@keyframes vh-aurora-drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(-3%, 2%) scale(1.08); }
+  100% { transform: translate(2%, -3%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-shell::before, .auth-hero-sweep, .auth-hero-node, .auth-hero-pulse-dot { animation: none !important; }
+}
+
+.auth-hero-background {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.auth-hero-art { width: 100%; height: 100%; display: block; }
+.auth-hero-sweep { transform-origin: 330px 330px; animation: vh-radar-sweep 9s linear infinite; }
+@keyframes vh-radar-sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.auth-hero-node { animation: vh-pulse 2.4s ease-in-out infinite; }
+.auth-hero-node:nth-of-type(2) { animation-delay: 0.3s; }
+.auth-hero-node:nth-of-type(3) { animation-delay: 0.6s; }
+.auth-hero-node:nth-of-type(4) { animation-delay: 0.9s; }
+.auth-hero-node:nth-of-type(5) { animation-delay: 1.2s; }
+.auth-hero-node:nth-of-type(6) { animation-delay: 1.5s; }
+.auth-hero-node:nth-of-type(7) { animation-delay: 1.8s; }
+.auth-hero-node:nth-of-type(8) { animation-delay: 2.1s; }
+.auth-hero-node:nth-of-type(9) { animation-delay: 2.4s; }
+.auth-hero-node:nth-of-type(10) { animation-delay: 2.7s; }
+.auth-hero-pulse-dot { filter: drop-shadow(0 0 4px #bcd2fb); }
+
 .auth-hero {
   position: relative;
+  z-index: 2;
   flex: 1 1 56%;
   min-width: 0;
-  background: linear-gradient(160deg, var(--brand-dark), var(--brand) 70%);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 48px;
-  overflow: hidden;
 }
-.auth-hero-art { width: 100%; max-width: 420px; height: auto; }
-.auth-hero-sweep { transform-origin: 240px 230px; animation: vh-radar-sweep 6s linear infinite; }
-@keyframes vh-radar-sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.auth-hero-node { animation: vh-pulse 2.4s ease-in-out infinite; }
-.auth-hero-node:nth-of-type(2) { animation-delay: 0.4s; }
-.auth-hero-node:nth-of-type(3) { animation-delay: 0.8s; }
-.auth-hero-node:nth-of-type(4) { animation-delay: 1.2s; }
-.auth-hero-node:nth-of-type(5) { animation-delay: 1.6s; }
-.auth-hero-node:nth-of-type(6) { animation-delay: 2s; }
-.auth-hero-copy { text-align: center; color: #eaf0fe; margin-top: -12px; max-width: 380px; }
+.auth-hero-copy { text-align: center; color: #eaf0fe; max-width: 380px; }
 .auth-hero-brand { font-size: 1.4rem; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
 .auth-hero-tagline { color: #c9d8fb; font-size: 1rem; line-height: 1.5; margin: 0 0 18px; }
 .auth-hero-points { list-style: none; padding: 0; margin: 0; text-align: left; display: inline-flex; flex-direction: column; gap: 8px; }
 .auth-hero-points li { color: #c9d8fb; font-size: 0.85rem; padding-left: 20px; position: relative; }
 .auth-hero-points li::before { content: "✓"; position: absolute; left: 0; color: #7ea6f5; font-weight: 700; }
-.auth-form-panel { flex: 1 1 44%; display: flex; align-items: center; justify-content: center; padding: 32px; }
+.auth-form-panel { position: relative; z-index: 2; flex: 1 1 44%; display: flex; align-items: center; justify-content: center; padding: 32px; }
 .logout-icon { display: flex; justify-content: center; margin-bottom: 16px; }
 @media (max-width: 860px) {
   .auth-hero { display: none; }
   .auth-form-panel { flex: 1 1 100%; }
 }
 
+/* Glassmorphism card: a translucent, blurred panel the animated scene shows through,
+   rather than a flat var(--surface) box that looked identical to any other card in
+   the app. The solid rgba() base (not just backdrop-filter alone) is a deliberate
+   fallback - a browser without backdrop-filter support still gets a reasonable
+   translucent-navy card, not an invisible one. */
 .login-card {
   width: 100%;
-  max-width: 360px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+  max-width: 380px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03)), rgba(16,24,50,0.55);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 18px;
+  padding: 36px 32px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  color: #eaf0fe;
 }
 .login-brand {
   display: flex;
@@ -944,8 +1039,36 @@ a.notif-item:hover { background: var(--bg); }
   font-size: 1.2rem;
   font-weight: 700;
   margin-bottom: 24px;
+  color: #ffffff;
 }
-.login-card .run-form button { width: 100%; text-align: center; margin-top: 4px; }
+.login-card .subtitle { color: #c9d8fb; }
+.login-card .run-form label { color: #c9d8fb; }
+.login-card .run-form input[type=email], .login-card .run-form input[type=password] {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #eaf0fe;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.login-card .run-form input[type=email]:focus, .login-card .run-form input[type=password]:focus {
+  outline: none;
+  border-color: #7ea6f5;
+  background: rgba(255,255,255,0.10);
+  box-shadow: 0 0 0 3px rgba(126,166,245,0.28);
+}
+.login-card .run-form button {
+  width: 100%;
+  text-align: center;
+  margin-top: 4px;
+  background: linear-gradient(135deg, var(--brand-accent, var(--brand)), var(--brand));
+  box-shadow: 0 8px 24px rgba(47,111,237,0.45);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.login-card .run-form button:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(47,111,237,0.55); }
+.login-card .callout { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); color: #c9d8fb; }
+.login-card .callout code { color: #eaf0fe; }
+.login-card .filter-count { color: #9fb3e0; }
+.login-card .secondary-button { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); color: #eaf0fe; }
+.login-card .secondary-button:hover { background: rgba(255,255,255,0.14); }
 
 .live-badge {
   display: inline-flex;
