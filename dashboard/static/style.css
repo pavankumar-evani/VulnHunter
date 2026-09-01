@@ -626,12 +626,35 @@ a.notif-item:hover { background: var(--bg); }
 .chart-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; display: inline-block; margin-top: 3px; }
 .chart-legend-label { min-width: 0; overflow-wrap: break-word; }
 
-/* Vulnerability Lifecycle funnel (overview.js's lifecycleSection - funnelChartSvg in
-   charts.js) - funnel on the left, avg-time-in-stage KPIs stacked on the right; wraps
-   to a column on narrow viewports since the funnel already reads top-to-bottom. */
-.lifecycle-funnel-wrap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 12px 0 20px; }
-.lifecycle-funnel-wrap .chart-svg { flex: 1 1 380px; max-width: 480px; }
-.lifecycle-stats { display: flex; flex-direction: column; gap: 10px; flex: 0 0 200px; }
+/* Vulnerability Lifecycle pipeline (overview.js's lifecycleSection) - a row of stage
+   cards connected by arrows, replacing an earlier funnel-chart rendering. A funnel
+   scales each bar's width to its value, which put a fresh install's real, honest
+   zeros (nothing approved/remediated yet) at a 2px-wide sliver next to invisible -
+   correct, but looked broken rather than "a real pipeline with nothing in it yet".
+   A stage's real number is the primary, always-legible element here; the thin
+   proportional bar underneath is a secondary accent, not the only signal, so a real
+   0% still reads as "an honest zero", not a rendering glitch. */
+.lifecycle-pipeline { display: flex; align-items: stretch; gap: 4px; flex-wrap: wrap; margin: 16px 0 4px; }
+.lifecycle-stage {
+  flex: 1 1 150px; min-width: 140px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 10px; text-align: center; text-decoration: none; color: var(--text);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.lifecycle-stage:hover, .lifecycle-stage:focus-visible { border-color: var(--brand-accent); transform: translateY(-1px); }
+.lifecycle-stage-icon { font-size: 1.3rem; line-height: 1; margin-bottom: 4px; }
+.lifecycle-stage-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+.lifecycle-stage-pct { font-size: 0.76rem; color: var(--text-muted); min-height: 1.1em; }
+.lifecycle-stage-label { font-size: 0.8rem; font-weight: 600; margin-top: 4px; }
+.lifecycle-stage-bar-track { height: 4px; background: var(--bg); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.lifecycle-stage-bar-fill { height: 100%; border-radius: 2px; min-width: 2px; }
+.lifecycle-arrow { display: flex; align-items: center; color: var(--text-muted); font-size: 1.3rem; flex: 0 0 auto; padding: 0 2px; }
+.lifecycle-stats { display: flex; gap: 10px; margin: 14px 0 4px; flex-wrap: wrap; }
+.lifecycle-stats .kpi-card { flex: 1 1 200px; }
+@media (max-width: 640px) {
+  .lifecycle-pipeline { flex-direction: column; }
+  .lifecycle-arrow { display: none; }
+}
 
 /* --- Ask VulnHunter (askVulnhunter.js) - example-query quick-fill buttons --- */
 .ask-examples { display: flex; flex-wrap: wrap; gap: 6px 14px; }

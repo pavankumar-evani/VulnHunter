@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { escapeHtml, timeAgo, kpiLink } from "../dom.js";
-import { barChartSvg, pieChartSvg, funnelChartSvg, countBy, wireChartLinks } from "../charts.js";
+import { barChartSvg, pieChartSvg, countBy, wireChartLinks } from "../charts.js";
 import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
 import { buildOwnerTeamMaps } from "../assetLookup.js";
 import {
@@ -124,39 +124,80 @@ function daysBetweenAll(records, startField, endField) {
 // finding fixed some other way (e.g. a manual change with no approval request) is
 // honestly invisible to this funnel rather than silently guessed at - same
 // disclosed-scope honesty as every other stat on this page.
+const LIFECYCLE_STAGE_ICONS = ["🔍", "📋", "✅", "🚀"];
+const LIFECYCLE_STAGE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-6)"];
+
+function lifecycleStageHtml(stage, index, firstValue) {
+  const pct = firstValue > 0 ? Math.round((stage.value / firstValue) * 100) : 0;
+  const pctNote = index > 0 ? `<div class="lifecycle-stage-pct">${pct}% of Detected</div>` : `<div class="lifecycle-stage-pct"></div>`;
+  const color = LIFECYCLE_STAGE_COLORS[index % LIFECYCLE_STAGE_COLORS.length];
+  const barPct = index === 0 ? 100 : pct;
+  return `
+    <a class="lifecycle-stage" href="${escapeHtml(stage.href)}" data-link data-tooltip="${escapeHtml(stage.detail)}">
+      <div class="lifecycle-stage-icon">${LIFECYCLE_STAGE_ICONS[index % LIFECYCLE_STAGE_ICONS.length]}</div>
+      <div class="lifecycle-stage-value">${stage.value.toLocaleString()}</div>
+      ${pctNote}
+      <div class="lifecycle-stage-label">${escapeHtml(stage.label)}</div>
+      <div class="lifecycle-stage-bar-track"><div class="lifecycle-stage-bar-fill" style="width:${barPct}%;background:${color}"></div></div>
+    </a>`;
+}
+
+// Real, dated remediation-lifecycle stages - Detected -> Remediation Initiated ->
+// Approved -> Remediation Triggered - each a real query over real data (the live
+// queue and remediation/remediation_approvals/store.py's own records), not simulated.
+// Stage names/order are informed by NIST CSF's Detect/Respond functions and NIST SP
+// 800-40's patch-management lifecycle - not a certified mapping (this app makes no
+// compliance claim, same disclosure pattern as Risk Score's "NIST SP 800-30-inspired,
+// not a certified assessment"), just the recognizable industry framing instead of an
+// app-specific ad-hoc one. "Remediation Triggered" (not "Remediated") is deliberate -
+// this app never executes playbooks itself, so a real playbook being generated and
+// dispatched is the honest ceiling of what's tracked, not independent confirmation the
+// fix was actually applied (see the FAQ). There is no "closed"/"remediated" concept in
+// this app outside the approval workflow, so a finding fixed some other way (e.g. a
+// manual change with no approval record) is honestly invisible to this pipeline rather
+// than silently guessed at - same disclosed-scope honesty as every other stat on this
+// page. Rendered as stage cards + arrows rather than a proportional-width funnel: a
+// funnel's bars would give a fresh install's real, honest zeros (nothing approved yet)
+// a 2px sliver next to invisible - correct, but reads as broken rather than "a real
+// pipeline with nothing in it yet" - the number is the primary signal here, the bar
+// underneath just a secondary accent.
 function lifecycleSection(queue, remediationApprovals) {
   const stages = [
     { label: "Detected", value: queue.findings.length, href: "/queue",
       detail: "Every finding currently in the live remediation queue" },
-    { label: "Entered remediation workflow", value: remediationApprovals.length, href: "/remediation-approvals",
+    { label: "Remediation Initiated", value: remediationApprovals.length, href: "/remediation-approvals",
       detail: "Has a real remediation-approval request (any status)" },
     { label: "Approved", value: remediationApprovals.filter((a) => a.computed_status === "approved" || a.computed_status === "remediation_triggered").length,
       href: "/remediation-approvals", detail: "Approval request approved (or already remediated)" },
-    { label: "Remediated", value: remediationApprovals.filter((a) => a.computed_status === "remediation_triggered").length,
-      href: "/remediation-approvals", detail: "Real playbook generated and marked remediation-triggered" },
+    { label: "Remediation Triggered", value: remediationApprovals.filter((a) => a.computed_status === "remediation_triggered").length,
+      href: "/remediation-approvals", detail: "Real playbook generated and dispatched - not independent confirmation the fix was applied" },
   ];
+  const firstValue = stages[0].value;
   const approvalDays = daysBetweenAll(remediationApprovals, "created_on", "approved_at");
   const remediationDays = daysBetweenAll(remediationApprovals, "approved_at", "triggered_at");
 
   return `
     <h2>Vulnerability Lifecycle: Detection → Remediation</h2>
     <p class="subtitle">
-      Real counts at each real stage of the remediation-approval workflow - a finding
-      fixed outside this workflow (e.g. a manual change with no approval record on
+      Real counts at each real stage of the remediation-approval workflow - stage
+      naming informed by NIST CSF's Detect/Respond functions and NIST SP 800-40's
+      patch-management lifecycle (not a certified mapping). A finding fixed outside
+      this workflow (e.g. a manual change with no approval record on
       <a href="/remediation-approvals" data-link>Remediation Approvals</a>) isn't
       reflected here, same disclosed-scope honesty as everywhere else on this page.
+      Click any stage to jump to it.
     </p>
-    <div class="lifecycle-funnel-wrap">
-      ${funnelChartSvg(stages)}
-      <div class="lifecycle-stats">
-        <div class="kpi-card">
-          <div class="kpi-value">${approvalDays === null ? "—" : `${approvalDays}d`}</div>
-          <div class="kpi-label">Avg. time to approve${approvalDays === null ? " (no completed approvals yet)" : ""}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-value">${remediationDays === null ? "—" : `${remediationDays}d`}</div>
-          <div class="kpi-label">Avg. time approved → remediated${remediationDays === null ? " (none triggered yet)" : ""}</div>
-        </div>
+    <div class="lifecycle-pipeline">
+      ${stages.map((s, i) => `${i > 0 ? `<div class="lifecycle-arrow">→</div>` : ""}${lifecycleStageHtml(s, i, firstValue)}`).join("")}
+    </div>
+    <div class="lifecycle-stats">
+      <div class="kpi-card">
+        <div class="kpi-value">${approvalDays === null ? "—" : `${approvalDays}d`}</div>
+        <div class="kpi-label">Avg. time to approve${approvalDays === null ? " (no completed approvals yet)" : ""}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">${remediationDays === null ? "—" : `${remediationDays}d`}</div>
+        <div class="kpi-label">Avg. time approved → triggered${remediationDays === null ? " (none triggered yet)" : ""}</div>
       </div>
     </div>`;
 }
@@ -399,11 +440,29 @@ function methodologySection(findings, vh) {
 // Aggregated across the WHOLE landscape (Infrastructure + AppSec + SAST/Code Scan) -
 // deliberately not per-domain like /infrastructure's or /appsec's own charts (appsec.js's
 // own pie explicitly excludes Infra-VM/Cert-Mgmt; this one includes them, plus SAST).
-function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindings) {
+function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindings, remediationApprovals) {
   const findings = queue.findings;
   const { breached, at_risk, on_track } = data.sla;
   const totalKnown = breached + at_risk + on_track;
   const slaComplianceRate = totalKnown ? Math.round((on_track / totalKnown) * 100) : null;
+
+  // MTTR (Mean Time To Remediate) - the industry-standard vulnerability-management
+  // metric: real elapsed time from DETECTION (the finding's own first_seen) to
+  // REMEDIATION being triggered, joined via each approval's finding_id back to the
+  // actual finding - a genuinely more complete "detection to remediation" figure than
+  // this page's own lifecycle-section sub-metrics (which only cover the narrower
+  // approved->triggered leg). Scoped, honestly, to findings that completed the
+  // remediation-approval workflow - see lifecycleSection's own disclosure for why a
+  // fix applied outside that workflow can't be counted. Deliberately no MTTD (Mean
+  // Time To Detect) KPI: that metric needs a real vulnerability-introduction or
+  // public-disclosure timestamp to compare against detection time, and this app has
+  // neither - a real answer here would have to be invented, which this app doesn't do.
+  const findingById = new Map(findings.map((f) => [f.id, f]));
+  const mttrRecords = remediationApprovals
+    .filter((a) => a.triggered_at)
+    .map((a) => ({ detected: findingById.get(a.finding_id)?.first_seen, triggered: a.triggered_at }))
+    .filter((r) => r.detected);
+  const mttrDays = daysBetweenAll(mttrRecords, "detected", "triggered");
 
   // SAST findings use capitalized f.Severity (parsed from a markdown table, a
   // genuinely different key-casing convention than /api/queue's lowercase f.severity)
@@ -455,7 +514,15 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
       ${kpi(slaComplianceRate === null ? "—" : `${slaComplianceRate}%`, "SLA compliance rate",
         slaComplianceRate !== null && slaComplianceRate >= 80 ? "kpi-good" : "kpi-warn")}
       ${kpi(eolExposedCount, "Assets EOL or EOL-soon", eolExposedCount ? "kpi-danger" : "kpi-good")}
+      ${kpi(mttrDays === null ? "—" : `${mttrDays}d`, `MTTR (Mean Time to Remediate)${mttrDays === null ? " - none triggered yet" : ""}`)}
     </div>
+    <p class="filter-count" style="margin:-8px 0 12px">
+      MTTR = detected → remediation triggered, for the ${mttrRecords.length} finding(s)
+      that completed the remediation-approval workflow - see the lifecycle pipeline
+      below for the approve/trigger breakdown. No MTTD (Mean Time to Detect) KPI is
+      shown - that metric needs a real vulnerability-introduction or public-disclosure
+      timestamp to compare against detection time, and this app honestly has neither.
+    </p>
 
     <div class="chart-row">
       <div class="chart-block">
@@ -598,7 +665,7 @@ function renderBody(data, queue, vh, rankings, assets, teamByAssetName, remediat
     ${definitionsPanel(data.priority_rules)}
     ${assetDefinitionsPanel(data.priority_rules)}
 
-    ${analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindings)}
+    ${analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindings, remediationApprovals)}
 
     ${riskScoringSection(assets, data.risk_scoring_rules)}
 
