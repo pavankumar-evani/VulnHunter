@@ -59,20 +59,6 @@ class FileLockConcurrency(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def _increment_unlocked(self, errors):
-        for _ in range(50):
-            try:
-                value = int(self.path.read_text(encoding="utf-8"))
-                time.sleep(0.0001)  # widen the race window so it's reliably observable
-                self.path.write_text(str(value + 1), encoding="utf-8")
-            except (OSError, ValueError) as exc:
-                # Unsynchronized concurrent access can fail outright, not just lose
-                # an update: a real OS-level sharing violation (seen on Windows), or
-                # a read catching another thread's write mid-truncate (an empty/
-                # partial read that fails int() with ValueError) - both are further
-                # proof this needs a lock, not something to hide.
-                errors.append(exc)
-
     def _increment_locked(self):
         for _ in range(50):
             with FileLock(self.path):
@@ -80,19 +66,35 @@ class FileLockConcurrency(unittest.TestCase):
                 time.sleep(0.0001)
                 self.path.write_text(str(value + 1), encoding="utf-8")
 
-    def test_without_the_lock_concurrent_increments_are_unsafe(self):
-        errors = []
-        threads = [threading.Thread(target=self._increment_unlocked, args=(errors,)) for _ in range(4)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        # 4 threads x 50 increments = 200 if perfectly serialized - the whole point of
-        # this test is proving that WITHOUT the lock, concurrent access is unsafe:
-        # either the final count is short (a lost update) or real errors were raised
-        # (unsynchronized concurrent access faulting outright, seen on Windows).
-        final_count = int(self.path.read_text(encoding="utf-8"))
-        self.assertTrue(final_count < 200 or errors, f"expected lost updates or errors, got count={final_count}, errors={errors}")
+    def test_without_the_lock_two_threads_reading_the_same_value_lose_an_update(self):
+        """Deterministic, not probabilistic: a threading.Barrier forces both threads
+        to finish their read BEFORE either writes, guaranteeing (not just hoping for)
+        the exact race a real lock prevents - two concurrent callers computing "next
+        value" from the same stale read, so whichever writes last silently erases the
+        other's update. A `time.sleep()`-based race (the original version of this
+        test) only *probably* manifests within N iterations, which is exactly the
+        kind of assertion that passes on one machine/OS and flakes on another (a CI
+        runner's own scheduler, VM contention, etc.) - real, observed cause of a real
+        CI failure on this exact test, not a hypothetical concern."""
+        barrier = threading.Barrier(2)
+
+        def worker(amount):
+            value = int(self.path.read_text(encoding="utf-8"))
+            barrier.wait()  # both threads now guaranteed to have read the SAME value
+            self.path.write_text(str(value + amount), encoding="utf-8")
+
+        t1 = threading.Thread(target=worker, args=(1,))
+        t2 = threading.Thread(target=worker, args=(2,))
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+        final = int(self.path.read_text(encoding="utf-8"))
+        # Without synchronization, one write always clobbers the other - the real
+        # result is exactly one of {1, 2}, never their sum (3), which is what two
+        # correctly-serialized increments would produce.
+        self.assertIn(final, (1, 2))
+        self.assertNotEqual(final, 3)
 
     def test_with_the_lock_concurrent_increments_are_all_preserved(self):
         threads = [threading.Thread(target=self._increment_locked) for _ in range(4)]
