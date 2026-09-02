@@ -5,7 +5,7 @@
 # deliberate action: re-run the full test suite (`python -m unittest discover -s tests
 # -p "test_*.py"`) after bumping, don't just edit the number.
 fastapi==0.141.1
-uvicorn==0.52.1
+uvicorn==0.52.4
 httpx==0.28.1  # not used at runtime - only by fastapi.testclient.TestClient in tests/test_dashboard.py
 pyyaml==6.0.3
 requests==2.34.2
