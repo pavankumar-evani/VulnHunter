@@ -19,7 +19,7 @@ export async function render(container) {
       alert-search API contract and is unit-tested against mocked HTTP responses shaped
       like that documentation. Fetches a single page of alerts only (a documented scope
       limit, not silently dropped) - see
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>.
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>.
     </div>
 
     <h2>What it does</h2>
@@ -37,7 +37,7 @@ export async function render(container) {
       <code>remediation/live-data/prismacloud_findings.json</code> - but, like the generic
       ingest adapter's own explicit, disclosed choice, this is deliberately <strong>not</strong>
       auto-merged into the live queue. See
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
       for why.
     </div>
 

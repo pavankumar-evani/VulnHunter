@@ -20,7 +20,7 @@ export async function render(container) {
       "Standard" authentication + incident-search API contract and is unit-tested against
       mocked HTTP responses shaped like that documentation - a separate "Advanced" (HMAC
       request-signature) auth mode exists for tenants that require it, not implemented
-      here. See <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>.
+      here. See <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>.
     </div>
 
     <h2>What it does</h2>
@@ -38,7 +38,7 @@ export async function render(container) {
       <code>remediation/live-data/cortex_xsiam_findings.json</code> - but, like the generic
       ingest adapter's own explicit, disclosed choice, this is deliberately <strong>not</strong>
       auto-merged into the live queue. See
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
       for why.
     </div>
 

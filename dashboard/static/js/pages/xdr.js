@@ -51,8 +51,8 @@ findings = conn.fetch_and_normalize_alerts(filter_query="severity:>=70")
 # ingest-normalizer step Tenable/Armis output goes through.</pre>
 
     <p class="filter-count">
-      See <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/remediation/connectors/README.md" target="_blank" rel="noopener">remediation/connectors/README.md</a>
-      and <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
+      See <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/remediation/connectors/README.md" target="_blank" rel="noopener">remediation/connectors/README.md</a>
+      and <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
       for the full verification-status writeup, alongside Tenable and Armis (the other
       two pull-style connectors, which get the same CLI-driven, no-dashboard-page treatment).
     </p>`;

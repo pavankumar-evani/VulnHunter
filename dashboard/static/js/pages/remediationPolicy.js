@@ -75,7 +75,7 @@ export async function render(container) {
       need a per-instance Approve click before it's considered ready - a human or an
       existing enterprise system (SCCM, Ansible Tower/AWX, your own change-management
       pipeline) still has to actually run it. See
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/REMEDIATION_WORKFLOWS.md" target="_blank" rel="noopener">docs/REMEDIATION_WORKFLOWS.md</a>'s
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/REMEDIATION_WORKFLOWS.md" target="_blank" rel="noopener">docs/REMEDIATION_WORKFLOWS.md</a>'s
       "Remediation Policy" section for the full model.
     </div>
 

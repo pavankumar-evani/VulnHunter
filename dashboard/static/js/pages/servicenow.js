@@ -45,7 +45,7 @@ export async function render(container) {
       credentials were available while building it. It implements ServiceNow's documented
       Table API contract and is unit-tested against mocked responses shaped like that
       documentation. Verify against a test/non-production instance before relying on it.
-      See <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/remediation/connectors/README.md" target="_blank" rel="noopener">remediation/connectors/README.md</a>.
+      See <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/remediation/connectors/README.md" target="_blank" rel="noopener">remediation/connectors/README.md</a>.
     </div>
 
     <form class="run-form" id="sn-form">

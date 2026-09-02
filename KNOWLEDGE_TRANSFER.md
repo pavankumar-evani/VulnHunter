@@ -307,7 +307,7 @@ by construction, not by policy:
 ### Step 1: Open the project
 
 ```bash
-git clone https://github.com/Deloitte-US-Consulting/VulnHunter.git
+git clone https://github.com/pavankumar-evani/VulnHunter.git
 cd VulnHunter
 claude
 ```
@@ -1168,7 +1168,7 @@ Qualys was in that same "declined for now" list at the time, but has since been 
 
 ## 14. Appendix
 
-- **Repository:** https://github.com/Deloitte-US-Consulting/VulnHunter
+- **Repository:** https://github.com/pavankumar-evani/VulnHunter
 - **Branches:** `master` (code pipeline scaffold), `vulnhunter/auto-fixes-20260803`
   (validated `/vulnhunt --fix` output), `feature/remediation-engine` (the `/remediate`
   pipeline, test suite, and this document)

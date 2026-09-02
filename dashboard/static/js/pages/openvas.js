@@ -23,7 +23,7 @@ export async function render(container) {
       mocked GMP client shaped like that documentation. Verify result field names
       against your instance's actual GMP version before trusting live output at scale -
       see
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/VULNERABILITY_ENGINE_ARCHITECTURE.md" target="_blank" rel="noopener">docs/VULNERABILITY_ENGINE_ARCHITECTURE.md</a>.
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/VULNERABILITY_ENGINE_ARCHITECTURE.md" target="_blank" rel="noopener">docs/VULNERABILITY_ENGINE_ARCHITECTURE.md</a>.
     </div>
 
     <div class="callout">

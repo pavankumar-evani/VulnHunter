@@ -22,7 +22,7 @@ function referencePanelHtml(c) {
       shape, what data would flow), but there's no code in this repo talking to it yet.
       This is one step earlier than this catalog's "live" connectors, which do have a
       working, documented-contract implementation - see
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>
       for the full catalog in doc form.
     </div>
     <table class="data-table finding-detail-table">

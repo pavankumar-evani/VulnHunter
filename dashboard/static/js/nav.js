@@ -144,7 +144,7 @@ export function renderSidebar(currentPath, currentSearch = "") {
       ${icon("chevronDown", 14)}
     </button>
     <div class="sidebar-footer">
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/dashboard/README.md"
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/dashboard/README.md"
          target="_blank" rel="noopener">Scope &amp; limitations ↗</a>
     </div>`;
 

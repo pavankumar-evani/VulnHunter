@@ -45,7 +45,7 @@ export async function render(container) {
       REST API v3 contract and is unit-tested against mocked responses shaped like that
       documentation. Verify against a test/non-production site before relying on it.
       Preview below uses a placeholder project key (<code>VULN</code>) until you enter a
-      real one. See <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/remediation/connectors/README.md" target="_blank" rel="noopener">remediation/connectors/README.md</a>.
+      real one. See <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/remediation/connectors/README.md" target="_blank" rel="noopener">remediation/connectors/README.md</a>.
     </div>
 
     <form class="run-form" id="jira-form">

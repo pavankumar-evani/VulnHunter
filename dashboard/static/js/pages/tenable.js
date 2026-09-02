@@ -20,7 +20,7 @@ export async function render(container) {
       asynchronous Vulnerability Export API contract and is unit-tested against mocked
       HTTP responses shaped like that documentation. Verify field names against your
       tenant's current API version before trusting live output at scale - see
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>.
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/INTEGRATIONS.md" target="_blank" rel="noopener">docs/INTEGRATIONS.md</a>.
     </div>
 
     <h2>What it does</h2>
@@ -36,7 +36,7 @@ export async function render(container) {
       this dashboard's own pages still needs one more, agent-driven step: run
       <code>/remediate remediation/live-data/tenable_export.csv</code> in an interactive
       Claude Code session, then reload. See
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/GOING_LIVE.md" target="_blank" rel="noopener">docs/GOING_LIVE.md</a>
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/GOING_LIVE.md" target="_blank" rel="noopener">docs/GOING_LIVE.md</a>
       for exactly why that step is agent-driven, not a plain script.
     </div>
 

@@ -17,7 +17,7 @@ export async function render(container) {
     <h2>Get help</h2>
     <ul>
       <li><strong>How do I do X?</strong> see the
-        <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/enterprise-suite/user-guide.html" target="_blank" rel="noopener">User &amp; Operations Guide</a>
+        <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/enterprise-suite/user-guide.html" target="_blank" rel="noopener">User &amp; Operations Guide</a>
         - task-oriented answers for login/logout, RBAC, asset edits, exceptions vs.
         approvals, reports, and the AI features - or just ask
         <a href="/ask" data-link>Ask VulnHunter</a> above.</li>
@@ -32,17 +32,17 @@ export async function render(container) {
         <code>SECURITY.md</code> for the private disclosure contact - please don't open a
         public issue for a real vulnerability in this tool.</li>
       <li><strong>"Is this safe to point at production?"</strong> read the safety model in
-        <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision" target="_blank" rel="noopener">KNOWLEDGE_TRANSFER.md §4.3</a>
+        <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision" target="_blank" rel="noopener">KNOWLEDGE_TRANSFER.md §4.3</a>
         first - short answer: nothing here auto-executes against real infrastructure.</li>
     </ul>
 
     <h2>Check these before filing an issue</h2>
     <ul>
       <li><a href="/faq" data-link>FAQ</a> - direct answers about what this does and doesn't do</li>
-      <li><a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/enterprise-suite/user-guide.html" target="_blank" rel="noopener">User &amp; Operations Guide</a> - how-to answers for every real workflow, with a search box of its own</li>
-      <li><a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#12-troubleshooting--things-that-tripped-us-up" target="_blank" rel="noopener">KNOWLEDGE_TRANSFER.md §12 Troubleshooting</a> - real issues hit and fixed during development</li>
-      <li><a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/USER_GUIDE.md" target="_blank" rel="noopener">docs/USER_GUIDE.md</a> - the full usage guide</li>
-      <li><a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/docs/enterprise-suite/MANIFEST.md" target="_blank" rel="noopener">Full enterprise documentation suite</a> - architecture, connectors, RBAC, pricing, and more</li>
+      <li><a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/enterprise-suite/user-guide.html" target="_blank" rel="noopener">User &amp; Operations Guide</a> - how-to answers for every real workflow, with a search box of its own</li>
+      <li><a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#12-troubleshooting--things-that-tripped-us-up" target="_blank" rel="noopener">KNOWLEDGE_TRANSFER.md §12 Troubleshooting</a> - real issues hit and fixed during development</li>
+      <li><a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/USER_GUIDE.md" target="_blank" rel="noopener">docs/USER_GUIDE.md</a> - the full usage guide</li>
+      <li><a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/enterprise-suite/MANIFEST.md" target="_blank" rel="noopener">Full enterprise documentation suite</a> - architecture, connectors, RBAC, pricing, and more</li>
     </ul>
 
     <h2>Known limitations (read before reporting these as bugs)</h2>

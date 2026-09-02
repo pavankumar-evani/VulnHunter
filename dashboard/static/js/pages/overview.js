@@ -727,7 +727,7 @@ function renderBody(data, queue, vh, rankings, assets, teamByAssetName, remediat
     <div class="callout">
       Every playbook shown here is a reviewable artifact — nothing in this dashboard executes
       against real infrastructure automatically. See the safety model in
-      <a href="https://github.com/Deloitte-US-Consulting/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision" target="_blank" rel="noopener">KNOWLEDGE_TRANSFER.md §4.3</a>.
+      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision" target="_blank" rel="noopener">KNOWLEDGE_TRANSFER.md §4.3</a>.
     </div>`;
 }
 
