@@ -19,6 +19,7 @@ this in sync" below).
 | `developer-guide.html` | https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4 | Developers |
 | `poc-methodology.html` | https://claude.ai/code/artifact/fc05a1c0-7664-4ce1-88a2-86bec7eae328 | Business |
 | `pricing.html` | https://claude.ai/code/artifact/6fc9ea41-5cc3-4934-8e2a-236a252b1bd1 | Business |
+| `user-guide.html` | https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578 | Everyday users |
 
 ## Keeping this in sync with the application — read this when you change anything
 
@@ -34,6 +35,7 @@ document(s) in the same change** — don't let the docs drift. Concretely:
 | Add/remove a subagent, or change a pipeline's step sequence (`.claude/agents/*.md`, `.claude/commands/*.md`) | `vuln-engine.html` (for `/vulnhunt`), `remediation-engine.html` (for `/remediate`), and `CLAUDE.md`'s two "Architecture: ..." sections — this exact gap (a subagent added but never reflected in any of the three) is why this row was added |
 | RBAC, session/auth model, or the tenant-switcher's real scope | `rbac-governance.html` and `CLAUDE.md`'s "Authentication & RBAC" section |
 | Any dashboard page/route (`dashboard/static/js/pages/`, `app.js` routes) | `pages.html` (the affected row) |
+| A new end-user workflow, form, or button (anything answering a real "how do I...?") | `user-guide.html`, plus a matching `### ` entry in `docs/FAQ.md` (Ask VulnHunter's `search_faq()` reads that file live - no code change needed for it to become searchable) and its condensed twin in `dashboard/static/js/pages/faq.js`'s hardcoded `FAQS` array (the in-app FAQ page does NOT read `docs/FAQ.md` directly - the two must be kept in sync by hand) |
 | Repo structure, subagent conventions, or the connector-writing pattern | `developer-guide.html` and `CLAUDE.md` |
 | **Pricing, tiers, or SLA terms** | `docs/PRICING.md` (source of truth) **first**, then `pricing.html` and `executive-brief.html`'s pricing-referencing sections, then check `docs/VR_PLATFORM_COMPARISON.md` for stale competitive-cost language |
 | Anything affecting the honest competitive/problem-solution framing | `executive-brief.html` |

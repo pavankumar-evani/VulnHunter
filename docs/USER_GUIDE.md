@@ -125,8 +125,13 @@ database and no historical trend view across runs — see
 | Reports | `/reports` | Generate a shareable KPI/SLA/coverage snapshot report (daily/weekly/monthly/quarterly/half-yearly/yearly framing), downloadable as standalone HTML. Every number is real; see the page's own caveat about period aggregation not existing yet (no persistence layer). `[SCREENSHOT: Reports]` |
 | Support | `/support` | How to get help, known limitations, before-you-file-a-bug checklist. |
 | FAQ | `/faq` | Direct answers to common questions — mirrors [FAQ.md](FAQ.md). |
-| Exceptions | `/exceptions` | Request/approve/auto-expire/revoke a time-boxed risk-acceptance waiver per finding, with keyword-suggested compensating controls on the request form. Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
-| Asset Inventory | `/assets` | Every asset with findings against it, aggregated, with an editable owner/team field (local file, not a CMDB sync). `[SCREENSHOT: Asset Inventory]` |
+| Exceptions | `/exceptions` | Request/auto-expire/revoke a time-boxed risk-acceptance waiver per finding, with keyword-suggested compensating controls on the request form. There's no separate in-app "approve" step - "approved by" is recorded as a text field at request time (see the FAQ entry on this). Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
+| Remediation Approvals | `/remediation-approvals` | The real human sign-off gate, distinct from Exceptions above ("proceed with this fix" vs. "accept the risk instead") - request, approve/reject (with an optional real AD group-membership check), mark staging-validated, and trigger remediation for findings whose policy calls for change management. `[SCREENSHOT: Remediation Approvals]` |
+| Asset Inventory | `/assets` | Every asset with findings against it, aggregated, with an Edit modal covering owner, team, IP/MAC address, environment, and a remediation-schedule override (local file, not a CMDB sync - bulk changes come from a CSV import on the same page). `[SCREENSHOT: Asset Inventory]` |
+| Ask VulnHunter | `/ask` | Free-text search - deterministically matched against real query shapes (finding ID, CVE, count, asset name) or, failing that, against this FAQ's own entries by keyword overlap. Explicitly not an LLM or a chatbot; see the FAQ entry on how this differs from AI Assist. `[SCREENSHOT: Ask VulnHunter]` |
+| ML Insights | `/ml-insights` | Real, unsupervised scikit-learn analysis of the live data - anomalous-asset detection (IsolationForest) and finding clustering (KMeans) - no login required. See the FAQ entry on what this does and doesn't compute. `[SCREENSHOT: ML Insights]` |
+| Admin Settings | `/admin` | Admin-only: add users, set role/team (this is also where RBAC is actually configured - see the FAQ entry), AI model/token-limit policy, and system health. `[SCREENSHOT: Admin Settings]` |
+| Notification Settings | `/notification-settings` | Configure scheduled-report recipients and team alert subscriptions, preview and send-test an email, or run the due-check logic on demand. `[SCREENSHOT: Notification Settings]` |
 | Risk Management | `/risk` | MITRE ATT&CK heat map, top vulnerabilities by type, top assets by critical findings, an editable internal/external-facing classification, and a CVSS v4.0 severity reference. See [§9](#9-the-risk-management-dashboard) below. `[SCREENSHOT: Risk Management]` |
 | Inbox | `/inbox` | Real, system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not messages between people. See [§10](#10-the-notification-inbox) below. `[SCREENSHOT: Inbox]` |
 | Jira | `/jira` | Same preview/send pattern as ServiceNow, targeting a Jira Cloud project. |
@@ -147,9 +152,12 @@ Corp (demo)" / "Northwind Bank (demo)") that partitions the Remediation Queue by
 category to demo an MSSP-style per-client view. It is a UI-only illustration — not real
 per-tenant authentication or data isolation. See [FAQ.md](FAQ.md#does-it-support-multiple-tenantsclients-mssp).
 
-Before exposing this beyond localhost or a trusted network: it has **no authentication or
-RBAC** — anyone who can reach the port can view findings and trigger a real, paid pipeline
-run. See [dashboard/README.md](../dashboard/README.md) and
+A real local login/RBAC system exists (see [§11](#11-logging-in-accounts-and-the-profile-page)
+below) - it gates mutations (admin-only settings, connector fetches, approvals) and
+scopes reads by team, but every read/GET route stays open with no session by default in
+this MVP, a stated, disclosed scope decision (set `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true`
+to close that gap). Before exposing this beyond localhost or a trusted network with reads
+still open: anyone who can reach the port can view findings. See [dashboard/README.md](../dashboard/README.md) and
 [COMPLIANCE_MAPPING.md](COMPLIANCE_MAPPING.md) for what's missing before that changes.
 
 ---

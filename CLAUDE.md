@@ -28,7 +28,10 @@ For depth beyond this file: [dashboard/README.md](dashboard/README.md) and
 [cli/README.md](cli/README.md) are the primary sources this file draws from and defers to.
 `docs/enterprise-suite/` holds seven longer technical references (`architecture.html`,
 `vuln-engine.html`, `remediation-engine.html`, `connectors.html`, `rbac-governance.html`,
-`pages.html`, `developer-guide.html` — indexed in
+`pages.html`, `developer-guide.html`) plus a task-oriented `user-guide.html` for
+end-users ("how do I...?" — kept in sync with `docs/FAQ.md` and
+`dashboard/static/js/pages/faq.js`'s own hardcoded FAQ array, per
+`docs/enterprise-suite/MANIFEST.md`'s sync table) — indexed in
 [docs/enterprise-suite/MANIFEST.md](docs/enterprise-suite/MANIFEST.md)), each covering one
 subsystem in more depth than fits here and meant to be kept in sync with the app (see
 "Enterprise documentation suite" at the end of this file).

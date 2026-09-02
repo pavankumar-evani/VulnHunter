@@ -490,6 +490,122 @@ If a React (or any other) frontend becomes worth building later, `/api/*`'s JSON
 is already the exact seam it would build against - `dashboard/data.py`'s parsing logic and
 the FastAPI routes underneath don't change either way.
 
+### How do I log out, and why does it show two different messages?
+
+Logging out itself happens from the account menu, `/profile`'s "Log out" button, or
+automatically after an idle-timeout — all three call `POST /api/auth/logout` and then
+send you to `/logout`, a display-only confirmation screen (it never calls the logout API
+itself; by the time it renders, you're already signed out). It shows one of two messages
+depending on `?reason=idle` in the URL: "signed out automatically after a period of
+inactivity" for the idle-timeout case, or a generic "your session has ended" for a
+manual logout — same page, different copy, so you know which one happened.
+
+### How do I change my password?
+
+`/profile` has one field: a new password (minimum 8 characters). There's no
+"confirm password" field and no "current password" field required — entering a new
+password and submitting changes it immediately (`POST /api/auth/change-password`).
+
+### How do I add a new user, or change someone's role or team?
+
+Admin-only, on `/admin` under "Team Management." Adding a user is a form with email,
+name, password (min 8 characters), role (`user` or `admin`), and an optional team —
+there are only ever these two roles, no broader permission matrix. For an existing user,
+role is a dropdown that saves the moment you change it; team is a free-text field with
+its own Save button (blank team means no team-based filtering applies to that user).
+This is also where RBAC is actually configured — there's no separate "RBAC settings"
+page; role and team here are the whole model.
+
+### How do I request a new feature?
+
+There's no in-app request form — file a GitHub issue using the **Feature request**
+template (`.github/ISSUE_TEMPLATE/feature_request.md`), which walks through the safety-
+model checklist (e.g., any new remediation-fixer subagent must stay Read/Write-only)
+before the request is scoped. See [SUPPORT.md](SUPPORT.md).
+
+### How do I change an asset's owner, team, IP/MAC, or environment?
+
+Click "Edit" on that asset's row in `/assets`. The modal has Owner, Team, IP address,
+MAC address, Environment (Production/Staging/Dev/Unknown), and a remediation-schedule
+override (Weekly/Monthly/Quarterly/Half-yearly/Yearly/On-demand/none) — each field saves
+to its own endpoint on submit. An unowned asset may also show a one-click "Use" button
+next to a pattern-matched owner suggestion (see "Is the owner suggestion... real machine
+learning?" above) instead of opening the full modal. Bulk changes to owner/team come from
+importing a CMDB CSV export via the "Import owner/team from a CMDB export" panel on the
+same page.
+
+### Where do I change an asset's internal/external-facing classification?
+
+Not in the Asset Inventory edit modal — that's a separate dropdown, right in the table,
+on the **Risk Management page** (`/risk`). It's a manual classification, never inferred
+from a real network scan (see "Is the internal/external-facing classification... from a
+real network scan?" above).
+
+### Can I change an asset's EOL/EOS status?
+
+No — and this is worth being precise about, since it looks editable from a distance.
+EOL/EOS is a **read-only badge**, computed server-side by matching the asset's OS string
+against a real vendor-lifecycle table (`remediation/enrichment/eol_lookup.py`). There is
+no form field for it anywhere in the app, on purpose: it's a fact derived from the OS
+string, not an opinion an owner should be able to override.
+
+### How do I request an exception - and is there a separate approval step?
+
+Request one from `/exceptions`: pick the finding, write a reason (candidate compensating
+controls are suggested by keyword and can be inserted with one click - see the FAQ entry
+above on what that suggestion does and doesn't mean), and set an expiry (quick +30/+90/
++180-day buttons or a date picker). "Requested by" and "approved by" are both plain text
+fields filled in **at request time** - there's no separate in-app "approve" button or
+workflow step the way the page's own summary language ("request/approve") might suggest.
+The only action available afterward is **Revoke** (admin-only), on an active exception.
+Expiry is automatic once `expires_on` passes - nothing to click.
+
+### How do I approve, reject, or trigger a remediation request?
+
+On `/remediation-approvals`: findings whose policy calls for change management appear
+under "awaiting a request" with a "Request approval" button. Once requested, a row in
+the approvals table gets **Approve** (records who decided; runs a real read-only AD
+group-membership check if one is configured, without ever writing to the directory),
+**Reject** (records who and why), and **Mark staging validated** (an ISO/IEC 27002:2022
+§8.32 attestation field, not a real automated staging check). Once approved, **Trigger
+Remediation** is a real, confirm-gated call that spends actual API usage to generate that
+finding's playbook — unchecked, it's a free preview of what would run.
+
+### How do I set up scheduled reports or team alerts?
+
+Two related pages. `/reports` generates an on-demand snapshot (pick a period, view or
+download it) and has its own "Schedule automatic email reports" panel. `/notification-
+settings` is the fuller surface: the same report-schedule config, a second config block
+for team alert subscriptions (critical findings, zero-days, KEV/EPSS matches), a
+Preview/Send-Test flow (build the real email, then confirm-gate an actual send - only
+works if `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM_ADDRESS` are configured), and a "Run checks
+now" button that runs the same due-subscription logic the background scheduler runs
+hourly, on demand.
+
+### How do I use AI Assist, and how is it different from Ask VulnHunter?
+
+**AI Assist** (`/ai-assist`) is the one feature that calls the real Claude API: pick a
+finding, pick an action (explain it in plain English / draft remediation steps / write an
+executive summary), and confirm to spend real API usage - unconfirmed, you get a free
+preview of the exact prompt that would be sent. **Ask VulnHunter** (`/ask`) is a
+different, free feature: type a question in plain English and it deterministically
+matches it against real query shapes (a finding ID, a CVE, a count, an asset name) or, if
+nothing structured matches, against this FAQ file's own entries by keyword overlap - it
+is explicitly **not an LLM and not a chatbot** (its own source comment says so), which is
+also why it can never hallucinate an answer: no match just means no match. If you're
+looking for a persistent, conversational chat interface - there isn't one anywhere in
+this app today.
+
+### What is ML Insights, and what does it actually compute?
+
+`/ml-insights` runs two real, unsupervised scikit-learn techniques over the live
+findings/asset data on every page load - no login required, no writes: an IsolationForest
+flags statistically anomalous assets (with a human-readable "why flagged" reason), and
+KMeans clusters findings into groups you can drill into by size/dominant severity/average
+CVSS+EPSS. See "Is there real machine learning anywhere in this app now?" above for what
+this deliberately does **not** do (no supervised prediction, no "this will get exploited"
+forecasting).
+
 ### What if I find a bug or need help?
 
 See [SUPPORT.md](SUPPORT.md) — the short version: open a GitHub issue on this repo for

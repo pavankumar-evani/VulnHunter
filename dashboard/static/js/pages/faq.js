@@ -210,6 +210,59 @@ const FAQS = [
     "remediation-fixer subagents generate real, reviewable Ansible playbooks (or " +
     "PowerShell DSC for Windows) - never auto-applied. /api/*'s JSON contract is " +
     "already the seam a future React frontend would build against."],
+  ["How do I log out, and why does it show two different messages?",
+    "Logging out (account menu, Profile, or idle-timeout) signs you out first, then " +
+    "sends you to a display-only confirmation screen - it shows \"signed out after " +
+    "inactivity\" or a generic \"session ended\" message depending on which happened; " +
+    "the page itself never calls the logout API."],
+  ["How do I change my password?",
+    "On the Profile page: one field, a new password (8+ characters). No \"confirm " +
+    "password\" or \"current password\" field - submitting changes it immediately."],
+  ["How do I add a user or change someone's role/team?",
+    "Admin Settings, \"Team Management\" (admin-only). Add User takes email/name/" +
+    "password/role/team. For an existing user, role is a per-row dropdown that saves " +
+    "on change; team is a free-text field with its own Save button. This is also the " +
+    "entire RBAC configuration surface - there's no separate RBAC settings page."],
+  ["How do I change an asset's owner, team, IP/MAC, or environment?",
+    "Click \"Edit\" on that asset's row in Asset Inventory. The modal covers Owner, " +
+    "Team, IP, MAC, Environment, and a remediation-schedule override - each field " +
+    "saves independently. Bulk changes come from the CMDB CSV import panel on the " +
+    "same page. Internal/external-facing classification is set separately, inline on " +
+    "the Risk Management page."],
+  ["Can I change an asset's EOL/EOS status?",
+    "No - and this is worth being precise about, since it looks editable from a " +
+    "distance. EOL/EOS is a read-only badge, computed server-side by matching the " +
+    "asset's OS string against a real vendor-lifecycle table. There is no form field " +
+    "for it anywhere in the app, on purpose: it's a fact derived from the OS string, " +
+    "not an opinion an owner should be able to override."],
+  ["How do I request an exception - and is there a separate approval step?",
+    "Request one from the Exceptions page: pick the finding, write a reason (keyword-" +
+    "suggested compensating controls can be inserted with one click), set an expiry. " +
+    "\"Approved by\" is a plain text field filled in at request time - there's no " +
+    "separate in-app approval action for exceptions. The only action afterward is " +
+    "Revoke (admin-only, active exceptions only); expiry is automatic."],
+  ["How do I approve, reject, or trigger a remediation request?",
+    "On Remediation Approvals: findings needing change management appear under " +
+    "\"awaiting a request.\" Once requested, a row gets Approve (with an optional real " +
+    "AD group-membership check), Reject (with a reason), Mark staging validated (an " +
+    "attestation, not a real check), and - once approved - Trigger Remediation, which " +
+    "is confirm-gated and spends real API usage to generate the playbook."],
+  ["How do I set up scheduled reports or team alerts?",
+    "Reports generates on-demand snapshots and has its own \"Schedule automatic email " +
+    "reports\" panel. Notification Settings is the fuller surface: the same report-" +
+    "schedule config, team alert-subscription rules, a Preview-then-confirm Send-Test " +
+    "flow, and a \"Run checks now\" button. Real sending needs SMTP configured " +
+    "server-side."],
+  ["How is AI Assist different from Ask VulnHunter?",
+    "AI Assist calls the real Claude API (explain/draft remediation/summarize a " +
+    "finding, confirm-gated, real cost) - free preview of the prompt if unconfirmed. " +
+    "Ask VulnHunter is free and deterministic: it matches a finding ID/CVE/count/asset " +
+    "name, or this FAQ's own entries by keyword overlap. It is explicitly not an LLM " +
+    "and not a chatbot - there is no persistent conversational chat interface " +
+    "anywhere in this app."],
+  ["How do I request a new feature?",
+    "No in-app form - open a GitHub issue using the Feature Request template, which " +
+    "walks through the safety-model checklist before anything is scoped."],
   ["What if I find a bug or need help?",
     "See the Support page, or docs/SUPPORT.md in the repo."],
 ];
