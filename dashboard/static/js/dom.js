@@ -16,7 +16,7 @@ export function escapeHtml(value) {
 // href so the value/label are actually clickable.
 export function kpiLink(href, value, label, cls = "") {
   return `<a class="kpi-card kpi-card-link ${cls}" href="${escapeHtml(href)}" data-link>
-    <div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></a>`;
+    <div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></a>`;
 }
 
 // Renders a transient message into the persistent #flash-container (which lives

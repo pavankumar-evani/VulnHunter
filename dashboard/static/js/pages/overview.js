@@ -17,7 +17,7 @@ export const title = "Security Posture Overview";
 const REFRESH_MS = 20000;
 
 function kpi(value, label, cls = "") {
-  return `<div class="kpi-card ${cls}"><div class="kpi-value">${value}</div><div class="kpi-label">${label}</div></div>`;
+  return `<div class="kpi-card ${cls}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
 }
 
 const PRIORITY_ORDER = ["Critical", "High", "Medium", "Low"];
@@ -273,8 +273,8 @@ function exposureScoreSectionHtml(exposure, rules) {
   return `
     <div class="kpi-grid">
       <a class="kpi-card kpi-card-link ${bandClass}" href="/risk" data-link>
-        <div class="kpi-value">${exposure.score}</div>
         <div class="kpi-label">Aggregate Exposure Score (${escapeHtml(exposure.band)}) — fleet-wide, 0-100</div>
+        <div class="kpi-value">${exposure.score}</div>
       </a>
     </div>
 
@@ -363,12 +363,12 @@ function riskScoringSection(assets, riskRules) {
 
     <div class="kpi-grid">
       <a class="kpi-card kpi-card-link ${criticalOrHigh ? "kpi-danger" : "kpi-good"}" href="/assets?risk_tier=Critical,High" data-link>
-        <div class="kpi-value">${criticalOrHigh}</div><div class="kpi-label">Assets at Critical/High risk</div>
+        <div class="kpi-label">Assets at Critical/High risk</div><div class="kpi-value">${criticalOrHigh}</div>
       </a>
       <a class="kpi-card kpi-card-link ${unowned ? "kpi-warn" : "kpi-good"}" href="/assets?owner=unassigned" data-link>
-        <div class="kpi-value">${unowned}</div><div class="kpi-label">Assets with no owner assigned</div>
+        <div class="kpi-label">Assets with no owner assigned</div><div class="kpi-value">${unowned}</div>
       </a>
-      <div class="kpi-card"><div class="kpi-value">${avgImpact === null ? "—" : avgImpact}</div><div class="kpi-label">Average Impact Score (0-100)</div></div>
+      <div class="kpi-card"><div class="kpi-label">Average Impact Score (0-100)</div><div class="kpi-value">${avgImpact === null ? "—" : avgImpact}</div></div>
     </div>
 
     <div class="chart-row">
