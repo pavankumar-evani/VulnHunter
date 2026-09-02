@@ -587,6 +587,14 @@ a.notif-item:hover { background: var(--bg); }
    force-scaled and distorted. */
 .chart-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
 .chart-row .chart-block { flex: 1 1 320px; max-width: 560px; }
+/* A chart-block that's the ONLY child of its row (no natural second chart to pair it
+   with - e.g. agingChartBlockHtml's callers, "KEV-listed findings by asset type") has
+   no sibling to preserve room for, so the 560px cap above just leaves the rest of the
+   row as a dead, empty gap beside it - a real, previously-only-half-fixed bug
+   (agingChartBlockHtml already widens its own SVG to explain why, but the container's
+   cap was never raised to match). Uncapping via :only-child fixes every current and
+   future solo chart-block automatically, with zero risk to any real 2-up row. */
+.chart-row .chart-block:only-child { max-width: none; }
 /* Deliberately NOT made responsive (width:100%) - a bar chart sharing a row with a
    pie chart (e.g. Infrastructure Vulnerabilities' top row) would then grow taller as
    its block grows wider, since its viewBox aspect ratio ties height to width, while

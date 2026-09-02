@@ -613,7 +613,7 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
           No historical-snapshot storage exists in this app, so this is a live count, not
           a trend line - a real trend would need new backend work to store daily snapshots.
         </p>
-        ${kevData.length ? barChartSvg(kevData) : `<p class="empty-state">No KEV-listed findings currently.</p>`}
+        ${kevData.length ? barChartSvg(kevData, { width: 760 }) : `<p class="empty-state">No KEV-listed findings currently.</p>`}
       </div>
     </div>
 
