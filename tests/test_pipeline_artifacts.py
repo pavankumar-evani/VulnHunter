@@ -489,7 +489,7 @@ class NoRealSecretsLeakedAnywhere(unittest.TestCase):
     REAL_SECRET_PATTERNS = [
         r"-----BEGIN (RSA|EC|OPENSSH|PGP) PRIVATE KEY-----",
         r"sk_live_[A-Za-z0-9]{20,}(?!.*FAKE|.*DEMO)",  # a Stripe-shaped key NOT tagged fake/demo
-        r"AKIA[0-9A-Z]{16}",  # AWS access key ID shape
+        r"AKIA(?!FAKE|DEMO)[0-9A-Z]{16}",  # AWS access key ID shape, not an obviously-fake demo value
     ]
 
     def test_no_real_looking_secrets_in_tracked_files(self):
