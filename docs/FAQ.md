@@ -606,6 +606,37 @@ CVSS+EPSS. See "Is there real machine learning anywhere in this app now?" above 
 this deliberately does **not** do (no supervised prediction, no "this will get exploited"
 forecasting).
 
+### How does this compare to ServiceNow's Vulnerability Response / USEM module?
+
+The short version: VulnHunter's core bet is that **remediation**, not just detection, is
+the differentiator — three separate mechanisms by asset domain (Ansible playbooks for
+Windows/Unix, a real git-branch-and-PR flow for application code, and a
+compensating-control-only recommendation track for OT/IoT that deliberately never
+generates a patch script) under one RBAC/approval model, rather than one generic
+"auto-remediate" button. ServiceNow announced its intent to acquire Armis on December 22,
+2025, specifically to extend USEM's coverage into OT/IoT/medical devices — which both
+validates that gap as real and shows ServiceNow actively closing it, so treat this as a
+genuine ongoing competitive space, not a settled advantage. The full breakdown (cost-per-
+asset research, feature-by-feature comparison, and where legacy tools still legitimately
+win — longer track record, bigger integration ecosystems, formal certifications VulnHunter
+doesn't have yet) is in `docs/enterprise-suite/whitepaper.html` §02 and
+`docs/enterprise-suite/pricing.html` §02/§09.
+
+### Has VulnHunter filed for, or been granted, any patents?
+
+No. A patent-landscape review (not a legal opinion — no attorney has been consulted) found
+that the broad concept of "AI analyzes a vulnerability and generates remediation
+instructions" is already claimed by multiple existing patents from other companies
+(including a Fortinet SOAR-playbook patent and Veracode's April 2025 patent for its
+"Veracode Fix" tool), so a patent on that idea alone is unlikely to be novel or grantable.
+A couple of narrower angles — the specific three-way domain segregation described above,
+and the prompt-injection-resistant "treat external data as data, not instructions" framing
+used throughout the ingest/planning subagents — are flagged as candidates worth a real,
+licensed patent attorney's independent assessment, not claimed as patentable here. Nothing
+in this product should be represented as "patent pending" unless and until a real filing
+happens. See `docs/enterprise-suite/whitepaper.html` §04 for the full assessment and
+sourcing.
+
 ### What if I find a bug or need help?
 
 See [SUPPORT.md](SUPPORT.md) — the short version: open a GitHub issue on this repo for

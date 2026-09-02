@@ -282,6 +282,39 @@
         <div class="card"><h4>Dedicated single-tenant (default, all tiers)</h4><p>Your own isolated instance — not a shared multi-tenant environment. Hosted by us or in your own cloud account. Real isolation today, without waiting on the multi-tenant MSSP architecture still in development (see the RBAC, Multi-Tenancy &amp; Governance document).</p></div>
         <div class="card"><h4>Self-hosted (Enterprise)</h4><p>Run it entirely in your own environment; we provide support and updates against the SLA above without hosting it ourselves.</p></div>
       </div>
+
+      <h3>Illustrative SaaS infrastructure cost model (roadmap)</h3>
+      <div class="callout warn"><span class="label">Proposed and illustrative — not a current cost or a committed price</span><p>Everything below is a roadmap model for a possible future hosted "VulnHunter Cloud" tier. VulnHunter is self-hosted/single-tenant today (see the Architecture &amp; Schema Reference document's storage-model section and its "Data handling &amp; residency" subsection) — nothing here is a built product, a vendor quote, or a firm commitment.</p></div>
+
+      <p class="section-intro">What 2026 public cloud pricing comparisons show, in general (attributed generically — not a quote from any one vendor's pricing page):</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cost driver</th><th>What the research shows</th></tr></thead>
+          <tbody>
+            <tr><td>Compute</td><td>A representative 4 vCPU / 16 GB Linux instance runs roughly <span class="mono">$0.19/hr</span> on AWS, Azure, and GCP alike — equivalent instance types are typically within 5-10% of each other, so compute is not a major cloud-vendor differentiator for this workload.</td></tr>
+            <tr><td>Egress / data transfer</td><td>Roughly <span class="mono">$0.087-$0.09/GB</span> for the first several TB/month (Azure ~$0.087/GB up to 5TB; AWS ~$0.09/GB up to 10TB) — the cost that actually scales with usage.</td></tr>
+            <tr><td>ARM/Graviton-class instances</td><td>Roughly <strong>20% cheaper</strong> than equivalent x86 for the same containerized workload — worth using for cost-sensitive scan/worker nodes.</td></tr>
+            <tr><td>Market range, production HA SaaS</td><td>Commonly <span class="mono">$5,000-$20,000/month</span> at meaningful scale; a small deployment (~1,000 monthly active users) can run on a single VM/small container setup for <span class="mono">$50-$200/month</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="section-intro">A rough, illustrative VulnHunter-shaped estimate — arithmetic shown, not a vendor quote, rounded generously:</p>
+      <div class="grid3">
+        <div class="card"><h4>Compute</h4><p>1-2 app/worker instances, ~$150-$300/mo blended (cheaper with ARM worker nodes)</p></div>
+        <div class="card"><h4>Managed database</h4><p>~$50-$150/mo at this scale</p></div>
+        <div class="card"><h4>Object storage</h4><p>Artifacts/logs/backups, ~$10-$30/mo</p></div>
+        <div class="card"><h4>Egress</h4><p>Dashboard/API/connector traffic, ~$20-$50/mo</p></div>
+        <div class="card"><h4>Backup/snapshot storage</h4><p>~$10-$30/mo</p></div>
+        <div class="card"><h4>Illustrative total</h4><p><strong>Roughly $300-$600/month</strong> for a Professional-shaped customer (~7,500 assets) — before any ops/monitoring/support staffing cost</p></div>
+      </div>
+
+      <p class="section-intro">Two possible pricing mechanisms for a hosted tier — options for the business to decide between, not a decision made here:</p>
+      <div class="grid2">
+        <div class="card"><h4>Option A — "VulnHunter Cloud" SKU: license + hosting uplift</h4><p>Keep every existing license tier unchanged and add a hosting uplift of roughly <strong>+15-25%</strong>, framed as covering infra/ops/monitoring/on-call — not a firm number. Applied to today's real prices: Standard +$1,800-$3,000/yr (~$150-$250/mo); Professional +$5,700-$9,500/yr (~$475-$792/mo); Enterprise +$12,750-$21,250/yr (~$1,063-$1,771/mo). The uplift is meant to cover more than the raw infra estimate above (staffing, monitoring, margin) — the two numbers aren't meant to match exactly, just sit in the same neighborhood at Professional scale.</p></div>
+        <div class="card"><h4>Option B — Metered infra pass-through</h4><p>Bill actual infrastructure (compute + database + storage + egress + backups) as a separate, itemized line item alongside the existing flat license fee, roughly at cost or a modest markup, instead of folding it into one uplifted price.</p></div>
+      </div>
+      <p style="font-size:0.82rem;color:var(--muted)">Neither option changes any existing tier or vertical-module price elsewhere in this document — this is additive, future-hosting content only. Cloud figures are illustrative/comparative research, generically attributed to 2026 public cloud pricing comparisons, not a quote from a specific vendor's pricing page.</p>
     </section>
 
     <section id="discounts">

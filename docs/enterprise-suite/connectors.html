@@ -91,8 +91,10 @@
     <a href="#hub">01 · The Adaptors hub</a>
     <a href="#live">02 · Live connectors</a>
     <a href="#push">03 · Push connectors</a>
-    <a href="#reference">04 · Reference catalog</a>
-    <a href="#credentials">05 · Credential handling</a>
+    <a href="#connect">04 · Connecting a source</a>
+    <a href="#limits">05 · Rate limits &amp; constraints</a>
+    <a href="#reference">06 · Reference catalog</a>
+    <a href="#credentials">07 · Credential handling</a>
   </nav>
 
   <main>
@@ -104,6 +106,7 @@
 
     <section id="hub">
       <h2><span class="num">01</span>The Adaptors hub</h2>
+      <p class="section-intro">Every connector below is a risk-management decision, not just a technical integration — this is the only way real vulnerability, asset, and threat data enters VulnHunter's pipeline at all. The seven-stage remediation lifecycle (documented in the Remediation Engine &amp; Workflows document) only ever sees what a connected source actually reported: an unconnected scanner, an unconfigured CNAPP, or an asset-discovery source nobody wired up is a coverage gap in your risk picture, not a limitation of the scoring or planning logic downstream of it. How current and complete that picture is — and how much the KEV/EPSS-aware prioritization described in the Vulnerability Finding Engine document is protecting against real, live threats rather than a stale snapshot — depends entirely on which of the sources below are actually connected in your environment.</p>
       <p class="section-intro">Every integration lives in one place (<code>/adaptors</code>), filterable by category, with a two-tier honesty label instead of a single "supported" checkmark:</p>
       <div class="grid3">
         <div class="catcard"><h4><span class="chip live">live</span></h4><p class="count" style="margin-top:6px">A real, working connector class + a real dashboard page — Test Connection, Fetch/Send, or (for the scan engine) the full scan lifecycle.</p></div>
@@ -131,6 +134,10 @@
           </tbody>
         </table>
       </div>
+
+      <h3>A fourth path: findings pushed in, not pulled out</h3>
+      <p><code>remediation/connectors/generic_connector.py</code> is a different shape from every connector above — the receiving side of a webhook, for any SIEM/XDR/EDR/SOAR tool that already supports posting a custom outbound webhook. VulnHunter never calls out; the outside tool calls <code>POST /api/ingest/generic</code> with a JSON body validated against a minimal required shape (<code>title</code>, <code>severity</code>, <code>asset_name</code>, <code>asset_type</code>) and normalized into the same Finding schema every other source uses. One real, generic, testable adapter instead of another bespoke vendor connector nobody has real API access to verify.</p>
+      <div class="callout warn"><span class="label">Deliberately unauthenticated today</span><p>Unlike every connector above, this route is not gated behind <code>rbac.require_admin</code> or any session — a machine-to-machine webhook receiver, not something a logged-in browser session submits. That also means there is no cap on call frequency or on how large the resulting <code>remediation/live-data/generic-ingested.json</code> can grow. A real deployment needs a webhook-specific API key or HMAC signature, plus request throttling, in front of this route — a disclosed, real gap, not implemented here (see §05 below).</p></div>
     </section>
 
     <section id="push">
@@ -148,8 +155,58 @@
       </div>
     </section>
 
+    <section id="connect">
+      <h2><span class="num">04</span>Connecting a source — the admin walkthrough</h2>
+      <p class="section-intro">This is the real, current path for an <strong>admin turning on an already-built source</strong> — not a developer wiring up a brand-new connector class (see the Developer Guide document's connector contract for that). All 11 connector pages with a real form — the 8 Test Connection/Fetch pages above plus ServiceNow/Jira/Splunk — follow the exact same shape:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Step</th><th>What actually happens</th></tr></thead>
+          <tbody>
+            <tr><td>1 · Open the connector's page</td><td>From <code>/adaptors</code> filtered by category, or directly (e.g. <code>/tenable</code>, <code>/servicenow</code>). Every real action below requires being logged in as <strong>admin</strong> — enforced server-side by <code>rbac.require_admin</code>, not just a hidden button.</td></tr>
+            <tr><td>2 · Enter credentials</td><td>Directly into that page's form — e.g. Tenable's access key + secret key, generated from the vendor's own console. Typed fresh every visit; nothing is saved server-side, and there is no vault or "saved connection" anywhere in this catalog.</td></tr>
+            <tr><td>3 · Test Connection</td><td>One click, no confirm checkbox needed. Calls the vendor's cheapest real authenticated endpoint — Tenable's is <code>GET /session</code>, its lightest documented call — so a bad credential pair fails in under a second, before anything slower runs.</td></tr>
+            <tr><td>4 · Check the confirm box, then Fetch (or Send)</td><td>The real action: a live export, scan, or send. Gated behind an explicit checkbox because it's a real call against a real production system — every push connector additionally shows you the exact payload for free before this step.</td></tr>
+            <tr><td>5 · See what landed</td><td>Differs by source category — see below.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Where the data actually goes</h3>
+      <p>What "Fetch" produces depends on which source category a connector belongs to (full detail in the Vulnerability Finding Engine document's source taxonomy, §01):</p>
+      <ul>
+        <li><strong>CVE-scoped host sources</strong> (Tenable, Qualys, OpenVAS) write a raw export file to <code>remediation/live-data/</code> — one more agent-driven step (<code>/remediate &lt;file&gt;</code>) is still needed before it appears on this dashboard's own pages, since classifying a host into one of 17 asset types needs judgment a script shouldn't guess at.</li>
+        <li><strong>Already-normalized posture sources</strong> (Prisma Cloud, Cortex XSIAM) write straight to <code>remediation/live-data/</code> as schema-ready findings — deliberately <strong>not</strong> auto-merged into the live queue.</li>
+        <li><strong>Asset-inventory sources</strong> (Infoblox, Axonius, Active Directory) reconcile real ip/mac/hostname ground truth directly into the asset ownership store — an asset with no findings against it yet still won't appear on the Asset Inventory table until one does.</li>
+        <li><strong>Push connectors</strong> (ServiceNow, Jira, Splunk) run in reverse: an Incident/Issue/Event is only created after you check the confirm box and submit — the preview above it is always free and makes zero network calls.</li>
+      </ul>
+      <div class="callout warn"><span class="label">Two connectors with no admin walkthrough today</span><p>CrowdStrike Falcon is CLI-driven with a reference page only (<code>/xdr</code>) — no dashboard form yet. Armis is CLI-ingestion only. Both are real, working connector classes; neither has the Test Connection/Fetch UI described above.</p></div>
+      <div class="callout info"><span class="label">Credentials: UI-entered, not environment variables — for every connector above</span><p>Some other parts of this app do read credentials from environment variables (SMTP, OIDC SSO, and the Active Directory <em>group-membership check</em> used by Remediation Approvals) — but none of the connector pages above work that way. Every one asks for real credentials fresh, in the browser, on every action. Don't confuse the Active Directory <em>connector</em> here (asset discovery, UI-entered LDAP bind credentials, its own <code>/active-directory</code> page) with that separately-configured, env-var-based AD group-validation check used elsewhere for approvals — genuinely different code paths against the same kind of directory.</p></div>
+    </section>
+
+    <section id="limits">
+      <h2><span class="num">05</span>Rate limits &amp; operational constraints</h2>
+      <p class="section-intro">Real constraints from two directions: what each vendor's own API imposes on VulnHunter, and what VulnHunter itself does — or, honestly, doesn't yet — enforce on the way in.</p>
+
+      <h3>Vendor-side: async jobs and pagination, not simple request caps</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Connector</th><th>Real constraint in the code today</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Tenable.io</strong></td><td>Vulnerability export is Tenable's documented asynchronous job model: request an export, then poll <code>GET /vulns/export/{uuid}/status</code> every 5 seconds (default) until it reports <code>FINISHED</code>, up to a 600-second timeout before the connector gives up and raises. A large tenant's export can legitimately take several minutes — the Fetch button says so before you click it.</td></tr>
+            <tr><td><strong>Armis</strong></td><td>Follows Armis's real <code>next</code> pagination cursor, page by page (100 records per page by default), until the API returns no further cursor — capped at 100 pages as a self-imposed safety bound so an unexpected response shape can't loop forever, not a limit Armis itself documents.</td></tr>
+            <tr><td><strong>OpenVAS/GVM</strong></td><td>Same async reasoning as Tenable's export: a real authenticated scan can run minutes to hours, so Start Scan/Check Status/Import Results are three separate calls (Vulnerability Finding Engine document, §03) instead of one blocking request.</td></tr>
+            <tr><td>Every other connector</td><td>A single request per action (test/fetch/send) — no pagination or async job, because the vendor's own API doesn't require one for these specific calls.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>VulnHunter's own side — honestly incomplete, not silently assumed complete</h3>
+      <div class="callout warn"><span class="label">No client-side retry/backoff in any vendor connector, and no explicit request timeout either</span><p>Only the CISA KEV/EPSS threat-intel client retries a dropped connection or timeout, with exponential backoff, up to 3 times — and that module is the only place in this codebase that sets an explicit HTTP timeout on its calls at all. None of the 13 named-vendor connectors in <code>remediation/connectors/</code> do either: a transient network blip during a Tenable export or an Armis page fetch fails the whole action rather than self-healing, and a slow/hung vendor endpoint has nothing forcing it to give up. A real production deployment calling any of these connectors on a schedule should add the same retry-with-timeout pattern already proven in the threat-intel client, not assume it's already there.</p></div>
+      <div class="callout warn"><span class="label">No inbound rate-limiting on VulnHunter's own API — a known, already-disclosed gap</span><p>This is the same gap the RBAC, Multi-Tenancy &amp; Governance document's AI &amp; security guardrails section discloses directly: there is no general request-throttling/rate-limiting middleware anywhere in this app today, confirmed by direct audit — not assumed. It applies here too: nothing in <code>dashboard/app.py</code> caps how often an admin can call a connector's test/fetch/send route. The generic-ingestion webhook (<code>POST /api/ingest/generic</code>, §02 above) is the sharpest edge of this — it takes no session or API key at all, so it also has no cap on call frequency or on how large its output file can grow. A real deployment exposing any connector route, and especially that one, needs its own throttling in front of it — a real follow-up, not implemented here.</p></div>
+    </section>
+
     <section id="reference">
-      <h2><span class="num">04</span>Reference catalog</h2>
+      <h2><span class="num">06</span>Reference catalog</h2>
       <p class="section-intro">Real, cited facts about each vendor's actual API — the honest "next stage earlier" than a live connector, not a vague roadmap bullet. Representative examples, by category:</p>
       <div class="table-wrap">
         <table>
@@ -167,7 +224,7 @@
     </section>
 
     <section id="credentials">
-      <h2><span class="num">05</span>Credential handling — the one rule that never changes</h2>
+      <h2><span class="num">07</span>Credential handling — the one rule that never changes</h2>
       <div class="callout warn"><span class="label">Per-request, never stored, no exceptions</span><p>Every connector page asks for real credentials fresh, on every Test Connection or Fetch/Send/Scan action. Nothing is persisted server-side. There is no vault, no saved-connection list, no "remember this account" option anywhere in this catalog.</p></div>
     </section>
 

@@ -263,6 +263,18 @@ const FAQS = [
   ["How do I request a new feature?",
     "No in-app form - open a GitHub issue using the Feature Request template, which " +
     "walks through the safety-model checklist before anything is scoped."],
+  ["How does this compare to ServiceNow's Vulnerability Response / USEM module?",
+    "The core bet is remediation, not just detection: three separate mechanisms by " +
+    "asset domain (Ansible playbooks, a real git-PR flow for app code, and a " +
+    "compensating-control-only track for OT/IoT) under one RBAC model, rather than " +
+    "one generic 'auto-remediate' button. See docs/enterprise-suite/whitepaper.html " +
+    "§02 for the full comparison, including where legacy tools still legitimately win."],
+  ["Has VulnHunter filed for, or been granted, any patents?",
+    "No. A patent-landscape review (not a legal opinion) found the broad 'AI generates " +
+    "a remediation playbook' concept already claimed by other companies' existing " +
+    "patents, so that alone is unlikely to be novel. A couple of narrower angles are " +
+    "flagged as worth a real attorney's opinion, not claimed as patentable here - see " +
+    "docs/enterprise-suite/whitepaper.html §04."],
   ["What if I find a bug or need help?",
     "See the Support page, or docs/SUPPORT.md in the repo."],
 ];

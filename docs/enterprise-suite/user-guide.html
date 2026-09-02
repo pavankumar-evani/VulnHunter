@@ -231,6 +231,11 @@
       </details>
 
       <details class="howto">
+        <summary>How do I check if VulnHunter is running and healthy?</summary>
+        <div class="body"><p>There's no dedicated status page in the UI, but there's a real, honest answer. The simplest check: if the Overview page's KPIs load and keep refreshing every 20 seconds without an error, the API and backend are up — a genuine signal, not a guess. For a definitive, scriptable check (worth doing before filing a bug), call <code>/api/status</code> directly — it returns real, live-checked facts (overall status, app version, process uptime, live finding/playbook counts, and whether the background notification scheduler is alive), not a hardcoded "OK". No login is required, unless your deployment has turned on the stricter login-for-reads setting.</p></div>
+      </details>
+
+      <details class="howto">
         <summary>How do I report a bug, or a real security issue?<span class="route">/support</span></summary>
         <div class="body"><p>Bugs/unexpected behavior: a GitHub issue with the exact command, full error output, and environment. A real security issue in VulnHunter itself: the private contact in <code>SECURITY.md</code> — never a public issue.</p></div>
       </details>

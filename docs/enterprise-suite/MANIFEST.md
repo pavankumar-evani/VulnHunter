@@ -1,6 +1,6 @@
 # Enterprise Documentation Suite — Manifest
 
-Eleven HTML documents, version-controlled here so they survive alongside the code they
+Fourteen HTML documents, version-controlled here so they survive alongside the code they
 document. Each is also published as a Claude Artifact (a hosted, shareable page) at the
 URL below. **The files in this directory are the source of truth** — the published
 Artifact is a mirror, kept in sync by republishing from these exact files (see "Keeping
@@ -8,13 +8,16 @@ this in sync" below).
 
 | File | Published URL | Audience |
 |---|---|---|
-| `hub.html` | https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b | Landing page — links to all 10 below |
+| `hub.html` | https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b | Landing page — links to all 13 below |
 | `executive-brief.html` | https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b | Enterprise evaluators |
+| `whitepaper.html` | https://claude.ai/code/artifact/2d57679f-6e91-4a8f-83b6-a9469bbcb4da | Enterprise evaluators — deep research/POV companion to `executive-brief.html`: why-now, vs. ServiceNow USEM, FAQs, patent/publication feasibility |
 | `architecture.html` | https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7 | Technical |
 | `vuln-engine.html` | https://claude.ai/code/artifact/37848de1-aed0-4e71-b903-0cf2780dc52b | Technical |
 | `remediation-engine.html` | https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46 | Technical |
 | `connectors.html` | https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c | Technical |
 | `rbac-governance.html` | https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c | Technical |
+| `ai-capabilities.html` | https://claude.ai/code/artifact/21f80f22-3840-4dbf-827b-bb9539ae73d4 | Technical — every AI surface in the app, what powers it, and its guardrails |
+| `reporting.html` | https://claude.ai/code/artifact/7f8dd69c-e1eb-4a2f-8bf2-02b39a88fdba | Technical — report fields, on-demand generation, scheduled email delivery |
 | `pages.html` | https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f | Technical |
 | `developer-guide.html` | https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4 | Developers |
 | `poc-methodology.html` | https://claude.ai/code/artifact/fc05a1c0-7664-4ce1-88a2-86bec7eae328 | Business |
@@ -39,7 +42,11 @@ document(s) in the same change** — don't let the docs drift. Concretely:
 | A new end-user workflow, form, or button (anything answering a real "how do I...?") | `user-guide.html`, plus a matching `### ` entry in `docs/FAQ.md` (Ask VulnHunter's `search_faq()` reads that file live - no code change needed for it to become searchable) and its condensed twin in `dashboard/static/js/pages/faq.js`'s hardcoded `FAQS` array (the in-app FAQ page does NOT read `docs/FAQ.md` directly - the two must be kept in sync by hand) |
 | Repo structure, subagent conventions, or the connector-writing pattern | `developer-guide.html` and `CLAUDE.md` |
 | **Pricing, tiers, SLA terms, or a vertical module (OT/IoT, AppSec)** | `docs/PRICING.md` (source of truth) **first**, then `pricing.html` and `executive-brief.html`'s pricing-referencing sections, then check `docs/VR_PLATFORM_COMPARISON.md` for stale competitive-cost language |
-| Anything affecting the honest competitive/problem-solution framing | `executive-brief.html` |
+| Anything affecting the honest competitive/problem-solution framing | `executive-brief.html`, and check `whitepaper.html` §02 (vs. ServiceNow USEM) for stale claims |
+| Any AI-facing page or feature (AI Assist, AI Trend Analysis, Ask VulnHunter, ML Insights) or a subagent's tool-scoping/budget cap | `ai-capabilities.html` |
+| The Reports page, `dashboard/reports.py`, or the report-scheduler (`remediation/notifications/report_scheduler.py`, `report_schedule_rules.yaml`) | `reporting.html` — keep the "real today vs. roadmap" split accurate; this is the doc most likely to drift into overclaiming, be careful |
+| A new competitor fact, research citation, or patent/publication development worth tracking | `whitepaper.html` §01/§02/§04 |
+| Threat-intel sources or industry/sector correlation (`remediation/enrichment/threat_actor_groups.py`) | `vuln-engine.html` §04 |
 
 **To republish a document after editing its local file**: use the Artifact tool's
 `publish` action with `file_path` set to the file here and `url` set to its Published

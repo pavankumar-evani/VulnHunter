@@ -118,6 +118,68 @@ for up to 100 apps; Checkmarx SAST lists $10,000-$15,000/year for the same range
 Credits apply to the following month's invoice as a percentage of that month's fee.
 Response clocks start from ticket creation; measured monthly.
 
+## Deployment & Hosting
+
+Every tier today is a dedicated, single-tenant deployment — hosted by us, or run
+entirely in your own cloud account at Enterprise (self-hosted). That's real
+per-customer isolation via separate instances, not shared multi-tenant infrastructure —
+see the Architecture & Schema Reference document's storage-model section for what
+"single-tenant" means at the data layer today.
+
+### Illustrative SaaS infrastructure cost model (roadmap)
+
+**This is a proposed, illustrative model for a possible future hosted "VulnHunter
+Cloud" tier — nothing below is a current cost, a committed price, or a built product.**
+VulnHunter is self-hosted/single-tenant today (see the Architecture & Schema Reference
+document, §03, and its "Data handling & residency (SaaS target design)" subsection).
+These figures exist so a future hosting build has a documented starting point, not
+because hosting is being sold today.
+
+**What 2026 public cloud pricing comparisons show, in general** (attributed
+generically — not a quote from any one vendor's pricing page):
+
+- **Compute is not much of a cloud-vendor differentiator for this workload.** A
+  representative 4 vCPU / 16 GB Linux instance runs roughly $0.19/hour on AWS, Azure,
+  and GCP alike — equivalent instance types are typically within 5-10% of each other.
+- **Egress/data transfer** runs roughly $0.087-$0.09/GB for the first several
+  terabytes each month (Azure ~$0.087/GB up to 5TB; AWS ~$0.09/GB up to 10TB) — the
+  cost that actually scales with usage.
+- **ARM/Graviton-class instances** run roughly 20% cheaper than equivalent x86 for the
+  same containerized workload — worth using for cost-sensitive scan/worker nodes.
+- **General market range:** a production, highly-available SaaS platform commonly
+  runs $5,000-$20,000/month at meaningful scale; a small deployment (~1,000 monthly
+  active users) can run on a single VM/small container setup for $50-$200/month.
+
+**A rough, illustrative VulnHunter-shaped estimate** — arithmetic shown, not a vendor
+quote, rounded generously: for a mid-tier customer sized like Professional (~7,500
+assets), a plausible all-in infra band is in the **low-to-mid hundreds of dollars per
+month**. Illustratively: 1-2 app/worker instances (~$150-$300/mo blended, cheaper with
+ARM worker nodes) + a small managed database (~$50-$150/mo) + object storage for
+artifacts/logs/backups (~$10-$30/mo at this scale) + egress for typical
+dashboard/API/connector traffic (~$20-$50/mo) + backup/snapshot storage (~$10-$30/mo)
+≈ **roughly $300-$600/month**, before any ops/monitoring/support staffing cost. This is
+intentionally rough, assumption-driven arithmetic, not a costed engineering estimate.
+
+**Two possible pricing mechanisms for a hosted tier** (options for the business to
+decide between — neither is a decision made here):
+
+1. **"VulnHunter Cloud" SKU — license + hosting uplift.** Keep every existing license
+   tier unchanged and add a hosting uplift of roughly +15-25% over the self-hosted
+   price, framed as covering infra/ops/monitoring/on-call — not a firm commitment.
+   Applied illustratively to today's real prices: Standard ($12,000/yr) →
+   +$1,800-$3,000/yr (~$150-$250/mo); Professional ($38,000/yr) → +$5,700-$9,500/yr
+   (~$475-$792/mo); Enterprise ($85,000/yr) → +$12,750-$21,250/yr (~$1,063-$1,771/mo).
+   The uplift is meant to cover more than the raw infra estimate above — staffing,
+   monitoring, margin — so the two figures aren't meant to match exactly, just sit in
+   the same neighborhood at Professional scale.
+2. **Metered infra pass-through.** Bill actual infrastructure (compute + database +
+   storage + egress + backups) as a separate, itemized line item alongside the
+   existing flat license fee, roughly at cost or a modest markup, rather than folding
+   it into one uplifted price.
+
+Neither option changes any existing tier, per-asset, or vertical-module price elsewhere
+in this document — this is additive, future-hosting content only.
+
 ## Competitive landscape (beyond ServiceNow VR/USEM)
 
 | Platform | Category | List pricing signal |

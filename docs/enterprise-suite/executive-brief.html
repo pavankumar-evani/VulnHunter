@@ -168,8 +168,74 @@
     <p class="body muted" style="font-size:0.95rem">This is a real, verified gap in the market, not a marketing claim: ServiceNow's own current Vulnerability Response/USEM documentation describes remediation as a phased <em>task</em> process — import, triage, and monitor progress to completion — workflow automation, not fix-artifact generation. Tenable, Qualys, and Rapid7 don't generate fixes either; they're scanners that feed a ticketing system like ServiceNow. See the Pricing &amp; Commercial Positioning document for how this shapes the tier structure.</p>
   </section>
 
+  <section id="threat-landscape">
+    <h2><span class="num">03</span>Why this matters now — the AI-driven threat landscape</h2>
+    <p class="section-intro">Advanced AI models are changing both sides of the vulnerability lifecycle at once — how fast weaknesses are found, and how fast a finding becomes a working exploit. That shift is why closing the gap between detection and remediation is no longer a back-office efficiency metric; it's a front-line risk decision.</p>
+
+    <blockquote class="facet" style="margin-top:0">
+      <p class="body muted" style="font-style:italic">Forrester's 2026 cybersecurity threat predictions name Anthropic's Claude Mythos Preview and Project Glasswing as early signals of "how radically areas such as vulnerability discovery, remediation, and exploitation are about to change."</p>
+      <p style="margin:10px 0 0;font-size:0.8rem;max-width:none;font-style:normal"><a href="https://www.forrester.com/blogs/announcing-forresters-top-cybersecurity-threats-for-2026/" target="_blank" rel="noopener">Forrester — Announcing Forrester's Top Cybersecurity Threats For 2026 ↗</a></p>
+    </blockquote>
+
+    <div class="twocol">
+      <div class="facet">
+        <div class="eyebrow">Same Forrester report</div>
+        <h4>AI agents as unsupervised shadow operators</h4>
+        <p>Forrester also warns that ungoverned AI agents can act as shadow operators — reaching data and taking action at machine speed — and calls on defenders to build their own agentic security capabilities in response, not just faster manual review.</p>
+      </div>
+      <div class="facet">
+        <div class="eyebrow">Gartner research, as reported by Reinsurance News</div>
+        <h4>AI-driven discovery is now a leading emerging risk</h4>
+        <p>Gartner research, reported by Reinsurance News, identifies AI-driven vulnerability discovery as a leading emerging organizational risk — and warns that without a matching gain in remediation capability, faster discovery alone could outpace what most organizations can actually defend against. Gartner points to faster patching and greater use of automated remediation as the way to close that gap.</p>
+      </div>
+    </div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-top:-6px">Sources: <a href="https://www.forrester.com/blogs/announcing-forresters-top-cybersecurity-threats-for-2026/" target="_blank" rel="noopener">Forrester, 2026 threat predictions ↗</a> · <a href="https://www.reinsurancene.ws/ai-driven-cyber-vulnerability-discovery-becomes-leading-emerging-risk-gartner-reports/" target="_blank" rel="noopener">Reinsurance News, reporting Gartner research ↗</a></p>
+
+    <p class="body">Read plainly: advanced models lower the skill floor for finding exploitable weaknesses, and can shorten the path from discovery to a working exploit faster than most organizations' manual triage-and-patch cycles can keep pace with. That asymmetry — AI-accelerated discovery meeting a still-largely-manual remediation pipeline — is precisely the gap an automation-assisted detect-and-remediate pipeline is built to close, and it matters more today than it did even two years ago.</p>
+
+    <div class="callout warn">
+      <span class="label">What VulnHunter does not claim</span>
+      <p>VulnHunter does not run Claude Mythos, and it is not an autonomous agent making unilateral changes to your environment. Its own AI-Assist feature is a bounded, budget-capped analyst helper — see the RBAC, Multi-Tenancy &amp; Governance document's "AI &amp; security guardrails" section — not an actor with independent authority over real infrastructure. The execution boundary in §08 below applies to every AI-touched step in this product, without exception.</p>
+    </div>
+  </section>
+
+  <section id="pptip">
+    <h2><span class="num">04</span>Protecting people, process, technology, and IP</h2>
+    <p class="section-intro">People / Process / Technology is a long-established security-governance triad — the lineage behind frameworks like NIST's Cybersecurity Framework and the ISO/IEC 27001 family. It's a useful lens for what closing the detection-to-remediation loop actually protects, and for whom — we add IP explicitly, since unpatched vulnerabilities are one of the most common vectors organizations lose it through.</p>
+
+    <div class="twocol">
+      <div class="facet">
+        <div class="eyebrow">People</div>
+        <h4>Less triage burden, not less oversight</h4>
+        <p>Normalizing findings and drafting a first-pass fix reduces the manual triage load and alert fatigue on security analysts. RBAC and approval workflows keep a human decision at every step that touches real infrastructure — fewer repetitive decisions for people to make, not fewer people in the loop.</p>
+      </div>
+      <div class="facet">
+        <div class="eyebrow">Process</div>
+        <h4>One schema, one lifecycle</h4>
+        <p>Findings from Tenable, Armis, and manual threat intel normalize into one schema and move through the same lifecycle — Found → Enriched → Playbook → Initiated → Approved → Triggered, the pipeline the Overview dashboard page tracks (see the Page-by-Page Reference document; the Remediation Engine document details who performs each step) — instead of ad hoc spreadsheet tracking that varies by team and source.</p>
+      </div>
+    </div>
+    <div class="twocol">
+      <div class="facet">
+        <div class="eyebrow">Technology</div>
+        <h4>A shorter exploitable window</h4>
+        <p>A faster mean-time-to-remediate shrinks the window during which a known, exploitable weakness actually sits exposed in production — the number that most directly drives real-world risk, independent of how good detection alone is.</p>
+      </div>
+      <div class="facet">
+        <div class="eyebrow">Intellectual property</div>
+        <h4>Fewer open doors for exfiltration</h4>
+        <p>Unpatched vulnerabilities are a common, well-documented vector for IP theft and data exfiltration. Getting from detection to a reviewed fix faster directly shrinks the window an attacker has to find and use that door.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="label">On "reducing losses" — what we can honestly say</span>
+      <p>Industry breach-cost research — IBM's annual <em>Cost of a Data Breach Report</em> is the most cited example — consistently finds that faster detection and containment correlates with materially lower incident costs. That's a well-established industry pattern, not a VulnHunter-specific measurement: VulnHunter itself has not been benchmarked for its effect on breach costs or loss reduction, and we're not attaching a specific dollar figure or percentage to it here. The honest claim is directional — shrinking the time between finding and fixing a vulnerability is the same lever that pattern describes.</p>
+    </div>
+  </section>
+
   <section id="who">
-    <h2><span class="num">03</span>Who it's for</h2>
+    <h2><span class="num">05</span>Who it's for</h2>
     <div class="personas">
       <div class="persona"><div class="ic">🛡️</div><div class="t">AppSec / Security</div><div class="d">Fast baseline scan + auto-fix PR</div></div>
       <div class="persona"><div class="ic">📊</div><div class="t">VM / SOC teams</div><div class="d">Raw backlog → prioritized queue</div></div>
@@ -180,7 +246,7 @@
   </section>
 
   <section id="position">
-    <h2><span class="num">04</span>Competitive positioning</h2>
+    <h2><span class="num">06</span>Competitive positioning</h2>
     <p class="section-intro">Compared against ServiceNow Vulnerability Response and four independent vulnerability-management platforms, on real, independently-sourced figures — not the vendor's own marketing.</p>
     <div class="table-wrap">
       <table>
@@ -218,13 +284,85 @@
     <p class="section-intro" style="margin-top:4px">Not a fully apples-to-apples comparison — a disclosed, deliberate choice over the alternative of quietly matching feature-count claims that couldn't be verified. This table shows flat annual cost; normalized to cost-per-asset (the metric this market actually bills on), VulnHunter runs 3–5x cheaper than the least expensive named platform — see the Pricing &amp; Commercial Positioning document §02 for the full, sourced comparison against Tenable, Qualys, Rapid7, Microsoft Defender VM, and CrowdStrike Falcon Spotlight as well. OT/IoT and Application Security are priced as separate vertical modules (§04 of that document), not folded into these core tiers - they're different buying centers and, per the Remediation Engine document, genuinely different remediation mechanisms under the hood.</p>
   </section>
 
+  <section id="why-deeper">
+    <h2><span class="num">07</span>Why VulnHunter, expanded</h2>
+    <p class="section-intro">The short version is in §02 and §06 above. The fuller picture: what actually differentiates the product, what has to be true before a real deployment, where its technology honestly still has edges, and which frameworks and standards its own design already answers to.</p>
+
+    <h3>Differentiation</h3>
+    <p class="section-intro" style="margin-bottom:12px">Two things, already true and documented elsewhere in this suite, do the real work here — not a longer feature list:</p>
+    <div class="twocol">
+      <div class="facet">
+        <div class="eyebrow">Remediation, not just detection</div>
+        <p>Generating a real, reviewable fix artifact — not workflow automation around a ticket — is the differentiator versus ServiceNow VR/USEM's own documented task-and-monitor process (§02 above). See the Pricing &amp; Commercial Positioning document §09 and the Remediation Engine document for the fuller comparison.</p>
+      </div>
+      <div class="facet">
+        <div class="eyebrow">Three segregated remediation tracks</div>
+        <p>IT infrastructure, Application Security, and OT/IoT run as three genuinely different mechanisms — a generated Ansible playbook, a real git branch/PR, or a compensating-control recommendation — not one generic pipeline stretched to fit cases it doesn't. See the Remediation Engine document §07.</p>
+      </div>
+    </div>
+
+    <h3>Prerequisites for a real deployment</h3>
+    <p class="section-intro" style="margin-bottom:12px">Realistic, not aspirational — sample data gets a demo running in minutes, but a live deployment needs:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Prerequisite</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">Python 3.11+</td><td>Runtime baseline for the dashboard and remediation pipeline.</td></tr>
+          <tr><td>Target systems reachable on the network</td><td>Each connector needs real network reachability to whatever it's enriching or scanning — Tenable/Armis SaaS endpoints, or an on-prem OpenVAS/GVM, Qualys, or Active Directory target.</td></tr>
+          <tr><td><code>VULNHUNTER_SESSION_SECRET</code> set to a real value</td><td>Without it, a random per-process secret is used and every session is invalidated on restart — the app prints a startup warning when this is missing (see the dashboard's own README).</td></tr>
+          <tr><td>RBAC mapped to your real roles/teams</td><td>The shipped role/team model (admin vs. not, team-scoping) needs to be configured for your actual analyst structure before go-live, not left on demo defaults.</td></tr>
+          <tr><td>At least one real scan engine or feed connected</td><td>The bundled sample data (Tenable/Armis/threat-intel fixtures) is for demonstration only — live value requires a real connector such as OpenVAS/GVM, Tenable, or Armis feeding real findings.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Technology limitations — stated plainly</h3>
+    <div class="sg honest" style="max-width:80ch">
+      <span class="label">Confirmed, already-disclosed gaps</span>
+      <ul>
+        <li>Vendor and scan-engine connectors (Tenable, Armis, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory, OpenVAS/GVM, and the rest) are built against each vendor's public API or protocol documentation and unit-tested against mocked responses shaped like that documentation. CISA KEV and FIRST.org EPSS threat-intel enrichment remain the only two integrations in the product confirmed working against a real live endpoint end-to-end.</li>
+        <li>No formal third-party penetration test has been performed on this application yet.</li>
+        <li>True multi-tenant SaaS isolation doesn't exist yet. Today's RBAC is single-tenant with a client-side tenant-label filter over one shared dataset — not a real per-tenant data boundary or server-side tenant trust. See the RBAC, Multi-Tenancy &amp; Governance document §02 for the standards a genuine multi-tenant claim would need to satisfy.</li>
+        <li>There is no general request-throttling/rate-limiting middleware in the application today — confirmed by direct audit, not assumed. Two specific unbounded-spend paths (AI Assist, AI trend analysis) are closed separately with their own per-call budget caps.</li>
+      </ul>
+    </div>
+
+    <h3>Frameworks, standards, and guidelines this design draws on</h3>
+    <p class="section-intro" style="margin-bottom:12px">Named specifically — each already cited with this precision elsewhere in this documentation suite, not introduced here for the first time:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Framework / standard</th><th>Where it's applied</th></tr></thead>
+        <tbody>
+          <tr><td>NIST SP 800-53 (AC-3 / AC-4 / AC-6)</td><td>Access enforcement, information flow, least privilege — the bar a genuine multi-tenant claim would need to clear</td></tr>
+          <tr><td>NIST SP 800-82</td><td>OT/ICS security guidance — why the OT/IoT remediation track outputs a compensating-control recommendation, never an automated patch script</td></tr>
+          <tr><td>OWASP API Security Top 10:2023 (API1)</td><td>Broken Object Level Authorization — the category the tenant-isolation gap above is measured against</td></tr>
+          <tr><td>OWASP Top 10:2025 (A01)</td><td>Broken Access Control</td></tr>
+          <tr><td>OWASP ASVS 5.0 (V8 §8.3.1)</td><td>Application-security verification standard cited alongside the two rows above</td></tr>
+          <tr><td>OWASP Top 10 for LLM Applications (2026 edition)</td><td>The standard AI Assist's own guardrails — prompt-injection boundary, SSRF guard, tool scoping, spend caps, output escaping — are mapped against</td></tr>
+          <tr><td>CVSS (v4.0, falling back to v3.1 / v3.0)</td><td>CVE severity scoring throughout the finding pipeline</td></tr>
+          <tr><td>FIRST.org EPSS</td><td>Daily-refreshed exploitation-probability scoring per CVE</td></tr>
+          <tr><td>CISA KEV catalog</td><td>Confirmed active-exploitation flag — the one hardcoded escalation to an emergency change type</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="section-intro" style="margin-top:4px">A separate, explicitly non-certifying category mapping against broader frameworks (NIST CSF, ISO/IEC 27002:2022, CIS Controls v8, NIST SP 800-40r4) also exists in the RBAC, Multi-Tenancy &amp; Governance document §05 — informational only, not a certification, attestation, or compliance claim of any kind.</p>
+
+    <h3>Building blocks — where each capability lives in this suite</h3>
+    <div class="suitegrid">
+      <a class="sdoc" href="https://claude.ai/code/artifact/37848de1-aed0-4e71-b903-0cf2780dc52b"><div class="n">Detection</div><div class="t">Vulnerability Finding Engine</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46"><div class="n">Remediation</div><div class="t">Remediation Engine &amp; Workflows</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c"><div class="n">Data sources</div><div class="t">Connectors &amp; Adaptors Catalog</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c"><div class="n">Governance</div><div class="t">RBAC, Multi-Tenancy &amp; Governance</div></a>
+    </div>
+  </section>
+
   <section id="trust">
-    <h2><span class="num">05</span>The trust differentiator — the execution boundary</h2>
+    <h2><span class="num">08</span>The trust differentiator — the execution boundary</h2>
     <div class="callout warn"><span class="label">By construction, not by policy</span><p>"Nothing in this repository ever executes against real infrastructure automatically." The subagents that draft fixes have Read/Write tool access only — no Bash, no network, no credentials. Every playbook is a reviewable artifact for a human, or your own change-managed automation, to run. This is auditable by reading three lines of YAML frontmatter, not by trusting a policy document.</p></div>
   </section>
 
   <section id="suite">
-    <h2><span class="num">06</span>Go deeper</h2>
+    <h2><span class="num">09</span>Go deeper</h2>
     <p class="section-intro">The rest of this documentation suite, for technical evaluators and developers:</p>
     <div class="suitegrid">
       <a class="sdoc" href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7"><div class="n">01</div><div class="t">Architecture &amp; Schema Reference</div></a>

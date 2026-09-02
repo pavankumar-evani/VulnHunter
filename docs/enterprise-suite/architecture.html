@@ -230,6 +230,29 @@ flowchart LR
 
       <h3>Why files, and the real tradeoff</h3>
       <p>Every artifact is human-readable, diffable in git, and inspectable without a DB client — a deliberate fit for a system whose whole point is producing <em>reviewable</em> artifacts. The honest cost: single-writer concurrency (enforced by <code>remediation/utils/file_lock.py</code>, a real cross-platform advisory file lock with a timeout, not a placeholder), no historical trend storage (every chart is a live snapshot, not a time series), and a full-file rewrite on every mutation rather than a targeted update. This is the top item on VulnHunter's own roadmap (§8).</p>
+
+      <h3>Data handling &amp; residency (SaaS target design)</h3>
+      <p>Everything in this subsection is a <strong>target design for a possible future hosted "VulnHunter Cloud" tier</strong> — proposed, not built. Stated plainly first: the current reality, per the storage-model table above and <code>dashboard/README.md</code>, is that VulnHunter persists every record as a flat JSON/YAML file under <code>remediation/</code> on whatever single host runs it — no database, no encryption-at-rest layer of its own (it inherits whatever the host filesystem/disk provides), and no enforced minimum TLS version (transit encryption today depends entirely on how an operator terminates TLS in front of it — see the reverse-proxy example in <code>dashboard/README.md</code>). None of the controls below exist yet; they are what a hosted offering would need to build.</p>
+
+      <div class="callout info"><span class="label">Framing: 2026 SOC 2 best-practice guidance for SaaS data handling</span><p>The controls below track common 2026 SOC 2 best-practice guidance for a multi-tenant SaaS platform — encryption at rest and in transit, documented key rotation, data-residency commitments, and tested backup/DR — rather than a specific numbered control framework VulnHunter has been audited against.</p></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Control</th><th>Target design</th></tr></thead>
+          <tbody>
+            <tr><td>Encryption at rest</td><td>AES-256 across the primary data store, backups, logs, and any analytics store.</td></tr>
+            <tr><td>Encryption in transit</td><td>TLS 1.3 enforced at the edge for every browser, connector, and API connection — not operator-dependent, as it is today.</td></tr>
+            <tr><td>Key rotation</td><td>A documented, scheduled key-rotation policy — not a one-time key set at provisioning.</td></tr>
+            <tr><td>Customer-managed keys (CMK)</td><td>A possible enterprise-tier differentiator: the customer holds the decryption key, and VulnHunter's hosting provider cannot read that customer's data without their cooperation. Not yet decided as a committed, shipping feature.</td></tr>
+            <tr><td>Data residency</td><td>All copies of a customer's data — primary store, backups, logs, analytics/aggregation stores, and any support-access copy — stay within that customer's approved region. Residency policy reviewed at least annually, or immediately after any significant architecture or regulatory change.</td></tr>
+            <tr><td>Backups &amp; DR</td><td>Regular automated backups, with periodically tested restores (an unrestored backup isn't a verified one). Specific RPO/RTO targets per tier are a decision for whoever builds this, sized to whatever uptime commitments <code>docs/PRICING.md</code> settles on — not invented here.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn"><span class="label">Multi-tenant isolation — today vs. target, stated honestly</span><p>VulnHunter's current RBAC (§6) is tenant-<em>label</em> filtering, not hardened multi-tenant data isolation: the MSSP "tenant view" is a client-side filter over one shared dataset, and server-side team-scoping narrows a non-admin's queries — but every tenant and team reads from the same underlying file store. The RBAC, Multi-Tenancy &amp; Governance document §02 already names the standards a real implementation would need to satisfy (NIST SP 800-53 AC-3/AC-4/AC-6, OWASP API Security Top 10:2023 API1, OWASP Top 10:2025 A01, OWASP ASVS 5.0 V8 §8.3.1). True SaaS multi-tenancy — most plausibly a database with a real per-tenant boundary — is a target-state architecture change for this hosted design, not something to bolt onto the current file-based model incrementally, and not yet built.</p></div>
+
+      <p style="color:var(--muted);font-size:0.9rem">See <code>docs/PRICING.md</code>'s "Deployment &amp; Hosting" section for the corresponding illustrative infrastructure cost model, and the RBAC, Multi-Tenancy &amp; Governance document for the full current-state access-control picture this subsection builds on.</p>
     </section>
 
     <section id="schema">

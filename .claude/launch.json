@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["dashboard/app.py"],
       "port": 5050
+    },
+    {
+      "name": "docs-enterprise-suite",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8611", "--directory", "docs/enterprise-suite"],
+      "port": 8611
     }
   ]
 }

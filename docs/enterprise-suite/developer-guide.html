@@ -92,6 +92,7 @@
     <a href="#testing">05 · Testing conventions</a>
     <a href="#cli">06 · CLI usage</a>
     <a href="#extension">07 · Extension points</a>
+    <a href="#health">08 · Health checks &amp; monitoring</a>
   </nav>
 
   <main>
@@ -192,6 +193,28 @@ python cli/vulnhunter.py /remediate --generate --max-budget-usd 5.00</pre></div>
           <tr><td>A new finding taxonomy</td><td class="mono">remediation/enrichment/ + normalized-finding-schema.md</td></tr>
         </tbody>
       </table></div>
+    </section>
+
+    <section id="health">
+      <h2><span class="num">08</span>Health checks &amp; operational monitoring</h2>
+      <p class="section-intro">A real, machine-readable health/status endpoint exists — every field below is an actual checked fact at request time, not a hardcoded "OK":</p>
+      <div class="codeblock"><pre><span class="c"># Open by default (see the auth note below) - no credentials needed</span>
+curl http://127.0.0.1:5050/api/status</pre></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Field</th><th>What it actually reports</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">status</td><td><code>"ok"</code> or <code>"degraded"</code> — degraded only when something genuinely load-bearing (the remediation findings or playbooks files) fails to read. A missing SMTP config or session secret is an expected, disclosed MVP default, not degradation, and never flips this.</td></tr>
+          <tr><td class="mono">app_version</td><td>The FastAPI app's own declared version string — the same value shown in the dashboard's page footer.</td></tr>
+          <tr><td class="mono">uptime_seconds</td><td>Real process uptime from a monotonic clock (immune to system clock changes) — resets to zero on every restart; there's no persistence layer behind it.</td></tr>
+          <tr><td class="mono">vulnhunt_findings / remediation_findings / remediation_playbooks</td><td>Live counts re-read from disk at request time, never cached.</td></tr>
+          <tr><td class="mono">smtp_configured / session_secret_configured</td><td>Whether the corresponding environment variables are actually set — never fabricated as "configured."</td></tr>
+          <tr><td class="mono">threat_intel</td><td>Freshness of the KEV/EPSS enrichment data on disk, with its own <code>available</code> flag and error string if that check itself failed.</td></tr>
+          <tr><td class="mono">notification_scheduler_alive</td><td>Whether the in-process background scheduler task (report/alert checks) is still running.</td></tr>
+          <tr><td class="mono">data_stores</td><td>Per-store <code>exists</code> / <code>last_modified</code> / <code>record_count</code> for the four gitignored JSON stores (exceptions, remediation approvals, activity log, AI usage log) — a corrupt store reports its own error string instead of taking down the whole check.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout info"><span class="label">Auth is conditional, not absent</span><p><code>/api/status</code> is open with no session by default, same as every other read route in this MVP. If a deployment sets <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code>, this route is <strong>not</strong> in the small allow-list of routes the login flow itself needs (<code>/api/auth/*</code>) — so it starts requiring a valid session too. Account for that in your uptime monitor's own auth if that flag is on.</p></div>
+      <p>There is no separate <code>/health</code>, <code>/api/health</code>, or <code>/api/version</code> route — <code>/api/status</code> is the one real health surface, and it already covers version. For a check outside this endpoint: the notification scheduler's own due-check logic is independently callable on demand via <code>POST /api/notification-settings/run-checks-now</code>, useful for confirming that background loop is actually reachable rather than only trusting <code>notification_scheduler_alive</code>.</p>
     </section>
 
     <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7" target="_blank" rel="noopener" data-suite-link="arch">Architecture &amp; Schema Reference</a> for the full data contract this all builds on.</footer>

@@ -1,0 +1,344 @@
+<title>Reporting & Scheduled Delivery</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #0b1220; --paper: #f5f7fb; --surface: #ffffff; --surface-2: #edf1f9;
+    --line: #d7deec; --muted: #5b6478; --accent: #2f6fed; --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe; --signal: #1baf7a; --crit: #991b1b; --high: #9a3412;
+    --med: #92400e; --low: #1e40af;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+      --med: #fbbf24; --low: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+    --med: #fbbf24; --low: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .suitebar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--ink); color: var(--paper); font-size: 0.82rem; }
+  :root[data-theme="dark"] .suitebar, :root:not([data-theme="light"]) .suitebar { background: #060a16; }
+  .suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 600; color: #fff; text-decoration: none; letter-spacing: 0.01em; }
+  .suitebar .sep { opacity: 0.35; } .suitebar .doclabel { opacity: 0.85; } .suitebar .spacer { flex: 1; }
+  .suitebar a.hub { color: #cdd8ff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 20px; padding: 4px 12px; }
+  .suitebar a.hub:hover { border-color: rgba(255,255,255,.6); }
+  .shell { display: flex; max-width: 1360px; margin: 0 auto; }
+  .toc { width: 250px; flex: 0 0 250px; position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow-y: auto; padding: 32px 18px 40px 24px; }
+  .toc-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px 6px; font-weight: 600; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 0.87rem; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--ink); background: var(--surface-2); }
+  .toc a.active { color: var(--accent-deep); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+  main { flex: 1; min-width: 0; padding: 0 40px 80px; max-width: 1020px; }
+  .kicker { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-deep); font-weight: 600; margin: 40px 0 10px; }
+  .hero h1 { font-size: 2.4rem; margin: 0 0 14px; }
+  .hero p.lede { font-size: 1.15rem; color: var(--muted); max-width: 74ch; margin: 0 0 8px; }
+  .hero { padding-top: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  section { margin-top: 50px; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; padding-top: 4px; scroll-margin-top: 20px; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.95rem; margin-right: 10px; }
+  h3 { font-size: 1.05rem; margin: 22px 0 8px; }
+  p { max-width: 74ch; } .section-intro { color: var(--muted); max-width: 74ch; margin-bottom: 18px; }
+
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+
+  .bar-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+  .bar-row .lbl { width: 190px; flex: 0 0 auto; font-size: 0.82rem; }
+  .bar-row .track { flex: 1; background: var(--surface-2); border-radius: 4px; height: 18px; overflow: hidden; }
+  .bar-row .fill { height: 100%; border-radius: 4px; }
+  .bar-row .fill.vh { background: var(--signal); }
+  .bar-row .fill.other { background: var(--muted); opacity: 0.55; }
+  .bar-row .val { width: 90px; flex: 0 0 auto; font-family: var(--mono); font-size: 0.8rem; text-align: right; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin: 20px 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .card h4 { margin: 0 0 6px; font-size: 0.95rem; } .card p { margin: 0; font-size: 0.87rem; color: var(--muted); }
+  .card .n { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: var(--accent-deep); display: block; margin-bottom: 2px; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 16px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); max-width: 82ch; }
+  .callout.info { border-color: var(--accent-soft); background: var(--accent-soft); }
+  .callout.warn { border-color: #f0c869; background: color-mix(in srgb, var(--med) 8%, var(--surface)); }
+  .callout .label { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 4px; }
+  .callout.info .label { color: var(--accent-deep); } .callout.warn .label { color: var(--med); }
+  .callout p { margin: 0; max-width: none; }
+
+  .howto { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 14px 0; box-shadow: var(--shadow); }
+  .howto summary { font-weight: 600; cursor: pointer; font-size: 0.96rem; list-style: none; display: flex; align-items: center; gap: 8px; }
+  .howto summary::before { content: "▸"; color: var(--accent); font-size: 0.8rem; transition: transform 0.15s; }
+  .howto[open] summary::before { transform: rotate(90deg); }
+  .howto .body { margin-top: 10px; font-size: 0.9rem; color: var(--ink); }
+  .howto .body p { margin: 0 0 8px; max-width: none; }
+  .howto .route { font-family: var(--mono); font-size: 0.78rem; color: var(--accent-deep); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px; margin-left: auto; flex: 0 0 auto; }
+  .howto .steps { margin: 8px 0 0; padding-left: 20px; }
+  .howto .steps li { margin-bottom: 4px; }
+
+  .fieldname { font-family: var(--mono); font-size: 0.82rem; background: var(--surface-2); padding: 1px 6px; border-radius: 5px; }
+  .chartcap { font-size: 0.78rem; color: var(--muted); margin: -4px 0 18px; max-width: 74ch; }
+
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+  @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } .grid2, .grid3, .grid4 { grid-template-columns: 1fr; } }
+</style>
+
+<div class="suitebar">
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#5b8bf5"/><circle cx="27" cy="27" r="9" fill="none" stroke="#fff" stroke-width="3"/><line x1="34" y1="34" x2="41" y2="41" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
+  <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#contents">01 · What a report contains today</a>
+    <a href="#generate">02 · Generating a report on demand</a>
+    <a href="#charts">03 · Charts &amp; visualization</a>
+    <a href="#scheduling">04 · Scheduled email delivery</a>
+    <a href="#customization">05 · Customization: today vs. roadmap</a>
+    <a href="#notifsettings">06 · Notification Settings — the fuller picture</a>
+    <a href="#navigate">07 · Navigating reports — RBAC &amp; Overview</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="kicker">Reference · Reporting &amp; Scheduled Delivery</div>
+      <h1>Reporting &amp; Scheduled Delivery</h1>
+      <p class="lede">What a VulnHunter report actually contains, how to generate one on demand, what's real about scheduled email delivery — and what genuinely isn't yet. Every claim on this page is traced to <code>dashboard/reports.py</code>, <code>remediation/notifications/report_scheduler.py</code>, and the live <code>/reports</code> page, not an aspirational feature list.</p>
+    </div>
+
+    <div class="callout info">
+      <span class="label">The short version</span>
+      <p><strong>Report content</strong> is always a real, live-computed snapshot of this repo's current findings — there's no sample data and no historical trend line yet, because there's no persistence layer to trend from. <strong>Report delivery</strong> is a separate concern, and here the honest answer surprises people both ways: on-demand generation is real (§02), and recurring email delivery on a schedule is <em>also</em> real, working code today (§04) — not a roadmap idea. What's genuinely still roadmap is narrower than "scheduling": real historical aggregation, custom field selection, and calendar-aware timing. §05 draws that line precisely.</p>
+    </div>
+
+    <section id="contents">
+      <h2><span class="num">01</span>What a report contains today</h2>
+      <p class="section-intro">Every report — whether generated on demand from <code>/reports</code> or emailed on a schedule (§04) — is assembled by one real function, <code>generate_report_data()</code> in <code>dashboard/reports.py</code>, over the exact same live data every other dashboard page reads: the re-scored remediation queue, the static <code>REMEDIATION_PLAN.md</code> snapshot, code-scan results, and generated playbooks. Nothing is sample text.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>What it actually measures</th></tr></thead>
+          <tbody>
+            <tr><td><span class="fieldname">sla.breached / at_risk / on_track</span></td><td>Real counts from the live queue's own SLA due-dates. "At risk" means due within 3 days and not yet breached; everything else on track.</td></tr>
+            <tr><td><span class="fieldname">kev_count</span></td><td>In-scope findings CISA's Known Exploited Vulnerabilities catalog confirms as actively exploited right now.</td></tr>
+            <tr><td><span class="fieldname">high_epss_count</span></td><td>In-scope findings with a live FIRST.org EPSS exploitation-probability score ≥ 50%.</td></tr>
+            <tr><td><span class="fieldname">remediation_total</span></td><td>Count of infrastructure/application findings in scope (the live queue, filtered).</td></tr>
+            <tr><td><span class="fieldname">vulnhunt_total</span></td><td>Code-scan (SAST) total from <code>SECURITY_REPORT.md</code> — landscape-wide only; reads as 0 the moment a scope or team filter is applied (see the callout below).</td></tr>
+            <tr><td><span class="fieldname">playbook_count</span></td><td>Real generated Ansible playbooks sitting in <code>remediation/output/</code> — landscape-wide only.</td></tr>
+            <tr><td><span class="fieldname">risk_tier_counts</span></td><td>The static <code>REMEDIATION_PLAN.md</code> snapshot's auto-approvable / needs-change-approval / manual-only breakdown — landscape-wide only.</td></tr>
+            <tr><td><span class="fieldname">asset_type_breakdown</span></td><td>In-scope findings grouped by asset type (OS, network, IoT, application, certificate, …), sorted by count descending.</td></tr>
+            <tr><td><span class="fieldname">top_priority_findings</span></td><td>The 5 highest-priority in-scope findings — ID, title, priority tier, and asset.</td></tr>
+            <tr><td><span class="fieldname">period</span> / <span class="fieldname">scope</span> / <span class="fieldname">team</span></td><td>What you asked for: a cadence label (§05), one of 9 sub-domains or "all," and an optional team filter.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <span class="label">Scoping a report excludes two things, on purpose</span>
+        <p>Pass a <code>scope</code> (e.g. <code>dast</code>) or <code>team</code> filter and the report honestly says so via a <code>scope_note</code>: code-scan/SAST findings have no scan-type or team association in that data path, and <code>REMEDIATION_PLAN.md</code>'s risk-tier snapshot and playbook count are whole-pipeline artifacts that can't be filtered this way. Both zero out rather than silently mislead — a scoped report is real, just narrower.</p>
+      </div>
+
+      <p style="font-size:0.85rem;color:var(--muted)">One field is computed but not yet surfaced anywhere: <span class="fieldname">vulnhunt_auto_fixable</span> is present in the raw JSON response but isn't rendered in either the downloadable HTML report or the on-screen summary today — a real, minor gap between what's computed and what's displayed.</p>
+    </section>
+
+    <section id="generate">
+      <h2><span class="num">02</span>Generating a report on demand</h2>
+      <p class="section-intro">Any logged-in user can do this — generating a report doesn't require admin (see §07).</p>
+
+      <details class="howto" open>
+        <summary>How do I generate a report right now?<span class="route">/reports</span></summary>
+        <div class="body">
+          <ol class="steps">
+            <li>Open <strong>Reports</strong> from the sidebar.</li>
+            <li>Choose a <strong>Period</strong> from the one dropdown on the page — Daily, Weekly, Monthly, Quarterly, Half-Yearly, or Yearly — and click <strong>Generate</strong>.</li>
+            <li>The page renders 8 KPI figures (SLA breached/at-risk/on-track, CISA KEV-listed, High EPSS, Infra findings, Code vulnerabilities, Playbooks generated) and a Top Priority Findings table. Every KPI is a live link that jumps straight into a pre-filtered Queue, Code Scan, or Remediation Plan view — this isn't a static screenshot, it's a doorway into the live data behind it.</li>
+            <li>Click <strong>Download this report as HTML</strong> to get the identical report as a standalone file — inline CSS only, no dependency on the dashboard's own stylesheet, so it opens correctly anywhere.</li>
+          </ol>
+        </div>
+      </details>
+
+      <div class="callout info">
+        <span class="label">Two parameters the API supports that the page's form doesn't expose yet</span>
+        <p>Both <code>/api/reports/generate</code> (JSON) and <code>/api/reports/generate.html</code> (HTML, add <code>&amp;download=true</code> for an attachment) also accept <code>scope=</code> (one of 9 sub-domains: <code>all</code>, <code>infra-vm</code>, <code>sca</code>, <code>cert-mgmt</code>, <code>dast</code>, <code>iac</code>, <code>secrets</code>, <code>runtime</code>, <code>ai-ml</code>) and <code>team=</code> query parameters. They're real and reachable by URL today — they're exactly what powers scheduled subscriptions in §04 — but the visible <code>/reports</code> page currently renders only the Period dropdown, not scope/team controls. See §05.</p>
+      </div>
+    </section>
+
+    <section id="charts">
+      <h2><span class="num">03</span>Charts &amp; visualization</h2>
+      <p class="section-intro">Stated plainly, because it's easy to assume otherwise: the Reports page itself renders numbers and tables. There is no chart — no SVG, no canvas — anywhere in <code>reports.js</code> or in the HTML/text report it produces (§01's table is the whole visual vocabulary).</p>
+
+      <p>Real charts do exist in this app, just not here. <code>dashboard/static/js/charts.js</code> is a hand-rolled SVG bar/pie chart module — zero charting-library dependency, colors drawn from the app's own CSS custom properties so they theme correctly in light and dark automatically. They render on:</p>
+
+      <div class="grid4">
+        <div class="card"><h4>Overview</h4><p><code>/</code> — the always-on companion described in §07</p></div>
+        <div class="card"><h4>Infrastructure hub</h4><p><code>/infrastructure</code> — severity + sub-category</p></div>
+        <div class="card"><h4>AppSec hub</h4><p><code>/appsec</code> — by-category pie chart</p></div>
+        <div class="card"><h4>OT Vulnerabilities</h4><p><code>/ot-vulnerabilities</code> — severity/device/aging</p></div>
+        <div class="card"><h4>Risk Management</h4><p><code>/risk</code> — MITRE ATT&amp;CK heat map</p></div>
+        <div class="card"><h4>Certificate Vulns</h4><p><code>/certificate-vulnerabilities</code></p></div>
+      </div>
+
+      <h3>An illustration, not a screenshot</h3>
+      <p>The bars below render this document's own illustration of the real <span class="fieldname">asset_type_breakdown</span> shape from §01, using the suite's shared bar-chart style (see the Pricing document for the same component). <strong>The numbers are illustrative example values, not a live measurement</strong> — this rendering exists only in this documentation, not anywhere in the running app.</p>
+      <div class="bar-row"><div class="lbl">OS — Windows/Linux Server</div><div class="track"><div class="fill vh" style="width:100%"></div></div><div class="val mono">example</div></div>
+      <div class="bar-row"><div class="lbl">Network / Network Security</div><div class="track"><div class="fill other" style="width:68%"></div></div><div class="val mono">example</div></div>
+      <div class="bar-row"><div class="lbl">OT / IoT devices</div><div class="track"><div class="fill other" style="width:41%"></div></div><div class="val mono">example</div></div>
+      <div class="bar-row"><div class="lbl">Application (SCA/DAST/Secrets)</div><div class="track"><div class="fill other" style="width:34%"></div></div><div class="val mono">example</div></div>
+      <div class="bar-row"><div class="lbl">Certificate / TLS</div><div class="track"><div class="fill other" style="width:15%"></div></div><div class="val mono">example</div></div>
+      <p class="chartcap">On the real Reports page, this same data renders as the "Coverage by asset class" table — plain rows, no bars.</p>
+
+      <p>The Overview page is the real, always-live counterpart: the same KPI family, refreshed automatically every 20 seconds, with real charts alongside it — see §07 for how it relates to on-demand reports.</p>
+    </section>
+
+    <section id="scheduling">
+      <h2><span class="num">04</span>Scheduled email delivery — real, not roadmap</h2>
+      <p class="section-intro">This is worth stating precisely, because "does it schedule reports?" is easy to answer wrong in either direction: recurring email delivery of a report is real, working, wired-up code today, built from <code>remediation/config/report_schedule_rules.yaml</code>, <code>remediation/notifications/report_scheduler.py</code>, and <code>remediation/notifications/email_sender.py</code>. It ships with nothing configured by default, and it depends on real SMTP settings to actually send — but the mechanism itself is not aspirational.</p>
+
+      <details class="howto">
+        <summary>How do I set up a scheduled report?<span class="route">/reports</span></summary>
+        <div class="body">
+          <p>The same <code>/reports</code> page has a <strong>"Schedule automatic email reports"</strong> panel below the on-demand generator: a raw YAML text box, not a dropdown form. Each subscription entry sets:</p>
+          <ul class="steps">
+            <li><span class="fieldname">id</span> — a unique string, used to track when it last sent</li>
+            <li><span class="fieldname">scope</span> — one of the 9 sub-domains from §02, or <code>all</code></li>
+            <li><span class="fieldname">team</span> — a team name exactly as it appears in the asset-ownership store (the shipped example uses <code>"Identity &amp; Domain Services"</code>)</li>
+            <li><span class="fieldname">cadence</span> — <code>weekly</code>, <code>monthly</code>, <code>quarterly</code>, <code>half-yearly</code>, or <code>yearly</code> (no <code>daily</code> option — see below)</li>
+            <li><span class="fieldname">recipients</span> — a list of email addresses</li>
+            <li><span class="fieldname">enabled</span> — <code>true</code>/<code>false</code>; disabled entries stay editable but never send</li>
+          </ul>
+          <p>Saving requires an <strong>admin</strong> session (<code>POST /api/report-schedule</code>). The file ships with <span class="fieldname">subscriptions: []</span> — real mechanism, nothing scheduled out of the box until an admin adds one.</p>
+        </div>
+      </details>
+
+      <h3>How a due subscription actually gets sent</h3>
+      <div class="grid2">
+        <div class="card"><h4>1. Something checks if it's due</h4><p>An in-process timer inside the dashboard server runs the check hourly by default (<code>NOTIFICATION_CHECK_INTERVAL_SECONDS</code>). Due = enabled, and at least <code>cadence</code>'s day-count has elapsed since it last sent — a rolling window, not calendar-aware.</p></div>
+        <div class="card"><h4>2. The real report is built</h4><p>The exact same <code>generate_report_data()</code> from §01, scoped to that subscription's <code>scope</code>/<code>team</code>. No separate "scheduled" data path.</p></div>
+        <div class="card"><h4>3. Real SMTP sends it, if configured</h4><p><code>email_sender.py</code> — stdlib <code>smtplib</code>, STARTTLS by default. Until <code>SMTP_HOST</code>/<code>SMTP_PORT</code>/<code>SMTP_FROM_ADDRESS</code> are set as real environment variables, a due send is honestly reported as <strong>skipped</strong>, never faked as sent.</p></div>
+        <div class="card"><h4>4. No double-sends</h4><p>The last-sent timestamp lives in its own <code>schedule_state.json</code>, deliberately separate from the YAML file, so a server restart can't resend the same period and an admin's own comments in the rules file are never overwritten.</p></div>
+      </div>
+
+      <p>For delivery that doesn't depend on the dashboard process staying up around the clock, the identical check is exposed as <code>POST /api/notification-settings/run-checks-now</code> (admin-only) — point a real external cron or Windows Task Scheduler at it instead of relying on the in-process timer.</p>
+
+      <div class="callout warn">
+        <span class="label">Honest limits on scheduling — real gaps, precisely stated</span>
+        <p>Cadence is a rolling day-count (7/30/91/182/365 days), not calendar-aware — there's no "every 1st of the month" primitive yet. There's no <code>daily</code> schedule cadence (daily exists only as an on-demand period label in §02). A scheduled send still reflects the same live current-moment snapshot as an on-demand report — a monthly email really goes out monthly, but its content is what's true right now, not an aggregated summary of that month (see §05). And like every other connector in this repo, the SMTP sender is built against the standard protocol but hasn't been exercised against a real mail server yet — send a real test via Notification Settings (§06) before relying on it.</p>
+      </div>
+    </section>
+
+    <section id="customization">
+      <h2><span class="num">05</span>Customization: today vs. roadmap</h2>
+      <p class="section-intro">This is the distinction that matters most on this page. The line below is drawn from what's actually wired up in code, not from what would make a better feature list.</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>Today — real and working</h4>
+          <p>
+            • Period label on the on-demand generator (6 options)<br>
+            • <code>scope</code> + <code>team</code> filters via URL/API params (9 scopes) — powers scheduling, not yet a dropdown on the on-demand form<br>
+            • Standalone self-contained HTML download, plus raw JSON at the same endpoint (unlinked from the UI)<br>
+            • Real recurring email delivery per sub-domain/team/cadence, YAML-configured, admin-managed<br>
+            • Real SMTP sending once configured, with a preview-before-send step and an explicit confirm+admin gate on any actual send<br>
+            • On-screen KPI figures that deep-link into pre-filtered Queue/Code Scan/Remediation Plan views
+          </p>
+        </div>
+        <div class="card">
+          <h4>Roadmap — not yet, named honestly</h4>
+          <p>
+            • Real historical trending / period-over-period aggregation (needs a findings-history datastore)<br>
+            • <code>scope</code>/<code>team</code> as dropdown controls on the on-demand form itself<br>
+            • Custom field/metric selection — the report's shape is fixed in code<br>
+            • Saved/named report templates beyond the scheduled-subscription list<br>
+            • Export formats beyond HTML/JSON (no PDF, no CSV/XLSX for this snapshot)<br>
+            • Calendar-aware scheduling, and a daily schedule cadence<br>
+            • Delivery durability independent of server uptime without an external cron
+          </p>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <span class="label">Why "period" isn't the same claim as "scheduling"</span>
+        <p>These are two separate, easily-conflated facts. <strong>Report content</strong> has no history: the Period selector (daily…yearly) labels intended cadence, but every period — on demand or scheduled — renders the same real, current-moment snapshot, because this MVP has no persistence layer to aggregate from yet (see <code>dashboard/reports.py</code>'s own module docstring, and <code>KNOWLEDGE_TRANSFER.md</code>'s roadmap). <strong>Report delivery</strong> is a different question, answered in §04: recurring email delivery on a schedule is real, shipped code today, just not yet populated with any subscription by default and dependent on real SMTP configuration to actually send.</p>
+      </div>
+    </section>
+
+    <section id="notifsettings">
+      <h2><span class="num">06</span>Notification Settings — the fuller picture</h2>
+      <p class="section-intro"><code>/notification-settings</code> is where the report-scheduling story connects to a second, complementary mechanism.</p>
+      <div class="grid3">
+        <div class="card"><h4>Same schedule editor</h4><p>The identical report-schedule YAML from §04, editable here too.</p></div>
+        <div class="card"><h4>Team alert subscriptions</h4><p>A distinct, complementary rule set (<code>alert_rules.yaml</code>) for critical findings, zero-days, and KEV/EPSS matches — not a periodic report, an event-triggered alert.</p></div>
+        <div class="card"><h4>Preview → confirm → send</h4><p>Build the exact real subject/text/HTML body first, free. Actually sending a test needs a real recipient, an explicit confirm, and an admin session.</p></div>
+      </div>
+      <p>A <strong>"Run checks now"</strong> button here calls the same <code>POST /api/notification-settings/run-checks-now</code> endpoint described in §04 — useful for verifying a new subscription without waiting for the next hourly tick. A status readout shows whether SMTP is actually configured on this server, honestly, before you rely on either mechanism.</p>
+    </section>
+
+    <section id="navigate">
+      <h2><span class="num">07</span>Navigating reports — RBAC &amp; the Overview companion</h2>
+
+      <p>Access here follows this product's deliberately simple RBAC model — one boolean role plus one independent team-scoping field, enforced server-side (see the RBAC, Multi-Tenancy &amp; Governance document for the full model). For reports specifically:</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Action</th><th>Who</th></tr></thead>
+          <tbody>
+            <tr><td>View/generate an on-demand report</td><td>Any logged-in user — the read route carries no role check</td></tr>
+            <tr><td>Edit the scheduled-delivery YAML (§04)</td><td>Admin only (<code>POST /api/report-schedule</code>)</td></tr>
+            <tr><td>Trigger "Run checks now" / send a real test email</td><td>Admin only</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <span class="label">One precise difference from Queue, Assets, Exceptions, and Approvals</span>
+        <p>Those four pages get real, automatic, server-side filtering to a logged-in non-admin's own assigned team. Reports do not work that way: a report's <code>team</code> filter (§01/§02) is a parameter someone explicitly supplies, not something inferred from the caller's session. Logging in with a team assigned doesn't, by itself, narrow what a report shows.</p>
+      </div>
+
+      <h3>Reports vs. Overview — two honest answers to "what's our posture right now?"</h3>
+      <p>The Overview page (<code>/</code>) is the always-on companion to the on-demand/scheduled snapshots on this page: the same KPI family (SLA, KEV, EPSS, coverage), refreshed automatically every 20 seconds, with the real charts described in §03 sitting alongside them. Reports exists for the moment you need that same real data as a static, shareable, emailable artifact — a point-in-time export, not a live view. Use Overview to watch; use Reports to hand someone a snapshot.</p>
+
+      <details class="howto">
+        <summary>Putting it together, end to end</summary>
+        <div class="body">
+          <ol class="steps">
+            <li>Log in — any role can proceed.</li>
+            <li>For continuous monitoring, leave <strong>Overview</strong> open; it refreshes itself.</li>
+            <li>For a snapshot to share outside the dashboard, go to <strong>Reports</strong>, pick a period, generate, and download the HTML.</li>
+            <li>If a team or leadership group needs this recurring: an <strong>admin</strong> adds a subscription in the "Schedule automatic email reports" panel (§04), and confirms SMTP is configured via <strong>Notification Settings</strong> (§06) with a real test send first.</li>
+            <li>For event-driven signals instead of a periodic snapshot (a new critical finding, a zero-day, a KEV match) — that's the separate team-alerts mechanism, also on Notification Settings.</li>
+          </ol>
+        </div>
+      </details>
+    </section>
+
+    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener">RBAC, Multi-Tenancy &amp; Governance</a> document for the full access-control model, the <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener">Page-by-Page Reference</a> for every route, or the <a href="https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578" target="_blank" rel="noopener">User &amp; Operations Guide</a> for task-oriented how-tos across the rest of the app.</footer>
+  </main>
+</div>
+
+<script>
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href')));
+  function onScroll() {
+    let idx = 0; const y = window.scrollY + 100;
+    sections.forEach((s, i) => { if (s && s.offsetTop <= y) idx = i; });
+    links.forEach((a, i) => a.classList.toggle('active', i === idx));
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>

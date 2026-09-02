@@ -202,6 +202,34 @@ sequenceDiagram
       </div>
       <div class="callout good"><span class="label">Live-verified, not just documented</span><p>Both feeds were built <em>and tested against the real endpoints</em> during development — the one place in this product where "live-verified" means exactly that, not "built against public docs."</p></div>
       <p>A separate enrichment pass adds <code>poc_available</code> and <code>user_interaction_required</code> from two real NVD API 2.0 fields already present in the cached CVE data — never fabricated when the underlying field is absent.</p>
+
+      <h3>Why this beats CVSS alone: a real example, not a hypothetical</h3>
+      <p>CVSS is theoretical severity — the same score whether or not anyone is actually exploiting a CVE today. Two findings in this product's own sample data show exactly why that's not enough by itself:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Finding</th><th>CISA KEV</th><th>EPSS (30-day exploitation probability)</th><th>Effect on priority</th></tr></thead>
+          <tbody>
+            <tr><td>OpenSSL denial-of-service CVE</td><td>Not listed</td><td class="mono">70.6%</td><td>EPSS override forces at least a minimum elevated priority, despite no KEV confirmation</td></tr>
+            <tr><td>OpenSSH regression CVE</td><td>Not listed</td><td class="mono">99.5%</td><td>Same override, more forcefully — very likely to be exploited soon even though CISA hasn't (yet) confirmed active exploitation</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Neither CVE is KEV-listed — a CVSS-only or a KEV-only view would under-prioritize both. EPSS is what catches them. This is what "threat-intel-aware prioritization" means in practice for a customer: a real external signal changing what a team works on today, not a slogan.</p>
+      <div class="callout warn"><span class="label">What KEV/EPSS change, and what they never touch</span><p>KEV/EPSS affect <strong>priority</strong> (how urgently to act) only — never <code>risk_tier</code> (how safe a fix is to auto-apply). An actively-exploited CVE on a domain controller is still <code>needs-change-approval</code>, just moved to the top of that queue. The full priority formula these overrides sit on top of is in the Scoring Layer section (§05) below.</p></div>
+
+      <h3>From a CVE to a named threat actor: how the correlation chain works</h3>
+      <p class="section-intro">KEV/EPSS answer "is this CVE dangerous." A separate correlation layer answers a different question: "which known attackers use techniques like this one, and do any of them target my industry?" Three real pieces chain together — each honestly scoped about its own limits:</p>
+      <div class="grid3">
+        <div class="card"><h4>1 · ATT&amp;CK technique tagging</h4><p>A keyword heuristic against each finding's title/description (e.g. "sql injection" → T1190). <strong>Not authoritative attribution</strong> — a rough tactical grouping, not a substitute for real technique analysis.</p></div>
+        <div class="card"><h4>2 · Threat-actor group reference</h4><p>6 real, MITRE-documented groups (APT28, APT29, Lazarus Group, FIN7, Sandworm Team, APT41), each independently verified against attack.mitre.org, tagged with the real industries MITRE's own pages document them targeting.</p></div>
+        <div class="card"><h4>3 · Correlation against your data</h4><p>Matches a group's known technique IDs against techniques already tagged on your current findings. The Threat Intel dashboard page surfaces which groups share real technique overlap with what's actually in your queue today.</p></div>
+      </div>
+      <div class="callout warn"><span class="label">Read this before citing any group name in a report</span><p>A technique match is an <strong>illustrative cross-reference, not an attribution claim</strong> — the same honesty pattern as the ATT&amp;CK tagging it builds on (a keyword heuristic, not authoritative attribution). Many groups share common techniques (phishing, PowerShell, valid-account abuse); a shared technique ID doesn't mean a specific finding was caused by, or is evidence of, that named group. Re-verify against attack.mitre.org before using this in anything formal.</p></div>
+
+      <h3>Industry-specific correlation: real today, narrower than it may sound</h3>
+      <p>The Threat Intel page filters that 6-group reference table by industry — a 12-sector taxonomy spanning financial services, healthcare, government/defense, energy, retail, and more. Each group's target-industry tags are drawn directly from sector names stated on that group's own MITRE page, not inferred or estimated. A per-tenant industry field on the (demo) tenant switcher is intended to eventually drive this automatically.</p>
+      <div class="callout info"><span class="label">Honest scope — read before assuming more than this does</span><p>This is a 6-group reference list cross-checked against your findings' tagged techniques — not a live, subscribed industry-threat-intelligence feed. A group missing a given industry tag genuinely has no sector-specific victimology documented for it on MITRE's page today, not a gap in this product's coverage. Both shipped demo tenants are currently tagged the same industry, so the tenant-driven half of this doesn't yet demonstrate real industry-to-industry contrast — disclosed directly in the feature's own code comments. The manual industry filter works fully regardless of which tenant is selected.</p></div>
+      <p>Extending this into scoring — e.g. nudging a finding's priority when a group already known to target its asset's industry has a matching technique — is a natural next step the underlying data already supports. It is not implemented today, and this document isn't claiming otherwise.</p>
     </section>
 
     <section id="scoring">
