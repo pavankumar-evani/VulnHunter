@@ -31,6 +31,7 @@ const ICONS = {
   splunk: '<path d="M4 19V9M9.5 19V5M15 19v-8M20 19v-4"/>',
   xdr: '<path d="M4 12h4l2-6 4 12 2-6h4"/>',
   risk: '<path d="M12 3l9 16H3z"/><line x1="12" y1="9.5" x2="12" y2="14"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/>',
+  blastRadius: '<circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="9.5"/>',
   infoblox: '<circle cx="12" cy="12" r="8.5"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><path d="M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17"/>',
   axonius: '<circle cx="12" cy="12" r="2.4"/><circle cx="4.5" cy="4.5" r="1.7"/><circle cx="19.5" cy="4.5" r="1.7"/><circle cx="4.5" cy="19.5" r="1.7"/><circle cx="19.5" cy="19.5" r="1.7"/><line x1="5.8" y1="5.8" x2="10.1" y2="10.1"/><line x1="18.2" y1="5.8" x2="13.9" y2="10.1"/><line x1="5.8" y1="18.2" x2="10.1" y2="13.9"/><line x1="18.2" y1="18.2" x2="13.9" y2="13.9"/>',
   adaptor: '<rect x="3" y="9" width="6.5" height="6" rx="1.2"/><rect x="14.5" y="9" width="6.5" height="6" rx="1.2"/><line x1="9.5" y1="12" x2="14.5" y2="12"/><line x1="6" y1="9" x2="6" y2="5.5"/><line x1="18" y1="9" x2="18" y2="5.5"/>',

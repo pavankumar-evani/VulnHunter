@@ -57,6 +57,8 @@ export const NAV = [
       tip: "Real, live-trained scikit-learn models (IsolationForest anomaly detection, KMeans risk clustering) - unsupervised, advisory, and never a replacement for the deterministic policy/priority engines." },
     { path: "/risk", label: "Risk Dashboard", icon: "risk",
       tip: "MITRE ATT&CK heat map, top critical assets, and internal/external-facing exposure." },
+    { path: "/risk/blast-radius", label: "Blast Radius", icon: "blastRadius",
+      tip: "If this asset is compromised, how far does the damage spread - business criticality and reachability, cross-referenced against real exploitability. Honestly scoped: 2 of 4 real profiling dimensions aren't measurable with this app's data yet." },
     { path: "/vulnerability-mapping", label: "Vulnerability Mapping", icon: "risk",
       tip: "Which real vulnerabilities hit the most assets, ranked and clickable." },
     { path: "/asset-mapping", label: "Asset Mapping", icon: "assets",

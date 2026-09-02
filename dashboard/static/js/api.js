@@ -79,6 +79,7 @@ export const api = {
   cmdbImportApply: (entries) => request("POST", "/api/assets/cmdb-import/apply", { entries }),
   notifications: () => request("GET", "/api/notifications"),
   attackHeatmap: () => request("GET", "/api/risk/attack-heatmap"),
+  blastRadius: () => request("GET", "/api/risk/blast-radius"),
   aiVulnerabilities: () => request("GET", "/api/ai-vulnerabilities"),
   quantumReadiness: () => request("GET", "/api/quantum-readiness"),
   authMe: () => request("GET", "/api/auth/me"),

@@ -1,0 +1,51 @@
+# Configurable per-ASSET Blast Radius scoring rules.
+#
+# Read by remediation/enrichment/blast_radius.py, which the dashboard uses to compute a
+# live Blast Radius score for every asset on the Risk Dashboard's Blast Radius sub-page
+# (/risk/blast-radius).
+#
+# IMPORTANT - read blast_radius.py's module docstring before treating this as more than
+# it is: it answers "if this asset is compromised, how far does the damage spread,"
+# using only two of the four profiling dimensions a full blast-radius framework
+# describes (Business Criticality, and a coarse Network Reachability proxy) - Identity &
+# Privilege isn't available at all with this app's real data, and is NOT folded in here
+# under a different name. Cross-referenced separately against real exploitability
+# (kev_count/likelihood_score, already computed by risk_scoring.py) rather than a third
+# weighted component - see cross_reference_immediate_risks().
+#
+# This is a NEW, separate config from priority_rules.yaml/risk_scoring_rules.yaml - it
+# does NOT re-declare asset_criticality_keywords/asset_type_weights; the criticality
+# component reads those directly from priority_rules.yaml so there is exactly one place
+# that defines "how critical is this asset."
+
+# Blast Radius score (0-100) = weighted blend of business criticality (reused from
+# priority_rules.yaml) and the network-reachability proxy below. Criticality weighted
+# higher - it's the one dimension backed by a real, already-used signal; the network
+# proxy is deliberately coarser (see facing_points below).
+component_weights:
+  criticality: 0.65
+  network_reachability_proxy: 0.35
+
+# Points awarded per the asset's manually-set internal/external "facing" classification
+# (asset_inventory.py - never derived from an actual network scan). "unknown" gets the
+# SAME points as "internal" - never assume elevated reachability without real evidence.
+facing_points:
+  external: 100
+  internal: 30
+  unknown: 30
+
+# Same Critical/High/Medium/Low convention as risk_scoring.py's risk_tier_thresholds -
+# one shared vocabulary for "how big a number is this" across the app.
+blast_radius_tier_thresholds:
+  Critical: 60
+  High: 35
+  Medium: 15
+  Low: 0
+
+# cross_reference_immediate_risks()'s thresholds for "this asset is both high blast
+# radius AND plausibly exploitable right now" - the specific pattern the source
+# framework calls "immediate, catastrophic risk." An asset qualifies at this blast
+# radius score AND (any KEV-listed finding OR a likelihood_score at/above the second
+# threshold).
+immediate_risk_blast_radius_threshold: 60
+immediate_risk_likelihood_threshold: 60

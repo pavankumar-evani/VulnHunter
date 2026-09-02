@@ -51,6 +51,7 @@ const routes = [
   { pattern: /^\/ot-vulnerabilities\/?$/, load: () => import("./pages/otVulnerabilities.js") },
   { pattern: /^\/inbox\/?$/, load: () => import("./pages/inbox.js") },
   { pattern: /^\/risk\/?$/, load: () => import("./pages/risk.js") },
+  { pattern: /^\/risk\/blast-radius\/?$/, load: () => import("./pages/blastRadius.js") },
   { pattern: /^\/vulnerability-mapping\/?$/, load: () => import("./pages/vulnerabilityMapping.js") },
   { pattern: /^\/asset-mapping\/?$/, load: () => import("./pages/assetMapping.js") },
   { pattern: /^\/compensating-controls\/?$/, load: () => import("./pages/compensatingControls.js") },

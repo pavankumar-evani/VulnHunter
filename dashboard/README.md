@@ -64,6 +64,13 @@ empty state with instructions instead of erroring.
 - **`remediation/enrichment/compensating_controls.py`** — keyword-heuristic
   compensating-control suggestions (same honesty pattern as `attack_mapping.py`) shown on
   the `/exceptions` request form.
+- **`remediation/enrichment/blast_radius.py`** — per-asset "if compromised, how far does
+  the damage spread" scoring, shown on `/risk/blast-radius`. Explicitly maps a real
+  4-dimension profiling framework against what this app's data can actually answer:
+  Business Criticality and a coarse Network-reachability proxy are real and scored;
+  Identity & Privilege isn't measurable at all with this app's data and is disclosed as
+  such, not approximated. Cross-referenced against `risk_scoring.py`'s already-real
+  `kev_count`/`likelihood_score`, never re-derived.
 - **`remediation/enrichment/ai_vuln_taxonomy.py`** — twelve real AI/ML vulnerability
   categories (prompt injection, model poisoning, MCP tool poisoning, shadow AI agents,
   etc.) with summary/remediation
@@ -123,6 +130,7 @@ empty state with instructions instead of erroring.
 | `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target, CSV/JSON/MD export |
 | `/playbooks/<filename>` | Full content of one generated Ansible playbook |
 | `/risk` | Risk Management dashboard - MITRE ATT&CK heat map, a condensed top-5 preview of vulnerabilities-by-affected-asset-count and assets-by-critical-findings (each linking to its full dashboard below), an editable internal/external-facing classification per asset, and a CVSS v4.0 severity-definitions reference |
+| `/risk/blast-radius` | Blast Radius - per-asset "if compromised, how far does the damage spread" scoring (`remediation/enrichment/blast_radius.py`), cross-referenced against real KEV/likelihood exploitability. Honestly scoped: renders a real disclosure of which of the 4 source profiling dimensions (Identity & Privilege, Network Topology, Business Criticality, Attack Surface) this app's real data can and can't measure today, rather than fabricating the two it can't |
 | `/vulnerability-mapping` | Full ranked dashboard (top 25) of real vulnerabilities by how many distinct assets they affect - click one to jump to a pre-filtered `/queue` view of every affected finding (`rankings.js`) |
 | `/asset-mapping` | Full ranked dashboard (top 25) of real assets by how many distinct vulnerabilities they carry, including each asset's EOL/EOS status - click one to jump to a pre-filtered `/queue` view of every one of its findings (`rankings.js`) |
 | `/compensating-controls` | Findings that can't be remediated right now - Critical + EOL/EOS, actively-exploited (CISA KEV) findings matching a configured exploit-criteria rule, or ones already covered by an approved exception - with each one's compensating controls listed inline (not click-to-reveal), owner/team, and drill-down/exception-request actions |

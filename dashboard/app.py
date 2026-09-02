@@ -63,6 +63,7 @@ from remediation.enrichment.ai_vuln_taxonomy import (  # noqa: E402
     AI_VULNERABILITIES, build_ai_atlas_heatmap, tag_findings as tag_ai_vulnerabilities,
 )
 from remediation.enrichment.attack_mapping import build_attack_heatmap  # noqa: E402
+from remediation.enrichment import blast_radius  # noqa: E402
 from remediation.enrichment import exploit_criteria  # noqa: E402
 from remediation.enrichment import exposure_score  # noqa: E402
 from remediation.enrichment import kev_epss  # noqa: E402
@@ -2172,6 +2173,24 @@ def api_activity_log_insights():
 def api_risk_attack_heatmap():
     queue = dashboard_data.load_live_queue()
     return {"heatmap": build_attack_heatmap(queue)}
+
+
+@app.get("/api/risk/blast-radius")
+def api_risk_blast_radius():
+    """Real per-asset Blast Radius scoring (remediation/enrichment/blast_radius.py) -
+    reuses the same shared, cached scored-asset rows as /api/assets/Overview (see
+    dashboard_data._load_scored_assets()'s own docstring), so kev_count/likelihood_score
+    are already real and computed, not re-derived here. `profiling_coverage` is a
+    static, honest disclosure of what this actually measures - render it, don't bury
+    it in a footnote."""
+    _, scored_assets = dashboard_data._load_scored_assets()
+    scored = blast_radius.score_blast_radius(scored_assets)
+    immediate_risks = blast_radius.cross_reference_immediate_risks(scored)
+    return {
+        "assets": scored,
+        "immediate_risks": immediate_risks,
+        "profiling_coverage": blast_radius.PROFILING_COVERAGE,
+    }
 
 
 @app.get("/api/ai-vulnerabilities")
