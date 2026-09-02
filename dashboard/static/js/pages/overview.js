@@ -118,19 +118,26 @@ function daysBetweenAll(records, startField, endField) {
   return Math.round((durations.reduce((sum, d) => sum + d, 0) / durations.length) * 10) / 10;
 }
 
-// Real, dated remediation-lifecycle stages - Detected -> Entered remediation workflow
-// -> Approved -> Remediated - each a real query over real data (the live queue and
-// remediation/remediation_approvals/store.py's own records), not simulated. There is
-// no "closed"/"remediated" concept in this app outside the approval workflow, so a
-// finding fixed some other way (e.g. a manual change with no approval request) is
-// honestly invisible to this funnel rather than silently guessed at - same
-// disclosed-scope honesty as every other stat on this page.
-const LIFECYCLE_STAGE_ICONS = ["🔍", "📋", "✅", "🚀"];
-const LIFECYCLE_STAGE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-6)"];
+// Real, dated vulnerability-lifecycle stages - Found -> Threat-Intel Enriched ->
+// Playbook Generated -> Remediation Initiated -> Approved -> Remediation Triggered -
+// each a real query over real data (the live queue and
+// remediation/remediation_approvals/store.py's own records), not simulated. The first
+// three stages are fully automatic and apply to every finding this app ingests,
+// regardless of whether a human ever acts on it; the last three are the human-driven
+// approval sub-workflow (see lifecycleSection()'s own comment below). There is no
+// "closed"/"remediated" concept in this app outside the approval workflow, so a finding
+// fixed some other way (e.g. a manual change with no approval request) is honestly
+// invisible to this funnel rather than silently guessed at - same disclosed-scope
+// honesty as every other stat on this page.
+const LIFECYCLE_STAGE_ICONS = ["🔍", "🛰️", "🛠️", "📋", "✅", "🚀"];
+const LIFECYCLE_STAGE_COLORS = [
+  "var(--chart-1)", "var(--chart-4)", "var(--chart-5)",
+  "var(--chart-2)", "var(--chart-3)", "var(--chart-6)",
+];
 
 function lifecycleStageHtml(stage, index, firstValue) {
   const pct = firstValue > 0 ? Math.round((stage.value / firstValue) * 100) : 0;
-  const pctNote = index > 0 ? `<div class="lifecycle-stage-pct">${pct}% of Detected</div>` : `<div class="lifecycle-stage-pct"></div>`;
+  const pctNote = index > 0 ? `<div class="lifecycle-stage-pct">${pct}% of Found</div>` : `<div class="lifecycle-stage-pct"></div>`;
   const color = LIFECYCLE_STAGE_COLORS[index % LIFECYCLE_STAGE_COLORS.length];
   const barPct = index === 0 ? 100 : pct;
   return `
@@ -162,10 +169,28 @@ function lifecycleStageHtml(stage, index, firstValue) {
 // a 2px sliver next to invisible - correct, but reads as broken rather than "a real
 // pipeline with nothing in it yet" - the number is the primary signal here, the bar
 // underneath just a secondary accent.
-function lifecycleSection(queue, remediationApprovals) {
+function lifecycleSection(data, queue, remediationApprovals) {
+  // Stages 1-3 are what happens to EVERY finding automatically, the moment it's
+  // ingested - no human involved yet. Stages 4-6 are the human-driven approval
+  // sub-workflow this section used to show on its own (see the git history) - kept
+  // unchanged, just given real context in front of them. "Threat-Intel Enriched" uses
+  // has-a-CVE as its real proxy: kev_epss.py/poc_enrichment.py only ever look up
+  // CVE-scoped findings (see normalized-finding-schema.md's "kev/epss are null when cve
+  // is null"), so a finding with a CVE is, by construction, one this app already
+  // checked against live CISA KEV + FIRST.org EPSS. "Playbook Generated" is
+  // data.playbook_count, not data.remediation.eligible - "eligible" only means a
+  // working fixer subagent exists for that asset type (see the schema's
+  // remediation_domain notes), "generated" means a real reviewable artifact was
+  // actually written to remediation/output/ - a meaningfully smaller, more honest
+  // number (asset-type eligibility is necessary but not sufficient; someone still has
+  // to run /remediate on that specific finding).
   const stages = [
-    { label: "Detected", value: queue.findings.length, href: "/queue",
-      detail: "Every finding currently in the live remediation queue" },
+    { label: "Found", value: queue.findings.length, href: "/queue",
+      detail: "Every finding this app has ingested and normalized, across every connector and scan type" },
+    { label: "Threat-Intel Enriched", value: queue.findings.filter((f) => f.cve).length, href: "/threat-intel",
+      detail: "Has a CVE, so it was checked against the live CISA KEV catalog + FIRST.org EPSS score (see Threat Intel)" },
+    { label: "Playbook Generated", value: data.playbook_count, href: "/remediate",
+      detail: "A real, reviewable fix artifact (Ansible playbook) exists for this finding - generated, not yet run by anyone" },
     { label: "Remediation Initiated", value: remediationApprovals.length, href: "/remediation-approvals",
       detail: "Has a real remediation-approval request (any status)" },
     { label: "Approved", value: remediationApprovals.filter((a) => a.computed_status === "approved" || a.computed_status === "remediation_triggered").length,
@@ -178,15 +203,17 @@ function lifecycleSection(queue, remediationApprovals) {
   const remediationDays = daysBetweenAll(remediationApprovals, "approved_at", "triggered_at");
 
   return `
-    <h2>Vulnerability Lifecycle: Detection → Remediation</h2>
+    <h2>Vulnerability Lifecycle: Found → Processed → Remediated</h2>
     <p class="subtitle">
-      Real counts at each real stage of the remediation-approval workflow - stage
-      naming informed by NIST CSF's Detect/Respond functions and NIST SP 800-40's
-      patch-management lifecycle (not a certified mapping). A finding fixed outside
-      this workflow (e.g. a manual change with no approval record on
+      Real counts at each real stage this app puts a finding through - the first three
+      happen automatically to everything ingested; the last three are the
+      human-driven remediation-approval workflow. Stage naming informed by NIST CSF's
+      Detect/Respond functions and NIST SP 800-40's patch-management lifecycle (not a
+      certified mapping). A finding fixed outside this workflow (e.g. a manual change
+      with no approval record on
       <a href="/remediation-approvals" data-link>Remediation Approvals</a>) isn't
       reflected here, same disclosed-scope honesty as everywhere else on this page.
-      Click any stage to jump to it.
+      Click any stage to jump to it; hover for what it counts.
     </p>
     <div class="lifecycle-pipeline">
       ${stages.map((s, i) => `${i > 0 ? `<div class="lifecycle-arrow">→</div>` : ""}${lifecycleStageHtml(s, i, firstValue)}`).join("")}
@@ -652,7 +679,7 @@ function renderBody(data, queue, vh, rankings, assets, teamByAssetName, remediat
       ${kpiLink("/remediate", data.playbook_count, "Playbooks generated")}
     </div>
 
-    ${lifecycleSection(queue, remediationApprovals)}
+    ${lifecycleSection(data, queue, remediationApprovals)}
 
     ${domainTotalsSection(queue, vh)}
 
