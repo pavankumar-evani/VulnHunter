@@ -22,18 +22,19 @@ this in sync" below).
 
 ## Keeping this in sync with the application — read this when you change anything
 
-**Whenever a change to the application would make a claim in one of these documents
-wrong, stale, or incomplete, update the affected document(s) in the same change** —
-don't let the docs drift. Concretely:
+**Whenever a change to the application would make a claim in one of these documents —
+or in the repository's own `CLAUDE.md` — wrong, stale, or incomplete, update the affected
+document(s) in the same change** — don't let the docs drift. Concretely:
 
 | If you change... | Update... |
 |---|---|
-| A connector (`remediation/connectors/*.py`), or add/remove one | `connectors.html`, `vuln-engine.html` §8, `pages.html` §4 |
-| The Finding schema (`remediation/schema/normalized-finding-schema.md`) | `architecture.html` §4 |
+| A connector (`remediation/connectors/*.py`), or add/remove one | `connectors.html`, `vuln-engine.html` §8, `pages.html` §4, and `CLAUDE.md`'s "The connector pattern" section |
+| The Finding schema (`remediation/schema/normalized-finding-schema.md`) | `architecture.html` §4 and `CLAUDE.md`'s "The Finding schema" section (it names the current asset-type count) |
 | The remediation workflow, approval states, or policy engine | `remediation-engine.html` |
-| RBAC, session/auth model, or the tenant-switcher's real scope | `rbac-governance.html` |
+| Add/remove a subagent, or change a pipeline's step sequence (`.claude/agents/*.md`, `.claude/commands/*.md`) | `vuln-engine.html` (for `/vulnhunt`), `remediation-engine.html` (for `/remediate`), and `CLAUDE.md`'s two "Architecture: ..." sections — this exact gap (a subagent added but never reflected in any of the three) is why this row was added |
+| RBAC, session/auth model, or the tenant-switcher's real scope | `rbac-governance.html` and `CLAUDE.md`'s "Authentication & RBAC" section |
 | Any dashboard page/route (`dashboard/static/js/pages/`, `app.js` routes) | `pages.html` (the affected row) |
-| Repo structure, subagent conventions, or the connector-writing pattern | `developer-guide.html` |
+| Repo structure, subagent conventions, or the connector-writing pattern | `developer-guide.html` and `CLAUDE.md` |
 | **Pricing, tiers, or SLA terms** | `docs/PRICING.md` (source of truth) **first**, then `pricing.html` and `executive-brief.html`'s pricing-referencing sections, then check `docs/VR_PLATFORM_COMPARISON.md` for stale competitive-cost language |
 | Anything affecting the honest competitive/problem-solution framing | `executive-brief.html` |
 
