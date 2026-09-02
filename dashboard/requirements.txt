@@ -11,3 +11,5 @@ pyyaml==6.0.3
 requests==2.34.2
 ldap3==2.9.1  # real Active Directory/LDAP group-membership lookups (dashboard/auth/ad_directory.py) - a genuinely new dependency, added because there is no honest way to speak LDAP from stdlib alone
 scikit-learn==1.9.0  # real unsupervised ML (remediation/enrichment/ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer; no honest way to do real anomaly detection/clustering/text-similarity from stdlib alone; pulls in numpy/scipy
+sqlalchemy==2.0.52  # first real DB-backed record store (remediation/utils/db.py) - SQLite today, a straightforward connection-string swap to Postgres later since this is SQLAlchemy Core, not raw sqlite3
+greenlet==3.5.5  # sqlalchemy's own transitive dependency

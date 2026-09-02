@@ -1002,12 +1002,16 @@ a.notif-item:hover { background: var(--bg); }
   justify-content: center;
   padding: 48px;
 }
-.auth-hero-copy { text-align: center; color: #eaf0fe; max-width: 380px; }
-.auth-hero-brand { font-size: 1.4rem; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
-.auth-hero-tagline { color: #c9d8fb; font-size: 1rem; line-height: 1.5; margin: 0 0 18px; }
-.auth-hero-points { list-style: none; padding: 0; margin: 0; text-align: left; display: inline-flex; flex-direction: column; gap: 8px; }
-.auth-hero-points li { color: #c9d8fb; font-size: 0.85rem; padding-left: 20px; position: relative; }
-.auth-hero-points li::before { content: "✓"; position: absolute; left: 0; color: #7ea6f5; font-weight: 700; }
+/* margin-top pushes the copy block down from .auth-hero's vertical center, clearing
+   the brand mark above it (see authHero.js - the mark now sits higher in the shared
+   background SVG specifically so this text has its own space instead of overlapping
+   it, the original defect this spacing responds to). */
+.auth-hero-copy { text-align: center; color: #eaf0fe; max-width: 380px; margin-top: 170px; }
+.auth-hero-brand { font-size: 1.5rem; font-weight: 700; color: #ffffff; margin-bottom: 10px; letter-spacing: 0.01em; text-shadow: 0 2px 16px rgba(47,111,237,0.5); }
+.auth-hero-tagline { color: #dbe6ff; font-size: 1.05rem; line-height: 1.55; margin: 0 0 20px; text-shadow: 0 1px 12px rgba(10,18,48,0.8); }
+.auth-hero-points { list-style: none; padding: 0; margin: 0; text-align: left; display: inline-flex; flex-direction: column; gap: 10px; }
+.auth-hero-points li { color: #dbe6ff; font-size: 0.88rem; padding-left: 22px; position: relative; text-shadow: 0 1px 10px rgba(10,18,48,0.7); }
+.auth-hero-points li::before { content: "✓"; position: absolute; left: 0; color: #7ea6f5; font-weight: 700; text-shadow: 0 0 8px rgba(126,166,245,0.7); }
 .auth-form-panel { position: relative; z-index: 2; flex: 1 1 44%; display: flex; align-items: center; justify-content: center; padding: 32px; }
 .logout-icon { display: flex; justify-content: center; margin-bottom: 16px; }
 @media (max-width: 860px) {

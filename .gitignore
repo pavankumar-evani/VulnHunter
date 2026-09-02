@@ -24,3 +24,8 @@ remediation/audit/activity_log.json
 # Real AI-call usage log (remediation/audit/ai_usage_log.py) - same reasoning as
 # activity_log.json above.
 remediation/audit/ai_usage_log.json
+
+# Real SQLite DB (remediation/utils/db.py) - first stores migrated onto it are
+# alert_state/schedule_state, replacing their now-removed JSON files below. Runtime
+# output, not source, same reasoning as the JSON state files above.
+remediation/vulnhunter.db

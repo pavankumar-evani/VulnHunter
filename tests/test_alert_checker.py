@@ -10,6 +10,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from sqlalchemy import create_engine
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -111,36 +113,41 @@ class _FakeEmailSender:
 class CheckAndSendAlerts(unittest.TestCase):
     def setUp(self):
         self.tmpdir = TemporaryDirectory()
-        self.state_path = Path(self.tmpdir.name) / "alert_state.json"
+        self.engine = create_engine(f"sqlite:///{Path(self.tmpdir.name) / 'test.db'}")
+        self.lock_path = Path(self.tmpdir.name) / "test.lock"
         self.ownership_patcher = patch.object(alert_checker.asset_inventory, "load_ownership", return_value={})
         self.ownership_patcher.start()
 
     def tearDown(self):
         self.ownership_patcher.stop()
+        self.engine.dispose()
         self.tmpdir.cleanup()
+
+    def _check(self, data_module, sender):
+        return alert_checker.check_and_send_alerts(data_module, sender, engine=self.engine, lock_path=self.lock_path)
 
     def test_no_matches_returns_empty(self):
         rules = {"subscriptions": [{"id": "s1", "alert_type": "critical", "scope": "all", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules, [MEDIUM_FINDING])
-        results = alert_checker.check_and_send_alerts(data_module, _FakeEmailSender(), state_path=self.state_path)
+        results = self._check(data_module, _FakeEmailSender())
         self.assertEqual(results, [])
 
     def test_new_match_sends_and_records_state(self):
         rules = {"subscriptions": [{"id": "s1", "alert_type": "critical", "scope": "all", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules, [CRITICAL_FINDING])
         sender = _FakeEmailSender()
-        results = alert_checker.check_and_send_alerts(data_module, sender, state_path=self.state_path)
+        results = self._check(data_module, sender)
         self.assertEqual(results, [{"id": "s1", "status": "sent", "new_count": 1}])
         self.assertEqual(len(sender.sent), 1)
-        state = alert_checker.load_state(self.state_path)
+        state = alert_checker.load_state(self.engine)
         self.assertEqual(state["s1"], ["FIND-1"])
 
     def test_same_finding_is_not_re_alerted_on_next_check(self):
         rules = {"subscriptions": [{"id": "s1", "alert_type": "critical", "scope": "all", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules, [CRITICAL_FINDING])
         sender = _FakeEmailSender()
-        alert_checker.check_and_send_alerts(data_module, sender, state_path=self.state_path)
-        results = alert_checker.check_and_send_alerts(data_module, sender, state_path=self.state_path)
+        self._check(data_module, sender)
+        results = self._check(data_module, sender)
         self.assertEqual(results, [])
         self.assertEqual(len(sender.sent), 1)
 
@@ -148,15 +155,42 @@ class CheckAndSendAlerts(unittest.TestCase):
         rules = {"subscriptions": [{"id": "s1", "alert_type": "critical", "scope": "all", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules, [CRITICAL_FINDING])
         sender = _FakeEmailSender(configured=False)
-        results = alert_checker.check_and_send_alerts(data_module, sender, state_path=self.state_path)
+        results = self._check(data_module, sender)
         self.assertEqual(results, [{"id": "s1", "status": "skipped", "reason": "SMTP not configured", "new_count": 1}])
-        self.assertEqual(alert_checker.load_state(self.state_path), {})
+        self.assertEqual(alert_checker.load_state(self.engine), {})
 
     def test_disabled_subscription_is_never_checked(self):
         rules = {"subscriptions": [{"id": "s1", "alert_type": "critical", "scope": "all", "recipients": ["a@example.com"], "enabled": False}]}
         data_module = _FakeDataModule(rules, [CRITICAL_FINDING])
-        results = alert_checker.check_and_send_alerts(data_module, _FakeEmailSender(), state_path=self.state_path)
+        results = self._check(data_module, _FakeEmailSender())
         self.assertEqual(results, [])
+
+    def test_concurrent_checks_never_double_send_the_same_finding(self):
+        """Regression guard for the confirmed race this migration closes: two
+        overlapping calls (simulating the background timer and the "run checks now"
+        button firing at the same time) must serialize, not both see a stale
+        not-yet-alerted state and both send."""
+        import threading
+
+        rules = {"subscriptions": [{"id": "s1", "alert_type": "critical", "scope": "all", "recipients": ["a@example.com"], "enabled": True}]}
+        data_module = _FakeDataModule(rules, [CRITICAL_FINDING])
+        sender = _FakeEmailSender()
+        barrier = threading.Barrier(2)
+        results = []
+
+        def run():
+            barrier.wait()
+            results.append(self._check(data_module, sender))
+
+        threads = [threading.Thread(target=run) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(sender.sent), 1)
+        sent_count = sum(1 for r in results if r == [{"id": "s1", "status": "sent", "new_count": 1}])
+        self.assertEqual(sent_count, 1)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
+from sqlalchemy import create_engine
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -100,50 +102,49 @@ class _FakeEmailSender:
 class CheckAndSendDueReports(unittest.TestCase):
     def setUp(self):
         self.tmpdir = TemporaryDirectory()
-        self.state_path = Path(self.tmpdir.name) / "schedule_state.json"
+        self.engine = create_engine(f"sqlite:///{Path(self.tmpdir.name) / 'test.db'}")
+        self.lock_path = Path(self.tmpdir.name) / "test.lock"
 
     def tearDown(self):
+        self.engine.dispose()
         self.tmpdir.cleanup()
+
+    def _check(self, data_module, sender, now):
+        return report_scheduler.check_and_send_due_reports(
+            data_module, _FakeReportsModule(), sender, now=now, engine=self.engine, lock_path=self.lock_path,
+        )
 
     def test_no_due_subscriptions_returns_empty(self):
         data_module = _FakeDataModule({"subscriptions": []})
-        results = report_scheduler.check_and_send_due_reports(
-            data_module, _FakeReportsModule(), _FakeEmailSender(), now=NOW, state_path=self.state_path,
-        )
+        results = self._check(data_module, _FakeEmailSender(), NOW)
         self.assertEqual(results, [])
 
     def test_due_subscription_sends_and_records_state(self):
         rules = {"subscriptions": [{"id": "s1", "cadence": "weekly", "scope": "all", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules)
         sender = _FakeEmailSender()
-        results = report_scheduler.check_and_send_due_reports(
-            data_module, _FakeReportsModule(), sender, now=NOW, state_path=self.state_path,
-        )
+        results = self._check(data_module, sender, NOW)
         self.assertEqual(results, [{"id": "s1", "status": "sent", "recipients": ["a@example.com"]}])
         self.assertEqual(sender.sent, [(["a@example.com"], "Report weekly")])
-        state = report_scheduler.load_state(self.state_path)
+        state = report_scheduler.load_state(self.engine)
         self.assertEqual(state["s1"], NOW.isoformat(timespec="seconds"))
 
     def test_due_subscription_is_skipped_not_fabricated_when_smtp_unconfigured(self):
         rules = {"subscriptions": [{"id": "s1", "cadence": "weekly", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules)
         sender = _FakeEmailSender(configured=False)
-        results = report_scheduler.check_and_send_due_reports(
-            data_module, _FakeReportsModule(), sender, now=NOW, state_path=self.state_path,
-        )
+        results = self._check(data_module, sender, NOW)
         self.assertEqual(results, [{"id": "s1", "status": "skipped", "reason": "SMTP not configured"}])
         self.assertEqual(sender.sent, [])
         # State untouched - retried on the next check, not silently marked done.
-        self.assertEqual(report_scheduler.load_state(self.state_path), {})
+        self.assertEqual(report_scheduler.load_state(self.engine), {})
 
     def test_a_second_check_does_not_resend_the_same_subscription(self):
         rules = {"subscriptions": [{"id": "s1", "cadence": "weekly", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules)
         sender = _FakeEmailSender()
-        report_scheduler.check_and_send_due_reports(data_module, _FakeReportsModule(), sender, now=NOW, state_path=self.state_path)
-        results = report_scheduler.check_and_send_due_reports(
-            data_module, _FakeReportsModule(), sender, now=NOW + datetime.timedelta(hours=1), state_path=self.state_path,
-        )
+        self._check(data_module, sender, NOW)
+        results = self._check(data_module, sender, NOW + datetime.timedelta(hours=1))
         self.assertEqual(results, [])
         self.assertEqual(len(sender.sent), 1)
 
@@ -151,10 +152,32 @@ class CheckAndSendDueReports(unittest.TestCase):
         rules = {"subscriptions": [{"id": "s1", "cadence": "weekly", "recipients": ["a@example.com"], "enabled": True}]}
         data_module = _FakeDataModule(rules)
         sender = _FakeEmailSender(raise_on_send=RuntimeError("smtp exploded"))
-        results = report_scheduler.check_and_send_due_reports(
-            data_module, _FakeReportsModule(), sender, now=NOW, state_path=self.state_path,
-        )
+        results = self._check(data_module, sender, NOW)
         self.assertEqual(results, [{"id": "s1", "status": "error", "reason": "smtp exploded"}])
+
+    def test_concurrent_checks_never_double_send_the_same_subscription(self):
+        """Regression guard for the confirmed race this migration closes."""
+        import threading
+
+        rules = {"subscriptions": [{"id": "s1", "cadence": "weekly", "recipients": ["a@example.com"], "enabled": True}]}
+        data_module = _FakeDataModule(rules)
+        sender = _FakeEmailSender()
+        barrier = threading.Barrier(2)
+        results = []
+
+        def run():
+            barrier.wait()
+            results.append(self._check(data_module, sender, NOW))
+
+        threads = [threading.Thread(target=run) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(sender.sent), 1)
+        sent_count = sum(1 for r in results if r == [{"id": "s1", "status": "sent", "recipients": ["a@example.com"]}])
+        self.assertEqual(sent_count, 1)
 
 
 if __name__ == "__main__":

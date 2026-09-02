@@ -9,25 +9,49 @@ server stays alive. POST /api/notification-settings/run-checks-now is the real,
 cron-callable alternative for guaranteed-uptime delivery.
 """
 import html
-import json
 from pathlib import Path
+
+from sqlalchemy import delete, insert, select
 
 from remediation.enrichment import threat_actor_groups
 from remediation.inventory import asset_inventory
+from remediation.utils import db as db_module
+from remediation.utils.file_lock import FileLock
 
-STATE_PATH = Path(__file__).resolve().parent / "alert_state.json"
+# check_and_send_alerts() is the real critical section - not load_state()/save_state()
+# individually - since it reads state, decides what's new, sends real email (slow I/O),
+# then persists. A generous timeout (not FileLock's tiny 5s default) because a real
+# batch of emails can legitimately take longer than that to send.
+LOCK_PATH = Path(__file__).resolve().parent / ".alert_checker.lock"
+LOCK_TIMEOUT_SECONDS = 60.0
 
 
-def load_state(path=None):
-    path = path or STATE_PATH
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+def load_state(engine=None):
+    """Returns {subscription_id: [finding_id, ...]} - same external shape the old
+    alert_state.json produced, now read from the alert_state table."""
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    state = {}
+    with engine.connect() as conn:
+        for subscription_id, finding_id in conn.execute(select(db_module.alert_state)):
+            state.setdefault(subscription_id, []).append(finding_id)
+    return state
 
 
-def save_state(state, path=None):
-    path = path or STATE_PATH
-    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def save_state(state, engine=None):
+    """Replaces the entire table's contents with `state` - same "rewrite everything"
+    semantics the old JSON file had, now atomic (a single DB transaction) instead of a
+    non-atomic full-file rewrite."""
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    rows = [
+        {"subscription_id": sub_id, "finding_id": fid}
+        for sub_id, fids in state.items() for fid in fids
+    ]
+    with engine.begin() as conn:
+        conn.execute(delete(db_module.alert_state))
+        if rows:
+            conn.execute(insert(db_module.alert_state), rows)
 
 
 def _is_critical(f):
@@ -125,41 +149,48 @@ def build_alert_body_html(subscription, findings):
 </body></html>"""
 
 
-def check_and_send_alerts(dashboard_data, email_sender, state_path=None):
+def check_and_send_alerts(dashboard_data, email_sender, engine=None, lock_path=None, lock_timeout=None):
     """Real orchestrator: for every enabled subscription, finds findings that newly
     match its alert type/scope/team since the last check and emails them - if SMTP
     isn't configured, honestly reports the subscription as skipped (state untouched, so
     it's retried once SMTP is configured) rather than fabricating a send. A single
-    subscription's send failure is caught per-subscription, not fatal to the batch."""
-    rules = dashboard_data.load_alert_rules()
-    findings = dashboard_data.load_live_queue()
-    ownership = asset_inventory.load_ownership()
-    state = load_state(state_path)
-    results = []
+    subscription's send failure is caught per-subscription, not fatal to the batch.
 
-    smtp_ready = email_sender.is_configured()
-    for sub in rules.get("subscriptions", []):
-        if not sub.get("enabled"):
-            continue
-        new_findings = new_matching_findings(sub, findings, ownership, state)
-        if not new_findings:
-            continue
-        if not smtp_ready:
-            results.append({
-                "id": sub["id"], "status": "skipped",
-                "reason": "SMTP not configured", "new_count": len(new_findings),
-            })
-            continue
-        try:
-            email_sender.send_email(
-                sub["recipients"], build_subject(sub),
-                build_alert_body_text(sub, new_findings), build_alert_body_html(sub, new_findings),
-            )
-            state.setdefault(sub["id"], [])
-            state[sub["id"]].extend(f["id"] for f in new_findings)
-            results.append({"id": sub["id"], "status": "sent", "new_count": len(new_findings)})
-        except Exception as exc:  # noqa: BLE001 - one bad subscription must not block the rest
-            results.append({"id": sub["id"], "status": "error", "reason": str(exc)})
+    Holds a real lock across this ENTIRE function - not just the load/save calls -
+    because the in-process scheduler timer and the "run checks now" button can call
+    this concurrently, and the whole read-decide-send-persist sequence (not just the
+    final write) has to be exclusive to avoid sending the same alert twice. This is the
+    confirmed race this locking closes."""
+    with FileLock(lock_path or LOCK_PATH, timeout=lock_timeout or LOCK_TIMEOUT_SECONDS):
+        rules = dashboard_data.load_alert_rules()
+        findings = dashboard_data.load_live_queue()
+        ownership = asset_inventory.load_ownership()
+        state = load_state(engine)
+        results = []
 
-    save_state(state, state_path)
-    return results
+        smtp_ready = email_sender.is_configured()
+        for sub in rules.get("subscriptions", []):
+            if not sub.get("enabled"):
+                continue
+            new_findings = new_matching_findings(sub, findings, ownership, state)
+            if not new_findings:
+                continue
+            if not smtp_ready:
+                results.append({
+                    "id": sub["id"], "status": "skipped",
+                    "reason": "SMTP not configured", "new_count": len(new_findings),
+                })
+                continue
+            try:
+                email_sender.send_email(
+                    sub["recipients"], build_subject(sub),
+                    build_alert_body_text(sub, new_findings), build_alert_body_html(sub, new_findings),
+                )
+                state.setdefault(sub["id"], [])
+                state[sub["id"]].extend(f["id"] for f in new_findings)
+                results.append({"id": sub["id"], "status": "sent", "new_count": len(new_findings)})
+            except Exception as exc:  # noqa: BLE001 - one bad subscription must not block the rest
+                results.append({"id": sub["id"], "status": "error", "reason": str(exc)})
+
+        save_state(state, engine)
+        return results

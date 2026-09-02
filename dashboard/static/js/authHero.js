@@ -54,11 +54,22 @@ export function authHeroBackgroundHtml() {
         </circle>
       </g>
 
-      <g transform="translate(280, 265) scale(1.55)">
+      <g transform="translate(280, 120) scale(1.55)" filter="url(#auth-hero-mark-glow)">
         <path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#2f6fed" fill-opacity="0.9"/>
         <circle cx="27" cy="27" r="11" fill="none" stroke="#ffffff" stroke-width="3.6"/>
         <line x1="35.2" y1="35.2" x2="45" y2="45" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
       </g>
+      <defs>
+        <filter id="auth-hero-mark-glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+          <feColorMatrix in="blur" type="matrix"
+            values="0 0 0 0 0.18  0 0 0 0 0.43  0 0 0 0 0.96  0 0 0 0.55 0"/>
+          <feMerge>
+            <feMergeNode/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
     </svg>`;
 }
 
