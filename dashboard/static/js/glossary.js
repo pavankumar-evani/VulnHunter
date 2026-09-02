@@ -68,7 +68,7 @@ export const GLOSSARY = {
   },
   remediationDomain: {
     label: "Remediation Domain",
-    text: "Which of this app's own Ansible-based auto-fixers can actually handle a finding - only windows-server/unix-server today; every other asset type is manual-only.",
+    text: "Which of this app's own fixers can actually handle a finding - windows-server/unix-server get a generated Ansible playbook, iot-ot-device gets a compensating-control recommendation instead; every other asset type is manual-only today.",
   },
   threatIntel: {
     label: "Threat Intel tagging",

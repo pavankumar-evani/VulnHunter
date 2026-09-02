@@ -22,7 +22,9 @@ re-deriving a different finding ID. Instead:
    so plainly and stop.
 2. Delegate to whichever single fixer subagent matches its `remediation_domain`/asset
    type — **remediation-fixer-windows** for `windows-server`, **remediation-fixer-unix**
-   for `unix-server` — scoped to just that one finding, not the whole batch.
+   for `unix-server`, **remediation-fixer-ot** for `iot-ot-device` (generates a
+   compensating-control recommendation, not a patch script - see that subagent's own
+   file for why) — scoped to just that one finding, not the whole batch.
 3. If the finding's domain doesn't map to either fixer, say so plainly (not every
    domain has a real fixer subagent yet) rather than guessing or fabricating a playbook.
 4. Report back the single playbook filename generated (or the reason none was), in the
@@ -46,9 +48,12 @@ Steps:
    working fixer) vs. manual-only, the breakdown by risk tier, and how many findings are
    KEV-listed / high-EPSS. Point the user at `REMEDIATION_PLAN.md` for full detail.
 5. If `--generate` was passed (or the user confirms after seeing the plan): split the plan
-   into windows-server findings and unix-server findings, delegate the former to
-   **remediation-fixer-windows** and the latter to **remediation-fixer-unix** (both can run
-   independently of each other). Report back which playbooks were generated.
+   into windows-server, unix-server, and iot-ot-device findings, delegate to
+   **remediation-fixer-windows**, **remediation-fixer-unix**, and **remediation-fixer-ot**
+   respectively (all three can run independently of each other). Report back which
+   playbooks/recommendations were generated - and for OT specifically, restate plainly
+   that its output is a recommendation for IT security + OT/plant operations to act on,
+   never a change already made.
 
 Always make clear, in the chat summary and in `REMEDIATION_PLAN.md`, that generated
 playbooks are artifacts for human/change-management review and execution — this pipeline

@@ -37,7 +37,7 @@ document(s) in the same change** — don't let the docs drift. Concretely:
 | Any dashboard page/route (`dashboard/static/js/pages/`, `app.js` routes) | `pages.html` (the affected row) |
 | A new end-user workflow, form, or button (anything answering a real "how do I...?") | `user-guide.html`, plus a matching `### ` entry in `docs/FAQ.md` (Ask VulnHunter's `search_faq()` reads that file live - no code change needed for it to become searchable) and its condensed twin in `dashboard/static/js/pages/faq.js`'s hardcoded `FAQS` array (the in-app FAQ page does NOT read `docs/FAQ.md` directly - the two must be kept in sync by hand) |
 | Repo structure, subagent conventions, or the connector-writing pattern | `developer-guide.html` and `CLAUDE.md` |
-| **Pricing, tiers, or SLA terms** | `docs/PRICING.md` (source of truth) **first**, then `pricing.html` and `executive-brief.html`'s pricing-referencing sections, then check `docs/VR_PLATFORM_COMPARISON.md` for stale competitive-cost language |
+| **Pricing, tiers, SLA terms, or a vertical module (OT/IoT, AppSec)** | `docs/PRICING.md` (source of truth) **first**, then `pricing.html` and `executive-brief.html`'s pricing-referencing sections, then check `docs/VR_PLATFORM_COMPARISON.md` for stale competitive-cost language |
 | Anything affecting the honest competitive/problem-solution framing | `executive-brief.html` |
 
 **To republish a document after editing its local file**: use the Artifact tool's

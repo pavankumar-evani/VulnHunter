@@ -24,7 +24,7 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   "severity": "Critical | High | Medium | Low",
   "description": "Plain-English impact, not just the vendor synopsis.",
   "recommended_fix": "What the source system suggests (patch, config change, etc.)",
-  "remediation_domain": "windows-server | unix-server | null",
+  "remediation_domain": "windows-server | unix-server | iot-ot-device | null",
   "remediation_mechanism": "SCCM / Microsoft Configuration Manager | MDM (e.g. Microsoft Intune) | Vendor firmware update | Vendor hypervisor patch tooling | null",
   "first_seen": "2026-07-28",
   "last_seen": "2026-08-02",
@@ -82,9 +82,14 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   Mgmt/SAST/DAST/IaC/Secrets/Runtime/AI-ML methodology taxonomy.
 - **`remediation_domain`** is set by the normalizer from `asset.type`, and reflects
   whether a *working* `remediation-fixer-*` subagent exists for it today - only
-  `windows-server`/`unix-server` do, so this is `null` for every other asset type,
-  including the new ones added alongside `windows-endpoint`/`mobile-device`/`printer`/
-  `virtualization-host` above (no Ansible-style automation exists for any of them).
+  `windows-server`/`unix-server`/`iot-ot-device` do, so this is `null` for every other
+  asset type, including the new ones added alongside `windows-endpoint`/`mobile-device`/
+  `printer`/`virtualization-host` above (no automated fixer exists for any of them yet).
+  `iot-ot-device`'s fixer (`remediation-fixer-ot`) is a deliberately different shape from
+  the other two - it generates a compensating-control/vendor-coordination recommendation,
+  never a direct patch script, since OT devices are usually unsafe to patch live (see that
+  subagent's own file, and the Remediation Engine document's "Three remediation tracks"
+  section, for why).
 - **`remediation_mechanism`** is a purely informational, reference-only field (not a
   working integration - there is no SCCM/Intune API call anywhere in this codebase) that
   names the REAL-WORLD tool that would normally patch that asset class, so a finding on

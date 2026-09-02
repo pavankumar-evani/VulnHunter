@@ -100,6 +100,7 @@
     <a href="#approvals">04 · Approvals vs. exceptions</a>
     <a href="#policy">05 · Remediation policy engine</a>
     <a href="#boundary">06 · The execution boundary</a>
+    <a href="#tracks">07 · Three remediation tracks</a>
   </nav>
 
   <main>
@@ -166,6 +167,26 @@
     <section id="boundary">
       <h2><span class="num">06</span>The execution boundary</h2>
       <div class="callout warn"><span class="label">Verbatim — this is the load-bearing sentence in this entire engine</span><p>"Nothing in this repository ever executes against real infrastructure automatically — by construction, not by policy." The fixer subagents hold <code>Read, Write</code> tool access only — no <code>Bash</code>, no network tool, no stored credentials. They cannot reach a host even if instructed to. PAM/Vault integration is a lookup-plugin snippet resolved by <em>your</em> infrastructure at playbook-run time — VulnHunter never holds a live secret.</p></div>
+    </section>
+
+    <section id="tracks">
+      <h2><span class="num">07</span>Three remediation tracks — deliberately not one workflow</h2>
+      <p class="section-intro">Everything above describes the IT-infrastructure track in detail. VulnHunter actually runs <strong>three genuinely separate remediation mechanisms</strong>, each shaped for how that category of finding is really fixed in practice — not one generic "generate a fix" pipeline stretched to cover cases it doesn't fit.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Track</th><th>Findings</th><th>Mechanism</th><th>Output artifact</th><th>Default risk posture</th></tr></thead>
+          <tbody>
+            <tr><td><strong>IT Infrastructure</strong></td><td><code>windows-server</code>, <code>unix-server</code></td><td><code>remediation-fixer-windows</code>/<code>-unix</code></td><td>Generated Ansible playbook</td><td>Conservative default (<code>needs-change-approval</code> unless clearly low-risk)</td></tr>
+            <tr><td><strong>Application Security</strong></td><td>SAST (<code>/vulnhunt</code> code findings)</td><td><code>vuln-fixer</code> — a completely separate pipeline</td><td>A real git branch + commit + pushed PR</td><td>Only <code>auto_fixable: true</code> findings touched; everything else flagged for manual review</td></tr>
+            <tr><td><strong>OT / IoT</strong></td><td><code>iot-ot-device</code></td><td><code>remediation-fixer-ot</code></td><td>Compensating-control + vendor-coordination recommendation (never a patch script)</td><td>Always <code>needs-change-approval</code> — never auto-approvable, by rule</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid2">
+        <div class="card"><h4>Why AppSec was never merged into the infra track</h4><p><code>vuln-fixer</code> edits source files directly and opens a pull request — a fundamentally different action than generating a standalone playbook for someone else to run. It has its own tool scope (<code>Bash</code> for git, <code>Edit</code> for source files) and its own trigger (<code>/vulnhunt --fix</code>), independent of <code>/remediate</code>'s pipeline entirely. DAST, SCA, Secrets, and Container findings don't have an equivalent fixer yet — they're honestly <code>manual-only</code> today, the same disclosed gap as network devices and certificates, tracked as a real next step (a <code>remediation-fixer-appsec</code> generating a dependency-upgrade or secret-rotation PR would follow the same pattern as <code>vuln-fixer</code>, not the Ansible one).</p></div>
+        <div class="card"><h4>Why OT gets a different artifact shape, not just a different template</h4><p>NIST SP 800-82 (OT security guidance) treats direct automated patching as the exception in industrial environments, not the default — many OT devices can't be safely rebooted mid-production, some have no reachable network path at all, and an unplanned change to a safety-critical controller risks physical harm, not just downtime. <code>remediation-fixer-ot</code> reflects that directly: it never generates a config/patch script, only a recommendation for IT security and OT/plant operations to act on together.</p></div>
+      </div>
     </section>
 
     <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> or <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener" data-suite-link="pages">Page-by-Page Reference</a>.</footer>

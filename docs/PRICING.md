@@ -78,6 +78,30 @@ before use in a real negotiation.
   3-year/10,000+-asset scale, since VulnHunter's list price already starts well below
   that comparison point.
 
+## Vertical modules — OT/IoT & AppSec
+
+OT/IoT and Application Security are different buying centers and, per
+`docs/enterprise-suite/remediation-engine.html`'s "Three remediation tracks" section,
+genuinely different remediation mechanisms - priced as separate modules, not folded
+into the core per-asset tiers, the same way Tenable sells Tenable.ot separately from
+Tenable.io.
+
+**OT/IoT Security Module** — $18,000/year, up to 2,000 OT/IoT devices (add-on to
+Professional or Enterprise). Includes OT-aware risk scoring, the dedicated OT/IoT hub
+page, and the OT remediation workflow (`remediation-fixer-ot` - a compensating-control/
+vendor-coordination recommendation, never a direct patch script). Additional devices:
+$600/100/year. Honest scope: a risk-management and remediation-workflow layer for
+OT/IoT findings from existing sources - not a replacement for deep OT-protocol network
+monitoring (Claroty/Dragos/Nozomi Networks, quote-only); designed to sit alongside one.
+
+**Application Security Module** — $9,000/year, up to 25 applications/repositories
+(add-on to any tier). Includes SAST via `/vulnhunt` with real auto-fix (`vuln-fixer`
+opens an actual git branch + PR) - a capability Checkmarx/Veracode don't ship natively.
+Also ingests DAST/SCA/Secrets/Container findings (no automated fixer for these yet -
+same disclosed gap as network devices, a real roadmap item). Additional apps:
+$300/year each beyond 25. For comparison: Veracode SAST alone lists $15,000-$25,000/year
+for up to 100 apps; Checkmarx SAST lists $10,000-$15,000/year for the same range.
+
 ## Enterprise SLA
 
 | Commitment | Standard | Professional | Enterprise |
@@ -103,6 +127,11 @@ Response clocks start from ticket creation; measured monthly.
 | Microsoft Defender Vulnerability Management | Endpoint-focused, Microsoft-ecosystem | $2–3/user/month; also bundled free into Microsoft 365 E5 |
 | CrowdStrike Falcon Spotlight | Endpoint-focused add-on to Falcon EDR | $7.50–$11.17/endpoint/year, on top of a required $59–99/endpoint base agent |
 | Nucleus Security / Brinqa / ArmorCode / DefectDojo | Aggregation/correlation onto scanners you already own | $300/mo (DefectDojo Pro) to custom-quote |
+| Claroty / Dragos / Nozomi Networks | OT/ICS deep protocol monitoring | Quote-only, per-asset or per-site |
+| Tenable.ot (OT Security) | OT/ICS vulnerability management | Priced separately from Tenable IT; real "up to 500 assets" SKU; ~$50K reported |
+| Snyk | AppSec (developer-centric) | Free-$25/contributing developer/month |
+| Veracode / Checkmarx | AppSec (SAST/DAST/SCA) | SAST alone $10K-$25K/year for up to 100 apps |
+| GitHub Advanced Security | AppSec (code/secret scanning) | $19-$49/active committer/month |
 
 **Why ServiceNow's headline number looks small until you scale it:** $11,000 is a
 per-user starting price that grows with every analyst added, plus a separate
@@ -119,6 +148,11 @@ VulnHunter's unlimited-user model doesn't recreate that growth curve.
 - [Costbench — Rapid7 InsightVM](https://costbench.com/software/vulnerability-management/rapid7-insightvm/)
 - [Microsoft — Defender VM pricing](https://www.microsoft.com/en-us/security/business/threat-protection/microsoft-defender-vulnerability-management-pricing)
 - [Costbench — CrowdStrike Falcon Spotlight](https://costbench.com/software/vulnerability-management/crowdstrike-falcon-spotlight/)
+- [CDW — Tenable.ot licensing (real SKU, up to 500 assets)](https://www.cdw.com/product/tenable.ot-subscription-license-1-year-up-to-500-assets/6145843)
+- [PeerSpot — Tenable OT Security pricing](https://www.peerspot.com/products/tenable-ot-security-reviews)
+- [Vendr — Snyk pricing](https://www.vendr.com/marketplace/snyk)
+- [UnderDefense — Veracode pricing](https://underdefense.com/industry-pricings/veracode-pricing-2026-ultimate-guide-for-security-products/)
+- [Beagle Security — Checkmarx pricing](https://beaglesecurity.com/blog/article/checkmarx-pricing.html)
 
 ## §readiness — Launch readiness (read before quoting this to a real customer)
 

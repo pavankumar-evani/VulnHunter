@@ -112,12 +112,13 @@
     <a href="#tiers">01 · Pricing tiers</a>
     <a href="#per-asset">02 · Cost per asset vs. the market</a>
     <a href="#licensing">03 · Licensing options</a>
-    <a href="#feature-matrix">04 · Feature matrix</a>
-    <a href="#sla">05 · Enterprise SLA</a>
-    <a href="#deployment">06 · Deployment &amp; hosting</a>
-    <a href="#discounts">07 · Terms &amp; discounts</a>
-    <a href="#landscape">08 · Competitive landscape</a>
-    <a href="#readiness">09 · Launch readiness</a>
+    <a href="#modules">04 · Vertical modules — OT/IoT &amp; AppSec</a>
+    <a href="#feature-matrix">05 · Feature matrix</a>
+    <a href="#sla">06 · Enterprise SLA</a>
+    <a href="#deployment">07 · Deployment &amp; hosting</a>
+    <a href="#discounts">08 · Terms &amp; discounts</a>
+    <a href="#landscape">09 · Competitive landscape</a>
+    <a href="#readiness">10 · Launch readiness</a>
   </nav>
 
   <main>
@@ -212,8 +213,28 @@
       </div>
     </section>
 
+    <section id="modules">
+      <h2><span class="num">04</span>Vertical modules — OT/IoT &amp; AppSec</h2>
+      <p class="section-intro">OT/IoT and Application Security are different buying centers, different buyers' budgets, and — per the Remediation Engine document's "Three remediation tracks" section — genuinely different remediation mechanisms under the hood. They're priced as separate modules, not folded into the core per-asset tiers, the same way Tenable sells Tenable.ot separately from Tenable.io rather than bundling OT into the same per-IT-asset price.</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>OT/IoT Security Module</h4>
+          <p><strong class="mono">$18,000/year</strong> — up to 2,000 OT/IoT devices (add-on to Professional or Enterprise; requires the core remediation engine).</p>
+          <p style="margin-top:8px">Includes OT-aware risk scoring, the dedicated OT/IoT hub page, and the OT remediation workflow — <code>remediation-fixer-ot</code> generates a compensating-control/vendor-coordination recommendation, never a direct patch script, since OT devices are usually unsafe to patch live. Additional devices: $600 per 100/year.</p>
+          <p style="margin-top:8px;font-size:0.82rem">Honest scope: this is a risk-management and remediation-workflow layer for OT/IoT findings from your existing sources (Tenable/Armis/Axonius/Infoblox) — not a replacement for deep OT-protocol network monitoring (Claroty, Dragos, Nozomi Networks, priced separately and typically quote-only). Designed to sit alongside one, not compete with it.</p>
+        </div>
+        <div class="card">
+          <h4>Application Security Module</h4>
+          <p><strong class="mono">$9,000/year</strong> — up to 25 applications/repositories (add-on to any tier).</p>
+          <p style="margin-top:8px">Includes SAST via <code>/vulnhunt</code> with real, working auto-fix: <code>vuln-fixer</code> opens an actual git branch + pull request for mechanical fixes (SQL injection, hardcoded secrets, etc.) — a capability Checkmarx and Veracode don't offer as a core built-in. Also ingests DAST/SCA/Secrets/Container findings (no automated fixer for these yet — same honestly-disclosed gap as network devices, tracked as a real roadmap item). Additional apps: $300/year each beyond 25.</p>
+          <p style="margin-top:8px;font-size:0.82rem">For comparison: Veracode SAST alone lists $15,000–$25,000/year for up to 100 applications; Checkmarx SAST lists $10,000–$15,000/year for the same range. This module is priced well below both while including the auto-fix-PR capability neither ships natively.</p>
+        </div>
+      </div>
+    </section>
+
     <section id="feature-matrix">
-      <h2><span class="num">04</span>Feature matrix</h2>
+      <h2><span class="num">05</span>Feature matrix</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Capability</th><th class="std">Standard</th><th class="pro">Professional</th><th class="ent">Enterprise</th></tr></thead>
@@ -233,7 +254,7 @@
     </section>
 
     <section id="sla">
-      <h2><span class="num">05</span>Enterprise SLA</h2>
+      <h2><span class="num">06</span>Enterprise SLA</h2>
       <p class="section-intro">Every paid tier includes a real, credited SLA — not a best-effort promise.</p>
       <div class="table-wrap">
         <table>
@@ -253,7 +274,7 @@
     </section>
 
     <section id="deployment">
-      <h2><span class="num">06</span>Deployment &amp; hosting</h2>
+      <h2><span class="num">07</span>Deployment &amp; hosting</h2>
       <div class="grid2">
         <div class="card"><h4>Dedicated single-tenant (default, all tiers)</h4><p>Your own isolated instance — not a shared multi-tenant environment. Hosted by us or in your own cloud account. Real isolation today, without waiting on the multi-tenant MSSP architecture still in development (see the RBAC, Multi-Tenancy &amp; Governance document).</p></div>
         <div class="card"><h4>Self-hosted (Enterprise)</h4><p>Run it entirely in your own environment; we provide support and updates against the SLA above without hosting it ourselves.</p></div>
@@ -261,7 +282,7 @@
     </section>
 
     <section id="discounts">
-      <h2><span class="num">07</span>Terms &amp; discounts</h2>
+      <h2><span class="num">08</span>Terms &amp; discounts</h2>
       <div class="grid3">
         <div class="card"><h4>Annual prepay</h4><p>Standard billing term — the prices above.</p></div>
         <div class="card"><h4>2-year commitment</h4><p>10% discount, prepaid or annual invoicing.</p></div>
@@ -270,7 +291,7 @@
     </section>
 
     <section id="landscape">
-      <h2><span class="num">08</span>Competitive landscape</h2>
+      <h2><span class="num">09</span>Competitive landscape</h2>
       <p class="section-intro">Beyond ServiceNow VR/USEM (the original comparison point), the broader vulnerability-management and exposure-management market this positions against:</p>
       <div class="table-wrap">
         <table>
@@ -283,6 +304,11 @@
             <tr><td>Microsoft Defender Vulnerability Management</td><td>Endpoint-focused, Microsoft-ecosystem</td><td>$2–3/user/month; also bundled free into Microsoft 365 E5/Defender for Cloud</td></tr>
             <tr><td>CrowdStrike Falcon Spotlight</td><td>Endpoint-focused add-on to Falcon EDR</td><td>$7.50–$11.17/endpoint/year, on top of a required $59–99/endpoint base agent</td></tr>
             <tr><td>Nucleus Security / Brinqa / ArmorCode / DefectDojo</td><td>Aggregation/correlation platforms (dedup connectors onto scanners you already own)</td><td>See the Solution Brief document — $300/mo (DefectDojo Pro) to custom-quote (Nucleus, Brinqa)</td></tr>
+            <tr><td>Claroty / Dragos / Nozomi Networks</td><td>OT/ICS security (deep protocol monitoring)</td><td>Quote-only, per-asset or per-site — no public pricing published</td></tr>
+            <tr><td>Tenable.ot (OT Security)</td><td>OT/ICS vulnerability management</td><td>Priced separately from Tenable's IT product; real SKU sold "up to 500 assets"; reported around $50K depending on asset count</td></tr>
+            <tr><td>Snyk</td><td>AppSec (developer-centric)</td><td>Free–$25/contributing developer/month; ~$63,000/year for 50 developers at higher tiers</td></tr>
+            <tr><td>Veracode / Checkmarx</td><td>AppSec (SAST/DAST/SCA)</td><td>SAST alone $10,000–$25,000/year for up to 100 applications; full platform $50,000–$250,000+/year</td></tr>
+            <tr><td>GitHub Advanced Security</td><td>AppSec (code/secret scanning)</td><td>$19–$49/active committer/month depending on modules enabled</td></tr>
           </tbody>
         </table>
       </div>
@@ -295,13 +321,18 @@
         <a href="https://vendorbenchmark.com/vendors/qualys-pricing" target="_blank" rel="noopener">VendorBenchmark — Qualys</a>,
         <a href="https://costbench.com/software/vulnerability-management/rapid7-insightvm/" target="_blank" rel="noopener">Costbench — Rapid7 InsightVM</a>,
         <a href="https://www.microsoft.com/en-us/security/business/threat-protection/microsoft-defender-vulnerability-management-pricing" target="_blank" rel="noopener">Microsoft — Defender VM pricing</a>,
-        <a href="https://costbench.com/software/vulnerability-management/crowdstrike-falcon-spotlight/" target="_blank" rel="noopener">Costbench — CrowdStrike Falcon Spotlight</a>.
-        Third-party estimates for quote-only products (Qualys, Tenable, Rapid7) — verify against a direct vendor quote before using in a real negotiation.
+        <a href="https://costbench.com/software/vulnerability-management/crowdstrike-falcon-spotlight/" target="_blank" rel="noopener">Costbench — CrowdStrike Falcon Spotlight</a>,
+        <a href="https://www.cdw.com/product/tenable.ot-subscription-license-1-year-up-to-500-assets/6145843" target="_blank" rel="noopener">CDW — Tenable.ot licensing (real SKU, up to 500 assets)</a>,
+        <a href="https://www.peerspot.com/products/tenable-ot-security-reviews" target="_blank" rel="noopener">PeerSpot — Tenable OT Security pricing</a>,
+        <a href="https://www.vendr.com/marketplace/snyk" target="_blank" rel="noopener">Vendr — Snyk pricing</a>,
+        <a href="https://underdefense.com/industry-pricings/veracode-pricing-2026-ultimate-guide-for-security-products/" target="_blank" rel="noopener">UnderDefense — Veracode pricing</a>,
+        <a href="https://beaglesecurity.com/blog/article/checkmarx-pricing.html" target="_blank" rel="noopener">Beagle Security — Checkmarx pricing</a>.
+        Third-party estimates for quote-only products (Qualys, Tenable, Rapid7, Claroty, Dragos, Nozomi, Checkmarx, Veracode) — verify against a direct vendor quote before using in a real negotiation.
       </p>
     </section>
 
     <section id="readiness">
-      <h2><span class="num">09</span>Launch readiness — what has to be true to sell this</h2>
+      <h2><span class="num">10</span>Launch readiness — what has to be true to sell this</h2>
       <p class="section-intro">The pricing and SLA above are the real, decided commercial model. Honoring the SLA table in §3 operationally requires standing up:</p>
       <div class="grid2">
         <div class="card"><h4>Support operations</h4><p>A ticketing system, on-call rotation for Enterprise's 24×7 tier, and a documented escalation path — none of this exists yet as a staffed function.</p></div>

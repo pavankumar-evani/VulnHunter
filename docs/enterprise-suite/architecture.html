@@ -249,7 +249,7 @@ flowchart LR
   <span class="k">"cve"</span>: <span class="s">"CVE-2021-34527"</span>,           <span class="c">// nullable — policy/config findings often have none</span>
   <span class="k">"cvss"</span>: <span class="s">8.8</span>,
   <span class="k">"severity"</span>: <span class="s">"Critical | High | Medium | Low"</span>,
-  <span class="k">"remediation_domain"</span>: <span class="s">"windows-server | unix-server | null"</span>,
+  <span class="k">"remediation_domain"</span>: <span class="s">"windows-server | unix-server | iot-ot-device | null"</span>,
   <span class="k">"first_seen"</span>: <span class="s">"2026-07-28"</span>, <span class="k">"last_seen"</span>: <span class="s">"2026-08-02"</span>,
   <span class="k">"kev"</span>: { <span class="k">"listed"</span>: <span class="s">true</span>, <span class="k">"date_added"</span>: <span class="s">"2021-11-03"</span>, <span class="k">"known_ransomware_campaign_use"</span>: <span class="s">"Known"</span> },
   <span class="k">"epss"</span>: { <span class="k">"score"</span>: <span class="s">0.9976</span>, <span class="k">"percentile"</span>: <span class="s">0.9996</span> },
@@ -257,7 +257,7 @@ flowchart LR
 }</pre></div>
 
       <h3>Why <code>asset.type</code> is the routing key</h3>
-      <p>It decides which remediation-fixer subagent — if any — can turn this finding into a real playbook. Today, only <code>windows-server</code> and <code>unix-server</code> have a working fixer. Every other type (17 in total, spanning network gear, cloud infrastructure, IoT/OT, certificates, AI/ML findings, code repositories, and more) is still normalized, scored, and planned — just routed to "no automated fixer yet, here's who should own it" instead of a generated artifact.</p>
+      <p>It decides which remediation-fixer subagent — if any — can turn this finding into a real remediation artifact. Today, <code>windows-server</code> and <code>unix-server</code> have a working fixer that generates a playbook, and <code>iot-ot-device</code> has one that generates a compensating-control recommendation instead (see the Remediation Engine document's "Three remediation tracks"). Every other type (17 in total, spanning network gear, cloud infrastructure, certificates, AI/ML findings, code repositories, and more) is still normalized, scored, and planned — just routed to "no automated fixer yet, here's who should own it" instead of a generated artifact.</p>
 
       <div class="callout info"><span class="label">kev / epss are added later, not at ingestion</span><p>A dedicated enrichment stage populates these from live public feeds (CISA KEV, FIRST.org EPSS) after normalization. Both are <code>null</code> whenever <code>cve</code> is null — KEV/EPSS are inherently CVE-scoped, so a policy finding with no CVE honestly carries no exploitation signal rather than a guessed one.</p></div>
     </section>

@@ -64,10 +64,13 @@ Map every record into the schema in `remediation/schema/normalized-finding-schem
     `certificate`
   - If genuinely unclear, use `unknown` — do not guess and mislabel; a wrong asset type
     routes the finding to the wrong (or no) remediation fixer.
-- `remediation_domain`: copy from `asset.type` for `windows-server` and `unix-server`
-  (the two domains with a working fixer today); set to `null` for every other asset type
-  (including `application` and `certificate`), since there is no automated fixer for them
-  yet — they still get planned, just not auto-remediated.
+- `remediation_domain`: copy from `asset.type` for `windows-server`, `unix-server`, and
+  `iot-ot-device` (the three domains with a working fixer today - `iot-ot-device` routes
+  to `remediation-fixer-ot`, which generates compensating-control/coordination artifacts,
+  not a direct patch script, since OT devices are rarely safe to patch automatically);
+  set to `null` for every other asset type (including `application` and `certificate`),
+  since there is no automated fixer for them yet — they still get planned, just not
+  auto-remediated.
 - Severity normalization: Tenable's `Risk` column and CVSS score map directly
   (Critical/High/Medium/Low). Armis `riskLevel` maps directly. Threat-intel `severity` is
   already in this scale, used as-is.

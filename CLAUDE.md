@@ -330,15 +330,16 @@ the only agent allowed to touch git/`gh`. When editing any of the three agent fi
 
 ## Architecture: the remediation engine (`/remediate`)
 
-`/remediate` (`.claude/commands/remediate.md`) orchestrates **five** subagents, same
+`/remediate` (`.claude/commands/remediate.md`) orchestrates **six** subagents, same
 scoped-tool-access philosophy as `/vulnhunt`:
 
 1. **`vuln-ingest-normalizer`** (tools: `Read, Glob, Write`) parses Tenable CSV, Armis
    JSON, and threat-intel JSON exports into one common schema — see
    `remediation/schema/normalized-finding-schema.md`. Writes
    `remediation/output/normalized-findings.json`. Assigns `asset.type` (the routing key
-   for everything downstream — 17 types today) and `remediation_domain` (non-null only for
-   `windows-server`/`unix-server`, since those are the only domains with a working fixer).
+   for everything downstream — 17 types today) and `remediation_domain` (non-null only
+   for `windows-server`/`unix-server`/`iot-ot-device`, the three domains with a working
+   fixer — see item 4 below for why the OT one is a different shape).
 2. **`threat-intel-enricher`** (tools: `Read, Write, Bash`) runs next, before planning: it
    shells out to `remediation/enrichment/kev_epss.py` to attach real CISA KEV and
    FIRST.org EPSS data to every finding that already has a CVE, overwriting
@@ -357,6 +358,14 @@ scoped-tool-access philosophy as `/vulnhunt`:
    `remediation/output/<finding-id>-<slug>.yml`, only for findings already routed to their
    domain by the planner. They never execute anything — that's the whole safety model of
    this pipeline (see README's "Remediation Engine" section for the full rationale).
+   **`remediation-fixer-ot`** (same `Read, Write`-only tool scope) handles
+   `iot-ot-device` findings, but generates a different kind of artifact entirely: a
+   compensating-control/isolation recommendation plus a vendor-coordination checklist
+   (`remediation/output/<finding-id>-ot-recommendation.md`), never a direct patch or
+   config script — OT/ICS devices are frequently unsafe to patch or reboot live, so
+   "generate the fix" for this domain means "generate the human-actionable risk-reduction
+   plan," not automation. See that subagent's own file for the full rationale (grounded
+   in NIST SP 800-82's OT security guidance).
 
 A `--finding-id FIND-N` argument (what the dashboard's "Trigger Remediation" button on an
 already-approved finding uses, via `/api/run`) skips steps 1-3 entirely and delegates
