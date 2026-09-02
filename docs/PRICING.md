@@ -2,9 +2,9 @@
 
 **VulnHunter is a commercial product**, licensed annually by environment size, with a
 real, credited support SLA at every paid tier. This file is the source of truth for the
-pricing/SLA model — the published enterprise documentation suite's pricing page
-(`docs/enterprise-suite/pricing.html`) restates this content visually; if the two ever
-disagree, this file is authoritative and the HTML page should be updated to match.
+pricing/SLA/licensing model — the published enterprise documentation suite's pricing
+page (`docs/enterprise-suite/pricing.html`) restates this content visually; if the two
+ever disagree, this file is authoritative and the HTML page should be updated to match.
 
 ## Tiers (annual, per dedicated-tenant environment)
 
@@ -12,14 +12,57 @@ disagree, this file is authoritative and the HTML page should be updated to matc
 |---|---|---|---|
 | **Price** | $12,000/year | $38,000/year | $85,000/year+ (custom above 25,000 assets) |
 | **Assets** | Up to 1,500 | Up to 7,500 | Unlimited |
+| **Users** | Unlimited | Unlimited | Unlimited |
 | Connectors | Up to 3 | All, unlimited | All, unlimited |
-| OpenVAS/GVM scan engine | — | ✓ | ✓ |
+| OpenVAS/GVM scan engine | Add-on (+$6,000/yr) | ✓ included | ✓ included |
 | Remediation workflow (approvals, exceptions, policy) | ✓ | ✓ | ✓ |
 | Deployment | Dedicated single-tenant | Dedicated single-tenant | Dedicated single-tenant or self-hosted |
 | Account management | Self-service | Quarterly business review | Dedicated Technical Account Manager |
 
-Additional assets beyond a tier's cap: $2,000 per 1,000 assets/year (Standard,
-Professional) — included and unlimited at Enterprise.
+Additional assets beyond a tier's cap: $2,000 per 1,000 assets/year true-up (Standard,
+Professional) — included and unlimited at Enterprise. **Unlimited named users at every
+tier** — priced by environment size, never by headcount.
+
+## Cost per asset vs. the market (why this is priced right, not "too costly")
+
+The flat tiers above are the sellable SKUs, but the fair comparison is cost per asset
+per year — the unit this whole market actually bills on (ServiceNow is the one
+exception: it bills per fulfiller-user, a structurally different, worse-scaling metric
+as a team grows).
+
+| Platform | Per asset/year | Basis |
+|---|---|---|
+| **VulnHunter Enterprise** | **$3.40** | at the 25,000-asset custom-quote threshold |
+| **VulnHunter Professional** | **$5.07** | $38,000 ÷ 7,500-asset cap |
+| **VulnHunter Standard** | **$8.00** | $12,000 ÷ 1,500-asset cap |
+| Rapid7 InsightVM | ~$19–23 | $1.62–$1.93/asset/month, ≥512-asset minimum |
+| Tenable Vulnerability Management | ~$28–45 | list price, base tier |
+| Microsoft Defender Vulnerability Management | ~$24–36 | $2–3/user/month — endpoint-adjacent, not full infra/cloud scanning |
+| CrowdStrike Falcon Spotlight | ~$67–110 | $7.50–$11.17/endpoint add-on, stacked on a required $59–99/endpoint base agent |
+| Qualys VMDR | ~$50–250 | quote-only; public estimates vary widely by source/bundle |
+
+**Even Standard ($8.00/asset/year) undercuts Rapid7 — the cheapest named real
+competitor — by roughly 3x, and Tenable by roughly 4–5x.** Professional and Enterprise
+widen that gap further. See "Sources" below for citations; these are third-party
+estimates for quote-only products and should be verified against a direct vendor quote
+before use in a real negotiation.
+
+## Licensing options
+
+- **Term-based subscription (standard)** — annual, auto-renewing. Every researched
+  competitor has moved to this model; nobody in vulnerability management sells a
+  perpetual license anymore.
+- **Metered per-asset (alternative to a flat tier)** — $6.50/asset/year, no tier
+  commitment, 500-asset minimum, for an environment whose size varies too much for a
+  flat cap to fit well. Still cheaper per-asset than every named competitor above.
+- **Scan-engine add-on (Standard tier only)** — $6,000/year adds the OpenVAS/GVM scan
+  engine without a full Professional upgrade (the same "core + priced add-on module"
+  pattern CrowdStrike uses for Falcon Spotlight). Included by default in Professional
+  and Enterprise.
+- **Multi-year commitment discount** — 10% (2-year) / 15% (3-year), prepaid or annual
+  invoicing. Deliberately more modest than the ~38–45% Qualys reportedly discounts at
+  3-year/10,000+-asset scale, since VulnHunter's list price already starts well below
+  that comparison point.
 
 ## Enterprise SLA
 
@@ -35,23 +78,39 @@ Professional) — included and unlimited at Enterprise.
 Credits apply to the following month's invoice as a percentage of that month's fee.
 Response clocks start from ticket creation; measured monthly.
 
-## Terms
+## Competitive landscape (beyond ServiceNow VR/USEM)
 
-- Annual prepay is the standard billing term (prices above).
-- 2-year commitment: 10% discount. 3-year commitment: 15% discount.
+| Platform | Category | List pricing signal |
+|---|---|---|
+| ServiceNow VR/USEM | ITSM-native vulnerability response | $11,000–$24,500/fulfilled-user/year; real deployments $40,000–$120,000/year |
+| Tenable Vulnerability Management | Network/host vuln scanning | $28–45/asset/year list; 500–2,000 assets = $25K–$150K/year real spend |
+| Qualys VMDR | Network/host vuln scanning | Quote-only; estimates vary widely by module bundle |
+| Rapid7 InsightVM | Network/host vuln scanning | $1.62–$1.93/asset/month, ≥512-asset minimum |
+| Microsoft Defender Vulnerability Management | Endpoint-focused, Microsoft-ecosystem | $2–3/user/month; also bundled free into Microsoft 365 E5 |
+| CrowdStrike Falcon Spotlight | Endpoint-focused add-on to Falcon EDR | $7.50–$11.17/endpoint/year, on top of a required $59–99/endpoint base agent |
+| Nucleus Security / Brinqa / ArmorCode / DefectDojo | Aggregation/correlation onto scanners you already own | $300/mo (DefectDojo Pro) to custom-quote |
 
-## Market position
+**Why ServiceNow's headline number looks small until you scale it:** $11,000 is a
+per-user starting price that grows with every analyst added, plus a separate
+device-based component — exactly why real deployments land at $40K–$120K/year.
+VulnHunter's unlimited-user model doesn't recreate that growth curve.
 
-ServiceNow Vulnerability Response lists at $11,000–$24,500/fulfilled-user/year, with
-real benchmarked deployments running $40,000–$120,000/year plus a device-based
-component (sources: [VR_PLATFORM_COMPARISON.md](VR_PLATFORM_COMPARISON.md)). VulnHunter's
-Professional tier is the direct comparison point: $38,000/year with a real SLA included.
+### Sources
 
-## §7 — Launch readiness (read before quoting this to a real customer)
+- [Vendr — ServiceNow pricing](https://www.vendr.com/marketplace/servicenow)
+- [Gartner Peer Insights — ServiceNow VR](https://www.gartner.com/reviews/product/servicenow-vulnerability-response)
+- [VendorBenchmark — Tenable](https://vendorbenchmark.com/vendors/tenable-pricing)
+- [UnderDefense — Tenable](https://underdefense.com/industry-pricings/tenable-pricing-2025-ultimate-guide-for-security-products/)
+- [VendorBenchmark — Qualys](https://vendorbenchmark.com/vendors/qualys-pricing)
+- [Costbench — Rapid7 InsightVM](https://costbench.com/software/vulnerability-management/rapid7-insightvm/)
+- [Microsoft — Defender VM pricing](https://www.microsoft.com/en-us/security/business/threat-protection/microsoft-defender-vulnerability-management-pricing)
+- [Costbench — CrowdStrike Falcon Spotlight](https://costbench.com/software/vulnerability-management/crowdstrike-falcon-spotlight/)
 
-The pricing and SLA above are the real, decided commercial model — not aspirational.
-Honoring the SLA table operationally still requires standing up, and does **not**
-exist yet as of this writing:
+## §readiness — Launch readiness (read before quoting this to a real customer)
+
+The pricing, licensing, and SLA above are the real, decided commercial model — not
+aspirational. Honoring the SLA table operationally still requires standing up, and does
+**not** exist yet as of this writing:
 
 1. **Support operations** — a ticketing system, an on-call rotation for Enterprise's
    24×7 tier, and a documented escalation path.
@@ -64,7 +123,7 @@ commitment is not honest.
 ## Keeping this in sync
 
 This file, `docs/enterprise-suite/pricing.html`, and `docs/enterprise-suite/executive-brief.html`
-all state the same pricing model. If pricing or SLA terms change, update all three (see
-`docs/enterprise-suite/MANIFEST.md` for how to republish the HTML versions) and check
-`docs/VR_PLATFORM_COMPARISON.md` for competitive-positioning language that assumes the
-old numbers.
+all state the same pricing model. If pricing, licensing, or SLA terms change, update
+all three (see `docs/enterprise-suite/MANIFEST.md` for how to republish the HTML
+versions) and check `docs/VR_PLATFORM_COMPARISON.md` for competitive-positioning
+language that assumes the old numbers.
