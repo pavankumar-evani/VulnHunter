@@ -16,6 +16,19 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   a `threading.Barrier` to force two threads to both finish reading before either
   writes - a deterministic proof of the same lost-update race instead of hoping one
   shows up. Full suite re-verified 1161/1161 locally.
+- **Second flaky-CI test on `tests/test_file_lock.py`, same file**: `test_with_the_lock_concurrent_increments_are_all_preserved`
+  failed once in a full-suite run (`162 != 200`) but passed cleanly in isolation -
+  the shortfall matches one worker thread hitting `FileLock`'s 5s default timeout
+  mid-loop (at its 12th of 50 iterations: `50-12=38` lost, `200-38=162`) under real
+  contention, then dying silently, since `threading.Thread` swallows an unhandled
+  exception instead of failing the test. Plausible on this repo's own OneDrive-synced
+  working directory in particular, which `file_lock.py`'s docstring already flags as
+  intercepting rapid create/delete cycles. Fixed by giving this test's locks a 30s
+  timeout (this test's job is proving the lock preserves every increment under load,
+  not exercising acquire-timeout behavior - `FileLockTimeoutAndStaleness` covers that
+  separately) and by collecting worker-thread exceptions into the main thread instead
+  of letting them vanish, so a genuine future failure surfaces as a real exception
+  instead of a mysterious count mismatch. Full suite re-verified 1343/1343 locally.
 - **Broken Overview dashboard**: `overview.js` referenced `aiTrendAnalysisTileHtml()`
   without importing it (only the old `aiTrendAnalysisSectionHtml` was imported) - a
   `ReferenceError` that threw on every page load, confirmed live in-browser (showed the

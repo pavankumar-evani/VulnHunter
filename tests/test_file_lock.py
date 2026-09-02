@@ -59,12 +59,25 @@ class FileLockConcurrency(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def _increment_locked(self):
-        for _ in range(50):
-            with FileLock(self.path):
-                value = int(self.path.read_text(encoding="utf-8"))
-                time.sleep(0.0001)
-                self.path.write_text(str(value + 1), encoding="utf-8")
+    def _increment_locked(self, errors):
+        try:
+            for _ in range(50):
+                # 30s, not FileLock's 5s default: this test proves the lock preserves
+                # every increment under real 4-thread contention, not that acquisition
+                # finishes within an arbitrary window (FileLockTimeoutAndStaleness
+                # covers timeout behavior separately). Under a CPU-starved full-suite
+                # run - or this repo's own OneDrive-synced working directory, which
+                # file_lock.py's docstring already flags as intercepting rapid
+                # create/delete cycles - legitimate queueing could exceed 5s and trip
+                # LockTimeoutError mid-loop, silently killing a worker thread (Python
+                # threads swallow unhandled exceptions) and losing the rest of its
+                # increments: the real cause of an observed "162 != 200" flake.
+                with FileLock(self.path, timeout=30.0):
+                    value = int(self.path.read_text(encoding="utf-8"))
+                    time.sleep(0.0001)
+                    self.path.write_text(str(value + 1), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 - surface to the main thread below instead of vanishing into stderr
+            errors.append(exc)
 
     def test_without_the_lock_two_threads_reading_the_same_value_lose_an_update(self):
         """Deterministic, not probabilistic: a threading.Barrier forces both threads
@@ -97,11 +110,16 @@ class FileLockConcurrency(unittest.TestCase):
         self.assertNotEqual(final, 3)
 
     def test_with_the_lock_concurrent_increments_are_all_preserved(self):
-        threads = [threading.Thread(target=self._increment_locked) for _ in range(4)]
+        errors = []
+        threads = [
+            threading.Thread(target=self._increment_locked, args=(errors,))
+            for _ in range(4)
+        ]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
+        self.assertEqual(errors, [])
         self.assertEqual(int(self.path.read_text(encoding="utf-8")), 200)
 
 
