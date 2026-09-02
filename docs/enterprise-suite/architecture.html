@@ -1,0 +1,359 @@
+<title>Architecture &amp; Schema Reference</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --ink: #0b1220;
+    --paper: #f5f7fb;
+    --surface: #ffffff;
+    --surface-2: #edf1f9;
+    --line: #d7deec;
+    --muted: #5b6478;
+    --accent: #2f6fed;
+    --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe;
+    --signal: #1baf7a;
+    --crit: #991b1b;
+    --high: #9a3412;
+    --med: #92400e;
+    --low: #1e40af;
+    --code-bg: #0f1830;
+    --code-text: #d7e2ff;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+      --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+    --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Suite nav ---------- */
+  .suitebar {
+    display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+    background: var(--ink); color: var(--paper); font-size: 0.82rem;
+  }
+  :root[data-theme="dark"] .suitebar, :root:not([data-theme="light"]) .suitebar { background: #060a16; }
+  .suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 600; color: #fff; text-decoration: none; letter-spacing: 0.01em; }
+  .suitebar .mark svg { display: block; }
+  .suitebar .sep { opacity: 0.35; }
+  .suitebar .doclabel { opacity: 0.85; }
+  .suitebar .spacer { flex: 1; }
+  .suitebar a.hub { color: #cdd8ff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 20px; padding: 4px 12px; }
+  .suitebar a.hub:hover { border-color: rgba(255,255,255,.6); }
+
+  /* ---------- Shell layout ---------- */
+  .shell { display: flex; max-width: 1320px; margin: 0 auto; }
+  .toc {
+    width: 250px; flex: 0 0 250px; position: sticky; top: 0; align-self: flex-start;
+    max-height: 100vh; overflow-y: auto; padding: 32px 18px 40px 24px;
+  }
+  .toc-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px 6px; font-weight: 600; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 0.87rem; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--ink); background: var(--surface-2); }
+  .toc a.active { color: var(--accent-deep); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+  main { flex: 1; min-width: 0; padding: 0 40px 80px; max-width: 900px; }
+
+  .kicker { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-deep); font-weight: 600; margin: 40px 0 10px; }
+  .hero h1 { font-size: 2.5rem; margin: 0 0 14px; }
+  .hero p.lede { font-size: 1.15rem; color: var(--muted); max-width: 70ch; margin: 0 0 8px; }
+  .hero { padding-top: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+
+  section { margin-top: 52px; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; padding-top: 4px; scroll-margin-top: 20px; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.95rem; margin-right: 10px; }
+  h3 { font-size: 1.1rem; margin: 28px 0 8px; scroll-margin-top: 20px; }
+  p { max-width: 72ch; }
+  .section-intro { color: var(--muted); max-width: 72ch; margin-bottom: 20px; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 18px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); max-width: 78ch; }
+  .callout.warn { border-color: #f0c869; background: color-mix(in srgb, var(--med) 8%, var(--surface)); }
+  .callout.info { border-color: var(--accent-soft); background: var(--accent-soft); }
+  .callout p { margin: 0; max-width: none; }
+  .callout .label { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 4px; }
+  .callout.warn .label { color: var(--med); }
+  .callout.info .label { color: var(--accent-deep); }
+
+  pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); overflow-x: auto; }
+
+  .codeblock { background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 18px 20px; overflow-x: auto; font-family: var(--mono); font-size: 0.83rem; line-height: 1.55; box-shadow: var(--shadow); }
+  .codeblock .c { color: #8fa3d6; }
+  .codeblock .k { color: #7fd0a8; }
+  .codeblock .s { color: #f2c185; }
+
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  td code { font-size: 0.82rem; }
+  tr:last-child td { border-bottom: none; }
+
+  .chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 2px 9px; border-radius: 20px; font-family: var(--mono); letter-spacing: 0.01em; }
+  .chip.crit { background: color-mix(in srgb, var(--crit) 15%, transparent); color: var(--crit); }
+  .chip.high { background: color-mix(in srgb, var(--high) 15%, transparent); color: var(--high); }
+  .chip.med  { background: color-mix(in srgb, var(--med) 18%, transparent); color: var(--med); }
+  .chip.low  { background: color-mix(in srgb, var(--low) 15%, transparent); color: var(--low); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .card h4 { margin: 0 0 6px; font-size: 0.95rem; }
+  .card p { margin: 0; font-size: 0.87rem; color: var(--muted); }
+
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+
+  @media (max-width: 900px) {
+    .toc { display: none; }
+    main { padding: 0 20px 60px; max-width: 100%; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="suitebar">
+  <a class="mark" href="#" onclick="return false">
+    <svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#5b8bf5"/><circle cx="27" cy="27" r="9" fill="none" stroke="#fff" stroke-width="3"/><line x1="34" y1="34" x2="41" y2="41" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>
+    VulnHunter
+  </a>
+  <span class="sep">/</span>
+  <span class="doclabel">Enterprise Documentation Suite</span>
+  <span class="spacer"></span>
+  <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#overview">01 · System overview</a>
+    <a href="#request-lifecycle">02 · Request lifecycle</a>
+    <a href="#storage">03 · Data &amp; storage model</a>
+    <a href="#schema">04 · The Finding schema</a>
+    <a href="#pipeline">05 · Processing pipeline</a>
+    <a href="#security">06 · Security architecture</a>
+    <a href="#frontend">07 · Frontend architecture</a>
+    <a href="#constraints">08 · Honest current-state limits</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="kicker">Technical Reference · 1 of 7</div>
+      <h1>Architecture &amp; Schema Reference</h1>
+      <p class="lede">How VulnHunter is actually built: the request path, the storage model, the one schema every data source normalizes into, and the security boundary that keeps it safe to run.</p>
+      <p style="color:var(--muted);font-size:0.9rem">Every diagram and field below reflects the real, current codebase — not a target-state design. Where something is a known limitation rather than a finished feature, §8 says so plainly.</p>
+    </div>
+
+    <section id="overview">
+      <h2><span class="num">01</span>System overview</h2>
+      <p class="section-intro">VulnHunter is a single deployable web application: a FastAPI backend serving both a JSON API and a hand-rolled vanilla-JS single-page app, backed by flat files instead of a database, with an optional layer of Claude Code subagents doing the judgment-heavy work (classification, playbook drafting) that a deterministic script can't.</p>
+
+      <pre class="mermaid">
+flowchart LR
+    Browser["Browser<br/>SPA (vanilla JS, no build step)"]
+    API["FastAPI app<br/>dashboard/app.py"]
+    Files["Flat-file store<br/>JSON + YAML under remediation/"]
+    Agents["Claude Code subagents<br/>.claude/agents/*.md"]
+    Ext["External sources<br/>Tenable · Qualys · OpenVAS · Prisma Cloud ·<br/>Cortex XSIAM · Infoblox · Axonius · Active Directory"]
+    Feeds["Public threat-intel feeds<br/>CISA KEV · FIRST.org EPSS · NVD"]
+
+    Browser <-->|"fetch() JSON, cookie session"| API
+    API <-->|read/write| Files
+    API -->|"subprocess: claude -p /remediate ..."| Agents
+    Agents -->|read/write| Files
+    API -->|"per-request credentials, never stored"| Ext
+    API -->|"free, no-auth"| Feeds
+      </pre>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>No separate services to stand up</h4>
+          <p>One Python process (<code>uvicorn</code>) serves the API, the SPA shell, and every static asset. There is no message queue, cache layer, or microservice boundary to operate.</p>
+        </div>
+        <div class="card">
+          <h4>Two different "engines," one process</h4>
+          <p>The deterministic engine (connectors, enrichment math, scoring formulas) runs as plain Python inside the request. The judgment engine (classification, playbook drafting) runs as a <em>subprocess call out to Claude Code</em> — see §5.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="request-lifecycle">
+      <h2><span class="num">02</span>Request lifecycle &amp; middleware</h2>
+      <p class="section-intro">Every HTTP request passes through three FastAPI middlewares, in this order, before reaching a route handler:</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Order</th><th>Middleware</th><th>What it does</th><th>Default state</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">1</td><td>Static no-cache</td><td>Forces <code>/static/*</code> responses to revalidate (<code>Cache-Control: no-cache</code>) instead of trusting the browser's heuristic freshness — an edited JS/CSS file is never served stale.</td><td class="mono">always on</td></tr>
+            <tr><td class="mono">2</td><td>Secure headers</td><td><code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: DENY</code>, <code>Referrer-Policy</code>, <code>Permissions-Policy</code> on every response. A full <code>Content-Security-Policy</code> is available but opt-in (see §6).</td><td class="mono">headers on, CSP off</td></tr>
+            <tr><td class="mono">3</td><td>Require-login-for-reads</td><td>When enabled, every <code>/api/*</code> route (except the login flow itself) requires a valid session. Off by default — see §8 for exactly what that means today.</td><td class="mono">opt-in, off</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn"><span class="label">Read this before a production rollout</span><p>Every read (<code>GET</code>) route is public by default. Every state-changing route (<code>POST</code>) is gated per-route with an explicit RBAC dependency. Set <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code> to close the read gap — it requires a real, stable <code>VULNHUNTER_SESSION_SECRET</code> as a precondition (checked at startup).</p></div>
+    </section>
+
+    <section id="storage">
+      <h2><span class="num">03</span>Data &amp; storage model</h2>
+      <p class="section-intro">There is deliberately no database. Every real piece of state is a JSON or YAML file under <code>remediation/</code>, read fresh (or from a short-TTL in-process cache) on every request and written back with an advisory file lock.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Path</th><th>What lives there</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">remediation/output/normalized-findings.json</td><td>Every finding, in the one common schema (§4) — the system of record.</td></tr>
+            <tr><td class="mono">REMEDIATION_PLAN.md</td><td>A point-in-time snapshot: risk tier, action type, rollback plan per finding, written by the <code>remediation-planner</code> subagent.</td></tr>
+            <tr><td class="mono">remediation/output/*.yml</td><td>Generated Ansible playbooks, one per remediable finding.</td></tr>
+            <tr><td class="mono">remediation/remediation_approvals/*.json</td><td>The human approval-request ledger — status, who decided, when, what window.</td></tr>
+            <tr><td class="mono">remediation/exceptions/*.json</td><td>SLA-exception records ("accept this risk instead of fixing it") — active / expired / revoked.</td></tr>
+            <tr><td class="mono">remediation/config/*.yaml</td><td>Every admin-editable policy: priority weights, SLA windows, remediation policy per asset domain, risk-scoring weights, exposure-score weights.</td></tr>
+            <tr><td class="mono">remediation/live-data/*</td><td>Raw exports written by a connector's Fetch action (Tenable/Qualys/OpenVAS CSVs, Prisma Cloud/Cortex XSIAM JSON) before ingestion.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Why files, and the real tradeoff</h3>
+      <p>Every artifact is human-readable, diffable in git, and inspectable without a DB client — a deliberate fit for a system whose whole point is producing <em>reviewable</em> artifacts. The honest cost: single-writer concurrency (enforced by <code>remediation/utils/file_lock.py</code>, a real cross-platform advisory file lock with a timeout, not a placeholder), no historical trend storage (every chart is a live snapshot, not a time series), and a full-file rewrite on every mutation rather than a targeted update. This is the top item on VulnHunter's own roadmap (§8).</p>
+    </section>
+
+    <section id="schema">
+      <h2><span class="num">04</span>The Finding schema</h2>
+      <p class="section-intro">Every connector — Tenable, Qualys, OpenVAS/GVM, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory, or a generic webhook — maps its own export format into exactly this shape. Nothing downstream (scoring, enrichment, planning, the dashboard) ever needs to know a source-specific field name again.</p>
+
+      <div class="codeblock"><pre>{
+  <span class="k">"id"</span>: <span class="s">"FIND-1"</span>,
+  <span class="k">"source"</span>: <span class="s">"tenable | qualys | openvas | prismacloud | cortex-xsiam | armis | threat-intel"</span>,
+  <span class="k">"source_ref"</span>: <span class="s">"&lt;plugin/QID/OID/device ID from the origin system&gt;"</span>,
+  <span class="k">"asset"</span>: {
+    <span class="k">"name"</span>: <span class="s">"WIN-DC01"</span>, <span class="k">"ip"</span>: <span class="s">"10.20.30.41"</span>,
+    <span class="k">"type"</span>: <span class="s">"windows-server | unix-server | network-security-device | ... (17 types)"</span>,
+    <span class="k">"os"</span>: <span class="s">"Microsoft Windows Server 2019 Datacenter"</span>
+  },
+  <span class="k">"title"</span>: <span class="s">"MS Windows Print Spooler RCE (PrintNightmare)"</span>,
+  <span class="k">"cve"</span>: <span class="s">"CVE-2021-34527"</span>,           <span class="c">// nullable — policy/config findings often have none</span>
+  <span class="k">"cvss"</span>: <span class="s">8.8</span>,
+  <span class="k">"severity"</span>: <span class="s">"Critical | High | Medium | Low"</span>,
+  <span class="k">"remediation_domain"</span>: <span class="s">"windows-server | unix-server | null"</span>,
+  <span class="k">"first_seen"</span>: <span class="s">"2026-07-28"</span>, <span class="k">"last_seen"</span>: <span class="s">"2026-08-02"</span>,
+  <span class="k">"kev"</span>: { <span class="k">"listed"</span>: <span class="s">true</span>, <span class="k">"date_added"</span>: <span class="s">"2021-11-03"</span>, <span class="k">"known_ransomware_campaign_use"</span>: <span class="s">"Known"</span> },
+  <span class="k">"epss"</span>: { <span class="k">"score"</span>: <span class="s">0.9976</span>, <span class="k">"percentile"</span>: <span class="s">0.9996</span> },
+  <span class="k">"poc_available"</span>: <span class="s">true</span>, <span class="k">"user_interaction_required"</span>: <span class="s">false</span>
+}</pre></div>
+
+      <h3>Why <code>asset.type</code> is the routing key</h3>
+      <p>It decides which remediation-fixer subagent — if any — can turn this finding into a real playbook. Today, only <code>windows-server</code> and <code>unix-server</code> have a working fixer. Every other type (17 in total, spanning network gear, cloud infrastructure, IoT/OT, certificates, AI/ML findings, code repositories, and more) is still normalized, scored, and planned — just routed to "no automated fixer yet, here's who should own it" instead of a generated artifact.</p>
+
+      <div class="callout info"><span class="label">kev / epss are added later, not at ingestion</span><p>A dedicated enrichment stage populates these from live public feeds (CISA KEV, FIRST.org EPSS) after normalization. Both are <code>null</code> whenever <code>cve</code> is null — KEV/EPSS are inherently CVE-scoped, so a policy finding with no CVE honestly carries no exploitation signal rather than a guessed one.</p></div>
+    </section>
+
+    <section id="pipeline">
+      <h2><span class="num">05</span>Processing pipeline</h2>
+      <p class="section-intro">One direction, eight real stages, from a raw export to a human decision. The full mechanics of stages 5-8 are covered in the Remediation Engine document; this is the map.</p>
+
+      <pre class="mermaid">
+flowchart LR
+    A["Ingest<br/>vuln-ingest-normalizer"] --> B["Normalize<br/>-> Finding schema"]
+    B --> C["Enrich<br/>CISA KEV + FIRST EPSS<br/>(live, no-auth feeds)"]
+    C --> D["Score<br/>priority + risk + exposure"]
+    D --> E["Plan<br/>remediation-planner<br/>-> REMEDIATION_PLAN.md"]
+    E --> F["Generate<br/>remediation-fixer-*<br/>-> Ansible playbook"]
+    F --> G["Approve<br/>human sign-off"]
+    G --> H["Trigger<br/>handed to your own<br/>change-managed automation"]
+
+    style A fill:#2f6fed,color:#fff,stroke:none
+    style B fill:#2f6fed,color:#fff,stroke:none
+    style C fill:#eda100,color:#1a1a1a,stroke:none
+    style D fill:#eda100,color:#1a1a1a,stroke:none
+    style E fill:#1baf7a,color:#fff,stroke:none
+    style F fill:#1baf7a,color:#fff,stroke:none
+    style G fill:#4a3aa7,color:#fff,stroke:none
+    style H fill:#4a3aa7,color:#fff,stroke:none
+      </pre>
+      <p style="color:var(--muted);font-size:0.87rem">Blue = automatic, every finding. Amber = automatic, CVE-scoped findings only. Green = automatic once eligible, produces a real artifact. Purple = human-driven — VulnHunter never crosses this boundary itself (see §6).</p>
+    </section>
+
+    <section id="security">
+      <h2><span class="num">06</span>Security architecture</h2>
+
+      <h3>Authentication &amp; sessions</h3>
+      <p>Local email/password accounts, hashed with PBKDF2-HMAC-SHA256. Sessions are a signed cookie (<code>vulnhunter_session</code>) verified against <code>VULNHUNTER_SESSION_SECRET</code>. Optional OIDC/SSO support exists and is exposed on the login page only when a real provider's <code>OIDC_ISSUER</code>/<code>OIDC_CLIENT_ID</code>/<code>OIDC_CLIENT_SECRET</code> are configured — otherwise the button is simply absent, not stubbed.</p>
+
+      <h3>Roles &amp; team scoping — the real model, not an idealized one</h3>
+      <p>This is intentionally simple: one boolean, <strong>admin</strong> or not. Every mutation route requires at minimum a logged-in session; most require <code>role == "admin"</code> outright. A second, independent axis — <strong>team</strong> — narrows which findings and approvals a non-admin user's own queries return, enforced server-side per request. There is no granular permission matrix (no separate "analyst," "approver," "read-only" roles) — see the RBAC, Multi-Tenancy &amp; Governance document for what this means in practice and its honestly-disclosed limits.</p>
+
+      <h3>The execution boundary — the single most important design decision</h3>
+      <div class="callout warn"><span class="label">Verbatim, because it is load-bearing</span><p>"Nothing in this repository ever executes against real infrastructure automatically — by construction, not by policy." The subagents that draft Ansible playbooks are given <code>Read, Write</code> tool access only in their own frontmatter — no <code>Bash</code>, no network tool, no credentials. They cannot reach a host even if a prompt somehow told one to. Every generated playbook is a reviewable artifact for a human, or your own change-managed automation platform, to run.</p></div>
+
+      <h3>Response security headers</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Header</th><th>Value</th><th>Enabled by default?</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">X-Content-Type-Options</td><td class="mono">nosniff</td><td>Yes</td></tr>
+            <tr><td class="mono">X-Frame-Options</td><td class="mono">DENY</td><td>Yes</td></tr>
+            <tr><td class="mono">Referrer-Policy</td><td class="mono">strict-origin-when-cross-origin</td><td>Yes</td></tr>
+            <tr><td class="mono">Permissions-Policy</td><td class="mono">geolocation=(), microphone=(), camera=()</td><td>Yes</td></tr>
+            <tr><td class="mono">Content-Security-Policy</td><td class="mono">default-src 'self'; script-src 'self'; ...</td><td>No — <code>VULNHUNTER_ENABLE_CSP=true</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="frontend">
+      <h2><span class="num">07</span>Frontend architecture</h2>
+      <p class="section-intro">A hand-rolled single-page app — no React, no build step, no bundler. Deliberate: the environment this was built in had no Node/npm runtime available to compile or verify a framework-based frontend against, and shipping unverifiable code is a worse outcome than a plainer one that's actually been run.</p>
+      <ul>
+        <li><strong>Router:</strong> a regex-pattern table (<code>app.js</code>) maps a URL path to a page module — around 50 routes today.</li>
+        <li><strong>Page module convention:</strong> every <code>pages/*.js</code> file exports <code>title</code> and an async <code>render(container)</code> — it owns its own markup, its own <code>api.js</code> calls, and its own event wiring.</li>
+        <li><strong>Shared libraries:</strong> <code>api.js</code> (every backend call in one place), <code>dom.js</code> (escaping, flash messages, KPI-card helpers), <code>charts.js</code> (bar/pie SVG, shared severity palette), <code>rbac</code>-aware helpers for showing/hiding admin-only controls client-side (never the actual security boundary — that's always enforced server-side too).</li>
+      </ul>
+    </section>
+
+    <section id="constraints">
+      <h2><span class="num">08</span>Honest current-state limits</h2>
+      <p class="section-intro">Every enterprise reference in this suite says plainly where the product is today versus where a production rollout would need to invest further. Reused consistently across all eight documents:</p>
+      <div class="grid2">
+        <div class="card"><h4>Single-tenant, file-based</h4><p>No database, no per-tenant data boundary. The MSSP "tenant switcher" in the UI is an illustrative client-side filter over one shared dataset — not real per-tenant isolation. See the RBAC/Governance document.</p></div>
+        <div class="card"><h4>Reads are public by default</h4><p>Every GET route is open unless <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS</code> is explicitly set — a deliberate MVP default, not a bug, but one to close before a real rollout.</p></div>
+        <div class="card"><h4>Synchronous pipeline execution</h4><p>A pipeline run blocks the request that started it. A production deployment needs a real job queue behind long-running operations (scans, large-tenant exports).</p></div>
+        <div class="card"><h4>No historical trend storage</h4><p>Every chart is a live, current-moment snapshot — there is no daily-snapshot table yet, so "trend over time" views are honestly absent rather than faked.</p></div>
+      </div>
+    </section>
+
+    <footer class="docfoot">
+      Part of the VulnHunter Enterprise Documentation Suite. Continue to the <a href="https://claude.ai/code/artifact/37848de1-aed0-4e71-b903-0cf2780dc52b" target="_blank" rel="noopener" data-suite-link="engine">Vulnerability Finding Engine</a> or the <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a> document.
+    </footer>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<script>
+  if (window.mermaid) { mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' }); }
+
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href')));
+  function onScroll() {
+    let idx = 0;
+    const y = window.scrollY + 100;
+    sections.forEach((s, i) => { if (s && s.offsetTop <= y) idx = i; });
+    links.forEach((a, i) => a.classList.toggle('active', i === idx));
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>

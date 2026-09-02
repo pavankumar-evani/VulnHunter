@@ -2,9 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this repository is
+## This file is stale on one major point — read this first
 
-VulnHunter is not a conventional application — it's a Claude Code **extension**: two slash
+The section below ("What this repository is") describes VulnHunter's original
+hackathon-era shape: two slash commands and seven subagents, no runnable application.
+That description is no longer complete. **A real, deployable dashboard now exists**
+(`dashboard/app.py`, a FastAPI backend + hand-rolled JS SPA, with auth/RBAC, 8+ live
+vendor connectors including a real OpenVAS/GVM scan engine, a Python `unittest` suite
+of 1,300+ tests, and its own `dashboard/README.md`) — none of that is documented in the
+architecture sections below yet. Rewriting this file to cover the dashboard properly is
+a real, scoped follow-up task in its own right, not done here. Until then: for anything
+touching `dashboard/`, `remediation/connectors/`, or the RBAC/auth model, trust
+`dashboard/README.md`, `docs/enterprise-suite/architecture.html`, and the other
+documents indexed in `docs/enterprise-suite/MANIFEST.md` over this file's own
+architecture description.
+
+## What this repository is (original scope — the two Claude Code pipelines)
+
+VulnHunter started as a Claude Code **extension**: two slash
 commands plus seven scoped subagents forming two pipelines:
 
 - `/vulnhunt` — scans source code, reports findings, auto-fixes the safe ones (3 subagents).
@@ -146,3 +161,23 @@ Plus Dockerfile-level issues: no `USER` directive (runs as root, CWE-250), unpin
 image tag, secret baked into an image layer via `ENV`.
 
 **Never deploy this app anywhere reachable** — it exists solely as a scan target.
+
+## Enterprise documentation suite — keep it in sync with the application
+
+`docs/enterprise-suite/` holds 11 HTML documents (an executive brief, 7 technical
+references, a POC methodology, and a commercial pricing/SLA page — indexed in
+`docs/enterprise-suite/MANIFEST.md`, each also published as a live, shareable Artifact
+page at the URL listed there) plus `docs/PRICING.md`, the plain-markdown source of truth
+for pricing/SLA terms.
+
+**Whenever a change to the application would make a claim in one of these documents
+wrong, stale, or incomplete, update the affected document(s) in the same change.**
+`docs/enterprise-suite/MANIFEST.md` has the exact "if you change X, update Y" table and
+the republish instructions (edit the local `.html` file, then use the Artifact tool's
+`publish` action with that file and the document's existing URL, so it updates in place
+rather than creating a duplicate).
+
+This cuts both ways: if `docs/PRICING.md` or the commercial model changes, sweep
+`docs/enterprise-suite/pricing.html`, `executive-brief.html`, and
+`docs/VR_PLATFORM_COMPARISON.md` for now-stale cost claims (e.g. an old "$0 / free"
+framing) before considering the change done.

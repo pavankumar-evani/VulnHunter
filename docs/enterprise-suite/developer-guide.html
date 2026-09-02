@@ -1,0 +1,211 @@
+<title>Developer Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #0b1220; --paper: #f5f7fb; --surface: #ffffff; --surface-2: #edf1f9;
+    --line: #d7deec; --muted: #5b6478; --accent: #2f6fed; --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe; --signal: #1baf7a; --crit: #991b1b; --high: #9a3412;
+    --med: #92400e; --low: #1e40af; --code-bg: #0f1830; --code-text: #d7e2ff;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+      --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+    --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .suitebar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--ink); color: var(--paper); font-size: 0.82rem; }
+  :root[data-theme="dark"] .suitebar, :root:not([data-theme="light"]) .suitebar { background: #060a16; }
+  .suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 600; color: #fff; text-decoration: none; letter-spacing: 0.01em; }
+  .suitebar .sep { opacity: 0.35; } .suitebar .doclabel { opacity: 0.85; } .suitebar .spacer { flex: 1; }
+  .suitebar a.hub { color: #cdd8ff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 20px; padding: 4px 12px; }
+  .suitebar a.hub:hover { border-color: rgba(255,255,255,.6); }
+  .shell { display: flex; max-width: 1320px; margin: 0 auto; }
+  .toc { width: 250px; flex: 0 0 250px; position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow-y: auto; padding: 32px 18px 40px 24px; }
+  .toc-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px 6px; font-weight: 600; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 0.87rem; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--ink); background: var(--surface-2); }
+  .toc a.active { color: var(--accent-deep); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+  main { flex: 1; min-width: 0; padding: 0 40px 80px; max-width: 900px; }
+  .kicker { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-deep); font-weight: 600; margin: 40px 0 10px; }
+  .hero h1 { font-size: 2.5rem; margin: 0 0 14px; }
+  .hero p.lede { font-size: 1.15rem; color: var(--muted); max-width: 70ch; margin: 0 0 8px; }
+  .hero { padding-top: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  section { margin-top: 52px; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; padding-top: 4px; scroll-margin-top: 20px; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.95rem; margin-right: 10px; }
+  h3 { font-size: 1.05rem; margin: 26px 0 8px; scroll-margin-top: 20px; }
+  p { max-width: 72ch; } .section-intro { color: var(--muted); max-width: 72ch; margin-bottom: 18px; }
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 16px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); max-width: 80ch; }
+  .callout.warn { border-color: #f0c869; background: color-mix(in srgb, var(--med) 8%, var(--surface)); }
+  .callout.info { border-color: var(--accent-soft); background: var(--accent-soft); }
+  .callout p { margin: 0; max-width: none; }
+  .callout .label { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 4px; }
+  .callout.warn .label { color: var(--med); } .callout.info .label { color: var(--accent-deep); }
+  .codeblock { background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: 0.8rem; line-height: 1.6; box-shadow: var(--shadow); margin: 14px 0; }
+  .codeblock .c { color: #8fa3d6; }
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .steps { display: flex; flex-direction: column; gap: 0; margin: 18px 0; }
+  .step { display: flex; gap: 16px; padding: 13px 0; border-top: 1px solid var(--line); }
+  .step:first-child { border-top: none; }
+  .step .n { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-deep); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 600; font-size: 0.8rem; }
+  .step h4 { margin: 0 0 3px; font-size: 0.92rem; }
+  .step p { margin: 0; font-size: 0.87rem; color: var(--muted); }
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+  @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } }
+</style>
+
+<div class="suitebar">
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#5b8bf5"/><circle cx="27" cy="27" r="9" fill="none" stroke="#fff" stroke-width="3"/><line x1="34" y1="34" x2="41" y2="41" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
+  <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#structure">01 · Repository structure</a>
+    <a href="#contract">02 · The connector contract</a>
+    <a href="#addconnector">03 · Adding a new connector</a>
+    <a href="#subagents">04 · Subagent conventions</a>
+    <a href="#testing">05 · Testing conventions</a>
+    <a href="#cli">06 · CLI usage</a>
+    <a href="#extension">07 · Extension points</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="kicker">Technical Reference · 7 of 7</div>
+      <h1>Developer Guide</h1>
+      <p class="lede">The building blocks this codebase is actually made of — where things live, the one contract every connector follows, and how to extend the product without breaking its safety guarantees.</p>
+    </div>
+
+    <section id="structure">
+      <h2><span class="num">01</span>Repository structure</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Path</th><th>What lives there</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">dashboard/</td><td>FastAPI app (<code>app.py</code>), auth (<code>auth/rbac.py</code>, <code>sessions.py</code>), data access (<code>data.py</code>), and the SPA (<code>static/js/</code>)</td></tr>
+          <tr><td class="mono">remediation/connectors/</td><td>Every vendor connector — one module per source, uniform contract (§2)</td></tr>
+          <tr><td class="mono">remediation/enrichment/</td><td>KEV/EPSS, PoC enrichment, priority/risk/exposure scoring, AI/ML taxonomy, dedup</td></tr>
+          <tr><td class="mono">remediation/schema/</td><td>The normalized Finding schema documentation — the single source of truth for field names</td></tr>
+          <tr><td class="mono">remediation/output/, live-data/</td><td>Generated artifacts and raw connector exports (gitignored where noted)</td></tr>
+          <tr><td class="mono">.claude/agents/*.md</td><td>Every subagent's prompt + tool-access frontmatter — the actual enforcement point of the safety model</td></tr>
+          <tr><td class="mono">cli/vulnhunter.py</td><td>Headless pipeline runner — the same entry point the dashboard's <code>/run</code> page calls</td></tr>
+          <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group — see §5</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="contract">
+      <h2><span class="num">02</span>The connector contract</h2>
+      <p class="section-intro">Every pull connector — 8 of them today — implements the same small surface, so a reviewer already knows the shape before opening the file:</p>
+      <div class="codeblock"><pre><span class="c"># The pattern every connector follows</span>
+<span class="c">class</span> SomeConnector:
+    <span class="c">def</span> __init__(self, ...credentials..., session=<span class="c">None</span>):
+        self.session = session <span class="c">or</span> requests.Session()  <span class="c"># DI seam for tests</span>
+
+    <span class="c">def</span> test_connection(self):
+        <span class="c">"""Cheapest real authenticated call - no confirm gate needed."""</span>
+
+    <span class="c">def</span> fetch_and_write_csv(self, output_path):
+        <span class="c">"""Real fetch, confirm-gated at the route level, never here."""</span></pre></div>
+      <p>Credentials are always a constructor argument, never a stored setting. A stateful-protocol connector (LDAP, GMP) takes an injectable <code>connection</code>/<code>gmp_client</code> parameter instead of a <code>requests.Session</code> — same seam, different transport.</p>
+    </section>
+
+    <section id="addconnector">
+      <h2><span class="num">03</span>Adding a new connector — the real checklist</h2>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><div><h4>Write the connector module</h4><p><code>remediation/connectors/&lt;name&gt;_connector.py</code> — <code>test_connection()</code> + a fetch method, against the vendor's real, publicly documented API.</p></div></div>
+        <div class="step"><div class="n">2</div><div><h4>Decide the output shape</h4><p>CVE-scoped host source → flatten into <code>tenable_connector.CSV_FIELDNAMES</code> (reuse the existing normalizer). Already-typed posture source → normalize directly to the Finding schema. Asset-only source → the shared asset-inventory shape.</p></div></div>
+        <div class="step"><div class="n">3</div><div><h4>Unit-test against a hand-rolled fake</h4><p>Not the vendor SDK's own mock utilities — a minimal fake object recording calls and returning canned, documentation-shaped responses. Cover: auth header/payload construction, response parsing, the confirm-gate boundary.</p></div></div>
+        <div class="step"><div class="n">4</div><div><h4>Add two dashboard routes</h4><p><code>POST /api/&lt;name&gt;/test-connection</code> (no confirm, <code>rbac.require_admin</code>) and <code>POST /api/&lt;name&gt;/fetch</code> (confirm-gated, returns a <code>preview_only</code> response when unconfirmed).</p></div></div>
+        <div class="step"><div class="n">5</div><div><h4>Wire the frontend</h4><p>Add functions to <code>api.js</code>, a catalog entry to <code>adaptorCatalog.js</code>, a page module under <code>pages/</code>, and a route in <code>app.js</code>'s router table.</p></div></div>
+        <div class="step"><div class="n">6</div><div><h4>Disclose the verification status honestly</h4><p>"Built against public docs, unit-tested against mocked responses, never exercised against a real account" is the default and expected state for a new connector — say so directly in the module docstring and the dashboard page.</p></div></div>
+      </div>
+    </section>
+
+    <section id="subagents">
+      <h2><span class="num">04</span>Subagent conventions</h2>
+      <p class="section-intro">Every subagent is a markdown file with YAML frontmatter declaring its allowed tools. This is the actual enforcement mechanism behind "never executes against real infrastructure" — not a runtime check, a capability the subagent simply doesn't have.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Subagent</th><th>Tools</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">remediation-fixer-windows/-unix</td><td class="mono">Read, Write</td><td>Drafts a playbook; cannot run one — no Bash, no network, no credentials</td></tr>
+          <tr><td class="mono">vuln-scanner</td><td class="mono">Read, Grep, Glob, Bash</td><td>No Edit/Write — physically cannot modify what it's scanning</td></tr>
+          <tr><td class="mono">vuln-triage-reporter</td><td class="mono">Write</td><td>Produces a report only</td></tr>
+          <tr><td class="mono">vuln-fixer</td><td class="mono">Read, Edit, Write, Bash</td><td>New-branch-only git workflow; never commits to <code>main</code></td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout warn"><span class="label">The rule for any new fixer-shaped subagent</span><p>If it drafts a change to real infrastructure config, it gets <code>Read, Write</code> only. This is the one convention in this codebase that is never relaxed for convenience.</p></div>
+    </section>
+
+    <section id="testing">
+      <h2><span class="num">05</span>Testing conventions</h2>
+      <ul>
+        <li><strong>Python:</strong> <code>python -m unittest discover -s tests -p "test_*.py"</code> — one file per module/route group, hand-rolled fakes over vendor mock libraries.</li>
+        <li><strong>JS:</strong> <code>node --check &lt;file&gt;</code> catches syntax errors only — a passing check is necessary, never sufficient. Frontend behavior is verified live in a running browser, not assumed from source reading.</li>
+        <li><strong>CI:</strong> GitHub Actions runs the full Python suite on every push. A clean local pass can still mask an environment-specific failure (see the CLI's own dry-run-ordering bug, fixed after reproducing it in a simulated clean environment) — reproduce, don't assume.</li>
+      </ul>
+    </section>
+
+    <section id="cli">
+      <h2><span class="num">06</span>CLI usage</h2>
+      <div class="codeblock"><pre><span class="c"># Preview only - never calls the API</span>
+python cli/vulnhunter.py /vulnhunt ./target --dry-run
+
+<span class="c"># Real run, explicit spend cap (default $2.00)</span>
+python cli/vulnhunter.py /remediate --generate --max-budget-usd 5.00</pre></div>
+      <p>The dashboard's <code>/run</code> page is a thin UI over this exact same entry point — same dry-run default, same confirm gate, same budget cap.</p>
+    </section>
+
+    <section id="extension">
+      <h2><span class="num">07</span>Extension points</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>To add</th><th>Start here</th></tr></thead>
+        <tbody>
+          <tr><td>A new data source</td><td class="mono">remediation/connectors/ + §3 above</td></tr>
+          <tr><td>A new remediable asset type</td><td class="mono">A new remediation-fixer-* subagent, Read/Write only</td></tr>
+          <tr><td>A new scoring rule</td><td class="mono">remediation/config/priority_rules.yaml (no code change needed)</td></tr>
+          <tr><td>A new dashboard page</td><td class="mono">dashboard/static/js/pages/ + app.js router entry</td></tr>
+          <tr><td>A new finding taxonomy</td><td class="mono">remediation/enrichment/ + normalized-finding-schema.md</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7" target="_blank" rel="noopener" data-suite-link="arch">Architecture &amp; Schema Reference</a> for the full data contract this all builds on.</footer>
+  </main>
+</div>
+
+<script>
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href')));
+  function onScroll() {
+    let idx = 0; const y = window.scrollY + 100;
+    sections.forEach((s, i) => { if (s && s.offsetTop <= y) idx = i; });
+    links.forEach((a, i) => a.classList.toggle('active', i === idx));
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>

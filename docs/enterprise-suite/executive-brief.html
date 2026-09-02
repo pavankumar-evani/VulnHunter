@@ -1,0 +1,242 @@
+<title>VulnHunter Solution Brief</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap');
+  :root {
+    --ink: #0b1220; --paper: #f5f7fb; --surface: #ffffff; --surface-2: #edf1f9;
+    --line: #d7deec; --muted: #5b6478; --accent: #2f6fed; --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe; --signal: #1baf7a; --crit: #991b1b; --high: #9a3412;
+    --med: #92400e; --low: #1e40af;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+    --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+      --med: #fbbf24; --low: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+    --med: #fbbf24; --low: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .suitebar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--ink); color: var(--paper); font-size: 0.82rem; position: relative; z-index: 5; }
+  :root[data-theme="dark"] .suitebar, :root:not([data-theme="light"]) .suitebar { background: #060a16; }
+  .suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 600; color: #fff; text-decoration: none; letter-spacing: 0.01em; }
+  .suitebar .sep { opacity: 0.35; } .suitebar .doclabel { opacity: 0.85; } .suitebar .spacer { flex: 1; }
+  .suitebar a.hub { color: #cdd8ff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 20px; padding: 4px 12px; }
+  .suitebar a.hub:hover { border-color: rgba(255,255,255,.6); }
+
+  /* ---------- Hero ---------- */
+  .hero-wrap { position: relative; overflow: hidden; background: #060a16; color: #eef1fb; padding: 70px 24px 60px; }
+  .hero-art { position: absolute; inset: 0; opacity: 0.55; }
+  .hero-inner { position: relative; max-width: 760px; margin: 0 auto; text-align: center; }
+  .hero-inner .kicker { color: #9db4f5; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.16em; font-weight: 600; margin-bottom: 18px; }
+  .hero-inner h1 { font-size: 3rem; margin: 0 0 20px; line-height: 1.08; }
+  .hero-inner .thesis { font-family: var(--serif); font-size: 1.3rem; color: #cdd8ff; max-width: 60ch; margin: 0 auto 30px; line-height: 1.55; }
+  .hero-stats { display: flex; justify-content: center; gap: 40px; margin-top: 20px; flex-wrap: wrap; }
+  .hero-stat .v { font-family: var(--mono); font-size: 1.6rem; font-weight: 600; color: #fff; }
+  .hero-stat .l { font-size: 0.78rem; color: #97a2c2; margin-top: 2px; }
+  @media (prefers-reduced-motion: no-preference) { .node { animation: pulse 3s ease-in-out infinite; } }
+  @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+  main { max-width: 900px; margin: 0 auto; padding: 0 40px 90px; }
+  section { margin-top: 60px; }
+  h2 { font-size: 1.7rem; margin: 0 0 8px; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 1rem; margin-right: 10px; }
+  h3 { font-size: 1.15rem; margin: 26px 0 8px; }
+  p.body { font-family: var(--serif); font-size: 1.08rem; color: var(--ink); max-width: 68ch; line-height: 1.65; }
+  p.body.muted { color: var(--muted); }
+  p { max-width: 72ch; }
+  .section-intro { color: var(--muted); max-width: 72ch; margin-bottom: 20px; }
+
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin: 24px 0; }
+  .facet { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; box-shadow: var(--shadow); }
+  .facet .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-deep); font-weight: 700; margin-bottom: 8px; }
+  .facet h4 { margin: 0 0 8px; font-size: 1.05rem; }
+  .facet p { margin: 0; font-size: 0.92rem; color: var(--muted); max-width: none; }
+  .facet blockquote { font-family: var(--serif); font-style: italic; font-size: 0.95rem; color: var(--ink); border-left: 3px solid var(--accent); padding-left: 14px; margin: 10px 0 0; }
+
+  .personas { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 22px 0; }
+  .persona { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 10px; text-align: center; box-shadow: var(--shadow); }
+  .persona .ic { font-size: 1.4rem; }
+  .persona .t { font-size: 0.76rem; font-weight: 600; margin-top: 6px; }
+  .persona .d { font-size: 0.68rem; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; background: var(--surface); }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.vh { background: color-mix(in srgb, var(--accent) 6%, transparent); font-weight: 500; }
+
+  .strengthsgaps { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 20px 0; }
+  .sg { border-radius: 12px; padding: 18px 20px; }
+  .sg.good { background: color-mix(in srgb, var(--signal) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--signal) 30%, var(--line)); }
+  .sg.honest { background: color-mix(in srgb, var(--med) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--med) 30%, var(--line)); }
+  .sg .label { font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; display: block; }
+  .sg.good .label { color: var(--signal); } .sg.honest .label { color: var(--med); }
+  .sg ul { margin: 0; padding-left: 18px; font-size: 0.88rem; }
+  .sg li { margin-bottom: 6px; }
+
+  .callout { border-radius: 10px; padding: 16px 20px; margin: 18px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); max-width: 80ch; }
+  .callout.warn { border-color: #f0c869; background: color-mix(in srgb, var(--med) 8%, var(--surface)); }
+  .callout .label { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 4px; color: var(--med); }
+  .callout p { margin: 0; max-width: none; }
+
+  .suitegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+  .sdoc { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; text-decoration: none; color: var(--ink); box-shadow: var(--shadow); }
+  .sdoc:hover { border-color: var(--accent); }
+  .sdoc .n { font-family: var(--mono); font-size: 0.72rem; color: var(--accent-deep); }
+  .sdoc .t { font-weight: 600; font-size: 0.92rem; margin-top: 2px; }
+
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+  @media (max-width: 860px) {
+    main { padding: 0 20px 60px; }
+    .twocol, .strengthsgaps, .suitegrid { grid-template-columns: 1fr; }
+    .personas { grid-template-columns: repeat(2, 1fr); }
+    .hero-inner h1 { font-size: 2.1rem; }
+  }
+</style>
+
+<div class="suitebar">
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#5b8bf5"/><circle cx="27" cy="27" r="9" fill="none" stroke="#fff" stroke-width="3"/><line x1="34" y1="34" x2="41" y2="41" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
+  <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
+</div>
+
+<div class="hero-wrap">
+  <svg class="hero-art" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <g stroke="#3f5fb0" stroke-width="1" fill="none" stroke-opacity="0.5">
+      <circle cx="500" cy="230" r="70"/><circle cx="500" cy="230" r="130"/><circle cx="500" cy="230" r="200"/><circle cx="500" cy="230" r="280"/>
+    </g>
+    <g stroke="#4d84f0" stroke-opacity="0.35">
+      <line x1="180" y1="90" x2="500" y2="230"/><line x1="860" y1="120" x2="500" y2="230"/>
+      <line x1="120" y1="380" x2="500" y2="230"/><line x1="880" y1="360" x2="500" y2="230"/>
+      <line x1="500" y1="30" x2="500" y2="230"/><line x1="320" y1="420" x2="500" y2="230"/>
+    </g>
+    <g fill="#7ea6f5" class="node">
+      <circle cx="180" cy="90" r="3.2"/><circle cx="860" cy="120" r="3.2"/><circle cx="120" cy="380" r="3.2"/>
+      <circle cx="880" cy="360" r="3.2"/><circle cx="500" cy="30" r="3.2"/><circle cx="320" cy="420" r="3.2"/>
+    </g>
+  </svg>
+  <div class="hero-inner">
+    <div class="kicker">Solution Brief · Enterprise Documentation Suite</div>
+    <h1>Vulnerability management that closes the loop, not just files the report.</h1>
+    <p class="thesis">Most tooling stops at "here's what's wrong." VulnHunter goes from a raw finding — wherever it came from — to a scored, threat-intel-aware, reviewable fix, with a human decision point at every step that touches real infrastructure.</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="v">99.9%</div><div class="l">uptime SLA, Professional tier</div></div>
+      <div class="hero-stat"><div class="v">17</div><div class="l">asset types normalized</div></div>
+      <div class="hero-stat"><div class="v">2</div><div class="l">live-verified threat-intel feeds</div></div>
+    </div>
+  </div>
+</div>
+
+<main>
+  <section id="problem">
+    <h2><span class="num">01</span>The problem — two versions of one gap</h2>
+    <div class="twocol">
+      <div class="facet">
+        <div class="eyebrow">Code</div>
+        <h4>Reports nobody reads end-to-end</h4>
+        <p>Static analysis tools produce findings. Finding a vulnerability and actually fixing it are two different jobs — most tooling stops at the report, leaving the harder half to whoever picks up the ticket.</p>
+      </div>
+      <div class="facet">
+        <div class="eyebrow">Infrastructure</div>
+        <h4>Incompatible sources, incompatible assets</h4>
+        <p>Tenable-style CVE/CVSS host findings, Armis-style device-risk findings for what agents can't reach, and analyst threat intel — landing on assets as different as domain controllers and firewalls. Turning any of it into a safe fix is almost entirely manual, and that's exactly where backlogs form.</p>
+      </div>
+    </div>
+    <blockquote class="facet" style="margin-top:0">
+      <p class="body muted" style="font-style:italic">"We have vulnerabilities detected from Tenable, manual threat intel, and Armis, and we have to remediate them across Windows servers, end-user devices, Unix servers, network routing/switching, and network security devices — instead of manual remediation effort, is there an AI-based remediation solution that can help?"</p>
+    </blockquote>
+  </section>
+
+  <section id="solution">
+    <h2><span class="num">02</span>The solution — one differentiator</h2>
+    <p class="body">Closing the loop <strong>scan → triage → fix → branch/PR</strong>, with a human decision point at every step that touches real infrastructure — not a linter wrapper with an AI narrating the output. Every source normalizes into one schema; every CVE-scoped finding is checked against live exploitation data; every eligible finding gets a real, reviewable fix artifact; nothing runs against real infrastructure without a person saying yes.</p>
+  </section>
+
+  <section id="who">
+    <h2><span class="num">03</span>Who it's for</h2>
+    <div class="personas">
+      <div class="persona"><div class="ic">🛡️</div><div class="t">AppSec / Security</div><div class="d">Fast baseline scan + auto-fix PR</div></div>
+      <div class="persona"><div class="ic">📊</div><div class="t">VM / SOC teams</div><div class="d">Raw backlog → prioritized queue</div></div>
+      <div class="persona"><div class="ic">⚙️</div><div class="t">Platform / DevOps</div><div class="d">Playbooks as a Tower/AWX starting point</div></div>
+      <div class="persona"><div class="ic">🏢</div><div class="t">Small &amp; mid-market</div><div class="d">A real scanner (OpenVAS/GVM) when there's no existing one</div></div>
+      <div class="persona"><div class="ic">🧑‍💻</div><div class="t">Developers</div><div class="d">A documented pattern to extend</div></div>
+    </div>
+  </section>
+
+  <section id="position">
+    <h2><span class="num">04</span>Competitive positioning</h2>
+    <p class="section-intro">Compared against ServiceNow Vulnerability Response and four independent vulnerability-management platforms, on real, independently-sourced figures — not the vendor's own marketing.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Platform</th><th>List price / year</th><th>Headline differentiator</th></tr></thead>
+        <tbody>
+          <tr><td>ServiceNow VR (Standard → SIR Enterprise)</td><td class="mono">$11,000 – $24,500/fulfilled-user; real deployments $40K–$120K</td><td>ITSM-native, chained approval workflow</td></tr>
+          <tr><td>Nucleus Security</td><td class="mono">—</td><td>200+ connectors, fastest onboarding</td></tr>
+          <tr><td>DefectDojo (Pro)</td><td class="mono">$300/mo</td><td>~200+ integrations, dedup is the headline feature</td></tr>
+          <tr><td>Brinqa</td><td class="mono">—</td><td>260+ sources, Cyber Risk Graph → business context</td></tr>
+          <tr><td>ArmorCode</td><td class="mono">$4,500/unit (AWS Marketplace)</td><td>320–350+ integrations, no-code playbooks</td></tr>
+          <tr><td class="vh">VulnHunter</td><td class="vh mono">$12,000 – $85,000+/year</td><td class="vh">Live KEV+EPSS enrichment, single dashboard, generated Ansible playbooks, real support SLA</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="strengthsgaps">
+      <div class="sg good"><span class="label">Real strengths, shipped today</span>
+        <ul>
+          <li>Live-verified CISA KEV + FIRST.org EPSS enrichment — the two integrations confirmed against a real endpoint, not just documentation</li>
+          <li>One dashboard, not a chained multi-screen workflow</li>
+          <li>Risk Score (Impact × Likelihood), Ansible playbook generation</li>
+          <li>Professional tier lists at $38,000/year with a real SLA, well below ServiceNow VR's $40K–$120K/year real-world deployment cost</li>
+          <li>Real, credited support SLA at every paid tier — see the Pricing &amp; Commercial Positioning document</li>
+        </ul>
+      </div>
+      <div class="sg honest"><span class="label">Confirmed real gaps</span>
+        <ul>
+          <li>~12 real connectors vs. 200–350+ per named competitor</li>
+          <li>Most vendor connectors never exercised against a real live account</li>
+          <li>No BitSight/BishopFox-class external-risk connector yet</li>
+          <li>Support operations (ticketing, on-call, status page) still being stood up to honor the SLA commitment at scale</li>
+        </ul>
+      </div>
+    </div>
+    <p class="section-intro" style="margin-top:4px">Not a fully apples-to-apples comparison — a disclosed, deliberate choice over the alternative of quietly matching feature-count claims that couldn't be verified.</p>
+  </section>
+
+  <section id="trust">
+    <h2><span class="num">05</span>The trust differentiator — the execution boundary</h2>
+    <div class="callout warn"><span class="label">By construction, not by policy</span><p>"Nothing in this repository ever executes against real infrastructure automatically." The subagents that draft fixes have Read/Write tool access only — no Bash, no network, no credentials. Every playbook is a reviewable artifact for a human, or your own change-managed automation, to run. This is auditable by reading three lines of YAML frontmatter, not by trusting a policy document.</p></div>
+  </section>
+
+  <section id="suite">
+    <h2><span class="num">06</span>Go deeper</h2>
+    <p class="section-intro">The rest of this documentation suite, for technical evaluators and developers:</p>
+    <div class="suitegrid">
+      <a class="sdoc" href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7"><div class="n">01</div><div class="t">Architecture &amp; Schema Reference</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/37848de1-aed0-4e71-b903-0cf2780dc52b"><div class="n">02</div><div class="t">Vulnerability Finding Engine</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46"><div class="n">03</div><div class="t">Remediation Engine &amp; Workflows</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c"><div class="n">04</div><div class="t">Connectors &amp; Adaptors Catalog</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c"><div class="n">05</div><div class="t">RBAC, Multi-Tenancy &amp; Governance</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f"><div class="n">06</div><div class="t">Page-by-Page Reference</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4"><div class="n">07</div><div class="t">Developer Guide</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/6fc9ea41-5cc3-4934-8e2a-236a252b1bd1"><div class="n">08</div><div class="t">Pricing &amp; Commercial Positioning</div></a>
+      <a class="sdoc" href="https://claude.ai/code/artifact/fc05a1c0-7664-4ce1-88a2-86bec7eae328"><div class="n">09</div><div class="t">Proof-of-Concept Methodology</div></a>
+    </div>
+  </section>
+
+  <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Built during an internal Deloitte Claude Code hackathon; every claim above is drawn from the current, real codebase — not a target-state roadmap.</footer>
+</main>

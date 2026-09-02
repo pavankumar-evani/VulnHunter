@@ -106,10 +106,13 @@ Real strengths already shipped (from the codebase, not aspiration):
   internal/external-facing asset classification on the Risk Management page — the same
   "link findings to business context" idea Brinqa leads with, already present in some
   form.
-- **Zero license cost** — internal tooling, no per-seat or per-device fee. Against VR's
-  real $40K–$120K/year benchmark or even DefectDojo Pro's $3,600/year, VulnHunter is the
-  cheapest option by construction — though this isn't a fully apples-to-apples
-  comparison, since it's not a supported commercial product with vendor SLAs.
+- **Priced well below the incumbent, with a real SLA** — VulnHunter is now a commercial
+  product (see [PRICING.md](PRICING.md)): Professional tier lists at $38,000/year
+  against VR's real $40K–$120K/year benchmark, and includes a credited support SLA
+  (99.9% uptime, 4-hour Sev1 response) rather than no formal support commitment at all.
+  Still not a fully apples-to-apples comparison — VR's pricing reflects a mature,
+  decades-old support organization VulnHunter's is not yet built out to match (see
+  PRICING.md §7's launch-readiness checklist).
 - **Remediation-plan/playbook generation** (Ansible) — directionally similar to
   ArmorCode's playbook pitch, though it generates a reviewable script for a human to run
   rather than fully no-code point-and-click automation.
@@ -175,9 +178,11 @@ assumption):
 ## 6. Recommendation
 
 Don't try to out-feature all four alternatives at once. VulnHunter's real, already-true
-advantages are **cost** ($0 internal vs. a real $40K–$120K/year ServiceNow VR benchmark)
-and **simplicity** (one dashboard vs. VR's workflow engine) — both directly answer
-pavane's original complaint and don't need new work to be true today. Phase 1 item 1
+advantages are **price** ($38,000/year Professional tier vs. a real $40K–$120K/year
+ServiceNow VR benchmark, with a comparable SLA) and **simplicity** (one dashboard vs.
+VR's workflow engine) — both directly answer pavane's original complaint and don't need
+new product work to be true today, though the SLA does need real support operations
+behind it before it's sold (see [PRICING.md](PRICING.md) §7). Phase 1 item 1
 (deduplication) and Phase 2 (Prisma Cloud/XSIAM, plus Tenable/Qualys/Infoblox/Axonius/
 Active Directory dashboard forms) are both done now. The highest-leverage next move is
 Phase 1, item 2 (live-verifying Tenable/ServiceNow against a real sandbox tenant): it's

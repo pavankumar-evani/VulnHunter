@@ -1,0 +1,188 @@
+<title>Connectors &amp; Adaptors Catalog</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #0b1220; --paper: #f5f7fb; --surface: #ffffff; --surface-2: #edf1f9;
+    --line: #d7deec; --muted: #5b6478; --accent: #2f6fed; --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe; --signal: #1baf7a; --crit: #991b1b; --high: #9a3412;
+    --med: #92400e; --low: #1e40af; --code-bg: #0f1830; --code-text: #d7e2ff;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+      --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+    --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .suitebar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--ink); color: var(--paper); font-size: 0.82rem; }
+  :root[data-theme="dark"] .suitebar, :root:not([data-theme="light"]) .suitebar { background: #060a16; }
+  .suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 600; color: #fff; text-decoration: none; letter-spacing: 0.01em; }
+  .suitebar .sep { opacity: 0.35; } .suitebar .doclabel { opacity: 0.85; } .suitebar .spacer { flex: 1; }
+  .suitebar a.hub { color: #cdd8ff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 20px; padding: 4px 12px; }
+  .suitebar a.hub:hover { border-color: rgba(255,255,255,.6); }
+  .shell { display: flex; max-width: 1320px; margin: 0 auto; }
+  .toc { width: 250px; flex: 0 0 250px; position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow-y: auto; padding: 32px 18px 40px 24px; }
+  .toc-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px 6px; font-weight: 600; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 0.87rem; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--ink); background: var(--surface-2); }
+  .toc a.active { color: var(--accent-deep); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+  main { flex: 1; min-width: 0; padding: 0 40px 80px; max-width: 940px; }
+  .kicker { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-deep); font-weight: 600; margin: 40px 0 10px; }
+  .hero h1 { font-size: 2.5rem; margin: 0 0 14px; }
+  .hero p.lede { font-size: 1.15rem; color: var(--muted); max-width: 70ch; margin: 0 0 8px; }
+  .hero { padding-top: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  section { margin-top: 52px; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; padding-top: 4px; scroll-margin-top: 20px; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.95rem; margin-right: 10px; }
+  h3 { font-size: 1.1rem; margin: 28px 0 8px; scroll-margin-top: 20px; }
+  p { max-width: 72ch; } .section-intro { color: var(--muted); max-width: 72ch; margin-bottom: 20px; }
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 18px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); max-width: 82ch; }
+  .callout.warn { border-color: #f0c869; background: color-mix(in srgb, var(--med) 8%, var(--surface)); }
+  .callout.info { border-color: var(--accent-soft); background: var(--accent-soft); }
+  .callout p { margin: 0; max-width: none; }
+  .callout .label { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 4px; }
+  .callout.warn .label { color: var(--med); } .callout.info .label { color: var(--accent-deep); }
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .chip { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 2px 9px; border-radius: 20px; font-family: var(--mono); letter-spacing: 0.01em; white-space: nowrap; }
+  .chip.live { background: color-mix(in srgb, var(--signal) 18%, transparent); color: var(--signal); }
+  .chip.ref  { background: var(--surface-2); color: var(--muted); }
+  .chip.pull { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-deep); }
+  .chip.push { background: color-mix(in srgb, var(--high) 15%, transparent); color: var(--high); }
+  .chip.scan { background: color-mix(in srgb, #4a3aa7 15%, transparent); color: #4a3aa7; }
+  :root:not([data-theme="light"]) .chip.scan, :root[data-theme="dark"] .chip.scan { background: rgba(160,140,255,.18); color: #b7a8ff; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0; }
+  .catcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
+  .catcard h4 { margin: 0 0 4px; font-size: 0.88rem; }
+  .catcard .count { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+  @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } .grid3 { grid-template-columns: 1fr; } table { font-size: 0.8rem; } }
+</style>
+
+<div class="suitebar">
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#5b8bf5"/><circle cx="27" cy="27" r="9" fill="none" stroke="#fff" stroke-width="3"/><line x1="34" y1="34" x2="41" y2="41" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
+  <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#hub">01 · The Adaptors hub</a>
+    <a href="#live">02 · Live connectors</a>
+    <a href="#push">03 · Push connectors</a>
+    <a href="#reference">04 · Reference catalog</a>
+    <a href="#credentials">05 · Credential handling</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="kicker">Technical Reference · 4 of 7</div>
+      <h1>Connectors &amp; Adaptors Catalog</h1>
+      <p class="lede">One consolidated hub for every system VulnHunter can pull from, push to, or scan directly — organized honestly by what's actually working versus what's researched and ready to build next.</p>
+    </div>
+
+    <section id="hub">
+      <h2><span class="num">01</span>The Adaptors hub</h2>
+      <p class="section-intro">Every integration lives in one place (<code>/adaptors</code>), filterable by category, with a two-tier honesty label instead of a single "supported" checkmark:</p>
+      <div class="grid3">
+        <div class="catcard"><h4><span class="chip live">live</span></h4><p class="count" style="margin-top:6px">A real, working connector class + a real dashboard page — Test Connection, Fetch/Send, or (for the scan engine) the full scan lifecycle.</p></div>
+        <div class="catcard"><h4><span class="chip ref">reference</span></h4><p class="count" style="margin-top:6px">Real, researched facts about the vendor's actual API — auth model, real endpoint shape, what data would flow — with no working code behind it yet.</p></div>
+        <div class="catcard"><h4>Categories</h4><p class="count" style="margin-top:6px">Identity/IAM · Ticketing/SOAR · SIEM/SOAR · Vulnerability Scanners · AppSec (SAST/SCA) · Cloud Security (CNAPP) · XDR/EDR · External Risk/ASM · Threat Intel · Network Security Mgmt · Asset Discovery/IPAM · Communication/On-Call</p></div>
+      </div>
+    </section>
+
+    <section id="live">
+      <h2><span class="num">02</span>Live connectors — pull &amp; scan</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Connector</th><th>Kind</th><th>Auth model</th><th>What it produces</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Tenable.io</strong></td><td><span class="chip pull">pull</span></td><td><code>X-ApiKeys</code> header (access + secret key)</td><td>Raw host-vulnerability export → <code>/remediate</code></td></tr>
+            <tr><td><strong>Qualys VMDR</strong></td><td><span class="chip pull">pull</span></td><td>Basic Auth + platform URL (region-specific)</td><td>Same CSV shape as Tenable — zero normalizer changes</td></tr>
+            <tr><td><strong>OpenVAS / Greenbone (GVM)</strong></td><td><span class="chip scan">scan engine</span></td><td>GMP protocol, username + password</td><td>Launches a real scan, then the same Tenable-shaped export</td></tr>
+            <tr><td><strong>Prisma Cloud</strong></td><td><span class="chip pull">pull</span></td><td>Access key/secret exchanged for a session token</td><td>Cloud posture/compliance alerts, already schema-normalized</td></tr>
+            <tr><td><strong>Cortex XSIAM</strong></td><td><span class="chip pull">pull</span></td><td><code>x-xdr-auth-id</code> + <code>Authorization</code> headers</td><td>Correlated incidents, already schema-normalized</td></tr>
+            <tr><td><strong>Infoblox</strong></td><td><span class="chip pull">pull</span></td><td>Basic Auth against the WAPI</td><td>DNS host records → real ip/mac into asset inventory</td></tr>
+            <tr><td><strong>Axonius</strong></td><td><span class="chip pull">pull</span></td><td>API key + API secret headers</td><td>Aggregated device records → asset inventory</td></tr>
+            <tr><td><strong>Active Directory</strong></td><td><span class="chip pull">pull</span></td><td>LDAP simple bind (or anonymous)</td><td>Computer objects → asset inventory (no ip/mac — AD doesn't carry it)</td></tr>
+            <tr><td><strong>CrowdStrike Falcon</strong></td><td><span class="chip pull">pull</span></td><td>OAuth2 client-credentials</td><td>EDR/XDR alerts (CLI-driven ingestion today, no dashboard form yet)</td></tr>
+            <tr><td><strong>Armis</strong></td><td><span class="chip pull">pull</span></td><td>CLI ingestion</td><td>Device-risk/IoT-OT findings, agentless-reachable assets</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="push">
+      <h2><span class="num">03</span>Push connectors — findings out</h2>
+      <p class="section-intro">Every push connector shares the same preview-then-confirm shape: build the exact real payload, show it, require an explicit confirm before anything is actually sent — no accidental ticket storms.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Connector</th><th>Auth model</th><th>Creates</th></tr></thead>
+          <tbody>
+            <tr><td><strong>ServiceNow</strong></td><td>Basic Auth (instance + username + password)</td><td>An Incident per finding via the Table API, idempotently</td></tr>
+            <tr><td><strong>Jira Cloud</strong></td><td>API token (Basic Auth, token as password) + site URL + project key</td><td>An Issue per finding via REST API v3, idempotently (label-keyed)</td></tr>
+            <tr><td><strong>Splunk</strong></td><td>HEC token (<code>Authorization: Splunk &lt;token&gt;</code>)</td><td>One HTTP Event Collector event per finding</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="reference">
+      <h2><span class="num">04</span>Reference catalog</h2>
+      <p class="section-intro">Real, cited facts about each vendor's actual API — the honest "next stage earlier" than a live connector, not a vague roadmap bullet. Representative examples, by category:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Category</th><th>Examples cataloged</th></tr></thead>
+          <tbody>
+            <tr><td>AppSec (SAST/SCA)</td><td>Black Duck (Synopsys), Polaris (Synopsys)</td></tr>
+            <tr><td>External Risk / ASM</td><td>BitSight, BishopFox</td></tr>
+            <tr><td>SIEM/SOAR (additional)</td><td>Microsoft Sentinel, IBM QRadar</td></tr>
+            <tr><td>XDR/EDR (additional)</td><td>Microsoft Defender</td></tr>
+            <tr><td>Threat Intelligence (commercial)</td><td>Recorded Future, Flashpoint, DarkOwl, KELA — named explicitly rather than self-building dark-web crawling, a different risk category entirely</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info"><span class="label">Why not just build all of them</span><p>The connector pattern is proven; adding another named product is "the same pattern again, gated on picking one and having real API access to verify against" — not a capability gap. Shipping a plausible-looking connector nobody has run against a real account isn't a shortcut worth taking.</p></div>
+    </section>
+
+    <section id="credentials">
+      <h2><span class="num">05</span>Credential handling — the one rule that never changes</h2>
+      <div class="callout warn"><span class="label">Per-request, never stored, no exceptions</span><p>Every connector page asks for real credentials fresh, on every Test Connection or Fetch/Send/Scan action. Nothing is persisted server-side. There is no vault, no saved-connection list, no "remember this account" option anywhere in this catalog.</p></div>
+    </section>
+
+    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> or <a href="https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4" target="_blank" rel="noopener" data-suite-link="developer">Developer Guide</a>.</footer>
+  </main>
+</div>
+
+<script>
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href')));
+  function onScroll() {
+    let idx = 0; const y = window.scrollY + 100;
+    sections.forEach((s, i) => { if (s && s.offsetTop <= y) idx = i; });
+    links.forEach((a, i) => a.classList.toggle('active', i === idx));
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>

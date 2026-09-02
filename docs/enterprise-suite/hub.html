@@ -1,0 +1,116 @@
+<title>VulnHunter Documentation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap');
+  :root {
+    --ink: #0b1220; --paper: #f5f7fb; --surface: #ffffff; --surface-2: #edf1f9;
+    --line: #d7deec; --muted: #5b6478; --accent: #2f6fed; --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe; --signal: #1baf7a;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+    --serif: "Source Serif 4", Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); text-decoration: none; }
+  code, .mono { font-family: var(--mono); }
+
+  .hero-wrap { position: relative; overflow: hidden; background: #060a16; color: #eef1fb; padding: 64px 24px 56px; text-align: center; }
+  .hero-art { position: absolute; inset: 0; opacity: 0.5; }
+  .hero-inner { position: relative; max-width: 720px; margin: 0 auto; }
+  .brandmark { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 22px; }
+  .brandmark .name { font-weight: 700; font-size: 1.1rem; letter-spacing: 0.01em; }
+  .hero-inner h1 { font-size: 2.5rem; margin: 0 0 14px; line-height: 1.1; }
+  .hero-inner p { font-family: var(--serif); font-size: 1.15rem; color: #cdd8ff; max-width: 55ch; margin: 0 auto; line-height: 1.6; }
+  @media (prefers-reduced-motion: no-preference) { .node { animation: pulse 3s ease-in-out infinite; } }
+  @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 56px 32px 90px; }
+  .audience { margin-bottom: 54px; }
+  .audience-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .audience-head h2 { font-size: 1.3rem; margin: 0; }
+  .audience-head .n { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); }
+  .doc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .doc-grid.single { grid-template-columns: 1fr; max-width: 640px; }
+  .doccard { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); transition: transform 0.12s ease, border-color 0.12s ease; }
+  .doccard:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .doccard .ic { font-size: 1.5rem; margin-bottom: 10px; display: block; }
+  .doccard h3 { font-size: 1rem; margin: 0 0 6px; color: var(--ink); }
+  .doccard p { font-size: 0.85rem; color: var(--muted); margin: 0; }
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 20px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+  @media (max-width: 900px) { .doc-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .doc-grid { grid-template-columns: 1fr; } .hero-inner h1 { font-size: 1.9rem; } }
+</style>
+
+<div class="hero-wrap">
+  <svg class="hero-art" viewBox="0 0 1000 460" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <g stroke="#3f5fb0" stroke-width="1" fill="none" stroke-opacity="0.5">
+      <circle cx="500" cy="210" r="70"/><circle cx="500" cy="210" r="130"/><circle cx="500" cy="210" r="200"/><circle cx="500" cy="210" r="280"/>
+    </g>
+    <g stroke="#4d84f0" stroke-opacity="0.35">
+      <line x1="180" y1="80" x2="500" y2="210"/><line x1="860" y1="110" x2="500" y2="210"/>
+      <line x1="120" y1="350" x2="500" y2="210"/><line x1="880" y1="330" x2="500" y2="210"/>
+      <line x1="500" y1="20" x2="500" y2="210"/><line x1="320" y1="390" x2="500" y2="210"/>
+    </g>
+    <g fill="#7ea6f5" class="node">
+      <circle cx="180" cy="80" r="3.2"/><circle cx="860" cy="110" r="3.2"/><circle cx="120" cy="350" r="3.2"/>
+      <circle cx="880" cy="330" r="3.2"/><circle cx="500" cy="20" r="3.2"/><circle cx="320" cy="390" r="3.2"/>
+    </g>
+  </svg>
+  <div class="hero-inner">
+    <div class="brandmark">
+      <svg width="26" height="26" viewBox="0 0 64 64"><path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#5b8bf5"/><circle cx="27" cy="27" r="9" fill="none" stroke="#fff" stroke-width="3"/><line x1="34" y1="34" x2="41" y2="41" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>
+      <span class="name">VulnHunter</span>
+    </div>
+    <h1>Enterprise Documentation</h1>
+    <p>Ten focused documents — one for each audience and each question — covering the problem, the architecture, every engine and page, and the commercial questions that come next.</p>
+  </div>
+</div>
+
+<main>
+  <div class="audience">
+    <div class="audience-head"><h2>For enterprise evaluators</h2><span class="n">01</span></div>
+    <div class="doc-grid single">
+      <a class="doccard" href="https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b">
+        <span class="ic">🎯</span><h3>Solution Brief</h3>
+        <p>The problem, the solution, who it's for, and honest competitive positioning against ServiceNow VR and peers.</p>
+      </a>
+    </div>
+  </div>
+
+  <div class="audience">
+    <div class="audience-head"><h2>Technical reference</h2><span class="n">02 – 08</span></div>
+    <div class="doc-grid">
+      <a class="doccard" href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7"><span class="ic">🏗️</span><h3>Architecture &amp; Schema Reference</h3><p>Request lifecycle, storage model, the Finding schema, the pipeline, security architecture.</p></a>
+      <a class="doccard" href="https://claude.ai/code/artifact/37848de1-aed0-4e71-b903-0cf2780dc52b"><span class="ic">🔍</span><h3>Vulnerability Finding Engine</h3><p>Source taxonomy, the connector pattern, the OpenVAS/GVM scan engine, live threat-intel enrichment.</p></a>
+      <a class="doccard" href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46"><span class="ic">🛠️</span><h3>Remediation Engine &amp; Workflows</h3><p>The seven-stage lifecycle, playbooks, approvals vs. exceptions, the execution boundary.</p></a>
+      <a class="doccard" href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c"><span class="ic">🔌</span><h3>Connectors &amp; Adaptors Catalog</h3><p>Every live and reference connector, push vs. pull, credential handling.</p></a>
+      <a class="doccard" href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c"><span class="ic">🔐</span><h3>RBAC, Multi-Tenancy &amp; Governance</h3><p>The real role model, an honest look at the MSSP tenant view, policy config, compliance mapping.</p></a>
+      <a class="doccard" href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f"><span class="ic">🗺️</span><h3>Page-by-Page Reference</h3><p>Every one of ~50 routes — purpose and the real fields each page shows.</p></a>
+      <a class="doccard" href="https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4"><span class="ic">🧩</span><h3>Developer Guide</h3><p>Repo structure, the connector contract, subagent conventions, testing, extension points.</p></a>
+    </div>
+  </div>
+
+  <div class="audience">
+    <div class="audience-head"><h2>Business planning</h2><span class="n">09 – 10</span></div>
+    <div class="doc-grid">
+      <a class="doccard" href="https://claude.ai/code/artifact/fc05a1c0-7664-4ce1-88a2-86bec7eae328"><span class="ic">🧪</span><h3>Proof-of-Concept Methodology</h3><p>A structured, time-boxed evaluation template — phases, success criteria, roles.</p></a>
+      <a class="doccard" href="https://claude.ai/code/artifact/6fc9ea41-5cc3-4934-8e2a-236a252b1bd1"><span class="ic">💠</span><h3>Pricing &amp; Commercial Positioning</h3><p>What actually costs money, TCO context, illustrative deployment models.</p></a>
+    </div>
+  </div>
+
+  <footer class="docfoot">Every document reflects the current, real VulnHunter codebase — verification status and known limitations are disclosed inline throughout, not saved for a footnote.</footer>
+</main>

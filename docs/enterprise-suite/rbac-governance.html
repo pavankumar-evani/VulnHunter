@@ -1,0 +1,174 @@
+<title>RBAC, Multi-Tenancy &amp; Governance</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #0b1220; --paper: #f5f7fb; --surface: #ffffff; --surface-2: #edf1f9;
+    --line: #d7deec; --muted: #5b6478; --accent: #2f6fed; --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe; --signal: #1baf7a; --crit: #991b1b; --high: #9a3412;
+    --med: #92400e; --low: #1e40af; --code-bg: #0f1830; --code-text: #d7e2ff;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+      --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+    --med: #fbbf24; --low: #60a5fa; --code-bg: #060a16; --code-text: #cfe0ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .suitebar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--ink); color: var(--paper); font-size: 0.82rem; }
+  :root[data-theme="dark"] .suitebar, :root:not([data-theme="light"]) .suitebar { background: #060a16; }
+  .suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 600; color: #fff; text-decoration: none; letter-spacing: 0.01em; }
+  .suitebar .sep { opacity: 0.35; } .suitebar .doclabel { opacity: 0.85; } .suitebar .spacer { flex: 1; }
+  .suitebar a.hub { color: #cdd8ff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 20px; padding: 4px 12px; }
+  .suitebar a.hub:hover { border-color: rgba(255,255,255,.6); }
+  .shell { display: flex; max-width: 1320px; margin: 0 auto; }
+  .toc { width: 250px; flex: 0 0 250px; position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow-y: auto; padding: 32px 18px 40px 24px; }
+  .toc-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px 6px; font-weight: 600; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 0.87rem; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--ink); background: var(--surface-2); }
+  .toc a.active { color: var(--accent-deep); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+  main { flex: 1; min-width: 0; padding: 0 40px 80px; max-width: 900px; }
+  .kicker { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-deep); font-weight: 600; margin: 40px 0 10px; }
+  .hero h1 { font-size: 2.5rem; margin: 0 0 14px; }
+  .hero p.lede { font-size: 1.15rem; color: var(--muted); max-width: 70ch; margin: 0 0 8px; }
+  .hero { padding-top: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  section { margin-top: 52px; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; padding-top: 4px; scroll-margin-top: 20px; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.95rem; margin-right: 10px; }
+  h3 { font-size: 1.1rem; margin: 28px 0 8px; scroll-margin-top: 20px; }
+  p { max-width: 72ch; } .section-intro { color: var(--muted); max-width: 72ch; margin-bottom: 20px; }
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 18px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); max-width: 82ch; }
+  .callout.warn { border-color: #f0c869; background: color-mix(in srgb, var(--med) 8%, var(--surface)); }
+  .callout.info { border-color: var(--accent-soft); background: var(--accent-soft); }
+  .callout.crit { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 8%, var(--surface)); }
+  .callout p { margin: 0; max-width: none; }
+  .callout .label { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 4px; }
+  .callout.warn .label { color: var(--med); } .callout.info .label { color: var(--accent-deep); } .callout.crit .label { color: var(--crit); }
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.87rem; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .card h4 { margin: 0 0 6px; font-size: 0.95rem; } .card p { margin: 0; font-size: 0.87rem; color: var(--muted); }
+  .disclaimer { border: 2px solid var(--crit); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); border-radius: 12px; padding: 20px 22px; margin: 20px 0; max-width: 82ch; }
+  .disclaimer .label { color: var(--crit); font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 8px; }
+  .disclaimer p { margin: 0 0 8px; max-width: none; font-size: 0.92rem; }
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+  @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } .grid2 { grid-template-columns: 1fr; } }
+</style>
+
+<div class="suitebar">
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 3.5 L57 13.5 V31 C57 46.5 46.5 57.5 32 61 C17.5 57.5 7 46.5 7 31 V13.5 Z" fill="#5b8bf5"/><circle cx="27" cy="27" r="9" fill="none" stroke="#fff" stroke-width="3"/><line x1="34" y1="34" x2="41" y2="41" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
+  <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
+</div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#rbac">01 · The real role model</a>
+    <a href="#tenant">02 · The MSSP tenant view</a>
+    <a href="#audit">03 · Audit trail</a>
+    <a href="#governance">04 · Policy &amp; governance config</a>
+    <a href="#compliance">05 · Standards &amp; compliance mapping</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="kicker">Technical Reference · 5 of 7</div>
+      <h1>RBAC, Multi-Tenancy &amp; Governance</h1>
+      <p class="lede">Exactly what today's access model enforces, exactly what the MSSP tenant view is and isn't, and every policy an admin can shape without touching code.</p>
+    </div>
+
+    <section id="rbac">
+      <h2><span class="num">01</span>The real role model</h2>
+      <p class="section-intro">Deliberately simple, not an idealized granular permission matrix: one boolean role, plus one independent scoping field.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Axis</th><th>Values</th><th>What it controls</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Role</strong></td><td class="mono">admin | (not admin)</td><td>Every mutation route requires a logged-in session at minimum; most require <code>role == "admin"</code> outright (policy edits, user management, connector fetch/scan actions, approvals).</td></tr>
+            <tr><td><strong>Team</strong></td><td class="mono">a string, or none</td><td>Narrows which findings and approvals a non-admin's own queries return — enforced server-side, per request, not a client-side filter.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn"><span class="label">The one gap worth knowing before a real rollout</span><p>Every read (<code>GET</code>) route is public by default in this MVP — team-scoping included, meaning it's bypassable by an anonymous request unless <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code> is explicitly set. This is a disclosed, deliberate MVP default, not an oversight — but it means "team scoping" today protects against an authenticated user browsing outside their lane, not against an anonymous one.</p></div>
+    </section>
+
+    <section id="tenant">
+      <h2><span class="num">02</span>The MSSP tenant view — what it is, and isn't, today</h2>
+      <p class="section-intro">A tenant switcher exists in the UI ("All Tenants (MSSP view)" plus named demo tenants). It is important to be precise about what this actually does:</p>
+      <div class="grid2">
+        <div class="card"><h4>What it is</h4><p>A client-side filter over one shared dataset — selecting a tenant narrows the same findings by asset type, illustrating what a per-client slice of the dashboard could look like.</p></div>
+        <div class="card"><h4>What it is not</h4><p>Real per-tenant authentication, a real per-tenant data boundary, or server-side tenant isolation of any kind. Every tenant sees data drawn from the same underlying store.</p></div>
+      </div>
+      <div class="callout crit"><span class="label">Held to a named standard, not waved away</span><p>An internal security review of this exact gap concluded there is zero server-side tenant trust today, and named the standards a real implementation must satisfy before this becomes a genuine multi-tenant claim: <strong>NIST SP 800-53 AC-3/AC-4/AC-6</strong> (access enforcement, information flow, least privilege), <strong>OWASP API Security Top 10:2023 API1</strong> (Broken Object Level Authorization), <strong>OWASP Top 10:2025 A01</strong> (Broken Access Control), and <strong>OWASP ASVS 5.0 V8 §8.3.1</strong>. Real multi-tenancy is a database + auth architecture decision, not something to bolt onto the current file-based model incrementally.</p></div>
+    </section>
+
+    <section id="audit">
+      <h2><span class="num">03</span>Audit trail</h2>
+      <p class="section-intro">The Activity Log (<code>/activity-log</code>) records who did what, when — every approval decision, exception grant, policy edit, and connector fetch/scan action — with a lightweight statistical anomaly flag (an actor or action volume that deviates from the recent baseline) surfaced separately from the raw feed.</p>
+    </section>
+
+    <section id="governance">
+      <h2><span class="num">04</span>Policy &amp; governance configuration</h2>
+      <p class="section-intro">Every policy below is a YAML file under <code>remediation/config/</code>, editable live from its own dashboard page (with a real-time match preview before saving) or by hand in git — never hardcoded in application code.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Policy</th><th>Dashboard page</th><th>Governs</th></tr></thead>
+          <tbody>
+            <tr><td>Priority rules</td><td class="mono">/priority-rules</td><td>Severity/criticality weights, tier thresholds, KEV/EPSS override behavior, SLA windows per tier</td></tr>
+            <tr><td>Remediation policy</td><td class="mono">/remediation-policy</td><td>Change type, cadence, maintenance window, auto-remediate eligibility, approval group, PAM backend — per asset domain (18 domains)</td></tr>
+            <tr><td>Exploit criteria</td><td class="mono">/exploit-criteria</td><td>What counts as "actively exploited" / zero-day for escalation purposes</td></tr>
+            <tr><td>Exceptions</td><td class="mono">/exceptions</td><td>Time-boxed risk acceptances — active / expired / revoked</td></tr>
+            <tr><td>Asset policy</td><td class="mono">/asset-policy</td><td>Bulk, rule-based asset metadata (owner, criticality, facing) assignment</td></tr>
+            <tr><td>Notification &amp; alert rules</td><td class="mono">/notification-settings</td><td>Scheduled report recipients/cadence, team alert subscriptions</td></tr>
+            <tr><td>Risk &amp; exposure scoring weights</td><td class="mono">(config file only)</td><td>Impact × Likelihood weighting, fleet-wide exposure-score component weights</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="compliance">
+      <h2><span class="num">05</span>Standards &amp; compliance mapping</h2>
+      <div class="disclaimer">
+        <span class="label">Read this before using any mapping below for anything</span>
+        <p>This is an informational reference only. It maps existing technical capabilities to common compliance-framework control <em>categories</em>, for internal planning — it is <strong>not a certification, attestation, audit result, or compliance claim of any kind, for any framework</strong>.</p>
+        <p>Achieving actual SOC 2, NIST CSF, PCI DSS, or any other formal compliance status requires a licensed audit or formal third-party assessment. Do not present this mapping, or any summary of it, to a customer, auditor, or regulator as evidence of compliance.</p>
+      </div>
+      <p>Frameworks referenced elsewhere in this product, strictly as directional category mappings: <strong>NIST Cybersecurity Framework (CSF)</strong>, <strong>NIST SP 800-40r4</strong> (patch management), <strong>CIS Controls v8</strong> (§7.1–7.6), <strong>ISO/IEC 27002:2022</strong> (§8.8, §8.32), and <strong>NIST FIPS 203/204/205</strong> (post-quantum cryptography). Named gaps, stated rather than omitted: automated scheduled vulnerability scanning (CIS §7.5/7.6 — VulnHunter ingests already-scanned findings; OpenVAS/GVM is the one exception that scans directly), automated patch deployment (§7.3 — deliberately never executed), and vendor-advisory/config-drift monitoring (not covered).</p>
+    </section>
+
+    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener" data-suite-link="pages">Page-by-Page Reference</a> or <a href="https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b" target="_blank" rel="noopener" data-suite-link="exec">Executive Overview &amp; Solution Brief</a>.</footer>
+  </main>
+</div>
+
+<script>
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href')));
+  function onScroll() {
+    let idx = 0; const y = window.scrollY + 100;
+    sections.forEach((s, i) => { if (s && s.offsetTop <= y) idx = i; });
+    links.forEach((a, i) => a.classList.toggle('active', i === idx));
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
