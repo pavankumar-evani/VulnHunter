@@ -549,6 +549,22 @@ class ApiRunPipeline(unittest.TestCase):
         resp = client.post("/api/run", json={"pipeline": "not-a-real-pipeline"})
         self.assertEqual(resp.status_code, 400)
 
+    def test_max_budget_usd_rejects_a_value_above_the_ceiling(self):
+        """Unbounded-consumption guardrail regression (OWASP LLM Top 10 2026 #6) - this
+        field used to flow straight from an unvalidated form input to a real subprocess
+        arg with no type/range check at all."""
+        resp = client.post("/api/run", json={"pipeline": "scan", "max_budget_usd": "999999"})
+        self.assertEqual(resp.status_code, 422)
+
+    def test_max_budget_usd_rejects_a_non_numeric_value(self):
+        resp = client.post("/api/run", json={"pipeline": "scan", "max_budget_usd": "not-a-number"})
+        self.assertEqual(resp.status_code, 422)
+
+    def test_max_budget_usd_accepts_a_reasonable_value(self):
+        resp = client.post("/api/run", json={"pipeline": "scan", "max_budget_usd": "5.00"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["dry_run"])
+
     def test_confirm_true_but_not_logged_in_is_rejected_before_ever_running_anything(self):
         """Login is required before the real (paid) path even runs cli.run() - not
         just before returning a result. Never logs in here, so if this test somehow
@@ -1126,6 +1142,21 @@ class ApiServiceNow(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("required", resp.json()["detail"])
 
+    def test_send_rejects_an_instance_value_that_could_bypass_the_url_template(self):
+        """SSRF guardrail regression: 'instance' is interpolated into a fixed
+        f"https://{instance}.service-now.com" template - a value containing a URL
+        fragment character would otherwise let an attacker-controlled host survive
+        past a naive suffix check. See remediation/connectors/url_safety.py."""
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/servicenow/send", json={
+                "instance": "169.254.169.254#", "username": "u", "password": "p",
+                "table": "incident", "confirm": True,
+            })
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
     def test_send_with_confirm_but_not_logged_in_is_rejected(self):
         """The real-send path (confirm=True) requires login even before credential
         validation - preview (confirm=False, tested above) stays open."""
@@ -1271,6 +1302,19 @@ class ApiQualys(unittest.TestCase):
             _logout()
         self.assertEqual(resp.status_code, 400)
 
+    def test_test_connection_rejects_a_cloud_metadata_endpoint(self):
+        """SSRF guardrail regression - platform_url used to be handed straight to
+        requests.Session().get() with zero validation of the destination. See
+        remediation/connectors/url_safety.py."""
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/qualys/test-connection", json={
+                "username": "u", "password": "p", "platform_url": "http://169.254.169.254/",
+            })
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
     def test_fetch_without_confirm_never_touches_the_network(self):
         resp = client.post("/api/qualys/fetch", json={"username": "u", "password": "p", "platform_url": "https://qualysapi.qualys.com"})
         self.assertEqual(resp.status_code, 200)
@@ -1360,6 +1404,18 @@ class ApiInfoblox(unittest.TestCase):
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
         try:
             resp = client.post("/api/infoblox/test-connection", json={"grid_master": "", "username": "", "password": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_test_connection_rejects_a_cloud_metadata_endpoint(self):
+        """SSRF guardrail regression - grid_master had literally zero transform before
+        landing in an f-string URL. See remediation/connectors/url_safety.py."""
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/infoblox/test-connection", json={
+                "grid_master": "169.254.169.254", "username": "u", "password": "p",
+            })
         finally:
             _logout()
         self.assertEqual(resp.status_code, 400)
@@ -1457,6 +1513,17 @@ class ApiOpenVas(unittest.TestCase):
             _logout()
         self.assertEqual(resp.status_code, 400)
 
+    def test_test_connection_rejects_a_cloud_metadata_endpoint(self):
+        """SSRF guardrail regression. See remediation/connectors/url_safety.py."""
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/openvas/test-connection", json={
+                "hostname": "169.254.169.254", "username": "admin", "password": "secret",
+            })
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
     def test_test_connection_with_missing_credentials_is_rejected(self):
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
         try:
@@ -1549,6 +1616,23 @@ class ApiAiAssist(unittest.TestCase):
         self.assertFalse(payload["dry_run"])
         self.assertEqual(payload["response"], "This is a mocked AI response.")
         mock_run.assert_called_once()
+
+    def test_confirm_true_passes_a_per_call_budget_cap(self):
+        """Unbounded-consumption guardrail regression (OWASP LLM Top 10 2026 #6) - this
+        subprocess call used to pass no --max-budget-usd at all, relying solely on the
+        daily token-limit pre-flight check to bound spend."""
+        fake_result = MagicMock(returncode=0, stdout="ok", stderr="")
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            with patch("app.cli.find_claude_binary", return_value="/fake/claude"), \
+                 patch("app.subprocess.run", return_value=fake_result) as mock_run:
+                client.post("/api/ai-assist", json={
+                    "finding_id": "FIND-1", "action": "explain", "confirm": True,
+                })
+        finally:
+            _logout()
+        called_command = mock_run.call_args.args[0]
+        self.assertIn("--max-budget-usd", called_command)
 
     def test_confirm_true_surfaces_a_failed_call_as_502(self):
         fake_result = MagicMock(returncode=1, stdout="", stderr="something went wrong")
@@ -1811,6 +1895,41 @@ class ApiTeamScopedRbac(unittest.TestCase):
     def test_anonymous_access_remains_unfiltered(self):
         unfiltered_count = len(client.get("/api/assets").json()["assets"])
         self.assertGreater(unfiltered_count, 0)
+
+    def test_ai_assist_dry_run_preview_respects_team_scoping(self):
+        """Guardrail regression test (OWASP LLM Top 10 2026 #2/#3): the free dry-run
+        preview must not let a team-scoped user read another team's finding detail by
+        guessing/enumerating a finding_id, even though it never spends real API usage."""
+        queue = client.get("/api/queue").json()["findings"]
+        other_team_finding = next(f for f in queue if f.get("team") and f["team"] != self.real_team)
+        own_team_finding = next(f for f in queue if f.get("team") == self.real_team)
+
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        try:
+            blocked = client.post("/api/ai-assist", json={"finding_id": other_team_finding["id"], "action": "explain"})
+            self.assertEqual(blocked.status_code, 404)
+
+            allowed = client.post("/api/ai-assist", json={"finding_id": own_team_finding["id"], "action": "explain"})
+            self.assertEqual(allowed.status_code, 200)
+            self.assertTrue(allowed.json()["dry_run"])
+        finally:
+            _logout()
+
+    def test_ai_assist_dry_run_preview_unfiltered_for_anonymous_and_admin(self):
+        """Same baseline every other team-scoped view already guarantees: no session
+        or an admin session is never MORE restrictive than a team-scoped one."""
+        queue = client.get("/api/queue").json()["findings"]
+        other_team_finding = next(f for f in queue if f.get("team") and f["team"] != self.real_team)
+
+        anon = client.post("/api/ai-assist", json={"finding_id": other_team_finding["id"], "action": "explain"})
+        self.assertEqual(anon.status_code, 200)
+
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            admin = client.post("/api/ai-assist", json={"finding_id": other_team_finding["id"], "action": "explain"})
+            self.assertEqual(admin.status_code, 200)
+        finally:
+            _logout()
 
     def test_non_admin_with_no_team_sees_everything_unfiltered(self):
         # TEST_USER_EMAIL has no team assigned - opt-in narrowing, not deny-by-default

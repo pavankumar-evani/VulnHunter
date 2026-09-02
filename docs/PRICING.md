@@ -17,6 +17,8 @@ ever disagree, this file is authoritative and the HTML page should be updated to
 | OpenVAS/GVM scan engine | Add-on (+$6,000/yr) | ✓ included | ✓ included |
 | **Remediation engine (generated playbooks)** | — | ✓ | ✓ |
 | Approval &amp; exception workflow | — | ✓ | ✓ |
+| Compensating-control suggestions (Exceptions form, any finding type) | — | ✓ | ✓ |
+| OT-specific compensating-control/vendor-coordination artifacts | — | Requires OT/IoT Security Module add-on | Requires OT/IoT Security Module add-on |
 | Deployment | Dedicated single-tenant | Dedicated single-tenant | Dedicated single-tenant or self-hosted |
 | Account management | Self-service | Quarterly business review | Dedicated Technical Account Manager |
 

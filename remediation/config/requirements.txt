@@ -1,1 +1,3 @@
-pyyaml>=6.0
+# Supply-chain guardrail (OWASP LLM Top 10 2026 #4) - pinned exact, see
+# dashboard/requirements.txt's own comment for why and how to bump these.
+pyyaml==6.0.3

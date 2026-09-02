@@ -1,2 +1,4 @@
-requests>=2.31
-scikit-learn>=1.9  # real unsupervised ML (ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer
+# Supply-chain guardrail (OWASP LLM Top 10 2026 #4) - pinned exact, see
+# dashboard/requirements.txt's own comment for why and how to bump these.
+requests==2.34.2
+scikit-learn==1.9.0  # real unsupervised ML (ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer

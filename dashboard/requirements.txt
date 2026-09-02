@@ -1,7 +1,13 @@
-fastapi>=0.115
-uvicorn>=0.32
-httpx>=0.27  # not used at runtime - only by fastapi.testclient.TestClient in tests/test_dashboard.py
-pyyaml>=6.0
-requests>=2.31
-ldap3>=2.9  # real Active Directory/LDAP group-membership lookups (dashboard/auth/ad_directory.py) - a genuinely new dependency, added because there is no honest way to speak LDAP from stdlib alone
-scikit-learn>=1.9  # real unsupervised ML (remediation/enrichment/ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer; no honest way to do real anomaly detection/clustering/text-similarity from stdlib alone; pulls in numpy/scipy
+# Supply-chain guardrail (OWASP LLM Top 10 2026 #4): pinned to the exact versions this
+# repo is actually tested against, not a floating minimum - an untested transitive
+# upgrade silently entering a security tool's own dependency tree is exactly the kind
+# of supply-chain risk this pin exists to prevent. Bumping any of these is a real,
+# deliberate action: re-run the full test suite (`python -m unittest discover -s tests
+# -p "test_*.py"`) after bumping, don't just edit the number.
+fastapi==0.141.1
+uvicorn==0.52.1
+httpx==0.28.1  # not used at runtime - only by fastapi.testclient.TestClient in tests/test_dashboard.py
+pyyaml==6.0.3
+requests==2.34.2
+ldap3==2.9.1  # real Active Directory/LDAP group-membership lookups (dashboard/auth/ad_directory.py) - a genuinely new dependency, added because there is no honest way to speak LDAP from stdlib alone
+scikit-learn==1.9.0  # real unsupervised ML (remediation/enrichment/ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer; no honest way to do real anomaly detection/clustering/text-similarity from stdlib alone; pulls in numpy/scipy

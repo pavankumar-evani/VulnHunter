@@ -22,7 +22,7 @@ import yaml
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli"))
@@ -57,6 +57,8 @@ from remediation.connectors.splunk_connector import (  # noqa: E402
     DEFAULT_SOURCETYPE as SPLUNK_DEFAULT_SOURCETYPE, SplunkConnector, build_hec_event,
 )
 from remediation.connectors.tenable_connector import TenableConnector  # noqa: E402
+from remediation.connectors.url_safety import UnsafeTargetError  # noqa: E402
+from remediation.connectors import url_safety  # noqa: E402
 from remediation.enrichment.ai_vuln_taxonomy import (  # noqa: E402
     AI_VULNERABILITIES, build_ai_atlas_heatmap, tag_findings as tag_ai_vulnerabilities,
 )
@@ -780,6 +782,27 @@ def api_notification_run_checks_now(user: dict = Depends(rbac.require_admin)):  
     return {"report_results": report_results, "alert_results": alert_results}
 
 
+def _require_safe_target(value, field_name):
+    """SSRF guardrail (see remediation/connectors/url_safety.py) - call this on every
+    admin-supplied host/URL field right before constructing a connector with it, same
+    place the existing "these fields are all required" checks already sit."""
+    try:
+        url_safety.assert_safe_target(value)
+    except UnsafeTargetError as exc:
+        raise HTTPException(status_code=400, detail=f"{field_name}: {exc}") from exc
+
+
+def _require_safe_instance_label(value, field_name):
+    """Same guardrail, for fields (ServiceNow's `instance`) that this app interpolates
+    into a fixed URL template rather than accepting a free URL - see
+    url_safety.assert_safe_instance_label()'s own docstring for the specific bypass
+    this closes."""
+    try:
+        url_safety.assert_safe_instance_label(value, field_name=field_name)
+    except UnsafeTargetError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/servicenow/preview")
 def api_servicenow_preview():
     findings = dashboard_data.load_remediation_findings()
@@ -817,6 +840,7 @@ def api_servicenow_send(body: ServiceNowSendBody, request: Request):
             status_code=400,
             detail="Instance, username, and password are all required to actually push to ServiceNow.",
         )
+    _require_safe_instance_label(body.instance, "instance")
 
     conn = ServiceNowConnector(body.instance, body.username, body.password, table=body.table)
     try:
@@ -884,6 +908,7 @@ def api_jira_send(body: JiraSendBody, request: Request):
             status_code=400,
             detail="Site URL, email, API token, and project key are all required to actually push to Jira.",
         )
+    _require_safe_target(body.base_url, "base_url")
 
     conn = JiraConnector(body.base_url, body.email, body.api_token, body.project_key)
     try:
@@ -943,6 +968,7 @@ def api_splunk_send(body: SplunkSendBody, request: Request):
             status_code=400,
             detail="HEC URL and token are both required to actually send events to Splunk.",
         )
+    _require_safe_target(body.hec_url, "hec_url")
 
     conn = SplunkConnector(body.hec_url, body.hec_token)
     try:
@@ -1068,6 +1094,7 @@ def api_qualys_test_connection(body: QualysTestConnectionBody, request: Request)
     rbac.require_admin(request)
     if not body.username or not body.password or not body.platform_url:
         raise HTTPException(status_code=400, detail="Username, password, and platform URL are all required.")
+    _require_safe_target(body.platform_url, "platform_url")
     conn = QualysConnector(body.username, body.password, platform_url=body.platform_url)
     try:
         conn.test_connection()
@@ -1090,6 +1117,7 @@ def api_qualys_fetch(body: QualysFetchBody, request: Request):
     rbac.require_admin(request)
     if not body.username or not body.password or not body.platform_url:
         raise HTTPException(status_code=400, detail="Username, password, and platform URL are all required to fetch live data.")
+    _require_safe_target(body.platform_url, "platform_url")
     conn = QualysConnector(body.username, body.password, platform_url=body.platform_url)
     out_path = LIVE_DATA_DIR / "qualys_export.csv"
     try:
@@ -1119,6 +1147,7 @@ def api_prismacloud_test_connection(body: PrismaCloudTestConnectionBody, request
     rbac.require_admin(request)
     if not body.access_key_id or not body.secret_key or not body.base_url:
         raise HTTPException(status_code=400, detail="Access key ID, secret key, and base URL are all required.")
+    _require_safe_target(body.base_url, "base_url")
     conn = PrismaCloudConnector(body.access_key_id, body.secret_key, base_url=body.base_url)
     try:
         conn.test_connection()
@@ -1141,6 +1170,7 @@ def api_prismacloud_fetch(body: PrismaCloudFetchBody, request: Request):
     rbac.require_admin(request)
     if not body.access_key_id or not body.secret_key or not body.base_url:
         raise HTTPException(status_code=400, detail="Access key ID, secret key, and base URL are all required to fetch live data.")
+    _require_safe_target(body.base_url, "base_url")
     conn = PrismaCloudConnector(body.access_key_id, body.secret_key, base_url=body.base_url)
     try:
         findings = conn.fetch_and_normalize_alerts()
@@ -1177,6 +1207,7 @@ def api_cortex_xsiam_test_connection(body: CortexXsiamTestConnectionBody, reques
     rbac.require_admin(request)
     if not body.api_key or not body.api_key_id or not body.base_url:
         raise HTTPException(status_code=400, detail="API key, API key ID, and base URL are all required.")
+    _require_safe_target(body.base_url, "base_url")
     conn = CortexXsiamConnector(body.api_key, body.api_key_id, base_url=body.base_url)
     try:
         conn.test_connection()
@@ -1199,6 +1230,7 @@ def api_cortex_xsiam_fetch(body: CortexXsiamFetchBody, request: Request):
     rbac.require_admin(request)
     if not body.api_key or not body.api_key_id or not body.base_url:
         raise HTTPException(status_code=400, detail="API key, API key ID, and base URL are all required to fetch live data.")
+    _require_safe_target(body.base_url, "base_url")
     conn = CortexXsiamConnector(body.api_key, body.api_key_id, base_url=body.base_url)
     try:
         findings = conn.fetch_and_normalize_incidents()
@@ -1235,6 +1267,7 @@ def api_infoblox_test_connection(body: InfobloxTestConnectionBody, request: Requ
     rbac.require_admin(request)
     if not body.grid_master or not body.username or not body.password:
         raise HTTPException(status_code=400, detail="Grid master, username, and password are all required.")
+    _require_safe_target(body.grid_master, "grid_master")
     conn = InfobloxConnector(body.grid_master, body.username, body.password)
     try:
         conn.test_connection()
@@ -1257,6 +1290,7 @@ def api_infoblox_fetch(body: InfobloxFetchBody, request: Request):
     rbac.require_admin(request)
     if not body.grid_master or not body.username or not body.password:
         raise HTTPException(status_code=400, detail="Grid master, username, and password are all required to fetch live data.")
+    _require_safe_target(body.grid_master, "grid_master")
     conn = InfobloxConnector(body.grid_master, body.username, body.password)
     try:
         assets = conn.fetch_and_normalize_hosts()
@@ -1284,6 +1318,7 @@ def api_axonius_test_connection(body: AxoniusTestConnectionBody, request: Reques
     rbac.require_admin(request)
     if not body.base_url or not body.api_key or not body.api_secret:
         raise HTTPException(status_code=400, detail="Base URL, API key, and API secret are all required.")
+    _require_safe_target(body.base_url, "base_url")
     conn = AxoniusConnector(body.base_url, body.api_key, body.api_secret)
     try:
         conn.test_connection()
@@ -1306,6 +1341,7 @@ def api_axonius_fetch(body: AxoniusFetchBody, request: Request):
     rbac.require_admin(request)
     if not body.base_url or not body.api_key or not body.api_secret:
         raise HTTPException(status_code=400, detail="Base URL, API key, and API secret are all required to fetch live data.")
+    _require_safe_target(body.base_url, "base_url")
     conn = AxoniusConnector(body.base_url, body.api_key, body.api_secret)
     try:
         assets = conn.fetch_and_normalize_devices()
@@ -1335,6 +1371,7 @@ def api_active_directory_test_connection(body: ActiveDirectoryTestConnectionBody
     rbac.require_admin(request)
     if not body.server or not body.base_dn:
         raise HTTPException(status_code=400, detail="Server and base DN are both required.")
+    _require_safe_target(body.server, "server")
     conn = ActiveDirectoryConnector(
         body.server, body.base_dn,
         bind_dn=body.bind_dn or None, bind_password=body.bind_password or None, use_ssl=body.use_ssl,
@@ -1362,6 +1399,7 @@ def api_active_directory_fetch(body: ActiveDirectoryFetchBody, request: Request)
     rbac.require_admin(request)
     if not body.server or not body.base_dn:
         raise HTTPException(status_code=400, detail="Server and base DN are both required to fetch live data.")
+    _require_safe_target(body.server, "server")
     conn = ActiveDirectoryConnector(
         body.server, body.base_dn,
         bind_dn=body.bind_dn or None, bind_password=body.bind_password or None, use_ssl=body.use_ssl,
@@ -1383,6 +1421,8 @@ def api_active_directory_fetch(body: ActiveDirectoryFetchBody, request: Request)
 
 
 def _openvas_connector(body):
+    if body.hostname:
+        _require_safe_target(body.hostname, "hostname")
     return OpenVasConnector(
         hostname=body.hostname or None, port=body.port,
         username=body.username or None, password=body.password or None,
@@ -1510,6 +1550,22 @@ class RunBody(BaseModel):
     path: str = "vulnerable-demo-app"
     max_budget_usd: str = cli.DEFAULT_MAX_BUDGET_USD
     confirm: bool = False
+
+    @field_validator("max_budget_usd")
+    @classmethod
+    def _max_budget_usd_is_a_sane_positive_number(cls, value):
+        """Unbounded-consumption guardrail (OWASP LLM Top 10 2026 #6) - this field used
+        to flow straight from an unvalidated <input type="text"> to a real subprocess
+        arg with zero range/type checking. $500 is a generous ceiling relative to the
+        $2.00 default - enough headroom for a real large batch run, not so much that a
+        typo or a malicious value turns into an open-ended spend."""
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"max_budget_usd must be a number, got {value!r}") from None
+        if not (0 < parsed <= 500):
+            raise ValueError(f"max_budget_usd must be between 0 and 500, got {parsed}")
+        return value
     # Scopes a "remediate" run to one already-approved finding instead of the full
     # batch pipeline - see cli/vulnhunter.py's remediate_prompt() and
     # .claude/commands/remediate.md's own --finding-id handling. Used by the
@@ -1606,6 +1662,17 @@ def _enforce_ai_usage_limit(actor):
     return governance
 
 
+# Unbounded-consumption guardrail (OWASP LLM Top 10 2026 #6): unlike /api/run's
+# RunBody.max_budget_usd (client-supplied, now range-validated - see RunBody above),
+# AI Assist/AI trend analysis are single, small, per-finding asks, not a batch pipeline
+# run - they never accepted a client-supplied budget at all before this, and the
+# subprocess call itself never passed --max-budget-usd, relying solely on the daily
+# token-limit pre-flight check (_enforce_ai_usage_limit) to bound spend. That check is
+# real and enforced (see its own docstring), but it's a per-day ceiling, not a per-call
+# one - a fixed, tight per-call cap closes that gap without needing a new client field.
+_AI_ASSIST_MAX_BUDGET_USD = "1.00"
+
+
 def _run_ai_call_and_record_usage(prompt, route, actor, governance):
     """Shared by /api/ai-assist and /api/ai-trend-analysis: calls the real claude CLI
     with the admin-configured model, parses its --output-format json response, records
@@ -1619,7 +1686,10 @@ def _run_ai_call_and_record_usage(prompt, route, actor, governance):
     except cli.ClaudeBinaryNotFound as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    command = [claude_bin, "-p", prompt, "--output-format", "json"]
+    command = [
+        claude_bin, "-p", prompt, "--output-format", "json",
+        "--max-budget-usd", _AI_ASSIST_MAX_BUDGET_USD,
+    ]
     if governance.get("default_model"):
         command += ["--model", governance["default_model"]]
 
@@ -1651,9 +1721,21 @@ def api_ai_assist(body: AiAssistBody, request: Request):
     """Same dry-run-preview-by-default / explicit-confirm-to-spend pattern as /api/run
     and /api/servicenow/send: without confirm, this only builds and returns the prompt
     text, at zero cost. With confirm, it calls the real `claude` CLI (same binary
-    discovery as cli/vulnhunter.py) and spends real API usage/credits."""
+    discovery as cli/vulnhunter.py) and spends real API usage/credits.
+
+    Guardrail (OWASP LLM Top 10 2026 #2/#3 - sensitive info disclosure / excessive
+    permissions via inconsistent authorization): the confirm-gated real API call was
+    already admin-only, but the free dry-run preview below had no team-scoping check
+    at all - a logged-in, team-scoped user could enumerate sequential finding IDs
+    (FIND-1, FIND-2, ...) through this endpoint and read another team's finding detail
+    in the returned prompt text, bypassing the same team-scoping /api/queue already
+    enforces. Reusing _scope_to_team() here (the same real, server-side check every
+    other finding-level view uses) closes that gap without inventing new logic."""
     finding = _find_any_finding(body.finding_id)
     if not finding:
+        raise HTTPException(status_code=404, detail=f"Finding {body.finding_id} not found")
+    _annotate_finding_teams([finding])
+    if not _scope_to_team([finding], rbac.get_current_user(request)):
         raise HTTPException(status_code=404, detail=f"Finding {body.finding_id} not found")
     if body.action not in ai_assist.ACTIONS:
         raise HTTPException(

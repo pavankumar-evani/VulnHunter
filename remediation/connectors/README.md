@@ -67,6 +67,23 @@ the result into the same nested `{"devices": [{"alerts": [...]}]}` shape as
 Both accept an injectable `session` parameter specifically so they can be unit tested
 without any real HTTP calls — see `tests/test_connectors.py`.
 
+## SSRF guardrail (applies to every connector accepting a host/URL, not just this pair)
+
+Any connector whose constructor takes an admin-supplied host, base URL, or platform
+URL (Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory, OpenVAS,
+plus the push connectors) must have its target validated with
+`remediation/connectors/url_safety.py`'s `assert_safe_target()` (or
+`assert_safe_instance_label()` for a field interpolated into a fixed URL template, like
+ServiceNow's `instance`) **before** the connector is constructed — see
+`dashboard/app.py`'s `_require_safe_target()`/`_require_safe_instance_label()` helpers
+and where each connector route calls them. This blocks cloud metadata endpoints/
+loopback/link-local addresses; private RFC1918 ranges are allowed on purpose, since
+on-prem tools are the expected common case here. `tenable_connector.py`/
+`armis_connector.py` above don't take a connector call-site here in `dashboard/app.py`
+today (see docs/enterprise-suite/rbac-governance.html's "AI & security guardrails"
+section), so this doesn't apply to them yet — it would if either gained a dashboard
+route with a user-supplied base URL.
+
 ## Manual/threat-intel source
 
 There is deliberately no "connector" for the third source (manual threat intel) — by
