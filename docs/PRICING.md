@@ -8,20 +8,32 @@ ever disagree, this file is authoritative and the HTML page should be updated to
 
 ## Tiers (annual, per dedicated-tenant environment)
 
-| | Standard | Professional | Enterprise |
+| | Standard — Detect &amp; Prioritize | Professional — Detect &amp; Remediate | Enterprise |
 |---|---|---|---|
 | **Price** | $12,000/year | $38,000/year | $85,000/year+ (custom above 25,000 assets) |
 | **Assets** | Up to 1,500 | Up to 7,500 | Unlimited |
 | **Users** | Unlimited | Unlimited | Unlimited |
 | Connectors | Up to 3 | All, unlimited | All, unlimited |
 | OpenVAS/GVM scan engine | Add-on (+$6,000/yr) | ✓ included | ✓ included |
-| Remediation workflow (approvals, exceptions, policy) | ✓ | ✓ | ✓ |
+| **Remediation engine (generated playbooks)** | — | ✓ | ✓ |
+| Approval &amp; exception workflow | — | ✓ | ✓ |
 | Deployment | Dedicated single-tenant | Dedicated single-tenant | Dedicated single-tenant or self-hosted |
 | Account management | Self-service | Quarterly business review | Dedicated Technical Account Manager |
 
 Additional assets beyond a tier's cap: $2,000 per 1,000 assets/year true-up (Standard,
 Professional) — included and unlimited at Enterprise. **Unlimited named users at every
 tier** — priced by environment size, never by headcount.
+
+### Why Standard → Professional is priced on a capability gap, not just more assets
+
+ServiceNow's own current Vulnerability Response/USEM documentation describes
+remediation as a phased *task* process — "verifying import completion, triaging new
+vulnerabilities, and monitoring progress to completion" — workflow/ticket automation,
+not automated generation of an actual fix artifact. Tenable, Qualys, and Rapid7 don't
+generate fixes at any price either — they're scanners that feed a ticketing system like
+ServiceNow. **Professional is priced on VulnHunter being the one product in this
+comparison set that turns a finding into a real, reviewable Ansible playbook
+automatically** — a capability gap, not a bundling choice.
 
 ## Cost per asset vs. the market (why this is priced right, not "too costly")
 
@@ -52,9 +64,11 @@ before use in a real negotiation.
 - **Term-based subscription (standard)** — annual, auto-renewing. Every researched
   competitor has moved to this model; nobody in vulnerability management sells a
   perpetual license anymore.
-- **Metered per-asset (alternative to a flat tier)** — $6.50/asset/year, no tier
-  commitment, 500-asset minimum, for an environment whose size varies too much for a
-  flat cap to fit well. Still cheaper per-asset than every named competitor above.
+- **Per-endpoint metering (alternative to a flat tier)** — $6.50/endpoint/year, no tier
+  commitment, 500-endpoint minimum — priced the same way Tenable, Qualys, Rapid7, and
+  CrowdStrike Spotlight all bill (per unit under management). "Endpoint" is the same
+  billable unit as "asset" elsewhere in this document. Still 3x+ cheaper per unit than
+  every named competitor above.
 - **Scan-engine add-on (Standard tier only)** — $6,000/year adds the OpenVAS/GVM scan
   engine without a full Professional upgrade (the same "core + priced add-on module"
   pattern CrowdStrike uses for Falcon Spotlight). Included by default in Professional

@@ -124,7 +124,7 @@
     <div class="hero">
       <div class="kicker">Business Reference · Commercial Pricing</div>
       <h1>VulnHunter Pricing</h1>
-      <p class="lede">Enterprise vulnerability management and remediation, licensed annually by environment size — unlimited users, every tier — backed by a real support SLA. Normalized to cost-per-asset (the metric this whole market actually bills on), VulnHunter runs 3–5x cheaper than the least-expensive named alternative, and its own unlimited-user pricing model doesn't grow with headcount the way a per-seat platform does. See §02 for the numbers, sourced.</p>
+      <p class="lede">Priced around a real capability gap, not just a cheaper scan: Professional is the only tier in this market's comparison set that turns a finding into a generated, reviewable fix rather than a ticket — ServiceNow's own documentation confirms its remediation is task-based only (§01). Licensed annually by environment size, unlimited users at every tier, backed by a real support SLA. Normalized to cost-per-asset (§02), VulnHunter also runs 3–5x cheaper than the least-expensive named scanner.</p>
     </div>
 
     <section id="tiers">
@@ -132,7 +132,7 @@
       <p class="section-intro">Annual licenses, billed per environment. Asset = any host, cloud resource, network device, or application VulnHunter tracks a finding against.</p>
       <div class="tiers">
         <div class="tier">
-          <div class="tname">Standard</div>
+          <div class="tname">Standard — Detect &amp; Prioritize</div>
           <div class="price">$12,000<span class="per">/year</span></div>
           <div class="assetcap">Up to 1,500 assets</div>
           <ul>
@@ -144,14 +144,15 @@
           </ul>
         </div>
         <div class="tier feat">
-          <div class="tname">Professional</div>
+          <div class="tname">Professional — Detect &amp; Remediate</div>
           <div class="price">$38,000<span class="per">/year</span></div>
           <div class="assetcap">Up to 7,500 assets</div>
           <ul>
             <li><span class="ck">✓</span>Everything in Standard</li>
+            <li><span class="ck">✓</span><strong>Remediation engine — real generated playbooks</strong>, not just a ticket</li>
+            <li><span class="ck">✓</span>Full remediation workflow (approvals, exceptions, policy engine)</li>
             <li><span class="ck">✓</span>Full connector catalog, unlimited</li>
             <li><span class="ck">✓</span>OpenVAS/GVM scan engine included</li>
-            <li><span class="ck">✓</span>Full remediation workflow (approvals, exceptions, policy engine)</li>
             <li><span class="ck">✓</span>4-hour Sev1 response, 99.9% uptime SLA</li>
             <li><span class="ck">✓</span>Quarterly business review</li>
           </ul>
@@ -171,6 +172,8 @@
         </div>
       </div>
       <p class="section-intro">Additional assets beyond a tier's cap: $2,000 per 1,000 assets/year true-up (Standard, Professional) — included and unlimited at Enterprise. <strong>Unlimited named users at every tier</strong> — priced by environment size, never by headcount, so a growing security team never triggers a re-negotiation the way a per-seat platform does.</p>
+
+      <div class="callout warn"><span class="label">Why the Standard → Professional jump is priced on a real capability gap, not just more assets</span><p>ServiceNow's own current Vulnerability Response/USEM documentation describes remediation as a phased <em>task</em> process — "verifying import completion, triaging new vulnerabilities, and monitoring progress to completion" — explicitly ticket/workflow automation, not automated generation of an actual fix artifact. Tenable, Qualys, and Rapid7 don't generate fixes at any price either — they're scanners that feed a ticketing system like ServiceNow. Professional is priced on VulnHunter being the one product in this comparison that turns a finding into a real, reviewable Ansible playbook automatically — a capability gap the competition doesn't close by paying more, not a feature VulnHunter is merely bundling at a higher tier.</p></div>
     </section>
 
     <section id="per-asset">
@@ -203,8 +206,8 @@
       <p class="section-intro">Every option below is a real, current pattern in this market — matched to VulnHunter's own structure, not invented from nothing.</p>
       <div class="grid2">
         <div class="card"><h4>Term-based subscription (standard)</h4><p>Annual, auto-renewing. Every platform researched for §02 has moved to this model — nobody in vulnerability management sells a perpetual license anymore, and VulnHunter doesn't either.</p></div>
-        <div class="card"><h4>Metered per-asset (alternative to a flat tier)</h4><p>$6.50/asset/year, no tier commitment, 500-asset minimum — for an environment whose size varies too much for a flat cap to fit well. Still cheaper per-asset than every named competitor in §02.</p></div>
-        <div class="card"><h4>Scan-engine add-on (Standard tier only)</h4><p>$6,000/year adds the OpenVAS/GVM scan engine to Standard without a full Professional upgrade — the same "core platform + priced add-on module" pattern CrowdStrike uses for Falcon Spotlight. Included by default in Professional and Enterprise.</p></div>
+        <div class="card"><h4>Per-Endpoint metering (alternative to a flat tier)</h4><p>$6.50/endpoint/year, no tier commitment, 500-endpoint minimum — priced the same way Tenable, Qualys, Rapid7, and CrowdStrike Spotlight all bill (per unit under management), for an environment whose size varies too much for a flat cap to fit well. Still 3x+ cheaper per unit than every named competitor in §02. "Endpoint" here means the same billable unit as "asset" elsewhere in this document — any host, cloud resource, network device, or application VulnHunter tracks a finding against.</p></div>
+        <div class="card"><h4>Scan-engine add-on (Standard tier only)</h4><p>$6,000/year adds the OpenVAS/GVM scan engine to Standard without a full Professional upgrade — the same "core platform + priced add-on module" pattern CrowdStrike uses for Falcon Spotlight. Included by default in Professional and Enterprise. Note: the remediation engine itself (playbook generation) is a Professional-tier capability, not an add-on — see the callout in §01.</p></div>
         <div class="card"><h4>Multi-year commitment discount</h4><p>10% (2-year) / 15% (3-year), prepaid or annual invoicing — deliberately more modest than the 38–45% Qualys reportedly discounts at 3-year/10,000+-asset scale (§02's sourcing), since VulnHunter's list price is already positioned well below that comparison point.</p></div>
       </div>
     </section>
@@ -216,10 +219,11 @@
           <thead><tr><th>Capability</th><th class="std">Standard</th><th class="pro">Professional</th><th class="ent">Enterprise</th></tr></thead>
           <tbody>
             <tr><td>Live KEV/EPSS threat-intel enrichment</td><td class="std">✓</td><td class="pro">✓</td><td class="ent">✓</td></tr>
-            <tr><td>Connectors included</td><td class="std">Up to 3</td><td class="pro">All, unlimited</td><td class="ent">All, unlimited</td></tr>
-            <tr><td>OpenVAS/GVM scan engine</td><td class="std">—</td><td class="pro">✓</td><td class="ent">✓</td></tr>
-            <tr><td>Playbook generation &amp; approval workflow</td><td class="std">✓</td><td class="pro">✓</td><td class="ent">✓</td></tr>
             <tr><td>Custom priority/risk/exposure scoring rules</td><td class="std">✓</td><td class="pro">✓</td><td class="ent">✓</td></tr>
+            <tr><td>Connectors included</td><td class="std">Up to 3</td><td class="pro">All, unlimited</td><td class="ent">All, unlimited</td></tr>
+            <tr><td><strong>Remediation engine (generated playbooks)</strong></td><td class="std">—</td><td class="pro">✓</td><td class="ent">✓</td></tr>
+            <tr><td>Approval &amp; exception workflow</td><td class="std">—</td><td class="pro">✓</td><td class="ent">✓</td></tr>
+            <tr><td>OpenVAS/GVM scan engine</td><td class="std">Add-on</td><td class="pro">✓</td><td class="ent">✓</td></tr>
             <tr><td>Deployment model</td><td class="std">Dedicated single-tenant</td><td class="pro">Dedicated single-tenant</td><td class="ent">Dedicated single-tenant or self-hosted</td></tr>
             <tr><td>SSO/SAML</td><td class="std">Self-service</td><td class="pro">Self-service</td><td class="ent">Assisted setup</td></tr>
             <tr><td>Account management</td><td class="std">Self-service</td><td class="pro">Quarterly review</td><td class="ent">Dedicated TAM</td></tr>
