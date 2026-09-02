@@ -36,6 +36,7 @@ const routes = [
   { pattern: /^\/infoblox\/?$/, load: () => import("./pages/infoblox.js") },
   { pattern: /^\/axonius\/?$/, load: () => import("./pages/axonius.js") },
   { pattern: /^\/active-directory\/?$/, load: () => import("./pages/activeDirectory.js") },
+  { pattern: /^\/openvas\/?$/, load: () => import("./pages/openvas.js") },
   { pattern: /^\/adaptors\/?$/, load: () => import("./pages/adaptors.js") },
   { pattern: /^\/run\/?$/, load: () => import("./pages/run.js") },
   { pattern: /^\/ai-assist\/?$/, load: () => import("./pages/aiAssist.js") },

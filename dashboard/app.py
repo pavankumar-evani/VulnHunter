@@ -47,6 +47,7 @@ from remediation.connectors.infoblox_connector import InfobloxConnector  # noqa:
 from remediation.connectors.jira_connector import (  # noqa: E402
     DEFAULT_ISSUE_TYPE as JIRA_DEFAULT_ISSUE_TYPE, JiraConnector, build_issue_body,
 )
+from remediation.connectors.openvas_connector import OpenVasConnector  # noqa: E402
 from remediation.connectors.prismacloud_connector import PrismaCloudConnector  # noqa: E402
 from remediation.connectors.qualys_connector import QualysConnector  # noqa: E402
 from remediation.connectors.servicenow_connector import (  # noqa: E402
@@ -95,6 +96,43 @@ async def _no_cache_static_assets(request: Request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+def _csp_enabled():
+    # Same read-fresh-from-env convention as _require_login_for_reads_enabled() below,
+    # for the same reason (tests toggle it with patch.dict(os.environ, ...)).
+    return os.environ.get("VULNHUNTER_ENABLE_CSP", "").strip().lower() in ("1", "true", "yes")
+
+
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    """Standard OWASP Secure Headers on every response. The first four are
+    unconditional and cannot break this app - they only remove capabilities a same-
+    origin, no-iframe, no-third-party-embed SPA never uses (clickjacking framing,
+    MIME-sniffing, leaking the full referrer URL to other origins, camera/mic/geo
+    access). Content-Security-Policy is opt-in (VULNHUNTER_ENABLE_CSP=true, same
+    off-by-default convention as VULNHUNTER_REQUIRE_LOGIN_FOR_READS just below) rather
+    than unconditional: this codebase's own inline `style="..."` attributes (see
+    login.js/logout.js and others) need `style-src 'unsafe-inline'` to keep rendering,
+    and a CSP is the one header here that fails closed - shipping it on by default and
+    getting the allow-list wrong would break the whole UI, not just narrow an attack
+    surface. script-src has no such exception: index.html loads exactly one
+    same-origin module script and this codebase has zero inline
+    onclick=/onload=-style handlers (checked directly), so 'self' with no
+    'unsafe-inline' is safe today - if that ever changes, this policy must change with
+    it."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    if _csp_enabled():
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+            "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        )
     return response
 
 
@@ -1341,6 +1379,120 @@ def api_active_directory_fetch(body: ActiveDirectoryFetchBody, request: Request)
                    f"reconcile into asset_ownership.json from this source alone: {len(result['skipped'])} skipped "
                    f"for that reason. Use Tenable/Qualys/Infoblox/Axonius to establish real ip/mac ground truth.",
         **result,
+    }
+
+
+def _openvas_connector(body):
+    return OpenVasConnector(
+        hostname=body.hostname or None, port=body.port,
+        username=body.username or None, password=body.password or None,
+        socket_path=body.socket_path or None,
+        **({"scan_config_id": body.scan_config_id} if getattr(body, "scan_config_id", "") else {}),
+        **({"scanner_id": body.scanner_id} if getattr(body, "scanner_id", "") else {}),
+    )
+
+
+class OpenVasTestConnectionBody(BaseModel):
+    hostname: str = ""
+    port: int = 9390
+    username: str = ""
+    password: str = ""
+    socket_path: str = ""
+
+
+@app.post("/api/openvas/test-connection")
+def api_openvas_test_connection(body: OpenVasTestConnectionBody, request: Request):
+    rbac.require_admin(request)
+    if not body.socket_path and not body.hostname:
+        raise HTTPException(status_code=400, detail="Either a hostname or a local socket path is required.")
+    if not body.username or not body.password:
+        raise HTTPException(status_code=400, detail="Username and password are both required.")
+    conn = _openvas_connector(body)
+    try:
+        result = conn.test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"OpenVAS/GVM connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected (GMP {result.get('gmp_version') or 'unknown version'}).", **result}
+
+
+class OpenVasScanStartBody(OpenVasTestConnectionBody):
+    target_name: str = ""
+    hosts: str = ""
+    scan_config_id: str = ""
+    scanner_id: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/openvas/scan/start")
+def api_openvas_scan_start(body: OpenVasScanStartBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm, provide real GVM credentials and at least one "
+                                                  "target, and this will launch a real authenticated scan against "
+                                                  "the network you name below.", "task_id": None}
+    rbac.require_admin(request)
+    if not body.username or not body.password:
+        raise HTTPException(status_code=400, detail="Username and password are both required.")
+    hosts = [h.strip() for h in body.hosts.replace(",", "\n").splitlines() if h.strip()]
+    if not hosts:
+        raise HTTPException(status_code=400, detail="At least one target host, CIDR range, or hostname is required.")
+    conn = _openvas_connector(body)
+    try:
+        task_id = conn.create_and_start_scan(body.target_name or f"VulnHunter target ({hosts[0]})", hosts)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"OpenVAS/GVM scan launch failed: {exc}") from exc
+    return {
+        "preview_only": False,
+        "task_id": task_id,
+        "message": f"Scan launched against {len(hosts)} target(s) as GVM task {task_id}. A real authenticated "
+                   f"network scan can take anywhere from minutes to hours depending on scope - poll status below, "
+                   f"then import once it reports Done.",
+    }
+
+
+class OpenVasScanStatusBody(OpenVasTestConnectionBody):
+    task_id: str = ""
+
+
+@app.post("/api/openvas/scan/status")
+def api_openvas_scan_status(body: OpenVasScanStatusBody, request: Request):
+    rbac.require_admin(request)
+    if not body.task_id:
+        raise HTTPException(status_code=400, detail="task_id is required.")
+    conn = _openvas_connector(body)
+    try:
+        status = conn.get_task_status(body.task_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"OpenVAS/GVM status check failed: {exc}") from exc
+    return {"ok": True, **status}
+
+
+class OpenVasScanImportBody(OpenVasTestConnectionBody):
+    task_id: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/openvas/scan/import")
+def api_openvas_scan_import(body: OpenVasScanImportBody, request: Request):
+    if not body.confirm:
+        return {"preview_only": True, "message": "Check confirm to pull this task's real results into a live export file.", "written_to": None, "count": None}
+    rbac.require_admin(request)
+    if not body.task_id:
+        raise HTTPException(status_code=400, detail="task_id is required.")
+    conn = _openvas_connector(body)
+    out_path = LIVE_DATA_DIR / "openvas_export.csv"
+    try:
+        conn.fetch_and_write_csv(out_path, task_id=body.task_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"OpenVAS/GVM result import failed: {exc}") from exc
+    with out_path.open(encoding="utf-8") as f:
+        count = max(sum(1 for _ in f) - 1, 0)
+    return {
+        "preview_only": False,
+        "message": f"Wrote {count} row(s) to remediation/live-data/openvas_export.csv. Run "
+                   f"`/remediate remediation/live-data/openvas_export.csv` in an interactive Claude "
+                   f"Code session to bring this into the dashboard - see docs/GOING_LIVE.md.",
+        "written_to": "remediation/live-data/openvas_export.csv",
+        "count": count,
     }
 
 

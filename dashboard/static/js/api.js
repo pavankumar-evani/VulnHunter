@@ -122,4 +122,8 @@ export const api = {
   axoniusFetch: (body) => request("POST", "/api/axonius/fetch", body),
   activeDirectoryTestConnection: (body) => request("POST", "/api/active-directory/test-connection", body),
   activeDirectoryFetch: (body) => request("POST", "/api/active-directory/fetch", body),
+  openvasTestConnection: (body) => request("POST", "/api/openvas/test-connection", body),
+  openvasScanStart: (body) => request("POST", "/api/openvas/scan/start", body),
+  openvasScanStatus: (body) => request("POST", "/api/openvas/scan/status", body),
+  openvasScanImport: (body) => request("POST", "/api/openvas/scan/import", body),
 };

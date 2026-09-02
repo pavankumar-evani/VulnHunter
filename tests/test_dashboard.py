@@ -1444,6 +1444,59 @@ class ApiActiveDirectory(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
 
+class ApiOpenVas(unittest.TestCase):
+    def test_test_connection_requires_login(self):
+        resp = client.post("/api/openvas/test-connection", json={"hostname": "gvm.example.com", "username": "admin", "password": "secret"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_test_connection_with_missing_target_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/openvas/test-connection", json={"hostname": "", "socket_path": "", "username": "admin", "password": "secret"})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_test_connection_with_missing_credentials_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/openvas/test-connection", json={"hostname": "gvm.example.com", "username": "", "password": ""})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_scan_start_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/openvas/scan/start", json={"hostname": "gvm.example.com", "username": "admin", "password": "secret", "hosts": "10.0.0.1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+        self.assertIsNone(resp.json()["task_id"])
+
+    def test_scan_start_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/openvas/scan/start", json={"hostname": "gvm.example.com", "username": "admin", "password": "secret", "hosts": "10.0.0.1", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_scan_start_with_confirm_but_no_hosts_is_rejected(self):
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        try:
+            resp = client.post("/api/openvas/scan/start", json={"hostname": "gvm.example.com", "username": "admin", "password": "secret", "hosts": "", "confirm": True})
+        finally:
+            _logout()
+        self.assertEqual(resp.status_code, 400)
+
+    def test_scan_status_requires_login(self):
+        resp = client.post("/api/openvas/scan/status", json={"hostname": "gvm.example.com", "username": "admin", "password": "secret", "task_id": "task-1"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_scan_import_without_confirm_never_touches_the_network(self):
+        resp = client.post("/api/openvas/scan/import", json={"hostname": "gvm.example.com", "username": "admin", "password": "secret", "task_id": "task-1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["preview_only"])
+
+    def test_scan_import_with_confirm_but_not_logged_in_is_rejected(self):
+        resp = client.post("/api/openvas/scan/import", json={"hostname": "gvm.example.com", "username": "admin", "password": "secret", "task_id": "task-1", "confirm": True})
+        self.assertEqual(resp.status_code, 401)
+
+
 class ApiAiAssist(unittest.TestCase):
     def test_preview_builds_a_real_prompt_with_no_confirm(self):
         resp = client.post("/api/ai-assist", json={"finding_id": "FIND-12", "action": "explain"})
@@ -1883,6 +1936,30 @@ class RequireLoginForReadsMiddleware(unittest.TestCase):
         _logout()
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
         self.assertEqual(client.get("/api/admin/users").status_code, 200)
+
+
+class SecurityHeadersMiddleware(unittest.TestCase):
+    """The unconditional OWASP secure-headers set is on by default and cannot be
+    turned off (unlike the opt-in CSP) - it's the one thing in this file every
+    response, authenticated or not, always carries."""
+
+    def test_safe_headers_present_on_every_response(self):
+        resp = client.get("/api/status")
+        self.assertEqual(resp.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(resp.headers.get("X-Frame-Options"), "DENY")
+        self.assertEqual(resp.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin")
+        self.assertIn("geolocation=()", resp.headers.get("Permissions-Policy", ""))
+
+    def test_csp_absent_by_default(self):
+        resp = client.get("/api/status")
+        self.assertNotIn("Content-Security-Policy", resp.headers)
+
+    def test_csp_present_when_opted_in(self):
+        with patch.dict(os.environ, {"VULNHUNTER_ENABLE_CSP": "true"}):
+            resp = client.get("/api/status")
+        csp = resp.headers.get("Content-Security-Policy", "")
+        self.assertIn("default-src 'self'", csp)
+        self.assertIn("style-src 'self' 'unsafe-inline'", csp)
 
 
 class ApiReports(unittest.TestCase):

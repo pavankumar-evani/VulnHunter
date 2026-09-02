@@ -76,6 +76,28 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
     Qualys/Prisma Cloud/Cortex XSIAM moved out of the "reference catalog, not yet built"
     tables into full connector sections; the cross-scanner dedup engine and Prisma
     Cloud/XSIAM roadmap items marked done where they'd been tracked as open.
+- **A real open-source scan engine, not just another pull connector**:
+  `remediation/connectors/openvas_connector.py` drives OpenVAS/Greenbone Community
+  Edition (GVM) directly via GMP (Greenbone's protocol, over `python-gvm`) - create a
+  target, create + start a scan task, poll it, pull real results - the first connector
+  in this project that launches a scan itself rather than reading one out of a scanner
+  someone already owns. Results flatten into Tenable's exact CSV shape (zero normalizer
+  changes). New dashboard flow at `/openvas` (Connect → Start Scan → Check Status →
+  Import Results - four steps, not one Fetch button, since a real scan can run for
+  hours and a request shouldn't block on it). 21 new connector tests
+  (`tests/test_openvas_connector.py`) plus 9 new dashboard-route safety-boundary tests,
+  against a hand-rolled fake GMP client - **never exercised against a real GVM server**,
+  same disclosed limitation as this project's other connectors. Full design, engine
+  comparison (vs. Nessus/Nuclei/ZAP/Trivy), schema, and the "zero-security-headcount
+  company's first scan" walkthrough in the new
+  [`docs/VULNERABILITY_ENGINE_ARCHITECTURE.md`](docs/VULNERABILITY_ENGINE_ARCHITECTURE.md).
+- **OWASP secure response headers**: every dashboard response now carries
+  `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`
+  unconditionally (zero-risk - this SPA never used the capabilities they remove), plus an
+  opt-in `Content-Security-Policy` (`VULNHUNTER_ENABLE_CSP=true`, off by default because
+  this codebase's existing inline `style="..."` attributes need `style-src
+  'unsafe-inline'` - shipping it on by default risked breaking the UI it's meant to
+  protect). Same "opt-in, off by default" convention as `VULNHUNTER_REQUIRE_LOGIN_FOR_READS`.
 - **[docs/GOING_LIVE.md](docs/GOING_LIVE.md)**: the operational checklist for actually
   connecting a real account - exact credentials needed per connector, exact commands/
   steps, and an honest split between what's ready today with zero code changes

@@ -28,6 +28,7 @@ for the source language this doc draws from. Also see [USER_GUIDE.md](USER_GUIDE
 | Infoblox connector | Pulls DNS host records via WAPI, normalizes into asset-inventory entries (not findings) - **dashboard Test Connection + Fetch form at `/infoblox`** | Built against public docs, **unit-tested against mocked HTTP only** — never exercised against a live grid |
 | Axonius connector | Pulls aggregated device records via the devices API, normalizes into asset-inventory entries (not findings) - **dashboard Test Connection + Fetch form at `/axonius`** | Built against public docs, **unit-tested against mocked HTTP only** — never exercised against a live tenant |
 | Active Directory (asset-inventory) connector | Pulls computer objects via LDAP, normalizes into asset-inventory entries (not findings) - **dashboard Test Connection + Fetch form at `/active-directory`** | Built against Microsoft's documented AD schema, **unit-tested against a hand-rolled fake LDAP connection only** — never exercised against a live domain controller |
+| OpenVAS / Greenbone (GVM) connector | The one **scan engine** in this table, not a pull connector onto a scanner you already run - launches a real authenticated GMP scan, polls it, imports results - **dashboard Connect/Start Scan/Poll/Import form at `/openvas`** | Built against Greenbone's public GMP protocol docs via `python-gvm`, **unit-tested against a hand-rolled fake GMP client only** — never exercised against a live GVM server. See [`docs/VULNERABILITY_ENGINE_ARCHITECTURE.md`](VULNERABILITY_ENGINE_ARCHITECTURE.md) |
 | CISA KEV enrichment | Flags CVEs confirmed actively exploited in the wild | **Live-verified** — built and tested against the real, free, public endpoint |
 | FIRST.org EPSS enrichment | Attaches a 0–1 exploitation-probability score per CVE | **Live-verified** — built and tested against the real, free, public endpoint |
 
@@ -118,6 +119,48 @@ a **Fetch Live Data** button (the full fetch → knowledge-base-lookup → flatt
 above, writing to `remediation/live-data/qualys_export.csv`). Same credential-handling,
 confirm-gating, and "still needs `/remediate <file>`" caveats as Tenable's dashboard form
 above.
+
+## OpenVAS / Greenbone (GVM) connector - the scan engine
+
+**File:** [`remediation/connectors/openvas_connector.py`](../remediation/connectors/openvas_connector.py)
+**Full design doc:** [`docs/VULNERABILITY_ENGINE_ARCHITECTURE.md`](VULNERABILITY_ENGINE_ARCHITECTURE.md)
+
+Every other connector in this document pulls data out of a scanner or CMDB someone
+already owns. This one is different: it drives Greenbone Community Edition (GVM, the
+free/open-source scan engine descended from the original Nessus) directly, via GMP
+(Greenbone Management Protocol - XML over a TLS socket or a local Unix socket, not
+HTTP), using Greenbone's own `python-gvm` client library. It creates a target, creates
+and starts a task, polls the task until done, and pulls real per-host CVE results back -
+this is the piece that lets a company with **no existing vulnerability scanner** get
+real findings out of VulnHunter, not just a company that already pays for Tenable or
+Qualys.
+
+Results are flattened into **Tenable's exact CSV column shape**
+(`tenable_connector.CSV_FIELDNAMES`), same reuse decision as the Qualys connector above -
+GVM is a CVE-scoped host-vulnerability source like Tenable/Qualys, so it needs the same
+`/remediate <file>` asset-classification step, and reusing their CSV shape means zero
+normalizer changes.
+
+**Verification status:** built against Greenbone's publicly documented GMP protocol.
+Covered by 21 tests in `tests/test_openvas_connector.py` - connection ownership
+semantics, target/task creation and scan startup, status polling (Done/Stopped/timeout),
+CVE extraction (both documented GMP result shapes), NVT tag parsing, and CSV-row
+mapping - all against a hand-rolled fake GMP client (real GMP-shaped XML elements, no
+network), the same test-double convention `active_directory_connector.py` established
+for this repo's other stateful-protocol connector. **It has not been exercised against a
+real GVM server**, same reason as every other connector here: none was available while
+building it. `DEFAULT_SCAN_CONFIG_ID`/`DEFAULT_SCANNER_ID` are Greenbone's own documented
+default seed IDs (present on every fresh install) - a customized instance may need to
+override them.
+
+**Dashboard form:** `/openvas` (also reachable via **Connectors / Adaptors**) is shaped
+differently from every connector above it, because launching a scan is a lifecycle, not
+a single fetch: **Test Connection**, then **Start Scan** (confirm-gated, requires an
+explicit "I own or am authorized to scan" attestation), then **Check Status** (poll as
+many times as needed - a real scan can take hours), then **Import Results** (confirm-
+gated, writes `remediation/live-data/openvas_export.csv`). See
+`docs/VULNERABILITY_ENGINE_ARCHITECTURE.md` §2 for why this couldn't be one button the
+way Tenable/Qualys's Fetch is.
 
 ## ServiceNow connector
 
@@ -480,11 +523,11 @@ rather than a promise to build N vendor-specific ones with no way to verify them
 
 The connector *pattern* — vendor auth flow, paginated fetch, mapping into a stable
 internal schema, mocked-HTTP unit tests, an explicit "built vs. verified" caveat — is now
-proven twelve times over for vulnerability-finding connectors (Tenable, Armis, Qualys,
-ServiceNow, Jira, Splunk, CrowdStrike, Prisma Cloud, Cortex XSIAM) and asset-inventory
-connectors (Infoblox, Axonius, Active Directory), plus the generic webhook adapter above
-for anything that can push data to VulnHunter rather than needing VulnHunter to pull from
-it.
+proven thirteen times over for vulnerability-finding connectors (Tenable, Armis, Qualys,
+OpenVAS/GVM, ServiceNow, Jira, Splunk, CrowdStrike, Prisma Cloud, Cortex XSIAM) and
+asset-inventory connectors (Infoblox, Axonius, Active Directory), plus the generic
+webhook adapter above for anything that can push data to VulnHunter rather than needing
+VulnHunter to pull from it.
 
 The entries below are the same idea one stage earlier: real, researched facts about
 each product's actual public API (auth model, real endpoint/data shape, what would flow)

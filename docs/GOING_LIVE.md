@@ -21,8 +21,8 @@ get and where to put it.
 Two genuinely different situations, by connector:
 
 - **Ready today, entirely from the dashboard - no CLI, no script**: ServiceNow, Jira,
-  Splunk (push - findings out), and Tenable, Qualys, Prisma Cloud, Cortex XSIAM,
-  Infoblox, Axonius, Active Directory (pull - data in). Every one of these takes real
+  Splunk (push - findings out), and Tenable, Qualys, OpenVAS/GVM, Prisma Cloud, Cortex
+  XSIAM, Infoblox, Axonius, Active Directory (pull - data in). Every one of these takes real
   credentials fresh on every request, typed into that connector's own page under
   **Connectors / Adaptors** - never stored server-side, by design (see the "Credential
   storage" note each connector's connection-settings panel already shows).
@@ -96,6 +96,34 @@ column shape as Tenable's export (a deliberate reuse decision - see
 **First real run:** `QualysConnector.fetch_host_detections_page()`/`fetch_knowledge_base()`
 are the adjustment points if your pod's real XML response differs from the documented
 shape.
+
+### OpenVAS / Greenbone (GVM) - the one real scan engine, not a pull connector
+
+**What you need:** a running GVM (Greenbone Community Edition) instance you administer,
+its hostname (or local socket path) + a GMP username/password. Standing up GVM itself is
+infrastructure work outside this repo - see
+[VULNERABILITY_ENGINE_ARCHITECTURE.md §5](VULNERABILITY_ENGINE_ARCHITECTURE.md#5-standing-up-gvm-itself-reference-not-built-by-this-repo)
+for Greenbone's official Docker Compose stack and realistic resource/feed-sync
+expectations. This is the connector to use if you have **no existing vulnerability
+scanner at all** - every other connector in this list pulls from a scanner you already
+bought.
+
+**From the dashboard:** **Connectors / Adaptors** → OpenVAS / Greenbone (GVM) card (or
+`/openvas`). This one is a 4-step flow, not a single Fetch, because launching a scan is a
+lifecycle: **Test Connection**, then enter target host(s)/CIDR + check the "I own or am
+authorized to scan" box + **Start Scan** (returns a task ID immediately - it does not
+wait for the scan to finish), then **Check Status** as many times as you like (a real
+authenticated scan can take minutes to hours), then once status reads `Done`, **Import
+Results** - writes to `remediation/live-data/openvas_export.csv` in the exact same
+column shape as Tenable's export. Then run
+`/remediate remediation/live-data/openvas_export.csv` the same way as Tenable above.
+
+**First real run:** `DEFAULT_SCAN_CONFIG_ID`/`DEFAULT_SCANNER_ID` in
+`openvas_connector.py` are Greenbone's documented default seed UUIDs ("Full and fast" /
+"OpenVAS Default") - if your instance's defaults were changed, look up the real IDs via
+GMP's `get_scan_configs()`/`get_scanners()` and paste them into the page's advanced
+fields. `OpenVasConnector.to_csv_row()` is the adjustment point if your GVM version's
+`<result>` XML differs from the documented shape.
 
 ### Prisma Cloud
 
