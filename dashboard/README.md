@@ -366,8 +366,9 @@ framework-appropriate JSON endpoints rather than Flask's `render_template` calls
 
 ## What this is NOT (yet)
 
-This is a single-process MVP with a real but partial auth model and no persistence
-layer:
+This is a single-process MVP. Auth is real but its read-gating is opt-in, and
+persistence is real for every actively-written record store but not for pipeline
+output or historical trends:
 
 - **Reads are still ungated server-side** — login is required by the client-side router
   for a coherent UX, and real mutations (sends, real pipeline runs, priority-rule edits,
@@ -391,27 +392,30 @@ layer:
   (SSO) is real, working client code but stays disabled until a real identity provider's
   credentials are configured (see "Authentication" above).
 - **Findings/plans still aren't in a database** — they're re-read from disk on every
-  request; there's no historical trend view across multiple pipeline runs. Six of the
-  smaller, actively-written record stores (`alert_state`/`schedule_state` in
-  `remediation/notifications/`, plus `exceptions`, `remediation_approvals`,
-  `activity_log`, and `ai_usage_log`) **have** moved off flat JSON files onto a real,
-  local SQLite database (`remediation/vulnhunter.db`, gitignored - see
+  request; there's no historical trend view across multiple pipeline runs. Every other
+  actively-written record store *is* in one now: `alert_state`/`schedule_state` (in
+  `remediation/notifications/`), `exceptions`, `remediation_approvals`, `activity_log`,
+  `ai_usage_log`, `asset_ownership` (`remediation/inventory/asset_inventory.py`'s
+  owner/team/facing/environment/network-info store), `users` (`auth/users.py`), and
+  `live_data_findings` (the generic-ingest/Prisma Cloud/Cortex XSIAM adapters' pending
+  output, via `remediation/connectors/live_data_store.py`) all live in a real, local
+  SQLite database (`remediation/vulnhunter.db`, gitignored - see
   `remediation/utils/db.py`), accessed through SQLAlchemy Core so a future move to
-  Postgres for real multi-tenancy is a connection-string change, not a rewrite. A
-  first-time run against a checkout that still has the old JSON seed files
-  (`remediation/exceptions/exceptions.json`, `remediation/remediation_approvals/
-  remediation_approvals.json`) should run `python scripts/migrate_json_to_db.py` once
-  to carry that content into the new DB - safe to re-run, and a no-op if there's
-  nothing left to migrate. `asset_inventory.py` (owner/team/facing/environment/
-  network-info), `auth/users.py`, and the three inline JSON buffers `dashboard/app.py`
-  writes directly (`generic-ingested.json`, `prismacloud_findings.json`,
-  `cortex_xsiam_findings.json`) are still flat JSON, still only protected by
-  `remediation/utils/file_lock.py`'s advisory lock (a dependency-free, cross-platform
-  primitive; see its own module docstring) - real, but weaker than a DB transaction,
-  and closing that gap is scoped follow-up work, not done in this pass. Even for the
-  six migrated stores, SQLite is a genuine mitigation for a single-machine deployment,
-  not a distributed-lock or multi-machine story - real ACID transactions on one file,
-  not a client-server database.
+  Postgres for real multi-tenancy is a connection-string change, not a rewrite.
+  `scripts/migrate_json_to_db.py` is the one-time, idempotent migration that carried
+  each store's old flat-JSON seed data (where it had any, e.g. `exceptions.json`'s one
+  waiver example, `users.json`'s two demo accounts) into its table on a fresh
+  checkout - safe to re-run, and a no-op once there's nothing left to migrate. Every
+  one of these stores' own read-modify-write cycle (e.g. compute-next-id-then-insert)
+  is still guarded by `remediation/utils/file_lock.py`'s advisory lock (a
+  dependency-free, cross-platform primitive; see its own module docstring), since
+  SQLite's own locking only gives atomicity for a single statement - a caller whose
+  critical section spans more than one still needs its own mutual exclusion.
+  `activity_log`/`ai_usage_log` are the one exception - a plain autoincrement `INSERT`
+  has no read-modify-write gap left to protect, so those two dropped the lock entirely.
+  None of this is a distributed-lock or multi-machine story - real ACID transactions on
+  one SQLite file, not a client-server database - so it's a genuine mitigation for a
+  single-machine deployment, not more than that.
 - **Synchronous pipeline execution** — a real (non-dry-run) `/api/run` submission blocks
   the request until the pipeline finishes, which can be slow. A production version needs
   a job queue.

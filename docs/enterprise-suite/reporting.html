@@ -124,7 +124,7 @@
 
     <div class="callout info">
       <span class="label">The short version</span>
-      <p><strong>Report content</strong> is always a real, live-computed snapshot of this repo's current findings — there's no sample data and no historical trend line yet, because there's no persistence layer to trend from. <strong>Report delivery</strong> is a separate concern, and here the honest answer surprises people both ways: on-demand generation is real (§02), and recurring email delivery on a schedule is <em>also</em> real, working code today (§04) — not a roadmap idea. What's genuinely still roadmap is narrower than "scheduling": real historical aggregation, custom field selection, and calendar-aware timing. §05 draws that line precisely.</p>
+      <p><strong>Report content</strong> is always a real, live-computed snapshot of this repo's current findings — there's no sample data and no historical trend line yet, because there's no historical/time-series storage to trend from (a real local SQLite database now backs several other record stores — see the Architecture doc's storage-model section — but report snapshots aren't one of them yet). <strong>Report delivery</strong> is a separate concern, and here the honest answer surprises people both ways: on-demand generation is real (§02), and recurring email delivery on a schedule is <em>also</em> real, working code today (§04) — not a roadmap idea. What's genuinely still roadmap is narrower than "scheduling": real historical aggregation, custom field selection, and calendar-aware timing. §05 draws that line precisely.</p>
     </div>
 
     <section id="contents">
@@ -274,7 +274,7 @@
 
       <div class="callout info">
         <span class="label">Why "period" isn't the same claim as "scheduling"</span>
-        <p>These are two separate, easily-conflated facts. <strong>Report content</strong> has no history: the Period selector (daily…yearly) labels intended cadence, but every period — on demand or scheduled — renders the same real, current-moment snapshot, because this MVP has no persistence layer to aggregate from yet (see <code>dashboard/reports.py</code>'s own module docstring, and <code>KNOWLEDGE_TRANSFER.md</code>'s roadmap). <strong>Report delivery</strong> is a different question, answered in §04: recurring email delivery on a schedule is real, shipped code today, just not yet populated with any subscription by default and dependent on real SMTP configuration to actually send.</p>
+        <p>These are two separate, easily-conflated facts. <strong>Report content</strong> has no history: the Period selector (daily…yearly) labels intended cadence, but every period — on demand or scheduled — renders the same real, current-moment snapshot, because there's no historical trend/time-series storage to aggregate report periods from yet — real persistence exists now for other record stores, just not this one (see <code>dashboard/reports.py</code>'s own module docstring, and <code>KNOWLEDGE_TRANSFER.md</code>'s roadmap). <strong>Report delivery</strong> is a different question, answered in §04: recurring email delivery on a schedule is real, shipped code today, just not yet populated with any subscription by default and dependent on real SMTP configuration to actually send.</p>
       </div>
     </section>
 

@@ -1,8 +1,8 @@
 // System-notification feed: real, system-generated events computed from live data
 // (SLA breaches, KEV-listed findings, expiring exceptions, pending generic-ingested
 // findings - see dashboard_data.build_notifications()). This is deliberately NOT
-// person-to-person messaging between users - there's no auth/user system yet for that
-// to mean anything (see KNOWLEDGE_TRANSFER.md). "Read" state is tracked client-side in
+// person-to-person messaging between users - the auth/user system this app has doesn't
+// extend to messaging anyone (see KNOWLEDGE_TRANSFER.md). "Read" state is tracked client-side in
 // localStorage only, since there's no per-user server state to track it against; it's
 // per-browser, not per-account.
 import { api } from "./api.js";

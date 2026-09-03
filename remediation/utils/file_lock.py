@@ -13,8 +13,10 @@ there first) rather than fcntl/msvcrt, since those are platform-specific
 dependency-free "lock file" pattern real small tools use for single-machine
 coordination - it is explicitly NOT a distributed lock. It coordinates processes on
 ONE machine sharing ONE filesystem, which is this app's actual deployment model (see
-dashboard/README.md's "no database" limitation - a real multi-machine deployment
-needs a real database with real transactions instead of this).
+dashboard/README.md's "What this is NOT (yet)" section - even the stores that have
+since moved to a real local SQLite database are still one file on one machine; a real
+multi-machine deployment needs a real client-server database with real distributed
+transactions instead of this).
 """
 import os
 import time

@@ -101,20 +101,26 @@ this document:
   there is no true multi-tenant data boundary — the MSSP "tenant view" is a client-side
   filter over one shared dataset, not server-side isolation. A real compliance program
   needs both of those closed, not an authentication layer built from zero. See
-  [dashboard/README.md](../dashboard/README.md)'s "Authentication" section.
+  [dashboard/README.md](../dashboard/README.md)'s "Authentication" section and
+  [KNOWLEDGE_TRANSFER.md §11](../KNOWLEDGE_TRANSFER.md#11-the-enterprisemssp-platform-ask--scope-reality-check)
+  for the multi-tenancy architecture gap specifically.
 - **Third-party audit / formal assessment** — SOC 2 specifically requires an audit by a
   licensed CPA firm over months of operational evidence; NIST CSF alignment requires a
   self-attestation or third-party assessment. No amount of internal documentation
   (including this one) substitutes for that process.
 - **A real deployment and data-handling architecture** — a real local SQLite database now
-  backs every record store that sees real read-modify-write traffic (approvals,
-  exceptions, activity/AI-usage logs, users) — the persistence layer this section used to
-  say didn't exist at all is real today. What's still genuinely missing: no
-  encryption-at-rest layer of its own (it inherits whatever the host disk provides —
+  backs every actively-written record store: `exceptions`, `remediation_approvals`,
+  `activity_log`, `ai_usage_log`, `asset_ownership`, `users`, `alert_state`/
+  `schedule_state` (notification-scheduler dedup state), and `live_data_findings`
+  (pending generic-ingest/Prisma Cloud/Cortex XSIAM output) — the persistence layer this
+  section used to say didn't exist at all is real today. What's still genuinely missing:
+  no encryption-at-rest layer of its own (it inherits whatever the host disk provides —
   enabling your OS's or cloud provider's disk-level encryption under the host is the
   correct control for today's single-host deployment, not an app-level code change), no
-  data retention policy, and no formal incident-response process. And it's single-host
-  only regardless — no per-tenant data boundary, no distributed-deployment story.
+  data retention policy, no formal incident-response process, and no historical
+  trend/time-series storage across pipeline runs (findings/playbooks are still re-read
+  from disk on every request, by design). And it's single-host only regardless — no
+  per-tenant data boundary, no distributed-deployment story.
 - **Deployment + pricing model** — SaaS vs. self-hosted, and what this costs per customer
   at scale given real Claude API usage, is a business decision this document (and the
   codebase) cannot make unilaterally.

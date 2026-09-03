@@ -77,5 +77,6 @@ report (see `remediation/sample-data/` and `SECURITY_REPORT.md`). From there:
 | FAQ | [docs/FAQ.md](FAQ.md) |
 
 If something breaks, check [dashboard/README.md](../dashboard/README.md#what-this-is-not-yet)
-first — several current limitations (single-tenant, no persistence layer, local-only
+first — several current limitations (single-tenant with no per-tenant data boundary, no
+historical trend storage across pipeline runs, reads open by default, local-only
 binding) are already known and documented, not bugs.

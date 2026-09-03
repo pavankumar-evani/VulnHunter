@@ -106,10 +106,14 @@ python dashboard/app.py
 
 The dashboard (`dashboard/app.py`) is a FastAPI JSON API (`/api/*`) behind a hand-rolled
 vanilla-JS single-page frontend (`dashboard/static/`) — no Node/npm build step. It is
-**read-mostly**: every page re-reads the real artifacts on disk (git history for
-`/vulnhunt`, files under `remediation/` for `/remediate`) on every request. There is no
-database and no historical trend view across runs — see
-[dashboard/README.md](../dashboard/README.md)'s "What this is NOT (yet)" section.
+**read-mostly** for pipeline output: every page re-reads the real findings/plan
+artifacts on disk (git history for `/vulnhunt`, files under `remediation/` for
+`/remediate`) on every request, and there's still no historical trend view across runs.
+A real local SQLite database (`remediation/vulnhunter.db`) backs everything else that
+gets read-modify-write traffic — exceptions, approvals, activity/AI-usage logs, asset
+ownership, users, and more — see
+[dashboard/README.md](../dashboard/README.md)'s "What this is NOT (yet)" section for the
+precise, current split between the two.
 
 | Page | Route | Purpose |
 |---|---|---|
@@ -122,7 +126,7 @@ database and no historical trend view across runs — see
 | ServiceNow | `/servicenow` | Previews the exact Incident payload for every finding with **zero credentials required**; only sends anything if you supply real credentials and explicitly confirm. `[SCREENSHOT: ServiceNow preview]` |
 | Run Pipeline | `/run` | Form wrapping the headless CLI — dry-run by default, plus a recent-run audit log. `[SCREENSHOT: Run Pipeline]` |
 | AI Assist | `/ai-assist` | Ask Claude to explain a finding, draft remediation steps, or write an executive summary — preview the exact prompt for free, explicit confirm to spend real API usage. See [AI_COMMANDS.md §4](AI_COMMANDS.md). `[SCREENSHOT: AI Assist]` |
-| Reports | `/reports` | Generate a shareable KPI/SLA/coverage snapshot report (daily/weekly/monthly/quarterly/half-yearly/yearly framing), downloadable as standalone HTML. Every number is real; see the page's own caveat about period aggregation not existing yet (no persistence layer). `[SCREENSHOT: Reports]` |
+| Reports | `/reports` | Generate a shareable KPI/SLA/coverage snapshot report (daily/weekly/monthly/quarterly/half-yearly/yearly framing), downloadable as standalone HTML. Every number is real; see the page's own caveat about period aggregation not existing yet — real persistence exists now, but there's no historical trend/time-series snapshot storage to aggregate actual past periods from, so every period renders the same current-moment snapshot. `[SCREENSHOT: Reports]` |
 | Support | `/support` | How to get help, known limitations, before-you-file-a-bug checklist. |
 | FAQ | `/faq` | Direct answers to common questions — mirrors [FAQ.md](FAQ.md). |
 | Exceptions | `/exceptions` | Request/auto-expire/revoke a time-boxed risk-acceptance waiver per finding, with keyword-suggested compensating controls on the request form. There's no separate in-app "approve" step - "approved by" is recorded as a text field at request time (see the FAQ entry on this). Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
@@ -338,8 +342,9 @@ yes/no version of this.
 ## 11. Logging in, accounts, and the profile page
 
 `/login` is a real local sign-in form (`dashboard/auth/`) — email and password, checked
-against `dashboard/auth/users.json` (PBKDF2-HMAC-SHA256 hashing, an HMAC-signed session
-cookie). Two demo accounts ship in the seed file (intentionally public — this is a demo
+against the local user store (`dashboard/auth/users.py`, backed by a real SQLite `users`
+table — PBKDF2-HMAC-SHA256 hashing, an HMAC-signed session cookie). Two demo accounts
+ship, seeded from `dashboard/auth/users.json` (intentionally public — this is a demo
 seed, not a real secret; change or remove before any real deployment):
 
 | Email | Password | Role |

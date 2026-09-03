@@ -101,9 +101,11 @@ tenant identifier today, so there's no cross-tenant leakage to have - only a sta
 hold real per-team/per-tenant work to once it's built (NIST SP 800-53 AC-3/AC-4/AC-6,
 OWASP API1:2023 Broken Object Level Authorization, and OWASP's own
 [Multi-Tenant Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Multi_Tenant_Security_Cheat_Sheet.html)).
-Building *real* multi-tenant MSSP support needs a database and an auth/RBAC layer
-first — a business/architecture decision, not something that can be bolted onto the
-current filesystem-reading MVP incrementally without rebuilding it. See
+Building *real* multi-tenant MSSP support needs a real per-tenant data boundary layered
+on top of the database and auth/RBAC layer that already exist today — a business/
+architecture decision (schema/row-level tenant scoping, enforced server-side on every
+query path), not something that can be bolted onto the current shared-dataset model
+incrementally. See
 [KNOWLEDGE_TRANSFER.md §11](../KNOWLEDGE_TRANSFER.md#11-the-enterprisemssp-platform-ask--scope-reality-check)
 (including the 2026-09-01 audit and standards citations) and its subsection
 [§11.1](../KNOWLEDGE_TRANSFER.md#111-the-commercial-grade-polyglot-ask--what-actually-happened)
@@ -121,10 +123,12 @@ can still show as "SLA breached" today - see the module docstring.
 ### Does it track who owns each asset?
 
 Yes — `/assets` aggregates every asset with findings against it (finding count, highest
-severity, KEV exposure) and lets you attach an owner/team, stored in
-`remediation/inventory/asset_ownership.json`. That's a real, editable local file, not a
-sync from a real CMDB/asset-management system - see the module docstring for what a
-production version would need instead.
+severity, KEV exposure) and lets you attach an owner/team, stored in the local SQLite
+`asset_ownership` table (`remediation/inventory/asset_inventory.py`, via
+`remediation/utils/db.py` — seeded from the old `asset_ownership.json` file on first
+migration). That's real, editable local data, not a sync from a real CMDB/asset-
+management system - see the module docstring for what a production version would need
+instead.
 
 ### Is "Container Vulnerabilities" the same thing as "Container/Host Runtime Security"?
 
@@ -386,14 +390,18 @@ Identity Federation - see the AD/PAM question above and
 
 ### What happens to my data / where does it live?
 
-Everything is local files in this repository — git history, JSON, YAML, Markdown. There
-is no cloud service and no telemetry:
+Everything is local to this machine — git-tracked files (Markdown, YAML, generated
+JSON/`.yml`) plus one local database. There is no cloud service and no telemetry:
 
 - Scan findings: `SECURITY_REPORT.md` in the scanned repo, committed to a local branch by
   `vuln-fixer` if you run `--fix`.
 - Remediation data: `remediation/output/normalized-findings.json` and generated `.yml`
   playbooks, `REMEDIATION_PLAN.md` at the project root.
-- Live connector output (if you use real Tenable/Armis credentials):
+- Dashboard record stores (exceptions, remediation approvals, activity/AI-usage logs,
+  asset ownership, user accounts, notification-scheduler state, and pending
+  generic-ingest/Prisma Cloud/Cortex XSIAM findings): a local SQLite database,
+  `remediation/vulnhunter.db` — gitignored, see `remediation/utils/db.py`.
+- Live connector output (if you use real Tenable/Qualys/OpenVAS credentials):
   `remediation/live-data/` — gitignored, since it's real vulnerability data about real
   infrastructure and must never be committed.
 - CLI audit logs: `.vulnhunter/logs/*.json` — gitignored.

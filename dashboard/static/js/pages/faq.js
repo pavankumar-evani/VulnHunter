@@ -32,8 +32,9 @@ const FAQS = [
     "There's a tenant switcher in the sidebar for demo purposes - it partitions the " +
     "same real dataset by asset category to show what an MSSP view could look like. " +
     "It is NOT real per-tenant authentication or data isolation (localStorage-only, " +
-    "unconnected to login); that needs a database + auth architecture decision that " +
-    "hasn't been made yet (see KNOWLEDGE_TRANSFER.md §11.1). Audited directly " +
+    "unconnected to login); that needs a real per-tenant data boundary layered on top " +
+    "of the database and auth that already exist today (see KNOWLEDGE_TRANSFER.md " +
+    "§11.1). Audited directly " +
     "(2026-09-01): no server route trusts a client-supplied tenant ID today, so " +
     "there's no real gap yet - only a standard (NIST AC-3/AC-4/AC-6, OWASP BOLA) to " +
     "build any future per-team/tenant scoping against from day one (see " +

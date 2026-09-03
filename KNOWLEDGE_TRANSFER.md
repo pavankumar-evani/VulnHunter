@@ -411,9 +411,12 @@ python dashboard/app.py
 A read-mostly web UI over the same artifacts: KPI overview, both findings tables, the
 remediation queue linked to generated playbooks, and a `/run` page that wraps the CLI
 above (dry-run by default, same cost posture). See [dashboard/README.md](dashboard/README.md)
-for the full page list and — importantly — what this MVP still has only partially (auth,
-persistence) or not at all yet (a job queue) before considering exposing it beyond
-localhost.
+for the full page list and — importantly — what this MVP still doesn't close before
+considering exposing it beyond localhost: every read route stays open with no session at
+all unless an operator sets `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true` (auth/RBAC are
+otherwise real — see [§9](#9-roadmap--path-to-commercial-grade) item 6 and
+[§13.1](#131-the-rbac-scope-decision-gate-mutations-not-reads)), and there's still no job
+queue for long-running pipeline runs.
 
 ### Step 9: Extend it
 
@@ -643,8 +646,10 @@ Usable by someone who isn't running Claude Code interactively:
    and a run-trigger page, reading off the same real artifacts. See
    [dashboard/README.md](dashboard/README.md) for why this architecture rather than a
    Node/React build (§11.1 has the fuller environment-constraint reasoning), and what
-   this MVP still only has partially (auth/RBAC, persistence) or not at all (a job
-   queue, multi-tenancy) before it's more than a local/trusted-network tool.
+   this MVP still doesn't fully close: reads stay open by default unless an operator
+   opts into `VULNHUNTER_REQUIRE_LOGIN_FOR_READS` (auth/RBAC are otherwise real now —
+   see item 6 below and §13.1), and there's still no job queue or real multi-tenant data
+   boundary, before it's more than a local/trusted-network tool.
 3. **Live Tenable/Armis connectors (`remediation/connectors/`)** ✅ Built, ⚠️ unverified
    against a real tenant — implements each vendor's publicly documented API contract
    (Tenable's async vulnerability export workflow; Armis's token auth + paginated AQL
@@ -670,18 +675,21 @@ Usable by someone who isn't running Claude Code interactively:
    findings — expiry, deprecated protocols — which usually carry no CVE at all). Both
    route to `manual-only` today, same honest-gap treatment as network/IoT, since no
    fixer exists yet for either.
-6. **Persistence + audit log** 🟡 Partly done — six of the actively-written record
-   stores (`alert_state`/`schedule_state`, `exceptions`, `remediation_approvals`,
-   `activity_log`, `ai_usage_log`) now live in a real local SQLite database
-   (`remediation/vulnhunter.db`, via SQLAlchemy Core — see
-   [remediation/utils/db.py](remediation/utils/db.py)) with real ACID transactions,
-   replacing the flat JSON files they used before. `activity_log` is the real,
-   already-built "who approved what, and when" audit trail this item asked for.
-   Still flat JSON: `asset_inventory.py`'s ownership store, `auth/users.py`, and the
-   three inline JSON buffers `dashboard/app.py` writes directly for generic/Prisma
-   Cloud/Cortex XSIAM ingestion — real follow-up, not done in this pass. Findings/
-   playbooks themselves are still re-read from disk on every request, not stored in
-   the DB — there's still no historical trend view across multiple pipeline runs.
+6. **Persistence + audit log** ✅ Done for every actively-written record store —
+   `alert_state`/`schedule_state`, `exceptions`, `remediation_approvals`,
+   `activity_log`, `ai_usage_log`, `asset_ownership`, `users`, and `live_data_findings`
+   (the generic-ingest/Prisma Cloud/Cortex XSIAM adapters' pending output) all now live
+   in a real local SQLite database (`remediation/vulnhunter.db`, via SQLAlchemy Core —
+   see [remediation/utils/db.py](remediation/utils/db.py)) with real ACID transactions,
+   replacing the flat JSON files most of them used before. `activity_log` is the real,
+   already-built "who approved what, and when" audit trail this item asked for;
+   `scripts/migrate_json_to_db.py` is the one-time, idempotent migration that carried
+   each store's old flat-JSON seed data (where it had any) into its table. What's still
+   genuinely open: findings/playbooks themselves are still re-read from disk on every
+   request rather than stored in the DB — a deliberate choice, since pipeline output is
+   meant to stay reviewable/diffable in git — so there's still no historical trend view
+   across multiple pipeline runs, and SQLite here is a real single-machine mitigation,
+   not a distributed-lock or multi-machine story.
 
 Also planned in this tier, lower priority than the items above:
 - **Cross-scanner deduplication** — if two connectors (e.g. Tenable and a future Prisma
@@ -833,9 +841,9 @@ the CSV-as-Excel choice, plus two things this wave deliberately did NOT build an
   still open with no session at all (team-scoping included - an anonymous request
   bypasses it the same way it bypasses everything else), real SSO has never been
   exercised against a live identity provider, and "one tenant = one client" MSSP
-  architecture still needs a real database and a real per-tenant data boundary — see
-  §11 and §13.1 below for why none of these three can be bolted on incrementally
-  beyond what's already there.
+  architecture still needs a real per-tenant data boundary layered on top of the
+  database that now exists (§9 Tier 2 item 6) — see §11 and §13.1 below for why none of
+  these three can be bolted on incrementally beyond what's already there.
 - **Compliance certification (SOC2, NIST, etc.)** — not a coding task. SOC2 is an audit
   by a licensed CPA firm over months of operational evidence; NIST CSF alignment is a
   self-attestation or third-party assessment. This repo can build toward the *controls*
@@ -888,9 +896,11 @@ dashboard nav.
   resolved/fixed_at field exists anywhere to learn from), and it never replaces or feeds
   into the deterministic `remediation_policy_engine.py`/`priority_engine.py` scoring —
   see `ml_insights.py`'s own module docstring and `docs/FAQ.md` for the full reasoning.
-- **Multi-tenant MSSP architecture** — requires the database + auth foundation from Tier
-  3 above *first*. Building tenant isolation on top of a filesystem-reading MVP (FastAPI
-  or not) would mean rebuilding it twice.
+- **Multi-tenant MSSP architecture** — the database and auth foundation this needed
+  (Tier 2 item 6's SQLite migration, Tier 3's auth/RBAC wave) exists now; what's still
+  missing is a real per-tenant data boundary layered on top of it — schema/row-level
+  tenant scoping enforced server-side on every query path — not a foundational database
+  or login system that doesn't exist yet.
 
   **Audited (2026-09-01) for a real vulnerability, not just a missing feature**: does
   today's app trust a client-supplied tenant/team identifier for authorization anywhere?
