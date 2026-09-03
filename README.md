@@ -7,7 +7,7 @@
 **An autonomous Claude Code security agent that finds vulnerabilities — in source code
 and across enterprise infrastructure — and fixes the safe ones automatically.**
 
-Built for the Deloitte Claude Code Hackathon. Two pipelines, one philosophy:
+An independent, self-directed project. Two pipelines, one philosophy:
 
 - **`/vulnhunt`** — scan a codebase, report findings, auto-fix the safe ones. See
   [below](#what-vulnhunt-does).

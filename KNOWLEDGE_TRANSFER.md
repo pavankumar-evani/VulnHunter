@@ -16,8 +16,8 @@ This document goes deeper than either: it's the KT.
 
 ## 1. Executive Summary
 
-VulnHunter is a **Claude Code extension** — not a standalone application — built for the
-Deloitte Claude Code Hackathon. It adds two slash-command pipelines to Claude Code:
+VulnHunter is a **Claude Code extension** — not a standalone application — built as an
+independent, self-directed project. It adds two slash-command pipelines to Claude Code:
 
 | Pipeline | What it does | Status |
 |---|---|---|
@@ -78,11 +78,11 @@ of manual remediation effort, is there an AI-based remediation solution that can
 
 ### 3.1 Context this was built for
 
-A Claude Code hackathon at Deloitte, judged by Claude itself, open to all participants.
-The author's background is cybersecurity, which shaped the choice of project: rather than
-a generic CRUD app, build something that is *itself* a demonstration of what an
-AI-security-engineer-in-a-box can do — a project that is simultaneously the entrant and a
-proof of the judging model (an AI evaluating AI-built security tooling).
+An independent project by a security engineer exploring what Claude Code's agentic
+capabilities could do applied to real vulnerability-management work. The author's
+background is cybersecurity, which shaped the choice of project: rather than a generic
+CRUD app, build something that is *itself* a demonstration of what an
+AI-security-engineer-in-a-box can do.
 
 ### 3.2 Why "find AND fix," not just "find"
 
@@ -545,9 +545,6 @@ for network devices or IoT/OT. To add one:
 │   ├── test_cmdb_import.py          14 tests for the CMDB-export CSV bulk-import helper
 │   │                                (parsing, column-mapping guess, reconciliation, apply)
 │   └── test_results.txt             a captured passing run (456/456)
-├── deliverables/
-│   ├── VulnHunter_Hackathon_Deck.pptx     Deloitte-branded pitch deck
-│   └── VulnHunter_Project_Report.docx     full project & test report
 ├── docs/                  USER_GUIDE, FAQ, AI_COMMANDS, INTEGRATIONS,
 │                          REMEDIATION_WORKFLOWS, COMPLIANCE_MAPPING (non-certifying),
 │                          SUPPORT - see docs/README.md
@@ -1024,10 +1021,9 @@ to hit too:
   artifacts it would, then validate those artifacts with the test suite — effectively
   treating the `.md` agent files as a spec and dry-running it by hand.
 - **This environment has no LibreOffice/Node.js**, which affects only the deliverables
-  build tooling, not the product itself: the pitch deck was built with `python-pptx`
-  instead of the more commonly available JS `docx`/`pptx` tooling, and visual QA relied
-  on the Deloitte template's own structural validator script rather than rendered
-  page images.
+  build tooling, not the product itself: any pitch-deck-style artifact was built with
+  `python-pptx` instead of the more commonly available JS `docx`/`pptx` tooling, and
+  visual QA relied on a structural validator script rather than rendered page images.
 - **A bound-default-parameter gotcha bit this project twice.** `def load_exceptions(path=
   DEFAULT_STORE_PATH):` binds `DEFAULT_STORE_PATH`'s value once, at function-definition
   time — `unittest.mock.patch.object(module, "DEFAULT_STORE_PATH", tmp_path)` in a test
