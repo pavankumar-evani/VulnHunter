@@ -794,7 +794,15 @@ class ApiStatus(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             missing_engine = create_engine(f"sqlite:///{Path(tmpdir) / 'does-not-exist.db'}")
             try:
-                with patch.object(db_module, "get_engine", return_value=missing_engine):
+                # /api/status also calls load_vulnhunt_data(), which - whenever a real
+                # vulnhunter/auto-fixes-* branch exists (it does in this repo; CI checks
+                # one out on purpose, see ci.yml) - reads activity_log.list_activity()
+                # for verification history. That read calls ensure_schema() on the SAME
+                # patched engine, which would lazily create the DB file before we ever
+                # get to checking "exists" below, defeating this test's whole premise.
+                # Stub it out so this test only observes the untouched missing_engine.
+                with patch.object(db_module, "get_engine", return_value=missing_engine), \
+                        patch.object(dashboard_data, "load_vulnhunt_data", return_value={"available": False}):
                     resp = client.get("/api/status")
             finally:
                 missing_engine.dispose()
