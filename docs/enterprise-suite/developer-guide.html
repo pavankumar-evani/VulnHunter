@@ -153,6 +153,9 @@
       <div class="table-wrap"><table>
         <thead><tr><th>Subagent</th><th>Tools</th><th>Why</th></tr></thead>
         <tbody>
+          <tr><td class="mono">vuln-ingest-normalizer</td><td class="mono">Read, Glob, Write</td><td>Parses scanner/threat-intel exports into the Finding schema — no Bash, nothing to reach out to</td></tr>
+          <tr><td class="mono">threat-intel-enricher</td><td class="mono">Read, Write, Bash</td><td>Bash is scoped to one fixed script (<code>kev_epss.py</code>) calling two public, no-auth feeds — never an arbitrary command</td></tr>
+          <tr><td class="mono">remediation-planner</td><td class="mono">Read, Write</td><td>Assigns risk tier and rollback plan; no Bash — cannot act on its own plan</td></tr>
           <tr><td class="mono">remediation-fixer-windows/-unix</td><td class="mono">Read, Write</td><td>Drafts a playbook; cannot run one — no Bash, no network, no credentials</td></tr>
           <tr><td class="mono">remediation-fixer-ot</td><td class="mono">Read, Write</td><td>Same restriction, different artifact shape — a compensating-control recommendation, never a patch script (OT devices are rarely safe to patch live)</td></tr>
           <tr><td class="mono">remediation-fixer-application</td><td class="mono">Read, Write</td><td>Drafts a dependency-upgrade plan; cannot edit a manifest, run a package manager, or open a PR itself</td></tr>

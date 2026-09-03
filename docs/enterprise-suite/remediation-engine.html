@@ -112,7 +112,7 @@
 
     <section id="lifecycle">
       <h2><span class="num">01</span>The seven-stage lifecycle</h2>
-      <p class="section-intro">Detection is covered in the Vulnerability Finding Engine document. This picks up once a finding is scored and continues through to a human decision.</p>
+      <p class="section-intro">Detection, normalization, threat-intel enrichment (<code>threat-intel-enricher</code> — CISA KEV + FIRST.org EPSS), and scoring are covered in the Vulnerability Finding Engine document. This picks up once a finding is scored and continues through to a human decision.</p>
       <div class="steps">
         <div class="step"><div class="n">1</div><div><div class="who">Automatic</div><h4>Plan</h4><p><code>remediation-planner</code> assigns an action type, the automation mechanism that could handle it, a risk tier, and a rollback plan — written to <code>REMEDIATION_PLAN.md</code>.</p></div></div>
         <div class="step"><div class="n">2</div><div><div class="who">Automatic, once eligible</div><h4>Generate</h4><p><code>remediation-fixer-windows</code>/<code>-unix</code>/<code>-ot</code>/<code>-application</code> drafts a real artifact — an Ansible playbook, a compensating-control recommendation, or a dependency-upgrade plan, depending on domain (see §07) — for <code>windows-server</code>/<code>unix-server</code>/<code>iot-ot-device</code>/<code>application</code> findings, the four asset types with a working fixer today.</p></div></div>

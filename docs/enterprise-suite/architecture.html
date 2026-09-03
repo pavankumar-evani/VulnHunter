@@ -291,7 +291,7 @@ flowchart LR
       <pre class="mermaid">
 flowchart LR
     A["Ingest<br/>vuln-ingest-normalizer"] --> B["Normalize<br/>-> Finding schema"]
-    B --> C["Enrich<br/>CISA KEV + FIRST EPSS<br/>(live, no-auth feeds)"]
+    B --> C["Enrich<br/>threat-intel-enricher<br/>CISA KEV + FIRST EPSS"]
     C --> D["Score<br/>priority + risk + exposure"]
     D --> E["Plan<br/>remediation-planner<br/>-> REMEDIATION_PLAN.md"]
     E --> F["Generate<br/>remediation-fixer-*<br/>-> Ansible playbook"]

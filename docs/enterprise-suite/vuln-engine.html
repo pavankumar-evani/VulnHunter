@@ -196,7 +196,7 @@ sequenceDiagram
 
     <section id="threatintel">
       <h2><span class="num">04</span>Threat-intel enrichment</h2>
-      <p class="section-intro">Every CVE-bearing finding is checked against two free, public, no-auth feeds — the only two integrations in this entire product confirmed working against a real live endpoint end-to-end, not just built against documentation.</p>
+      <p class="section-intro">Every CVE-bearing finding is checked against two free, public, no-auth feeds by a dedicated <code>threat-intel-enricher</code> subagent — the only two integrations in this entire product confirmed working against a real live endpoint end-to-end, not just built against documentation. It runs as <code>/remediate</code>'s second pipeline stage, after <code>vuln-ingest-normalizer</code> and before <code>remediation-planner</code>, shelling out to <code>remediation/enrichment/kev_epss.py</code> and writing the result back into <code>normalized-findings.json</code>.</p>
       <div class="grid2">
         <div class="card"><h4>CISA KEV</h4><p>Known Exploited Vulnerabilities catalog — flags a CVE confirmed actively exploited in the wild, plus date added and known-ransomware-campaign-use.</p></div>
         <div class="card"><h4>FIRST.org EPSS</h4><p>A 0–1 exploitation-probability score per CVE, refreshed daily by FIRST.org — catches high-risk CVEs KEV hasn't confirmed yet.</p></div>
