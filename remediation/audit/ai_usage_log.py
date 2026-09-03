@@ -17,16 +17,16 @@ response. `extraction_ok=False` on a record is the honest "we got a response but
 couldn't find usage figures in it, so cost/tokens for that call are unknown, not zero" -
 never silently coerced to zero, which would make a real cap under-count real spend.
 
-Persistence: a single local JSON file (remediation/audit/ai_usage_log.json), same
-append-only, gitignored pattern as activity_log.py (real runtime output, not seed data).
+Persistence is the shared local SQLite database (see remediation/utils/db.py), same
+append-only, gitignored pattern as activity_log.py (real runtime output, not seed data) -
+previously a flat JSON file.
 """
 import datetime
 import json
-from pathlib import Path
 
-from remediation.utils.file_lock import FileLock
+from sqlalchemy import insert, select
 
-DEFAULT_LOG_PATH = Path(__file__).resolve().parent / "ai_usage_log.json"
+from remediation.utils import db as db_module
 
 # Every key spelling actually seen or plausible for this field across Claude Code
 # versions (see this module's docstring on why there's no single documented schema) -
@@ -82,49 +82,51 @@ def _total_tokens(usage):
     return sum(v for v in usage.values() if isinstance(v, (int, float)))
 
 
-def _load(path=None):
-    path = Path(path) if path is not None else DEFAULT_LOG_PATH
-    if not path.exists():
-        return []
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
+def _row_to_record(row):
+    record = dict(row)
+    record["usage"] = json.loads(record["usage"]) if record.get("usage") else {}
+    return record
 
 
-def _save(entries, path=None):
-    path = Path(path) if path is not None else DEFAULT_LOG_PATH
-    path.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+def _load_all(engine=None):
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(db_module.ai_usage_log).order_by(db_module.ai_usage_log.c.id.desc())
+        ).mappings().all()
+    return [_row_to_record(r) for r in rows]
 
 
-def record_usage(actor, route, model, usage, total_cost_usd, extraction_ok, path=None, as_of=None):
-    """Appends one real AI-call usage record and returns it. `route` is a short,
-    machine-readable label for which feature made the call (e.g. "ai-assist",
-    "ai-trend-analysis", "vulnhunt", "remediate")."""
-    # Locked for the full read-modify-write cycle - see activity_log.py's
-    # record_activity() for the exact same reasoning (two concurrent real AI calls
-    # would otherwise race on `id` and one's real cost/token record could be
-    # silently dropped, undercounting real spend against a configured daily cap).
-    lock_path = Path(path) if path is not None else DEFAULT_LOG_PATH
-    with FileLock(lock_path):
-        entries = _load(path)
-        entry = {
-            "id": len(entries) + 1,
-            "actor": actor or "unknown",
-            "route": route,
-            "model": model,
-            "usage": usage,
-            "total_tokens": _total_tokens(usage) if extraction_ok else None,
-            "total_cost_usd": total_cost_usd,
-            "extraction_ok": extraction_ok,
-            "timestamp": (as_of or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
-        }
-        entries.append(entry)
-        _save(entries, path)
-    return entry
+def record_usage(actor, route, model, usage, total_cost_usd, extraction_ok, engine=None, as_of=None):
+    """Appends one real AI-call usage record and returns it (with its real DB-assigned
+    id). `route` is a short, machine-readable label for which feature made the call
+    (e.g. "ai-assist", "ai-trend-analysis", "vulnhunt", "remediate").
+
+    No FileLock here - see activity_log.py's record_activity() for the exact same
+    reasoning: a single INSERT relying on a real DB autoincrement id has no
+    read-modify-write gap for two concurrent real AI calls to race on."""
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    row = {
+        "actor": actor or "unknown",
+        "route": route,
+        "model": model,
+        "usage": json.dumps(usage),
+        "total_tokens": _total_tokens(usage) if extraction_ok else None,
+        "total_cost_usd": total_cost_usd,
+        "extraction_ok": extraction_ok,
+        "timestamp": (as_of or datetime.datetime.now(datetime.timezone.utc)).isoformat(),
+    }
+    with engine.begin() as conn:
+        result = conn.execute(insert(db_module.ai_usage_log), row)
+        new_id = result.inserted_primary_key[0]
+    return {**row, "id": new_id, "usage": usage}
 
 
-def list_usage(path=None, actor=None, limit=None):
+def list_usage(engine=None, actor=None, limit=None):
     """Returns entries newest-first, optionally filtered to one actor."""
-    entries = list(reversed(_load(path)))
+    entries = _load_all(engine)
     if actor:
         entries = [e for e in entries if e["actor"] == actor]
     if limit is not None:
@@ -132,7 +134,7 @@ def list_usage(path=None, actor=None, limit=None):
     return entries
 
 
-def usage_by_user(path=None, since=None):
+def usage_by_user(engine=None, since=None):
     """Returns {actor: {call_count, total_tokens, total_cost_usd, unknown_cost_calls}}
     across every recorded call, optionally only those at/after `since` (a real
     datetime.date or datetime.datetime) - the aggregation the Admin Settings page's
@@ -140,7 +142,7 @@ def usage_by_user(path=None, since=None):
     extraction actually succeeded - unknown_cost_calls counts the rest honestly instead
     of silently treating them as zero-cost."""
     result = {}
-    for e in _load(path):
+    for e in _load_all(engine):
         if since is not None:
             entry_time = datetime.datetime.fromisoformat(e["timestamp"])
             since_dt = since if isinstance(since, datetime.datetime) else datetime.datetime.combine(
@@ -161,7 +163,7 @@ def usage_by_user(path=None, since=None):
     return result
 
 
-def tokens_used_today(actor, path=None, as_of=None):
+def tokens_used_today(actor, engine=None, as_of=None):
     """Real total tokens `actor` has consumed since the start of "today" (UTC), for
     daily-limit enforcement. Only counts calls where extraction succeeded - an unknown-
     usage call can't be counted against a token cap that's measured in tokens."""
@@ -170,7 +172,7 @@ def tokens_used_today(actor, path=None, as_of=None):
         datetime.time.min, tzinfo=datetime.timezone.utc,
     )
     total = 0
-    for e in _load(path):
+    for e in _load_all(engine):
         if e["actor"] != actor or not e.get("extraction_ok"):
             continue
         if datetime.datetime.fromisoformat(e["timestamp"]) >= today_start:
@@ -178,7 +180,7 @@ def tokens_used_today(actor, path=None, as_of=None):
     return total
 
 
-def would_exceed_limit(actor, governance_config, path=None, as_of=None):
+def would_exceed_limit(actor, governance_config, engine=None, as_of=None):
     """Returns (would_exceed: bool, limit: int|None, used_today: int) - the real,
     server-side check every AI-spending route must call before making a real API call.
     `governance_config` is the parsed ai_governance.yaml dict; a per-user override in
@@ -189,5 +191,5 @@ def would_exceed_limit(actor, governance_config, path=None, as_of=None):
     limit = overrides.get(actor, governance_config.get("daily_token_limit_per_user"))
     if limit is None:
         return False, None, 0
-    used_today = tokens_used_today(actor, path=path, as_of=as_of)
+    used_today = tokens_used_today(actor, engine=engine, as_of=as_of)
     return used_today >= limit, limit, used_today

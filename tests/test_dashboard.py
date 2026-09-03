@@ -31,6 +31,7 @@ sys.path.insert(0, str(REPO_ROOT / "cli"))
 sys.path.insert(0, str(REPO_ROOT))
 
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import create_engine, delete, insert  # noqa: E402
 
 import data as dashboard_data  # noqa: E402
 import vulnhunter as cli  # noqa: E402
@@ -47,8 +48,31 @@ from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, asset_policy  # noqa: E402
 from remediation.notifications import email_sender  # noqa: E402
 from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
+from remediation.utils import db as db_module  # noqa: E402
 
 client = TestClient(fastapi_app)
+
+
+def _patch_db_engine(tmpdir_path):
+    """Redirects every store module's default DB access (exceptions, remediation
+    approvals, activity log, AI usage log - see remediation/utils/db.py) to a fresh
+    on-disk SQLite file under `tmpdir_path`. Every migrated store module calls
+    `db_module.get_engine()` (dynamically, through the module object) whenever a
+    caller doesn't pass its own `engine=`, so patching this one function is the same
+    isolation the old per-module DEFAULT_STORE_PATH/DEFAULT_LOG_PATH patches gave,
+    just through the one shared choke point that replaced them. Patches nest like any
+    other unittest.mock.patch: a class-level override started after a module-level one
+    takes precedence for that class's tests and correctly restores the module-level
+    one (not the real function) on .stop().
+
+    The returned patcher carries the engine as `.engine` - Windows won't delete a
+    tempdir while a pooled connection still has its DB file open, so every caller
+    must do `patcher.engine.dispose()` before `patcher.stop()` and the tmpdir cleanup
+    that follows (POSIX doesn't enforce this, so the bug is invisible there)."""
+    test_engine = create_engine(f"sqlite:///{Path(tmpdir_path) / 'test.db'}")
+    patcher = patch.object(db_module, "get_engine", return_value=test_engine)
+    patcher.engine = test_engine
+    return patcher
 
 # A temporary, module-scoped user store (never the real, shipped users.json) so every
 # test in this file that needs to be logged in can log in as a known admin/user without
@@ -60,13 +84,12 @@ TEST_USER_PASSWORD = "user-test-password-1"
 
 _auth_tmpdir = None
 _auth_patcher = None
-_activity_log_patcher = None
-_ai_usage_log_patcher = None
+_db_engine_patcher = None
 _ai_governance_patcher = None
 
 
 def setUpModule():
-    global _auth_tmpdir, _auth_patcher, _activity_log_patcher, _ai_usage_log_patcher, _ai_governance_patcher
+    global _auth_tmpdir, _auth_patcher, _db_engine_patcher, _ai_governance_patcher
     _auth_tmpdir = tempfile.TemporaryDirectory()
     tmp_users_path = Path(_auth_tmpdir.name) / "users.json"
     _auth_patcher = patch.object(auth_users, "DEFAULT_USERS_PATH", tmp_users_path)
@@ -75,20 +98,15 @@ def setUpModule():
     auth_users.create_user(TEST_USER_EMAIL, TEST_USER_PASSWORD, "Test User", role="user")
 
     # Every mutation route in this file (asset edits, exception revoke, approval
-    # decisions, login attempts) also writes to the real, shared activity log (see
-    # remediation/audit/activity_log.py) unless redirected - one module-wide patch here
-    # (rather than repeating it in every affected test class) keeps this suite from ever
-    # polluting the real, committed-empty log.
-    tmp_activity_log_path = Path(_auth_tmpdir.name) / "activity_log.json"
-    _activity_log_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", tmp_activity_log_path)
-    _activity_log_patcher.start()
+    # decisions, login attempts) also writes to the real, shared activity log and AI
+    # usage log (see remediation/audit/) unless redirected, and exceptions/approvals
+    # routes called with no more specific per-class override (below) would otherwise
+    # hit the real, shared remediation/vulnhunter.db too - one module-wide patch here
+    # (rather than repeating it in every affected test class) keeps this suite from
+    # ever touching real data.
+    _db_engine_patcher = _patch_db_engine(_auth_tmpdir.name)
+    _db_engine_patcher.start()
 
-    # Same reasoning as activity_log above - every confirm=True AI-assist/AI-trend-
-    # analysis/run test in this file writes a real usage record and reads the real
-    # governance policy unless redirected.
-    tmp_ai_usage_log_path = Path(_auth_tmpdir.name) / "ai_usage_log.json"
-    _ai_usage_log_patcher = patch.object(ai_usage_log, "DEFAULT_LOG_PATH", tmp_ai_usage_log_path)
-    _ai_usage_log_patcher.start()
     tmp_ai_governance_path = Path(_auth_tmpdir.name) / "ai_governance.yaml"
     _ai_governance_patcher = patch.object(ai_governance, "DEFAULT_PATH", tmp_ai_governance_path)
     _ai_governance_patcher.start()
@@ -96,8 +114,8 @@ def setUpModule():
 
 def tearDownModule():
     _ai_governance_patcher.stop()
-    _ai_usage_log_patcher.stop()
-    _activity_log_patcher.stop()
+    _db_engine_patcher.engine.dispose()
+    _db_engine_patcher.stop()
     _auth_patcher.stop()
     _auth_tmpdir.cleanup()
 
@@ -607,13 +625,13 @@ class ApiRunTriggersRemediation(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.tmp_path = Path(self.tmpdir.name) / "remediation_approvals.json"
-        self.patcher = patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", self.tmp_path)
+        self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
 
     def tearDown(self):
         _logout()
+        self.patcher.engine.dispose()
         self.patcher.stop()
         self.tmpdir.cleanup()
 
@@ -720,9 +738,12 @@ class ApiStatus(unittest.TestCase):
 
     def test_data_store_fact_reports_a_missing_file_honestly(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            missing_path = Path(tmpdir) / "does-not-exist.json"
-            with patch.object(ai_usage_log, "DEFAULT_LOG_PATH", missing_path):
-                resp = client.get("/api/status")
+            missing_engine = create_engine(f"sqlite:///{Path(tmpdir) / 'does-not-exist.db'}")
+            try:
+                with patch.object(db_module, "get_engine", return_value=missing_engine):
+                    resp = client.get("/api/status")
+            finally:
+                missing_engine.dispose()
         fact = resp.json()["data_stores"]["ai_usage_log"]
         self.assertFalse(fact["exists"])
         self.assertIsNone(fact["last_modified"])
@@ -730,10 +751,22 @@ class ApiStatus(unittest.TestCase):
 
     def test_data_store_fact_reports_a_real_record_count(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            real_path = Path(tmpdir) / "ai_usage_log.json"
-            real_path.write_text("[{}, {}, {}]", encoding="utf-8")
-            with patch.object(ai_usage_log, "DEFAULT_LOG_PATH", real_path):
-                resp = client.get("/api/status")
+            real_engine = create_engine(f"sqlite:///{Path(tmpdir) / 'real.db'}")
+            try:
+                db_module.ensure_schema(real_engine)
+                with real_engine.begin() as conn:
+                    conn.execute(insert(db_module.ai_usage_log), [
+                        {
+                            "actor": "a@x.com", "route": "ai-assist", "model": "m", "usage": "{}",
+                            "total_tokens": None, "total_cost_usd": None, "extraction_ok": False,
+                            "timestamp": "2026-01-01T00:00:00+00:00",
+                        }
+                        for _ in range(3)
+                    ])
+                with patch.object(db_module, "get_engine", return_value=real_engine):
+                    resp = client.get("/api/status")
+            finally:
+                real_engine.dispose()
         fact = resp.json()["data_stores"]["ai_usage_log"]
         self.assertTrue(fact["exists"])
         self.assertEqual(fact["record_count"], 3)
@@ -888,8 +921,9 @@ class ApiLiveQueue(unittest.TestCase):
         genuine change (a real approval decision) on the very next call, not a stale
         pre-approval snapshot, regardless of the cache being warm."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = Path(tmpdir) / "remediation_approvals.json"
-            with patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", tmp_path):
+            patcher = _patch_db_engine(tmpdir)
+            patcher.start()
+            try:
                 before = client.get("/api/queue").json()
                 find_1_before = next(f for f in before["findings"] if f["id"] == "FIND-1")
                 self.assertIsNone(find_1_before["remediation_approval"])
@@ -901,6 +935,9 @@ class ApiLiveQueue(unittest.TestCase):
                 find_1_after = next(f for f in after["findings"] if f["id"] == "FIND-1")
                 self.assertIsNotNone(find_1_after["remediation_approval"])
                 self.assertEqual(find_1_after["remediation_approval"]["requested_by"], "tester@example.com")
+            finally:
+                patcher.engine.dispose()
+                patcher.stop()
 
     def test_queue_findings_carry_eol_eos_status(self):
         """Real, dated vendor-lifecycle classification (remediation/enrichment/
@@ -1683,9 +1720,10 @@ class ApiAiAssist(unittest.TestCase):
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
         try:
             # Other tests in this class/module also record real usage against the same
-            # module-wide patched log (see setUpModule) - reset it so this test's "first
+            # module-wide patched DB (see setUpModule) - reset it so this test's "first
             # call is under the limit" assumption holds regardless of run order.
-            ai_usage_log._save([], path=ai_usage_log.DEFAULT_LOG_PATH)
+            with db_module.get_engine().begin() as conn:
+                conn.execute(delete(db_module.ai_usage_log))
             ai_governance.save_governance("sonnet", 100, {})
             # First call: under the limit (0 used so far), goes through and pushes
             # this user's real recorded usage past 100 tokens.
@@ -1856,9 +1894,9 @@ class ApiTeamScopedRbac(unittest.TestCase):
     (never TEST_USER_EMAIL, which many unrelated tests elsewhere in this module log in
     as expecting full, unfiltered access - giving it a team would silently break all
     of them) so this class's own team assignment can't leak into any other test.
-    Exceptions/remediation-approvals tests use their own temp store files, same
+    Exceptions/remediation-approvals tests use their own isolated temp DB, same
     pattern as ApiExceptions/ApiRemediationApprovals, so this class never mutates the
-    real, shipped exceptions.json/remediation_approvals.json."""
+    real, shared remediation/vulnhunter.db."""
 
     TEAM_USER_EMAIL = "rbac-team-member@test.local"
     TEAM_USER_PASSWORD = "rbac-team-password-1"
@@ -1875,15 +1913,13 @@ class ApiTeamScopedRbac(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.exceptions_patcher = patch.object(exceptions_store, "DEFAULT_STORE_PATH", Path(self.tmpdir.name) / "exceptions.json")
-        self.approvals_patcher = patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", Path(self.tmpdir.name) / "remediation_approvals.json")
-        self.exceptions_patcher.start()
-        self.approvals_patcher.start()
+        self.db_patcher = _patch_db_engine(self.tmpdir.name)
+        self.db_patcher.start()
 
     def tearDown(self):
         _logout()
-        self.approvals_patcher.stop()
-        self.exceptions_patcher.stop()
+        self.db_patcher.engine.dispose()
+        self.db_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_admin_sees_the_same_unfiltered_view_as_anonymous(self):
@@ -2109,13 +2145,12 @@ class ApiReports(unittest.TestCase):
 
 
 class ApiExceptions(unittest.TestCase):
-    """Every test here uses a temporary store file (via patching DEFAULT_STORE_PATH) so
-    the suite never mutates the real, shipped exceptions.json."""
+    """Every test here uses an isolated temp DB (via patching db_module.get_engine) so
+    the suite never mutates the real, shared remediation/vulnhunter.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.tmp_path = Path(self.tmpdir.name) / "exceptions.json"
-        self.patcher = patch.object(exceptions_store, "DEFAULT_STORE_PATH", self.tmp_path)
+        self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
         # Create requires any logged-in user, revoke requires admin - log in as admin so
         # both work in these tests; the 401/403 tests below explicitly log out/switch.
@@ -2123,6 +2158,7 @@ class ApiExceptions(unittest.TestCase):
 
     def tearDown(self):
         _logout()
+        self.patcher.engine.dispose()
         self.patcher.stop()
         self.tmpdir.cleanup()
 
@@ -2250,21 +2286,21 @@ class ApiDirectoryStatus(unittest.TestCase):
 
 
 class ApiRemediationApprovals(unittest.TestCase):
-    """Every test here uses a temporary store file (via patching DEFAULT_STORE_PATH) so
-    the suite never mutates the real, shipped remediation_approvals.json. AD_SERVER/
+    """Every test here uses an isolated temp DB (via patching db_module.get_engine) so
+    the suite never mutates the real, shared remediation/vulnhunter.db. AD_SERVER/
     AD_BASE_DN are never set in this test process, so every approve() call here exercises
     the honest "AD not configured" branch - the ldap3-mocked branch is covered directly
     in test_ad_directory.py."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.tmp_path = Path(self.tmpdir.name) / "remediation_approvals.json"
-        self.patcher = patch.object(remediation_approvals_store, "DEFAULT_STORE_PATH", self.tmp_path)
+        self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
 
     def tearDown(self):
         _logout()
+        self.patcher.engine.dispose()
         self.patcher.stop()
         self.tmpdir.cleanup()
 
@@ -2421,14 +2457,13 @@ class ApiRemediationApprovals(unittest.TestCase):
 
 class ApiActivityLog(unittest.TestCase):
     """/api/activity-log reads remediation/audit/activity_log.py's shared feed - this
-    class uses its own isolated temp path (on top of setUpModule's module-wide one) so
+    class uses its own isolated temp DB (on top of setUpModule's module-wide one) so
     entries written by other test classes running earlier/later in the same process
     can't leak into these assertions."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.tmp_activity_path = Path(self.tmpdir.name) / "activity_log.json"
-        self.activity_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", self.tmp_activity_path)
+        self.activity_patcher = _patch_db_engine(self.tmpdir.name)
         self.activity_patcher.start()
         self.tmp_ownership_path = Path(self.tmpdir.name) / "asset_ownership.json"
         self.ownership_patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_ownership_path)
@@ -2438,6 +2473,7 @@ class ApiActivityLog(unittest.TestCase):
     def tearDown(self):
         _logout()
         self.ownership_patcher.stop()
+        self.activity_patcher.engine.dispose()
         self.activity_patcher.stop()
         self.tmpdir.cleanup()
 
@@ -2909,14 +2945,14 @@ class ApiNotifications(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.tmp_exc_path = Path(self.tmpdir.name) / "exceptions.json"
-        self.exc_patcher = patch.object(exceptions_store, "DEFAULT_STORE_PATH", self.tmp_exc_path)
+        self.exc_patcher = _patch_db_engine(self.tmpdir.name)
         self.exc_patcher.start()
         self.ingest_path = Path(self.tmpdir.name) / "generic-ingested.json"
         self.ingest_patcher = patch.object(dashboard_data, "GENERIC_INGESTED_PATH", self.ingest_path)
         self.ingest_patcher.start()
 
     def tearDown(self):
+        self.exc_patcher.engine.dispose()
         self.exc_patcher.stop()
         self.ingest_patcher.stop()
         self.tmpdir.cleanup()

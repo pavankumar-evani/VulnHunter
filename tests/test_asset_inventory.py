@@ -9,11 +9,27 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from sqlalchemy import create_engine
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from remediation.audit import activity_log  # noqa: E402
 from remediation.inventory import asset_inventory  # noqa: E402
+from remediation.utils import db as db_module  # noqa: E402
+
+
+def _patch_db_engine(tmpdir_path):
+    """See tests/test_dashboard.py's helper of the same name for the full rationale -
+    record_activity() (called by set_owner/set_facing/etc below) resolves its DB
+    access via db_module.get_engine() when no engine is passed explicitly, so
+    patching that one function redirects it to an isolated on-disk file. Returned
+    patcher carries the engine as `.engine` - callers must dispose it (Windows won't
+    delete a tempdir while a pooled connection still has the file open) before
+    `.stop()` and the tmpdir cleanup that follows."""
+    test_engine = create_engine(f"sqlite:///{Path(tmpdir_path) / 'test.db'}")
+    patcher = patch.object(db_module, "get_engine", return_value=test_engine)
+    patcher.engine = test_engine
+    return patcher
 
 
 def _finding(id_, asset_name, asset_type, severity, kev_listed=False):
@@ -111,11 +127,11 @@ class OwnershipStore(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.activity_log_path = Path(self.tmpdir.name) / "activity_log.json"
-        self.activity_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", self.activity_log_path)
+        self.activity_patcher = _patch_db_engine(self.tmpdir.name)
         self.activity_patcher.start()
 
     def tearDown(self):
+        self.activity_patcher.engine.dispose()
         self.activity_patcher.stop()
         self.tmpdir.cleanup()
 
@@ -228,11 +244,11 @@ class ReconcilePulledAssets(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.activity_log_path = Path(self.tmpdir.name) / "activity_log.json"
-        self.activity_patcher = patch.object(activity_log, "DEFAULT_LOG_PATH", self.activity_log_path)
+        self.activity_patcher = _patch_db_engine(self.tmpdir.name)
         self.activity_patcher.start()
 
     def tearDown(self):
+        self.activity_patcher.engine.dispose()
         self.activity_patcher.stop()
         self.tmpdir.cleanup()
 

@@ -411,8 +411,9 @@ python dashboard/app.py
 A read-mostly web UI over the same artifacts: KPI overview, both findings tables, the
 remediation queue linked to generated playbooks, and a `/run` page that wraps the CLI
 above (dry-run by default, same cost posture). See [dashboard/README.md](dashboard/README.md)
-for the full page list and — importantly — what this MVP deliberately does not have yet
-(auth, persistence, a job queue) before considering exposing it beyond localhost.
+for the full page list and — importantly — what this MVP still has only partially (auth,
+persistence) or not at all yet (a job queue) before considering exposing it beyond
+localhost.
 
 ### Step 9: Extend it
 
@@ -642,8 +643,8 @@ Usable by someone who isn't running Claude Code interactively:
    and a run-trigger page, reading off the same real artifacts. See
    [dashboard/README.md](dashboard/README.md) for why this architecture rather than a
    Node/React build (§11.1 has the fuller environment-constraint reasoning), and what
-   this MVP still lacks (auth/RBAC, persistence, a job queue, multi-tenancy) before it's
-   more than a local/trusted-network tool.
+   this MVP still only has partially (auth/RBAC, persistence) or not at all (a job
+   queue, multi-tenancy) before it's more than a local/trusted-network tool.
 3. **Live Tenable/Armis connectors (`remediation/connectors/`)** ✅ Built, ⚠️ unverified
    against a real tenant — implements each vendor's publicly documented API contract
    (Tenable's async vulnerability export workflow; Armis's token auth + paginated AQL
@@ -669,8 +670,18 @@ Usable by someone who isn't running Claude Code interactively:
    findings — expiry, deprecated protocols — which usually carry no CVE at all). Both
    route to `manual-only` today, same honest-gap treatment as network/IoT, since no
    fixer exists yet for either.
-6. **Persistence + audit log** — a database of runs, findings, and who approved what,
-   replacing the flat JSON audit files the CLI writes today and the dashboard reads.
+6. **Persistence + audit log** 🟡 Partly done — six of the actively-written record
+   stores (`alert_state`/`schedule_state`, `exceptions`, `remediation_approvals`,
+   `activity_log`, `ai_usage_log`) now live in a real local SQLite database
+   (`remediation/vulnhunter.db`, via SQLAlchemy Core — see
+   [remediation/utils/db.py](remediation/utils/db.py)) with real ACID transactions,
+   replacing the flat JSON files they used before. `activity_log` is the real,
+   already-built "who approved what, and when" audit trail this item asked for.
+   Still flat JSON: `asset_inventory.py`'s ownership store, `auth/users.py`, and the
+   three inline JSON buffers `dashboard/app.py` writes directly for generic/Prisma
+   Cloud/Cortex XSIAM ingestion — real follow-up, not done in this pass. Findings/
+   playbooks themselves are still re-read from disk on every request, not stored in
+   the DB — there's still no historical trend view across multiple pipeline runs.
 
 Also planned in this tier, lower priority than the items above:
 - **Cross-scanner deduplication** — if two connectors (e.g. Tenable and a future Prisma

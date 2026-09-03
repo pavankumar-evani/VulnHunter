@@ -20,6 +20,7 @@ from pathlib import Path
 import uvicorn
 import yaml
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from sqlalchemy import func, select
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
@@ -74,6 +75,7 @@ from remediation.inventory import asset_inventory, cmdb_import, pattern_recognit
 from remediation.notifications import alert_checker, email_sender, report_scheduler  # noqa: E402
 from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
 from remediation.search import query_engine  # noqa: E402
+from remediation.utils import db as db_module  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -2414,22 +2416,38 @@ def api_auth_oidc_callback(code: str, state: str):
     return redirect
 
 
-def _data_store_fact(path):
-    """Real, cheap facts about one gitignored runtime JSON store (exceptions, approvals,
-    activity log, AI usage log) - exists/last-modified/record-count, so Admin can see
-    real data freshness instead of a guess. Never raises: a corrupt/unreadable file
-    reports its own error string instead of taking down the whole health check."""
-    if not path.exists():
+def _db_table_fact(table):
+    """Real, cheap facts about one of the shared SQLite DB's tables (exceptions,
+    approvals, activity log, AI usage log) - exists/last-modified/record-count, so
+    Admin can see real data freshness instead of a guess. Never raises: a DB read
+    failure reports its own error string instead of taking down the whole health
+    check.
+
+    `last_modified` is the shared DB *file's* own mtime, not a per-table timestamp -
+    all four stores now live in one physical file (see remediation/utils/db.py), so
+    they will always report the same last_modified as each other; that's the honest
+    fact about the new shared-file architecture, not a bug. `exists` reports whether
+    the DB file itself has been created yet (it's created lazily on first write).
+
+    The path is read off the real engine (`engine.url.database`), not the separate
+    db_module.DEFAULT_DB_PATH constant - tests patch db_module.get_engine() to an
+    isolated file for isolation, and reading DEFAULT_DB_PATH here directly would
+    silently drift from whatever engine.get_engine() actually returns in that case."""
+    engine = db_module.get_engine()
+    db_path = Path(engine.url.database)
+    if not db_path.exists():
         return {"exists": False, "last_modified": None, "record_count": None}
     try:
-        record_count = len(json.loads(path.read_text(encoding="utf-8")))
+        db_module.ensure_schema(engine)
+        with engine.connect() as conn:
+            record_count = conn.execute(select(func.count()).select_from(table)).scalar_one()
         error = None
     except Exception as exc:  # noqa: BLE001 - report the read failure, don't crash /api/status
         record_count, error = None, str(exc)
     fact = {
         "exists": True,
         "last_modified": datetime.datetime.fromtimestamp(
-            path.stat().st_mtime, tz=datetime.timezone.utc,
+            db_path.stat().st_mtime, tz=datetime.timezone.utc,
         ).isoformat(),
         "record_count": record_count,
     }
@@ -2480,10 +2498,10 @@ def api_status():
         "uptime_seconds": round(time.monotonic() - _PROCESS_STARTED_AT, 1),
         "notification_scheduler_alive": _scheduler_task is not None and not _scheduler_task.done(),
         "data_stores": {
-            "exceptions": _data_store_fact(exceptions_store.DEFAULT_STORE_PATH),
-            "remediation_approvals": _data_store_fact(remediation_approvals_store.DEFAULT_STORE_PATH),
-            "activity_log": _data_store_fact(activity_log.DEFAULT_LOG_PATH),
-            "ai_usage_log": _data_store_fact(ai_usage_log.DEFAULT_LOG_PATH),
+            "exceptions": _db_table_fact(db_module.exceptions),
+            "remediation_approvals": _db_table_fact(db_module.remediation_approvals),
+            "activity_log": _db_table_fact(db_module.activity_log),
+            "ai_usage_log": _db_table_fact(db_module.ai_usage_log),
         },
     }
 

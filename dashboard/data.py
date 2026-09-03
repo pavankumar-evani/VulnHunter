@@ -37,6 +37,7 @@ from remediation.enrichment.scan_type_mapping import tag_scan_types  # noqa: E40
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, asset_policy  # noqa: E402
 from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
+from remediation.utils import db as db_module  # noqa: E402
 
 
 def _git_show(ref, path):
@@ -392,24 +393,34 @@ def _load_scored_assets():
 
 
 def _live_queue_cache_key():
-    """Every real, editable file whose content actually changes load_live_queue()'s
-    output, on top of _scored_assets_cache_key()'s own four (findings, ownership,
-    risk-rules, priority-rules): the exploit-criteria rules, active exceptions,
-    remediation policy rules, and approval decisions - each can genuinely change
-    between requests via a real admin action (editing a rules form, requesting/
-    approving/rejecting an approval, revoking an exception), so each one's mtime is
-    part of the key, same "an edit invalidates the instant it happens, not just after
-    a TTL" reasoning as that function's own docstring."""
+    """Every real, editable file/store whose content actually changes
+    load_live_queue()'s output, on top of _scored_assets_cache_key()'s own four
+    (findings, ownership, risk-rules, priority-rules): the exploit-criteria rules,
+    active exceptions, remediation policy rules, and approval decisions - each can
+    genuinely change between requests via a real admin action (editing a rules form,
+    requesting/approving/rejecting an approval, revoking an exception), so each one's
+    mtime is part of the key, same "an edit invalidates the instant it happens, not
+    just after a TTL" reasoning as that function's own docstring.
+
+    Exceptions and approvals now live in the shared SQLite DB (see
+    remediation/utils/db.py), not separate files - both tables are in the SAME
+    physical file, so its one mtime stands in for both. This over-invalidates very
+    slightly (a write to activity_log or ai_usage_log, which share that file too, also
+    bumps it) rather than under-invalidating, which is the safe direction for a cache.
+
+    The path is read off the real engine (`engine.url.database`), not the separate
+    db_module.DEFAULT_DB_PATH constant - tests patch db_module.get_engine() to an
+    isolated file for isolation, and reading DEFAULT_DB_PATH here directly would
+    silently drift from whatever get_engine() actually returns in that case (the
+    cache would then key off a file nothing is writing to, and never invalidate)."""
     exploit_rules_path = exploit_criteria.DEFAULT_RULES_PATH
-    exceptions_path = exceptions_store.DEFAULT_STORE_PATH
     policy_rules_path = remediation_policy_engine.DEFAULT_RULES_PATH
-    approvals_path = remediation_approvals_store.DEFAULT_STORE_PATH
+    db_path = Path(db_module.get_engine().url.database)
     return (
         _scored_assets_cache_key(),
         exploit_rules_path.stat().st_mtime if exploit_rules_path.exists() else None,
-        exceptions_path.stat().st_mtime if exceptions_path.exists() else None,
+        db_path.stat().st_mtime if db_path.exists() else None,
         policy_rules_path.stat().st_mtime if policy_rules_path.exists() else None,
-        approvals_path.stat().st_mtime if approvals_path.exists() else None,
     )
 
 

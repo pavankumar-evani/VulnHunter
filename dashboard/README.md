@@ -10,9 +10,15 @@ the reasoning.
 
 ```bash
 pip install -r dashboard/requirements.txt
+python scripts/migrate_json_to_db.py  # one-time: seeds the SQLite DB from the committed example data
 python dashboard/app.py
 # open http://127.0.0.1:5050
 ```
+
+The migration step carries the one seeded example in `remediation/exceptions/exceptions.json`
+into `remediation/vulnhunter.db` (gitignored, created on first run either way) - see "What
+this is NOT (yet)" below for which stores this covers. Safe to skip on a repeat run; the
+script no-ops if there's nothing left to migrate.
 
 It reads directly from the repo it's run in: git history (for `/vulnhunt`'s
 `SECURITY_REPORT.md`, via the `vulnhunter/auto-fixes-*` branch) and files under
@@ -372,19 +378,28 @@ layer:
 - **Local users only by default** — the shipped `users.json` has two demo accounts; OIDC
   (SSO) is real, working client code but stays disabled until a real identity provider's
   credentials are configured (see "Authentication" above).
-- **No database** — findings/plans are re-read from disk on every request; there's no
-  historical trend view across multiple runs. The real correctness risk this creates -
-  two concurrent requests racing on the same JSON store's read-modify-write cycle and
-  silently dropping one's write - has a real, tested mitigation for the
-  highest-traffic/highest-consequence stores only: `remediation/utils/file_lock.py`
-  (a dependency-free, cross-platform advisory lock; see its own module docstring) now
-  guards `activity_log.py`, `ai_usage_log.py`, `exceptions/store.py`, and
-  `remediation_approvals/store.py`. `asset_inventory.py` (owner/team/facing/
-  environment/network-info) and `auth/users.py` do **not** have this yet - both are
-  rarer, admin-gated edits, but the same race exists there and closing it is real,
-  scoped follow-up work, not done in this pass. None of this is a substitute for a
-  real database with real transactions - it's a genuine mitigation for a single-
-  machine deployment, not a distributed-lock or multi-machine story.
+- **Findings/plans still aren't in a database** — they're re-read from disk on every
+  request; there's no historical trend view across multiple pipeline runs. Six of the
+  smaller, actively-written record stores (`alert_state`/`schedule_state` in
+  `remediation/notifications/`, plus `exceptions`, `remediation_approvals`,
+  `activity_log`, and `ai_usage_log`) **have** moved off flat JSON files onto a real,
+  local SQLite database (`remediation/vulnhunter.db`, gitignored - see
+  `remediation/utils/db.py`), accessed through SQLAlchemy Core so a future move to
+  Postgres for real multi-tenancy is a connection-string change, not a rewrite. A
+  first-time run against a checkout that still has the old JSON seed files
+  (`remediation/exceptions/exceptions.json`, `remediation/remediation_approvals/
+  remediation_approvals.json`) should run `python scripts/migrate_json_to_db.py` once
+  to carry that content into the new DB - safe to re-run, and a no-op if there's
+  nothing left to migrate. `asset_inventory.py` (owner/team/facing/environment/
+  network-info), `auth/users.py`, and the three inline JSON buffers `dashboard/app.py`
+  writes directly (`generic-ingested.json`, `prismacloud_findings.json`,
+  `cortex_xsiam_findings.json`) are still flat JSON, still only protected by
+  `remediation/utils/file_lock.py`'s advisory lock (a dependency-free, cross-platform
+  primitive; see its own module docstring) - real, but weaker than a DB transaction,
+  and closing that gap is scoped follow-up work, not done in this pass. Even for the
+  six migrated stores, SQLite is a genuine mitigation for a single-machine deployment,
+  not a distributed-lock or multi-machine story - real ACID transactions on one file,
+  not a client-server database.
 - **Synchronous pipeline execution** — a real (non-dry-run) `/api/run` submission blocks
   the request until the pipeline finishes, which can be slow. A production version needs
   a job queue.
