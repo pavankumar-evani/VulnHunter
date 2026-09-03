@@ -11,6 +11,7 @@ import {
 } from "../domainSummary.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
+import { icon } from "../icons.js";
 
 export const title = "Security Posture Overview";
 
@@ -129,7 +130,10 @@ function daysBetweenAll(records, startField, endField) {
 // fixed some other way (e.g. a manual change with no approval request) is honestly
 // invisible to this funnel rather than silently guessed at - same disclosed-scope
 // honesty as every other stat on this page.
-const LIFECYCLE_STAGE_ICONS = ["🔍", "🛰️", "🛠️", "📋", "✅", "🚀"];
+// Real vector icons (icons.js), one per stage - "Found" and "Remediation Initiated"
+// reuse the same scan/run glyphs already used elsewhere in the app for the same
+// concepts (see icons.js) rather than drawing near-duplicates.
+const LIFECYCLE_STAGE_ICON_NAMES = ["scan", "signal", "document", "run", "approved", "dispatched"];
 const LIFECYCLE_STAGE_COLORS = [
   "var(--chart-1)", "var(--chart-4)", "var(--chart-5)",
   "var(--chart-2)", "var(--chart-3)", "var(--chart-6)",
@@ -140,9 +144,10 @@ function lifecycleStageHtml(stage, index, firstValue) {
   const pctNote = index > 0 ? `<div class="lifecycle-stage-pct">${pct}% of Found</div>` : `<div class="lifecycle-stage-pct"></div>`;
   const color = LIFECYCLE_STAGE_COLORS[index % LIFECYCLE_STAGE_COLORS.length];
   const barPct = index === 0 ? 100 : pct;
+  const iconName = LIFECYCLE_STAGE_ICON_NAMES[index % LIFECYCLE_STAGE_ICON_NAMES.length];
   return `
     <a class="lifecycle-stage" href="${escapeHtml(stage.href)}" data-link data-tooltip="${escapeHtml(stage.detail)}">
-      <div class="lifecycle-stage-icon">${LIFECYCLE_STAGE_ICONS[index % LIFECYCLE_STAGE_ICONS.length]}</div>
+      <div class="lifecycle-stage-icon" style="color:${color}">${icon(iconName, 26)}</div>
       <div class="lifecycle-stage-value">${stage.value.toLocaleString()}</div>
       ${pctNote}
       <div class="lifecycle-stage-label">${escapeHtml(stage.label)}</div>

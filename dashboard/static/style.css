@@ -723,7 +723,8 @@ a.notif-item:hover { background: var(--bg); }
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
 .lifecycle-stage:hover, .lifecycle-stage:focus-visible { border-color: var(--brand-accent); transform: translateY(-1px); }
-.lifecycle-stage-icon { font-size: 1.3rem; line-height: 1; margin-bottom: 4px; }
+.lifecycle-stage-icon { display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+.lifecycle-stage-icon .icon { width: 26px; height: 26px; }
 .lifecycle-stage-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
 .lifecycle-stage-pct { font-size: 0.76rem; color: var(--text-muted); min-height: 1.1em; }
 .lifecycle-stage-label { font-size: 0.8rem; font-weight: 600; margin-top: 4px; }
@@ -1014,9 +1015,21 @@ a.notif-item:hover { background: var(--bg); }
    the brand mark above it (see authHero.js - the mark now sits higher in the shared
    background SVG specifically so this text has its own space instead of overlapping
    it, the original defect this spacing responds to). */
-.auth-hero-copy { text-align: center; color: #eaf0fe; max-width: 380px; margin-top: 170px; }
-.auth-hero-brand { font-size: 1.5rem; font-weight: 700; color: #ffffff; margin-bottom: 10px; letter-spacing: 0.01em; text-shadow: 0 2px 16px rgba(47,111,237,0.5); }
-.auth-hero-tagline { color: #dbe6ff; font-size: 1.05rem; line-height: 1.55; margin: 0 0 20px; text-shadow: 0 1px 12px rgba(10,18,48,0.8); }
+.auth-hero-copy { text-align: center; color: #eaf0fe; max-width: 420px; margin-top: 150px; }
+/* Chakra Petch (loaded in index.html's <head>) is the one display face on this page -
+   its angular letterforms read as "technical/targeting" without leaning on a literal
+   crosshair-as-favicon cliche, and it's scoped to just these two rules + .login-brand
+   rather than the whole app, so every other page keeps the plain system-UI stack. */
+.auth-hero-brand {
+  font-family: "Chakra Petch", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 3rem; font-weight: 700; color: #ffffff; margin-bottom: 14px;
+  letter-spacing: 0.01em; line-height: 1; text-shadow: 0 2px 24px rgba(47,111,237,0.6);
+}
+.auth-hero-tagline {
+  font-family: "Chakra Petch", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #dbe6ff; font-weight: 300; font-size: 1.4rem; line-height: 1.45; margin: 0 0 24px;
+  text-shadow: 0 1px 12px rgba(10,18,48,0.8);
+}
 .auth-hero-points { list-style: none; padding: 0; margin: 0; text-align: left; display: inline-flex; flex-direction: column; gap: 10px; }
 .auth-hero-points li { color: #dbe6ff; font-size: 0.88rem; padding-left: 22px; position: relative; text-shadow: 0 1px 10px rgba(10,18,48,0.7); }
 .auth-hero-points li::before { content: "✓"; position: absolute; left: 0; color: #7ea6f5; font-weight: 700; text-shadow: 0 0 8px rgba(126,166,245,0.7); }
@@ -1048,8 +1061,9 @@ a.notif-item:hover { background: var(--bg); }
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 1.2rem;
-  font-weight: 700;
+  font-family: "Chakra Petch", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
   margin-bottom: 24px;
   color: #ffffff;
 }

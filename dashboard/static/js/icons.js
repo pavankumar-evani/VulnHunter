@@ -48,6 +48,10 @@ const ICONS = {
   iac: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><polyline points="9 10 7 12 9 14"/><polyline points="15 10 17 12 15 14"/>',
   ml: '<circle cx="5.5" cy="6" r="2.2"/><circle cx="5.5" cy="18" r="2.2"/><circle cx="18.5" cy="12" r="2.6"/><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="18" r="1.6"/><line x1="7.4" y1="6.9" x2="16.3" y2="10.8"/><line x1="7.4" y1="17.1" x2="16.3" y2="13.2"/><line x1="10.4" y1="6.4" x2="10.6" y2="6.7"/><line x1="13.6" y1="6" x2="16" y2="10.3"/><line x1="13.6" y1="18" x2="16" y2="13.7"/>',
   quantum: '<circle cx="12" cy="12" r="1.6"/><ellipse cx="12" cy="12" rx="9" ry="3.6"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(120 12 12)"/>',
+  signal: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="16.6" r="0.6" fill="currentColor" stroke="none"/><path d="M9 13.6a4.2 4.2 0 016 0"/><path d="M6.6 10.8a7.6 7.6 0 0110.8 0"/>',
+  document: '<path d="M8.5 4h5.5l3 3v12.5a1 1 0 01-1 1h-7.5a1 1 0 01-1-1V5a1 1 0 011-1z"/><path d="M14 4v3h3"/><line x1="10" y1="12.5" x2="15" y2="12.5"/><line x1="10" y1="15.5" x2="15" y2="15.5"/>',
+  approved: '<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7 5.3-5.8"/>',
+  dispatched: '<circle cx="12" cy="12" r="9"/><path d="M12 15.5V8.3"/><path d="M8.6 11.5L12 8l3.4 3.5"/>',
 };
 
 export function icon(name, size = 18) {
