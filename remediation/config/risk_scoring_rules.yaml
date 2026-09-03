@@ -31,6 +31,12 @@ likelihood_weights:
   epss: 0.30              # MAX EPSS score among this asset's findings
   exploit_criteria: 0.15  # count of findings matching a configured /exploit-criteria rule
   eol: 0.15               # this asset's own EOL/EOS status
+  control_coverage: 0.20  # MAX residual risk after real firewall/EDR coverage
+                          # (remediation/enrichment/control_coverage.py) - only counted for
+                          # an asset with at least one finding covered by
+                          # security_controls.yaml; absent for every other asset, so this
+                          # weight is simply never used until that data exists for it
+                          # (see risk_scoring.py's _likelihood_components()).
 
 # How many exploit-criteria-matching findings on one asset counts as "maxed out" for the
 # exploit_criteria likelihood component (a linear scale from 0 to this count).

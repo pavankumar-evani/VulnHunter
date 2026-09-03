@@ -24,7 +24,14 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   "severity": "Critical | High | Medium | Low",
   "description": "Plain-English impact, not just the vendor synopsis.",
   "recommended_fix": "What the source system suggests (patch, config change, etc.)",
-  "remediation_domain": "windows-server | unix-server | iot-ot-device | null",
+  "remediation_domain": "windows-server | unix-server | iot-ot-device | application | null",
+  "dependency": {
+    "package": "log4j-core",
+    "ecosystem": "maven",
+    "version": "2.14.1",
+    "fixed_version": "2.17.1",
+    "direct": false
+  },
   "remediation_mechanism": "SCCM / Microsoft Configuration Manager | MDM (e.g. Microsoft Intune) | Vendor firmware update | Vendor hypervisor patch tooling | null",
   "first_seen": "2026-07-28",
   "last_seen": "2026-08-02",
@@ -82,14 +89,19 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   Mgmt/SAST/DAST/IaC/Secrets/Runtime/AI-ML methodology taxonomy.
 - **`remediation_domain`** is set by the normalizer from `asset.type`, and reflects
   whether a *working* `remediation-fixer-*` subagent exists for it today - only
-  `windows-server`/`unix-server`/`iot-ot-device` do, so this is `null` for every other
-  asset type, including the new ones added alongside `windows-endpoint`/`mobile-device`/
-  `printer`/`virtualization-host` above (no automated fixer exists for any of them yet).
-  `iot-ot-device`'s fixer (`remediation-fixer-ot`) is a deliberately different shape from
-  the other two - it generates a compensating-control/vendor-coordination recommendation,
-  never a direct patch script, since OT devices are usually unsafe to patch live (see that
-  subagent's own file, and the Remediation Engine document's "Three remediation tracks"
-  section, for why).
+  `windows-server`/`unix-server`/`iot-ot-device`/`application` do, so this is `null` for
+  every other asset type, including the new ones added alongside
+  `windows-endpoint`/`mobile-device`/`printer`/`virtualization-host` above (no automated
+  fixer exists for any of them yet). `iot-ot-device`'s fixer (`remediation-fixer-ot`) is a
+  deliberately different shape from the other two OS-level fixers - it generates a
+  compensating-control/vendor-coordination recommendation, never a direct patch script,
+  since OT devices are usually unsafe to patch live (see that subagent's own file, and the
+  Remediation Engine document's "Three remediation tracks" section, for why).
+  `application`'s fixer (`remediation-fixer-application`) is a fourth, different shape
+  again - a dependency-upgrade plan generated from the `dependency` field below, not an OS
+  patch or a compensating control - and only applies to `application`-type findings that
+  have a real CVE (the SCA case; see `remediation/enrichment/scan_type_mapping.py`), not
+  every `application` finding.
 - **`remediation_mechanism`** is a purely informational, reference-only field (not a
   working integration - there is no SCCM/Intune API call anywhere in this codebase) that
   names the REAL-WORLD tool that would normally patch that asset class, so a finding on
@@ -119,6 +131,19 @@ This is the same "read-only scanner / scoped tool" separation-of-concerns idea a
   into a configurable, admin-editable `exploit_criteria_matches` field - computed LIVE
   by the dashboard (like `eol_status`/`compensating_controls`), not persisted into this
   file, so it isn't shown in the example above.
+- **`dependency`** is nullable — populated by `vuln-ingest-normalizer` only when (a) the
+  finding is `application`-type with a real CVE (the SCA case) and (b) a CycloneDX SBOM
+  file was supplied alongside the scanner exports and it contains a component matching
+  this finding's affected package. Matching a CVE/title to a specific SBOM component is a
+  judgment call the normalizer's own LLM reasoning makes directly from the SBOM's raw
+  JSON (see that subagent's file) — there's no mechanical CVE-to-package lookup table for
+  it. `fixed_version` is populated only when the normalizer is confident of the real safe
+  version from its own knowledge of that CVE; left `null` rather than guessed when it
+  isn't, the same "don't fabricate" rule this pipeline applies everywhere else. `direct`
+  is `true` when the package is a direct dependency of the scanned application, `false`
+  for a transitive one - `remediation/enrichment/sbom.py`'s `compute_blast_radius()`
+  answers the related "how many other components does fixing this affect" question,
+  computed live by the dashboard from the same SBOM file, not persisted into this field.
 - IDs (`FIND-N`) are assigned by the normalizer, sequential across all sources combined,
   so `remediation-planner` and `remediation-fixer-*` have one consistent key regardless of
   which system a finding originated from.

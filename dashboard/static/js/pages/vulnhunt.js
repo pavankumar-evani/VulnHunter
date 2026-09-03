@@ -13,6 +13,7 @@ const EXPORT_COLUMNS = [
   { label: "CWE", value: (f) => f.CWE },
   { label: "File", value: (f) => f.File },
   { label: "Auto-fixable?", value: (f) => f["Auto-fixable?"] },
+  { label: "Verified", value: (f) => (f.verification ? f.verification.status : "not-yet-verified") },
 ];
 
 // A coarse, honest categorization by CWE - matches .claude/agents/vuln-scanner.md's own
@@ -46,6 +47,16 @@ export function categoryFor(cwe, file) {
   return "Other";
 }
 
+// verification is null until a real `/vulnhunt <path> --verify <ID> <branch>` run has
+// logged an outcome (remediation/audit/record_verification.py) - "not yet verified" is
+// the honest default, never implied as "verified" just because a fix branch exists.
+function verificationBadgeHtml(verification) {
+  if (!verification) return `<span class="muted" title="No /vulnhunt --verify run has checked this finding yet">Not yet verified</span>`;
+  const label = { resolved: "Resolved", "still-present": "Still present", inconclusive: "Inconclusive" }[verification.status] || verification.status;
+  const badgeClass = { resolved: "badge-auto_approvable", "still-present": "badge-critical", inconclusive: "badge-medium" }[verification.status] || "badge-medium";
+  return `<span class="badge ${badgeClass}" title="${escapeHtml(verification.detail || "")}">${escapeHtml(label)}</span>`;
+}
+
 function rowHtml(f) {
   return `
     <tr data-finding-id="${escapeHtml(f.ID)}">
@@ -58,6 +69,7 @@ function rowHtml(f) {
       <td>${f["Auto-fixable?"] === "Yes"
         ? `<span class="badge badge-auto_approvable">Yes</span>`
         : `<span class="badge badge-manual_only">No</span>`}</td>
+      <td>${verificationBadgeHtml(f.verification)}</td>
     </tr>`;
 }
 
@@ -110,7 +122,7 @@ export async function render(container) {
 
     <div class="table-scroll">
       <table class="data-table">
-        <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Category</th><th>CWE</th><th>File</th><th>Auto-fixable?</th></tr></thead>
+        <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Category</th><th>CWE</th><th>File</th><th>Auto-fixable?</th><th>Verified</th></tr></thead>
         <tbody id="scan-body"></tbody>
       </table>
     </div>
@@ -136,7 +148,7 @@ export async function render(container) {
     page = paged.page;
     tbody.innerHTML = paged.rows.length
       ? paged.rows.map(rowHtml).join("")
-      : `<tr><td colspan="7" class="empty-state">No findings match the current filters.</td></tr>`;
+      : `<tr><td colspan="8" class="empty-state">No findings match the current filters.</td></tr>`;
     countEl.textContent = `${filtered.length} of ${findings.length} finding(s)`;
     container.querySelector("#scan-pagination").innerHTML = paginationHtml(paged.page, paged.totalPages);
 

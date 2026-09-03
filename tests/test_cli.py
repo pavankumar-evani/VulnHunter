@@ -28,6 +28,12 @@ class PromptConstruction(unittest.TestCase):
             "/vulnhunt vulnerable-demo-app --fix",
         )
 
+    def test_verify_prompt(self):
+        self.assertEqual(
+            cli.verify_prompt("vulnerable-demo-app", "VULN-3", "vulnhunter/auto-fixes-20260901"),
+            "/vulnhunt vulnerable-demo-app --verify VULN-3 vulnhunter/auto-fixes-20260901",
+        )
+
     def test_remediate_prompt_without_generate(self):
         self.assertEqual(cli.remediate_prompt(), "/remediate")
 

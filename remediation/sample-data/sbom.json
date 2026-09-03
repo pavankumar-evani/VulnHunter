@@ -1,0 +1,66 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "bom-ref": "component-order-processing-service",
+      "name": "order-processing-service",
+      "version": "3.4.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "component-log4j-core",
+      "name": "log4j-core",
+      "version": "2.14.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "component-spring-boot-starter-web",
+      "name": "spring-boot-starter-web",
+      "version": "2.5.4",
+      "purl": "pkg:maven/org.springframework.boot/spring-boot-starter-web@2.5.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "component-spring-boot-starter-logging",
+      "name": "spring-boot-starter-logging",
+      "version": "2.5.4",
+      "purl": "pkg:maven/org.springframework.boot/spring-boot-starter-logging@2.5.4"
+    },
+    {
+      "type": "library",
+      "bom-ref": "component-jackson-databind",
+      "name": "jackson-databind",
+      "version": "2.12.4",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.12.4"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "component-order-processing-service",
+      "dependsOn": ["component-spring-boot-starter-web", "component-jackson-databind"]
+    },
+    {
+      "ref": "component-spring-boot-starter-web",
+      "dependsOn": ["component-spring-boot-starter-logging"]
+    },
+    {
+      "ref": "component-spring-boot-starter-logging",
+      "dependsOn": ["component-log4j-core"]
+    },
+    {
+      "ref": "component-jackson-databind",
+      "dependsOn": []
+    },
+    {
+      "ref": "component-log4j-core",
+      "dependsOn": []
+    }
+  ]
+}

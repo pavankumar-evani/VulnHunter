@@ -93,6 +93,15 @@ def scan_prompt(path, fix=False):
     return f"/vulnhunt {path}" + (" --fix" if fix else "")
 
 
+def verify_prompt(path, finding_id, branch):
+    """Re-verifies one already-fixed /vulnhunt finding against the branch vuln-fixer
+    pushed for it, reading <path>/SECURITY_REPORT.md to reconstruct the finding rather
+    than needing a fresh scan (see .claude/commands/vulnhunt.md's own `--verify`
+    handling) - the /vulnhunt-side counterpart to remediate_prompt()'s `finding_id`
+    short-circuit above."""
+    return f"/vulnhunt {path} --verify {finding_id} {branch}"
+
+
 def remediate_prompt(generate=False, finding_id=None):
     """`finding_id`, when given, scopes the run to a single already-known finding
     (skipping full re-ingest/normalize/enrich/plan - see .claude/commands/remediate.md's

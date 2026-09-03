@@ -27,16 +27,20 @@ risk level that happens to appear inside a finding's own text.
    `firmware-update`, or `manual-investigation` (when the finding is too ambiguous to
    assign a concrete action, e.g. a vague policy violation with no clear fix).
 2. **`automation_target`** — `ansible-windows`, `ansible-unix`, `ot-compensating-controls`,
-   or `manual-only`. Only assign `ansible-windows` when
+   `dependency-upgrade`, or `manual-only`. Only assign `ansible-windows` when
    `remediation_domain == "windows-server"`, `ansible-unix` when
-   `remediation_domain == "unix-server"`, and `ot-compensating-controls` when
+   `remediation_domain == "unix-server"`, `ot-compensating-controls` when
    `remediation_domain == "iot-ot-device"` (routes to `remediation-fixer-ot`, which
    generates a compensating-control/isolation recommendation and a vendor-coordination
    checklist — deliberately NOT a direct patch script, since OT devices are usually
-   unsafe to patch live; see that subagent's own file for why). Every other
-   `remediation_domain` (including `null`) gets `manual-only`, because no fixer subagent
-   exists for those domains yet. Do not invent automation for domains that aren't
-   supported — say so plainly instead.
+   unsafe to patch live; see that subagent's own file for why), and `dependency-upgrade`
+   when `remediation_domain == "application"` (routes to `remediation-fixer-application`,
+   which generates a dependency-upgrade plan from the finding's own `dependency` field —
+   see that subagent's own file; assign it even when `dependency` turned out `null`, since
+   the fixer itself is the one that decides whether it has enough to produce a real plan
+   vs. a "needs manual research" note). Every other `remediation_domain` (including
+   `null`) gets `manual-only`, because no fixer subagent exists for those domains yet. Do
+   not invent automation for domains that aren't supported — say so plainly instead.
 3. **`risk_tier`** — one of:
    - `auto-approvable`: a well-understood, low-blast-radius, reversible change (e.g.
      patching a single known CVE with a vendor-published fix, disabling a service that has
@@ -95,14 +99,16 @@ Write `REMEDIATION_PLAN.md` to the project root with:
    actively exploited per CISA KEV since 2021-11-03").
 4. **A clearly separated section**: "Findings with no automated remediation path today" —
    list every finding whose `automation_target` is `manual-only` because the domain isn't
-   supported yet (network devices, endpoints, application-layer findings,
-   certificate/TLS findings — IoT/OT now has a path via `ot-compensating-controls`, see
-   above), with a note on what would be needed to support it (e.g.
-   "network-routing-switching needs a `remediation-fixer-network` subagent generating
-   vendor CLI config diffs"; "application needs a `remediation-fixer-application`
-   subagent for library/dependency upgrades — a different mechanism per language/package
-   manager, unlike the OS-level fixers"; "certificate needs integration with the org's
-   CA/ACME tooling for renewal, and a TLS-config fixer for protocol/cipher hardening").
+   supported yet (network devices, endpoints, certificate/TLS findings — IoT/OT and
+   application/SCA now have paths via `ot-compensating-controls` and
+   `dependency-upgrade` respectively, see above), with a note on what would be needed to
+   support it (e.g. "network-routing-switching needs a `remediation-fixer-network`
+   subagent generating vendor CLI config diffs"; "certificate needs integration with the
+   org's CA/ACME tooling for renewal, and a TLS-config fixer for protocol/cipher
+   hardening"). An `application`/SCA finding that got `dependency-upgrade` but has a
+   `null` `dependency` (no SBOM was provided, or nothing in it matched) still belongs in
+   this section too — note specifically that it needs an SBOM cross-reference to become
+   real, not just "unsupported domain."
 
 When finished, output a short plain-text confirmation (not JSON): how many findings were
 planned, the auto-remediable/manual-only split, how many are KEV-listed, and the path to

@@ -419,6 +419,20 @@ def api_queue(user: dict = Depends(rbac.get_current_user)):
     return _fast_json({"findings": scored, "sla": dashboard_data.sla_summary(scored)})
 
 
+@app.get("/api/attack-paths")
+def api_attack_paths(user: dict = Depends(rbac.get_current_user)):
+    scoped = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    return _fast_json({"chains": dashboard_data.get_attack_chains(scoped)})
+
+
+@app.get("/api/dependencies")
+def api_dependencies(user: dict = Depends(rbac.get_current_user)):
+    packages = dashboard_data.get_dependency_findings()
+    for entry in packages:
+        entry["findings"] = _scope_to_team(_annotate_finding_teams(entry["findings"]), user)
+    return _fast_json({"packages": [p for p in packages if p["findings"]]})
+
+
 @app.get("/api/threat-intel/freshness")
 def api_threat_intel_freshness():
     return {
@@ -2087,6 +2101,19 @@ def api_ml_finding_cluster_members(cluster_id: int):
 @app.get("/api/ml-insights/similar/{finding_id}")
 def api_ml_similar_findings(finding_id: str):
     return _fast_json({"similar": dashboard_data.find_similar_findings(finding_id)})
+
+
+@app.get("/api/findings/{finding_id}/control-coverage")
+def api_control_coverage(finding_id: str):
+    coverage = dashboard_data.get_control_coverage(finding_id)
+    if coverage is None:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return _fast_json(coverage)
+
+
+@app.get("/api/assets/{asset_name}/network-path")
+def api_network_path(asset_name: str):
+    return _fast_json(dashboard_data.get_network_path(asset_name))
 
 
 class AssetOwnerBody(BaseModel):

@@ -102,6 +102,16 @@ export function openFindingDetail(f) {
       <h3>Recommended fix</h3>
       <p>${escapeHtml(f.recommended_fix)}</p>` : ""}
 
+    <h3>Compensating control coverage</h3>
+    <div id="control-coverage-body">
+      <p class="filter-count">Loading — checking real firewall/EDR coverage data…</p>
+    </div>
+
+    <h3>Network reachability</h3>
+    <div id="network-path-body">
+      <p class="filter-count">Loading — tracing the path to the internet…</p>
+    </div>
+
     <h3>Similar findings</h3>
     <div id="similar-findings-body">
       <p class="filter-count">Loading — real TF-IDF + cosine-similarity text search…</p>
@@ -123,6 +133,74 @@ export function openFindingDetail(f) {
   });
 
   loadSimilarFindings(f.id, modalBody);
+  loadControlCoverage(f.id, modalBody);
+  loadNetworkPath(asset.name, modalBody);
+}
+
+// Real firewall/EDR coverage assessment (remediation/enrichment/control_coverage.py) -
+// fetched lazily, same reasoning as loadSimilarFindings() below: cheap per-call, no
+// reason to compute it for every finding in a queue that may never open this modal.
+async function loadControlCoverage(findingId, modalBody) {
+  const el = modalBody.querySelector("#control-coverage-body");
+  if (!el) return;
+  let coverage;
+  try {
+    coverage = await api.controlCoverage(findingId);
+  } catch (err) {
+    el.innerHTML = `<p class="filter-count">Couldn't load control coverage (${escapeHtml(err.message || String(err))}).</p>`;
+    return;
+  }
+  if (!modalBody.querySelector("#control-coverage-body")) return; // modal closed/replaced meanwhile
+  if (!coverage.has_data) {
+    el.innerHTML = `<p class="filter-count">No firewall/EDR coverage data on file for this asset — add an entry to <code>remediation/config/security_controls.yaml</code> to see a real coverage assessment here.</p>`;
+    return;
+  }
+  const controlsHtml = coverage.recommended_controls.length
+    ? `<ul style="margin:4px 0 0; padding-left:18px">${coverage.recommended_controls.map((c) => `<li style="margin-bottom:2px">${escapeHtml(c)}</li>`).join("")}</ul>`
+    : `<p class="muted" style="margin:4px 0 0">No further controls recommended — existing coverage already accounts for everything this module checks.</p>`;
+  el.innerHTML = `
+    <div class="table-scroll">
+      <table class="data-table finding-detail-table">
+        <tbody>
+          ${row("Existing coverage", `${coverage.existing_coverage_pct}%`)}
+          ${row("Residual risk", `${coverage.residual_risk_pct}%`)}
+          ${row("Incremental coverage if applied", `${coverage.incremental_coverage_pct}%`)}
+        </tbody>
+      </table>
+    </div>
+    <p style="margin:10px 0 4px"><strong>Recommended controls:</strong></p>
+    ${controlsHtml}`;
+}
+
+// Real network-reachability trace (remediation/enrichment/network_reachability.py) -
+// same lazy-fetch reasoning as the coverage assessment above.
+async function loadNetworkPath(assetName, modalBody) {
+  const el = modalBody.querySelector("#network-path-body");
+  if (!el || !assetName) {
+    if (el) el.innerHTML = `<p class="filter-count">No asset on this finding to trace.</p>`;
+    return;
+  }
+  let path;
+  try {
+    path = await api.networkPath(assetName);
+  } catch (err) {
+    el.innerHTML = `<p class="filter-count">Couldn't load the network path (${escapeHtml(err.message || String(err))}).</p>`;
+    return;
+  }
+  if (!modalBody.querySelector("#network-path-body")) return;
+  if (path.verdict === "unknown") {
+    el.innerHTML = `<p class="filter-count">No network path on file for this asset — add an entry to <code>remediation/config/network_topology.yaml</code> to see a real reachability verdict here.</p>`;
+    return;
+  }
+  const verdictBadge = path.verdict === "denied"
+    ? `<span class="badge badge-auto_approvable">Denied — no path to the internet</span>`
+    : `<span class="badge badge-critical">Allowed — reachable from the internet</span>`;
+  const hopsHtml = path.hops.map((h) =>
+    `<li>${escapeHtml(h.hop_type)} <strong>${escapeHtml(h.name)}</strong> — ${escapeHtml(h.default_action)}</li>`).join("");
+  el.innerHTML = `
+    <p>${verdictBadge}</p>
+    <p style="margin:8px 0 4px"><strong>Path to the internet:</strong></p>
+    <ol style="margin:0; padding-left:18px">${hopsHtml}</ol>`;
 }
 
 // Fetched lazily (not blocking the modal's initial open) - real scikit-learn

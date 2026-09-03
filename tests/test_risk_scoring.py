@@ -9,11 +9,13 @@ own qualitative lookup tables.
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from remediation.config import priority_engine  # noqa: E402
+from remediation.enrichment import control_coverage  # noqa: E402
 from remediation.enrichment.risk_scoring import load_rules, score_assets  # noqa: E402
 
 
@@ -93,11 +95,15 @@ class KevAndEpssEffect(unittest.TestCase):
             _finding("A", cve="CVE-2", epss={"score": 0.05}),
         ]
         scored = score_assets(rows, findings)[0]
-        # Weighted-average likelihood (only epss component non-zero, weight 0.30,
-        # normalized by total weight 1.0) should reflect the MAX (0.95), not the
-        # average (0.5) - i.e. the epss component alone contributes 95, not ~50.
+        # Weighted-average likelihood (only epss component non-zero) should reflect the
+        # MAX (0.95), not the average (0.5) - i.e. the epss component alone contributes
+        # 95, not ~50. Normalized by the weight of the 4 base components only - this
+        # asset has no security_controls.yaml entry, so control_coverage's weight is
+        # never part of the denominator (see risk_scoring.py's score_assets()).
         rules = load_rules()
-        expected = round(rules["likelihood_weights"]["epss"] * 95 / sum(rules["likelihood_weights"].values()))
+        base_weights = {k: v for k, v in rules["likelihood_weights"].items()
+                         if k in ("kev", "epss", "exploit_criteria", "eol")}
+        expected = round(rules["likelihood_weights"]["epss"] * 95 / sum(base_weights.values()))
         self.assertEqual(scored["likelihood_score"], expected)
 
 
@@ -162,6 +168,38 @@ class RulesAreReal(unittest.TestCase):
         # With eol as the only weight and this asset's eol_status "unknown" (0 points),
         # likelihood should drop to 0 once KEV/EPSS/exploit-criteria are zeroed out.
         self.assertEqual(scored_retuned["likelihood_score"], 0)
+
+
+class ControlCoverageIsAdditive(unittest.TestCase):
+    """remediation/config/security_controls.yaml ships empty, so by default every asset
+    here has no coverage data - confirms that's truly a no-op (same score as before this
+    component existed), and that real coverage data DOES change the score once present."""
+
+    def test_asset_with_no_coverage_data_scores_identically_to_before(self):
+        rows = [_asset_row(name="A", kev_count=1)]
+        findings = [_finding("A", kev={"listed": True})]
+        with patch.object(control_coverage, "load_controls", return_value={"assets": []}):
+            scored = score_assets(rows, findings)[0]
+        rules = load_rules()
+        base_weights = {k: v for k, v in rules["likelihood_weights"].items()
+                         if k in ("kev", "epss", "exploit_criteria", "eol")}
+        expected = round(base_weights["kev"] * 100 / sum(base_weights.values()))
+        self.assertEqual(scored["likelihood_score"], expected)
+
+    def test_asset_with_real_coverage_data_scores_differently(self):
+        rows = [_asset_row(name="A")]
+        findings = [_finding("A", cve="CVE-2024-56238", title="x", description="")]
+        controls = {"assets": [{
+            "match": {"name": "A"},
+            "firewall_rules": [{"source": "internet", "dest": "A", "action": "allow"}],
+        }]}
+        with patch.object(control_coverage, "load_controls", return_value={"assets": []}):
+            scored_no_data = score_assets(rows, findings)[0]
+        with patch.object(control_coverage, "load_controls", return_value=controls):
+            scored_with_data = score_assets(rows, findings)[0]
+        # Unblocked internet-facing exposure (0% firewall coverage -> 100% residual risk
+        # for that finding) should push likelihood strictly higher than the no-data case.
+        self.assertGreater(scored_with_data["likelihood_score"], scored_no_data["likelihood_score"])
 
 
 class DoesNotMutateInput(unittest.TestCase):

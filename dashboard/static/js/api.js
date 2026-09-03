@@ -32,6 +32,8 @@ export const api = {
   remediate: () => request("GET", "/api/remediate"),
   playbook: (filename) => request("GET", `/api/playbooks/${encodeURIComponent(filename)}`),
   queue: () => request("GET", "/api/queue"),
+  attackPaths: () => request("GET", "/api/attack-paths"),
+  dependencies: () => request("GET", "/api/dependencies"),
   getPriorityRules: () => request("GET", "/api/priority-rules"),
   savePriorityRules: (rulesText) => request("POST", "/api/priority-rules", { rules_text: rulesText }),
   getExploitCriteria: () => request("GET", "/api/exploit-criteria"),
@@ -98,6 +100,8 @@ export const api = {
   mlFindingClusters: () => request("GET", "/api/ml-insights/clusters"),
   mlFindingClusterMembers: (clusterId) => request("GET", `/api/ml-insights/clusters/${encodeURIComponent(clusterId)}/members`),
   mlSimilarFindings: (findingId) => request("GET", `/api/ml-insights/similar/${encodeURIComponent(findingId)}`),
+  controlCoverage: (findingId) => request("GET", `/api/findings/${encodeURIComponent(findingId)}/control-coverage`),
+  networkPath: (assetName) => request("GET", `/api/assets/${encodeURIComponent(assetName)}/network-path`),
   activityLog: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request("GET", `/api/activity-log${qs ? `?${qs}` : ""}`);

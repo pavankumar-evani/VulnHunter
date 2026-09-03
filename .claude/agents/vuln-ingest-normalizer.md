@@ -33,6 +33,11 @@ You will be given one or more file paths, each belonging to one of these source 
 - **Threat intel** — a JSON export shaped as `{ "entries": [ { "intelId", "source",
   "title", "description", "affectedAsset": { "name", "ip", "os" }, "cve", "severity",
   "recommendedAction", "dateAdded" } ] }`.
+- **SBOM** (optional, at most one file) — a CycloneDX JSON document (`"bomFormat":
+  "CycloneDX"`), e.g. `remediation/sample-data/sbom.json`. Not itself a source of new
+  findings — a cross-reference input that enriches `application`-type SCA findings you
+  already normalized from one of the three sources above (see "Populating `dependency`"
+  below).
 
 Detect the source type per file from its extension/structure — don't require the caller
 to tell you which is which.
@@ -73,13 +78,47 @@ Map every record into the schema in `remediation/schema/normalized-finding-schem
     `certificate`
   - If genuinely unclear, use `unknown` — do not guess and mislabel; a wrong asset type
     routes the finding to the wrong (or no) remediation fixer.
-- `remediation_domain`: copy from `asset.type` for `windows-server`, `unix-server`, and
-  `iot-ot-device` (the three domains with a working fixer today - `iot-ot-device` routes
-  to `remediation-fixer-ot`, which generates compensating-control/coordination artifacts,
-  not a direct patch script, since OT devices are rarely safe to patch automatically);
-  set to `null` for every other asset type (including `application` and `certificate`),
-  since there is no automated fixer for them yet — they still get planned, just not
-  auto-remediated.
+- `remediation_domain`: copy from `asset.type` for `windows-server`, `unix-server`,
+  `iot-ot-device`, and `application` **when that `application` finding has a real CVE**
+  (the SCA case — see "Populating `dependency`" below; an `application` finding with no
+  CVE gets `null`, same as before). `iot-ot-device` routes to `remediation-fixer-ot`,
+  which generates compensating-control/coordination artifacts, not a direct patch script,
+  since OT devices are rarely safe to patch automatically; `application` routes to
+  `remediation-fixer-application`, which generates a dependency-upgrade plan, not an OS
+  patch. Set to `null` for every other asset type (including `certificate`), since there
+  is no automated fixer for them yet — they still get planned, just not auto-remediated.
+
+## Populating `dependency` (SCA findings only, when an SBOM file was provided)
+
+For every finding you just assigned `remediation_domain: "application"` (i.e.
+`asset.type == "application"` and `cve` is set), and only if an SBOM file is among your
+inputs:
+
+1. Read the SBOM's `components` array (plus its `metadata.component`, which is the SBOM's
+   own root/subject and not listed inside `components`). Using your own judgment — there
+   is no mechanical CVE-to-package lookup table for this — identify which component this
+   finding's CVE/title most plausibly refers to (e.g. a finding titled "Apache Log4j2
+   Remote Code Execution (Log4Shell)" plausibly refers to a component named
+   `log4j-core`). If nothing in the SBOM plausibly matches, leave `dependency` as `null`
+   — do not force a low-confidence guess onto the finding.
+2. If you found a plausible match, set `dependency`:
+   - `package`/`version`: copy directly from the matched component's `name`/`version`.
+   - `ecosystem`: derive from the component's `purl` field if present (the segment right
+     after `pkg:`, e.g. `pkg:maven/...` → `"maven"`); `null` if there's no `purl` or you
+     aren't confident.
+   - `fixed_version`: **only** if you are confident, from your own knowledge of this
+     specific CVE, of the real version that actually fixes it (e.g. Log4Shell/
+     CVE-2021-44228 was fixed in Log4j 2.15.0, with the more complete fix in 2.17.1) —
+     otherwise `null`. Never fabricate a plausible-looking version number; an admin acting
+     on a wrong fixed-version claim could deploy a still-vulnerable "fix."
+   - `direct`: `true` if the SBOM's `dependencies` graph shows this component as a direct
+     dependency of the root/subject component, `false` if it's only reached transitively.
+
+## What NOT to do with the SBOM
+
+Don't compute blast radius (which other components depend on this package) yourself —
+that's `remediation/enrichment/sbom.py`'s `compute_blast_radius()`, run live by the
+dashboard from the same SBOM file, not something to duplicate or persist here.
 - Severity normalization: Tenable's `Risk` column and CVSS score map directly
   (Critical/High/Medium/Low). Armis `riskLevel` maps directly. Threat-intel `severity` is
   already in this scale, used as-is.

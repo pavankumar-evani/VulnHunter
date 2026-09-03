@@ -31,6 +31,13 @@ Likelihood components aren't fully statistically independent of each other. This
 same kind of overlap priority_engine.py's own KEV-override and EPSS-escalation already
 have with the weighted score they sit on top of - not a bug, just worth knowing.
 
+A fifth Likelihood component, "control_coverage", is added ONLY for an asset that has at
+least one finding with real coverage data in remediation/config/security_controls.yaml
+(see remediation/enrichment/control_coverage.py) - an asset with no such data gets exactly
+the same 4-component score this module always computed, not a diluted one from a
+zero-valued fifth weight. See _likelihood_components()/score_assets() below for how that
+conditional inclusion is implemented.
+
 Note on what this is NOT: CVSS is stored in this pipeline only as a single rolled-up
 scalar (finding["cvss"]) - there is no Impact/Exploitability sub-score split (the
 Confidentiality/Integrity/Availability impact metrics, or the Attack Vector/Complexity/
@@ -44,6 +51,7 @@ from pathlib import Path
 import yaml
 
 from remediation.config import priority_engine
+from remediation.enrichment import control_coverage
 
 DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent / "config" / "risk_scoring_rules.yaml"
 
@@ -100,8 +108,31 @@ def _criticality_component(asset_row, priority_rules):
     return (crit["keyword_score"] + crit["type_score"]) / max_total * 100
 
 
-def _likelihood_components(asset_row, asset_findings, rules):
-    """Returns the 4 raw 0-100 Likelihood sub-components for one asset."""
+def _control_coverage_component(asset_findings, security_controls):
+    """Returns 0-100 (the MAX residual_risk_pct among this asset's findings that
+    actually have coverage data on file), or None if no finding on this asset has any
+    security_controls.yaml entry - the None case means "don't add this component at
+    all" (see score_assets()), never a guessed 0 or 100.
+
+    `security_controls` MUST be the already-loaded dict, not None - control_coverage.
+    load_controls() re-opens and re-parses the YAML file with no caching, and this
+    function is called once per asset while scoring every asset in the pipeline, so
+    resolving it fresh here would mean one disk read per asset (thousands, at this
+    pipeline's real data scale) instead of the single read score_assets() already does
+    up front. See score_assets() for where that one real load happens."""
+    residuals = [
+        coverage["residual_risk_pct"]
+        for f in asset_findings
+        for coverage in [control_coverage.assess_coverage(f, controls=security_controls)]
+        if coverage["has_data"]
+    ]
+    return max(residuals) if residuals else None
+
+
+def _likelihood_components(asset_row, asset_findings, rules, security_controls):
+    """Returns the raw 0-100 Likelihood sub-components for one asset - always the 4 base
+    ones (kev/epss/exploit_criteria/eol), plus "control_coverage" only when at least one
+    finding on this asset has real coverage data (see _control_coverage_component)."""
     kev_component = 100 if asset_row.get("kev_count", 0) > 0 else 0
 
     epss_values = [
@@ -117,12 +148,16 @@ def _likelihood_components(asset_row, asset_findings, rules):
     eol_status = (asset_row.get("eol_status") or {}).get("status", "unknown")
     eol_component = rules["eol_likelihood_points"].get(eol_status, 0)
 
-    return {
+    components = {
         "kev": kev_component,
         "epss": epss_component,
         "exploit_criteria": exploit_criteria_component,
         "eol": eol_component,
     }
+    coverage_component = _control_coverage_component(asset_findings, security_controls)
+    if coverage_component is not None:
+        components["control_coverage"] = coverage_component
+    return components
 
 
 def _tier_from_score(score, thresholds):
@@ -134,15 +169,21 @@ def _tier_from_score(score, thresholds):
     return "Low"
 
 
-def score_assets(asset_rows, findings, rules=None, priority_rules=None):
+def score_assets(asset_rows, findings, rules=None, priority_rules=None, security_controls=None):
     """Returns a new list (doesn't mutate `asset_rows`) with `impact_score`,
     `likelihood_score`, `risk_score` (all 0-100 ints), and `risk_tier` added to every
     row. `findings` should already have `exploit_criteria_matches` tagged (see
     remediation/enrichment/exploit_criteria.py's tag_exploit_criteria()) for the
     Likelihood score's exploit-criteria component to reflect anything - a finding
-    missing that field is treated the same as one with no matches (honest, not a bug)."""
+    missing that field is treated the same as one with no matches (honest, not a bug).
+
+    security_controls.yaml is loaded exactly ONCE here (like rules/priority_rules
+    already are) and threaded through to every asset's _control_coverage_component()
+    call - not reloaded per-asset, which at this pipeline's real data scale (thousands
+    of assets) would mean thousands of avoidable disk reads for one static file."""
     rules = rules if rules is not None else load_rules()
     priority_rules = priority_rules if priority_rules is not None else priority_engine.load_rules()
+    security_controls = security_controls if security_controls is not None else control_coverage.load_controls()
 
     findings_by_asset = {}
     for f in findings:
@@ -162,7 +203,12 @@ def score_assets(asset_rows, findings, rules=None, priority_rules=None):
             },
             rules["impact_weights"],
         )
-        likelihood = _weighted(_likelihood_components(row, asset_findings, rules), rules["likelihood_weights"])
+        likelihood_components = _likelihood_components(row, asset_findings, rules, security_controls)
+        # Only the weights for components actually present this time - an asset with no
+        # control_coverage component gets exactly today's 4-way weighted average, not one
+        # diluted by a 5th weight sitting at an implicit zero (see module docstring).
+        likelihood_weights = {k: v for k, v in rules["likelihood_weights"].items() if k in likelihood_components}
+        likelihood = _weighted(likelihood_components, likelihood_weights)
         risk = impact * likelihood / 100
         tier = _tier_from_score(risk, rules["risk_tier_thresholds"])
 

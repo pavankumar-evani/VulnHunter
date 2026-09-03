@@ -30,6 +30,10 @@ from remediation.enrichment.infra_classification import tag_infra_categories  # 
 from remediation.enrichment import activity_insights  # noqa: E402
 from remediation.enrichment import ml_insights  # noqa: E402
 from remediation.enrichment import risk_scoring  # noqa: E402
+from remediation.enrichment import control_coverage  # noqa: E402
+from remediation.enrichment import network_reachability  # noqa: E402
+from remediation.enrichment import attack_chains  # noqa: E402
+from remediation.enrichment import sbom  # noqa: E402
 from remediation.enrichment.quantum_readiness import tag_quantum_readiness  # noqa: E402
 from remediation.enrichment.cloud_provider import tag_cloud_provider  # noqa: E402
 from remediation.enrichment.dedup import dedup_findings  # noqa: E402
@@ -132,6 +136,17 @@ def _compute_vulnhunt_data():
 
     header, rows = parse_markdown_table(report, "Summary")
     findings = [dict(zip(header, row)) for row in rows]
+
+    # /vulnhunt --verify's own outcome, real and logged to the activity log by
+    # remediation/audit/record_verification.py - list_activity() returns newest-first,
+    # so the first entry seen per finding ID is its most recent verification.
+    verification_by_id = {}
+    for entry in activity_log.list_activity(action="vulnhunt.verify"):
+        finding_id = entry.get("target")
+        if finding_id and finding_id not in verification_by_id:
+            verification_by_id[finding_id] = entry["details"]
+    for f in findings:
+        f["verification"] = verification_by_id.get(f.get("ID"))
 
     title_line = next((l for l in report.splitlines() if l.startswith("# ")), "")
     return {
@@ -348,8 +363,10 @@ def _load_content_enriched_findings():
 def _scored_assets_cache_key():
     """Every real, editable file/store whose content actually changes
     _load_scored_assets()'s output - findings, asset ownership (owner/team/environment/
-    facing/remediation schedule - read by build_asset_inventory()), and the two rules
-    files score_assets() itself loads when not passed explicitly. Keying on each one's
+    facing/remediation schedule - read by build_asset_inventory()), and the three files
+    score_assets() itself loads when not passed explicitly (risk_scoring_rules.yaml,
+    priority_rules.yaml, and security_controls.yaml, the last feeding the
+    control_coverage Likelihood component). Keying on each one's
     own mtime means an edit to ANY of them invalidates the cache the instant it
     happens, not just after the TTL below expires - that TTL is only a backstop for
     rapid repeat calls within the same file state, never the mechanism a real edit
@@ -363,11 +380,13 @@ def _scored_assets_cache_key():
     db_path = Path(db_module.get_engine().url.database)
     risk_rules_path = risk_scoring.DEFAULT_RULES_PATH
     priority_rules_path = priority_engine.DEFAULT_RULES_PATH
+    security_controls_path = control_coverage.DEFAULT_CONTROLS_PATH
     return (
         _findings_file_mtime(),
         db_path.stat().st_mtime if db_path.exists() else None,
         risk_rules_path.stat().st_mtime if risk_rules_path.exists() else None,
         priority_rules_path.stat().st_mtime if priority_rules_path.exists() else None,
+        security_controls_path.stat().st_mtime if security_controls_path.exists() else None,
     )
 
 
@@ -731,6 +750,67 @@ def find_similar_findings(finding_id, top_n=5):
     view, not on every page load."""
     findings = load_remediation_findings()
     return ml_insights.find_similar_findings(findings, finding_id, top_n=top_n)
+
+
+def get_control_coverage(finding_id):
+    """Real compensating-control coverage for one finding (remediation/enrichment/
+    control_coverage.py) - cheap enough (one YAML load + a handful of regex checks)
+    that it isn't cached, same lazy-on-open posture as find_similar_findings() above.
+    Returns None if the finding itself doesn't exist (distinct from has_data=False,
+    which means the finding exists but its asset has no security_controls.yaml entry)."""
+    findings = load_remediation_findings()
+    finding = next((f for f in findings if f.get("id") == finding_id), None)
+    if finding is None:
+        return None
+    return control_coverage.assess_coverage(finding)
+
+
+def get_attack_chains(findings):
+    """Real entry/pivot/impact attack-chain grouping (remediation/enrichment/
+    attack_chains.py) over an already-loaded finding list - takes `findings` as a
+    parameter (rather than fetching the live queue itself) so the caller in app.py can
+    team-scope it first, the same way /api/queue does, before chains are built from it."""
+    return attack_chains.build_chains(findings)
+
+
+def get_dependency_findings():
+    """Every finding with a real, populated `dependency` field (see
+    remediation/schema/normalized-finding-schema.md), grouped by package name, each
+    with its live blast radius from the shipped sample SBOM (remediation/enrichment/
+    sbom.py) - computed fresh here, not persisted, since blast radius is a property of
+    the SBOM's own dependency graph, not of any one finding. Returns [] (an honest
+    empty state, not an error) until a finding actually carries dependency data - that
+    only happens after a /remediate run supplied an SBOM file alongside the scanner
+    exports (see vuln-ingest-normalizer.md's "Populating dependency" section)."""
+    findings = load_remediation_findings()
+    by_package = {}
+    for f in findings:
+        dep = f.get("dependency")
+        if not dep or not dep.get("package"):
+            continue
+        entry = by_package.setdefault(dep["package"], {"dependency": dep, "findings": []})
+        entry["findings"].append({"id": f.get("id"), "title": f.get("title"), "asset": f.get("asset")})
+
+    try:
+        sbom_doc = sbom.load_sbom()
+    except (FileNotFoundError, ValueError):
+        sbom_doc = None
+
+    return [
+        {
+            "package": package,
+            "dependency": entry["dependency"],
+            "findings": entry["findings"],
+            "blast_radius": sbom.compute_blast_radius(sbom_doc, package) if sbom_doc else [],
+        }
+        for package, entry in by_package.items()
+    ]
+
+
+def get_network_path(asset_name):
+    """Real network-reachability trace for one asset (remediation/enrichment/
+    network_reachability.py) - same lazy, uncached posture as get_control_coverage()."""
+    return network_reachability.trace_path(asset_name)
 
 
 def load_asset_policy_text():

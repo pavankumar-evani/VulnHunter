@@ -1,0 +1,56 @@
+# Hand-maintained firewall-rule and EDR-policy state, per asset.
+#
+# Read by remediation/enrichment/control_coverage.py to compute how much a finding's
+# existing security controls already reduce its exposure, before recommending anything
+# new. This is a manually-curated dataset, not a live query against a real firewall/EDR
+# management API or console - same "manually-curated until a live connector exists"
+# honesty already applied to remediation/sample-data/threat_intel.json. There is no
+# firewall-vendor or EDR-vendor connector in this repo that could populate this file
+# automatically; an admin (or a future connector) keeps it current by hand.
+#
+# Each entry:
+#   match  - one of: name (exact asset name), name_prefix (string), name_regex (a Python
+#            regex, matched with re.search against the asset name). The FIRST matching
+#            entry wins - order matters if you use overlapping name_prefix/name_regex
+#            entries, most-specific first.
+#   firewall_rules - a list of {source, dest, port, protocol, action: allow|deny}. `source`
+#            is a real, project-wide zone label of your own choosing (e.g. "internet",
+#            "dmz", "corp-lan") - this file doesn't enforce a fixed zone vocabulary,
+#            control_coverage.py just checks whether ANY rule whose source looks
+#            internet/DMZ-facing (source contains "internet" or "dmz", case-insensitive)
+#            denies traffic to this asset. It does NOT filter by the finding's own port -
+#            the normalized Finding schema doesn't carry a port field today, so this is an
+#            asset-level network-exposure signal, not a per-finding one. Treat it as "is
+#            this asset's untrusted-facing path blocked at all," not "is this exact CVE's
+#            port blocked."
+#   edr    - {mode: block|detect|none, signature_coverage: [...]}. `signature_coverage` is
+#            a list of CVE IDs and/or free-text keywords (matched case-insensitively
+#            against a finding's cve field or its title+description) that this asset's EDR
+#            has ANY signature for - `mode` says whether that signature blocks or only
+#            detects.
+#
+# This file ships with zero entries - there's nothing here to accidentally treat as real
+# coverage for the seed asset data. The example below is commented out.
+
+assets: []
+
+# Example (commented out) - a domain controller with a restrictive perimeter firewall and
+# detection-only EDR coverage for one specific CVE:
+# assets:
+#   - match:
+#       name: "WIN-DC01"
+#     firewall_rules:
+#       - source: "internet"
+#         dest: "WIN-DC01"
+#         port: 443
+#         protocol: "tcp"
+#         action: "deny"
+#       - source: "dmz"
+#         dest: "WIN-DC01"
+#         port: 443
+#         protocol: "tcp"
+#         action: "allow"
+#     edr:
+#       mode: "detect"
+#       signature_coverage:
+#         - "CVE-2024-56238"

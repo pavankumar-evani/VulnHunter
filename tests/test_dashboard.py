@@ -537,6 +537,33 @@ class ApiVulnhunt(unittest.TestCase):
         ids = {f["ID"] for f in payload["findings"]}
         self.assertEqual(ids, {f"VULN-{i}" for i in range(1, 19)})
 
+    def test_unverified_finding_has_no_verification(self):
+        resp = client.get("/api/vulnhunt")
+        payload = resp.json()
+        vuln1 = next(f for f in payload["findings"] if f["ID"] == "VULN-1")
+        self.assertIsNone(vuln1["verification"])
+
+    def test_verified_finding_surfaces_its_latest_outcome(self):
+        # record_verification.py logs via activity_log.record_activity() - this test
+        # exercises that exact real write, not a mocked stand-in, same as every other
+        # real-DB-backed test in this module (see setUpModule()'s module-wide
+        # _patch_db_engine()).
+        dashboard_data._VULNHUNT_DATA_CACHE["data"] = None  # force a fresh read past the TTL cache
+        dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+        activity_log.record_activity(
+            "vulnhunt-verify", "vulnhunt.verify", "VULN-2",
+            {"branch": "vulnhunter/auto-fixes-test", "status": "resolved", "detail": "confirmed fixed"},
+        )
+        try:
+            resp = client.get("/api/vulnhunt")
+            payload = resp.json()
+            vuln2 = next(f for f in payload["findings"] if f["ID"] == "VULN-2")
+            self.assertEqual(vuln2["verification"]["status"], "resolved")
+            self.assertEqual(vuln2["verification"]["detail"], "confirmed fixed")
+        finally:
+            dashboard_data._VULNHUNT_DATA_CACHE["data"] = None
+            dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+
 
 class ApiRemediate(unittest.TestCase):
     def test_lists_all_findings_and_playbook_links(self):

@@ -1,0 +1,52 @@
+# Hand-maintained network path from "the internet" to each asset, hop by hop.
+#
+# Read by remediation/enrichment/network_reachability.py to answer the question a simple
+# firewall-rule lookup can't: is this asset actually reachable from outside, once you
+# account for every hop (firewall, WAF, load balancer, DMZ segment) in between - not just
+# whether one rule at one point says "allow." Same manually-curated nature as
+# security_controls.yaml - there is no network-topology-discovery connector in this repo;
+# an admin keeps this current by hand as the real environment changes.
+#
+# Each entry:
+#   match          - one of: name (exact asset name), name_prefix (string), name_regex (a
+#                    Python regex, matched with re.search against the asset name). First
+#                    match wins, same convention as security_controls.yaml.
+#   path_to_internet - an ORDERED list of hops from the internet down to this asset, each
+#                    {hop_type: firewall|waf|load_balancer|dmz, name, default_action:
+#                    allow|deny}. network_reachability.py walks this list in order; the
+#                    overall verdict is "denied" if ANY hop's default_action is "deny" (a
+#                    single blocking hop protects the asset regardless of what's allowed
+#                    elsewhere), "allowed" only if every hop allows, and "partial" if the
+#                    list is non-empty but ambiguous (currently unused - reserved for a
+#                    future hop-level override, e.g. a specific allow-listed rule punching
+#                    through an otherwise-denying hop; today every hop is all-or-nothing).
+#
+# An asset with NO matching entry here has an unknown path, not an assumed-safe one -
+# network_reachability.trace_path() returns verdict "unknown", never "denied" by default,
+# so a missing entry can never be misread as "protected."
+#
+# This file ships with zero entries. The example below is commented out.
+
+assets: []
+
+# Example (commented out) - an internet-facing web tier behind a WAF and a DMZ, versus an
+# internal-only asset with no path to the internet at all:
+# assets:
+#   - match:
+#       name_prefix: "WEB-"
+#     path_to_internet:
+#       - hop_type: "waf"
+#         name: "Edge-WAF"
+#         default_action: "allow"
+#       - hop_type: "firewall"
+#         name: "Perimeter-FW-01"
+#         default_action: "allow"
+#       - hop_type: "dmz"
+#         name: "DMZ-Segment-A"
+#         default_action: "allow"
+#   - match:
+#       name: "WIN-DC01"
+#     path_to_internet:
+#       - hop_type: "firewall"
+#         name: "Core-FW-01"
+#         default_action: "deny"
