@@ -8,7 +8,7 @@ remediation pipeline, the demo app's handling outside its intended sandboxed use
 anywhere else in this repository — please report it privately rather than opening a
 public issue.
 
-**Contact:** pavane@deloitte.com
+**Contact:** pavane1@outlook.com
 
 Please include:
 - A description of the issue and its potential impact
