@@ -2555,7 +2555,22 @@ def api_status():
     genuinely load-bearing (the findings file itself) can't be read - SMTP/a real
     session secret not being configured are expected, documented, optional-by-default
     states in this MVP, not degradation, so they're reported honestly but don't flip
-    `status`."""
+    `status`.
+
+    `data_stores` is deliberately computed FIRST, before anything else below - vh's own
+    load_vulnhunt_data() reads activity_log for verification status, and that read (like
+    any table read) unconditionally runs ensure_schema() first, which lazily creates the
+    shared DB file if it doesn't exist yet. Computing data_stores after that call would
+    make every store sharing that physical file (see _db_table_fact's own docstring)
+    report exists:true just because this same request happened to touch a different
+    table first - an honest existence check must not be contaminated by what the rest
+    of the same request does."""
+    data_stores = {
+        "exceptions": _db_table_fact(db_module.exceptions),
+        "remediation_approvals": _db_table_fact(db_module.remediation_approvals),
+        "activity_log": _db_table_fact(db_module.activity_log),
+        "ai_usage_log": _db_table_fact(db_module.ai_usage_log),
+    }
     vh = dashboard_data.load_vulnhunt_data()
     findings, findings_error = _safe_check(dashboard_data.load_remediation_findings, [])
     playbooks, playbooks_error = _safe_check(dashboard_data.load_playbooks, [])
@@ -2578,12 +2593,7 @@ def api_status():
         "threat_intel": threat_intel,
         "uptime_seconds": round(time.monotonic() - _PROCESS_STARTED_AT, 1),
         "notification_scheduler_alive": _scheduler_task is not None and not _scheduler_task.done(),
-        "data_stores": {
-            "exceptions": _db_table_fact(db_module.exceptions),
-            "remediation_approvals": _db_table_fact(db_module.remediation_approvals),
-            "activity_log": _db_table_fact(db_module.activity_log),
-            "ai_usage_log": _db_table_fact(db_module.ai_usage_log),
-        },
+        "data_stores": data_stores,
     }
 
 
