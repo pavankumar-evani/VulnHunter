@@ -154,9 +154,12 @@
         <thead><tr><th>Subagent</th><th>Tools</th><th>Why</th></tr></thead>
         <tbody>
           <tr><td class="mono">remediation-fixer-windows/-unix</td><td class="mono">Read, Write</td><td>Drafts a playbook; cannot run one — no Bash, no network, no credentials</td></tr>
+          <tr><td class="mono">remediation-fixer-ot</td><td class="mono">Read, Write</td><td>Same restriction, different artifact shape — a compensating-control recommendation, never a patch script (OT devices are rarely safe to patch live)</td></tr>
+          <tr><td class="mono">remediation-fixer-application</td><td class="mono">Read, Write</td><td>Drafts a dependency-upgrade plan; cannot edit a manifest, run a package manager, or open a PR itself</td></tr>
           <tr><td class="mono">vuln-scanner</td><td class="mono">Read, Grep, Glob, Bash</td><td>No Edit/Write — physically cannot modify what it's scanning</td></tr>
           <tr><td class="mono">vuln-triage-reporter</td><td class="mono">Write</td><td>Produces a report only</td></tr>
           <tr><td class="mono">vuln-fixer</td><td class="mono">Read, Edit, Write, Bash</td><td>New-branch-only git workflow; never commits to <code>main</code></td></tr>
+          <tr><td class="mono">vuln-verifier</td><td class="mono">Read, Grep, Glob, Bash</td><td>Same read-only shape as vuln-scanner — re-checks a fix via <code>git show</code>/<code>git grep</code> against a named branch, never checks that branch out</td></tr>
         </tbody>
       </table></div>
       <div class="callout warn"><span class="label">The rule for any new fixer-shaped subagent</span><p>If it drafts a change to real infrastructure config, it gets <code>Read, Write</code> only. This is the one convention in this codebase that is never relaxed for convenience.</p></div>

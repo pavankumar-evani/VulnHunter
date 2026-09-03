@@ -8,15 +8,15 @@ VulnHunter started as a Claude Code **extension** — two slash commands plus se
 subagents, no runnable application. It has since grown a second, much larger half on top:
 a real, deployable web application. Both halves are real and current today:
 
-- **The pipelines** — `/vulnhunt` and `/remediate`, orchestrating 8 subagents total (3 + 5)
-  via markdown prompt/config files under `.claude/`. No build system or package manifest
-  of their own. See "Architecture: the 3-stage subagent pipeline" and "Architecture: the
-  remediation engine" below.
+- **The pipelines** — `/vulnhunt` and `/remediate`, orchestrating 11 subagents total
+  (4 + 7) via markdown prompt/config files under `.claude/`. No build system or package
+  manifest of their own. See "Architecture: the 3-stage subagent pipeline" and
+  "Architecture: the remediation engine" below.
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/vulnhunter.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,343 tests — all passing as
-  of 2026-09-02 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
+  pipeline non-interactively, and a Python `unittest` suite of 1,456 tests — all passing as
+  of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
 The dashboard reads the pipelines' own output artifacts (`SECURITY_REPORT.md`,
@@ -49,6 +49,7 @@ claude
 /vulnhunt <path-to-target-repo> [--fix]
 /vulnhunt vulnerable-demo-app         # scan+report only
 /vulnhunt vulnerable-demo-app --fix   # scan+report, then auto-fix and push a branch
+/vulnhunt vulnerable-demo-app --verify VULN-2 vulnhunter/auto-fixes-<branch>  # re-check one fix
 /remediate                            # ingests remediation/sample-data/* by default
 /remediate --generate                 # also generates Ansible playbooks for auto-remediable findings
 
@@ -120,8 +121,15 @@ The shape worth knowing without opening either: a "Security Domains" layer of hu
 counts and link into pre-filtered `/queue` views; a live, re-scored `/queue` versus a
 static `/remediate` plan snapshot; one Test Connection + Fetch page per pull connector (see
 "The connector pattern" below); governance pages (`/exceptions`, `/remediation-approvals`,
-`/priority-rules`, `/exploit-criteria`); and account/ops pages (`/login`, `/profile`,
-`/run`, `/reports`, `/support`, `/faq`).
+`/priority-rules`, `/exploit-criteria`); risk-correlation pages (`/attack-paths` — entry/
+pivot/impact chains built on each finding's tagged MITRE ATT&CK tactic;
+`/dependencies` — SBOM-derived blast radius per vulnerable package; both real, both
+honestly empty until the underlying data — a shared asset/tactic, or a matched SBOM
+component — actually exists); and account/ops pages (`/login`, `/profile`, `/run`,
+`/reports`, `/support`, `/faq`). The finding-detail modal (opened from any finding-ID
+link, `dashboard/static/js/findingDetail.js`) additionally shows real compensating-control
+coverage and network-reachability data, lazily fetched per finding — see
+`remediation/enrichment/control_coverage.py` and `network_reachability.py`.
 
 ### Data & storage
 
@@ -132,9 +140,10 @@ The files most worth knowing:
 | `remediation/output/normalized-findings.json` | Every finding, in the schema below — the system of record |
 | `REMEDIATION_PLAN.md` | Point-in-time snapshot written by `remediation-planner` — risk tier, action type, rollback plan per finding |
 | `remediation/output/*.yml` | Generated Ansible playbooks, one per remediable finding |
-| `remediation/config/*.yaml` | Every admin-editable policy — priority weights, SLA windows, remediation policy, risk/exposure scoring, exploit-criteria rules, alerting, report schedules, AI governance |
+| `remediation/config/*.yaml` | Every admin-editable policy — priority weights, SLA windows, remediation policy, risk/exposure scoring, exploit-criteria rules, alerting, report schedules, AI governance, plus two hand-maintained datasets: `security_controls.yaml` (per-asset firewall rules + EDR policy state) and `network_topology.yaml` (per-asset hop path to the internet) — both ship empty, feeding `remediation/enrichment/control_coverage.py` and `network_reachability.py` respectively |
 | `remediation/vulnhunter.db` | Shared local SQLite database (gitignored) — see below |
 | `remediation/live-data/*` | Raw CSV/XML exports written by a CVE-scoped connector's Fetch action (Tenable/Qualys/OpenVAS), before ingestion via `/remediate` |
+| `remediation/sample-data/sbom.json` | A hand-authored CycloneDX SBOM — the input `remediation/enrichment/sbom.py` computes dependency blast radius from, and `vuln-ingest-normalizer` cross-references to populate a finding's `dependency` field |
 
 **`remediation/utils/db.py`** — a real local SQLite database (accessed through
 SQLAlchemy Core, not raw `sqlite3`, so a future move to Postgres for real multi-tenancy
@@ -170,13 +179,18 @@ field again). `asset.type` is the routing key: **17 types today** (windows/unix 
 endpoint OS, network routing/switching, network security devices, IoT/OT, virtualization
 hosts, cloud infrastructure, applications, certificates, client applications, mobile
 devices, printers, IaC resources, code repositories, container runtimes, and AI/ML
-systems), but only `windows-server` and `unix-server` route to a working
-`remediation-fixer-*` subagent today — every other type is still normalized, enriched,
-scored, and planned, just routed to "no automated fixer yet, here's who should own it"
-instead of a generated artifact. `kev`/`epss` (CISA KEV + FIRST.org EPSS) and
-`poc_available`/`user_interaction_required` are added by later enrichment stages, not at
-ingestion, and stay `null` whenever `cve` is null — these are inherently CVE-scoped
-signals, so a policy finding with no CVE honestly carries none rather than a guessed one.
+systems), but only `windows-server`, `unix-server`, `iot-ot-device`, and (for SCA findings
+with a CVE) `application` route to a working `remediation-fixer-*` subagent today — every
+other type is still normalized, enriched, scored, and planned, just routed to "no
+automated fixer yet, here's who should own it" instead of a generated artifact.
+`kev`/`epss` (CISA KEV + FIRST.org EPSS) and `poc_available`/`user_interaction_required`
+are added by later enrichment stages, not at ingestion, and stay `null` whenever `cve` is
+null — these are inherently CVE-scoped signals, so a policy finding with no CVE honestly
+carries none rather than a guessed one. `dependency` (package/ecosystem/version/
+fixed_version/direct) is nullable too, populated only for `application`/SCA findings when
+a CycloneDX SBOM was supplied alongside the scanner exports and the normalizer's own LLM
+judgment matched a component to the finding — see that field's own note in the schema doc
+for why there's no mechanical CVE-to-package lookup table for this.
 
 ## Authentication & RBAC
 
@@ -270,7 +284,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,343 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,456 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -295,7 +309,7 @@ feature — before calling it done. This SPA has 30+ page modules; each was clic
 and verified live in a browser during development, not just unit-tested, and a
 shared-function edit can silently break a sibling page that wasn't the focus of the change.
 
-## Architecture: the 3-stage subagent pipeline
+## Architecture: the 3-stage subagent pipeline (+ optional verification)
 
 `/vulnhunt` (`.claude/commands/vulnhunt.md`) is the orchestrator. It parses `$ARGUMENTS`
 for a target path (default: cwd) and an optional `--fix` flag, then sequences three
@@ -321,6 +335,18 @@ is the core design idea of the project, not an incidental detail:
    — opening the actual PR is a manual click in the browser or VS Code afterward. If push
    fails, it must stop and tell the user the manual step rather than failing silently.
 
+A fourth subagent, **`vuln-verifier`** (tools: `Read, Grep, Glob, Bash` — same read-only
+scope as `vuln-scanner`, no Edit/Write), runs only when `--verify FINDING-ID BRANCH` is
+passed instead of `--fix`: it re-reads `SECURITY_REPORT.md` to reconstruct one finding,
+re-checks it against the named branch/commit with `git show`/`git grep` (never checking
+that branch out into the working tree), and returns a `resolved`/`still-present`/
+`inconclusive` verdict — closing the loop `vuln-fixer` otherwise leaves open (it pushes a
+branch and stops; nothing before this re-confirmed the fix actually worked). The
+orchestrator logs the verdict via `remediation/audit/record_verification.py` to the real
+activity log, and the dashboard's `/vulnhunt` page shows it as a "Verified" column,
+defaulting to "Not yet verified" — never implied as verified just because a fix branch
+exists.
+
 The chat output from `/vulnhunt` stays a short summary (counts by severity, auto-fixable
 count); full detail always lives in `SECURITY_REPORT.md`, never dumped into the
 conversation.
@@ -330,9 +356,10 @@ conversation.
 Each agent's `tools:` list in its frontmatter is a hard security boundary, not a
 suggestion: the scanner is read-only so the component that *finds* vulnerabilities cannot
 introduce new ones; the reporter can only `Write`, so it cannot scan or fix; the fixer is
-the only agent allowed to touch git/`gh`. When editing any of the three agent files
-(`.claude/agents/*.md`), preserve this separation — don't widen an agent's tool access to
-"make it easier," since the narrow scope is the point.
+the only agent allowed to touch git/`gh`; the verifier can run `git show`/`git grep` via
+Bash but has no Edit/Write, so it can inspect a fix but never apply or alter one. When
+editing any of these agent files (`.claude/agents/*.md`), preserve this separation — don't
+widen an agent's tool access to "make it easier," since the narrow scope is the point.
 
 ### Fix conventions the fixer follows (`vuln-fixer.md`)
 
@@ -347,7 +374,7 @@ the only agent allowed to touch git/`gh`. When editing any of the three agent fi
 
 ## Architecture: the remediation engine (`/remediate`)
 
-`/remediate` (`.claude/commands/remediate.md`) orchestrates **six** subagents, same
+`/remediate` (`.claude/commands/remediate.md`) orchestrates **seven** subagents, same
 scoped-tool-access philosophy as `/vulnhunt`:
 
 1. **`vuln-ingest-normalizer`** (tools: `Read, Glob, Write`) parses Tenable CSV, Armis
@@ -355,8 +382,9 @@ scoped-tool-access philosophy as `/vulnhunt`:
    `remediation/schema/normalized-finding-schema.md`. Writes
    `remediation/output/normalized-findings.json`. Assigns `asset.type` (the routing key
    for everything downstream — 17 types today) and `remediation_domain` (non-null only
-   for `windows-server`/`unix-server`/`iot-ot-device`, the three domains with a working
-   fixer — see item 4 below for why the OT one is a different shape).
+   for `windows-server`/`unix-server`/`iot-ot-device`/`application`, the four domains
+   with a working fixer — see items 4-5 below for why the OT and application ones are
+   each a different shape).
 2. **`threat-intel-enricher`** (tools: `Read, Write, Bash`) runs next, before planning: it
    shells out to `remediation/enrichment/kev_epss.py` to attach real CISA KEV and
    FIRST.org EPSS data to every finding that already has a CVE, overwriting
@@ -383,23 +411,32 @@ scoped-tool-access philosophy as `/vulnhunt`:
    "generate the fix" for this domain means "generate the human-actionable risk-reduction
    plan," not automation. See that subagent's own file for the full rationale (grounded
    in NIST SP 800-82's OT security guidance).
+5. **`remediation-fixer-application`** (same `Read, Write`-only scope) handles
+   `application`-type findings with a real CVE (the SCA case) that the planner routed to
+   `automation_target: "dependency-upgrade"`. Generates a dependency-upgrade *plan*, not
+   a manifest edit or a PR — it has no Bash/git access, so a real version bump, test run,
+   and PR are left to a developer's own workflow. Uses the finding's `dependency` field
+   (populated by `vuln-ingest-normalizer` from a CycloneDX SBOM — see
+   `remediation/enrichment/sbom.py`) when available; when it isn't, generates a plan that
+   says so and asks for one, rather than guessing a package or fixed version.
 
 A `--finding-id FIND-N` argument (what the dashboard's "Trigger Remediation" button on an
 already-approved finding uses, via `/api/run`) skips steps 1-3 entirely and delegates
 straight to whichever fixer matches that one finding's `remediation_domain`, rather than
 re-running ingest/enrich/plan for the whole batch to reach one already-known finding.
 
-### Why network/firewall/IoT findings stay manual-only
+### Why network/firewall findings stay manual-only
 
 `vuln-ingest-normalizer`, `threat-intel-enricher`, and `remediation-planner` handle every
 asset type — ingestion, enrichment, and planning are asset-agnostic by design. Only
-fix-generation is incomplete: there's no `remediation-fixer-network` or
-`remediation-fixer-iot` yet, out of the 17 types the schema recognizes today (network
-routing/switching, network security devices, IoT/OT, cloud infrastructure, certificates,
-AI/ML findings, code repositories, and more — see
+fix-generation is incomplete: there's no `remediation-fixer-network` yet, out of the 17
+types the schema recognizes today (network routing/switching, network security devices,
+cloud infrastructure, certificates, AI/ML findings, code repositories, and more — see
 `remediation/schema/normalized-finding-schema.md` for the full list and why each was
-added). Adding one means adding a new subagent with `tools: Read, Write` (same restricted
-pattern) that generates vendor-appropriate config (e.g. Ansible's
+added; `iot-ot-device` and `application` both have working fixers today —
+`remediation-fixer-ot` and `remediation-fixer-application` respectively, see above).
+Adding a network fixer means adding a new subagent with `tools: Read, Write` (same
+restricted pattern) that generates vendor-appropriate config (e.g. Ansible's
 `cisco.ios`/`junipernetworks.junos` collections for network gear), plus updating
 `remediation-planner`'s `automation_target` assignment to route to it. Don't add real
 execution capability (`Bash`, SSH, API calls) to any fixer subagent — every fixer in this

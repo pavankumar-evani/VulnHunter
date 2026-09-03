@@ -162,6 +162,8 @@
           <tr><td>/asset-mapping</td><td>Asset Mapping</td><td>Rank assets by distinct-vuln count</td><td class="col-fields">Asset, Type, Distinct Vulnerabilities, Critical, Risk Score, EOL/EOS; subnet grouping</td></tr>
           <tr><td>/assets</td><td>Asset Inventory</td><td>Master asset list, CMDB import</td><td class="col-fields">Asset, Type, IP, MAC, Findings, Highest Severity, KEV Exposure, Risk Score, Owner, Team, EOL/EOS</td></tr>
           <tr><td>/compensating-controls</td><td>Compensating Controls</td><td>Un-remediable-findings watchlist</td><td class="col-fields">Critical+EOL, actively-exploited, exception-covered counts; Priority, Why flagged, Compensating controls, Owner</td></tr>
+          <tr><td>/attack-paths</td><td>Attack Chains</td><td>Entry/pivot/impact grouping by asset</td><td class="col-fields">Attack chains found, pivot-finding count; per-chain Entry/Pivot/Impact finding chips, clickable to detail</td></tr>
+          <tr><td>/dependencies</td><td>Dependencies</td><td>SBOM-derived package blast radius</td><td class="col-fields">Packages-with-data count; per-package current/fixed version, direct/transitive, referencing findings, blast-radius component list</td></tr>
           <tr><td>/ml-insights</td><td>ML Insights</td><td>Real scikit-learn anomaly/clustering</td><td class="col-fields">Anomalous assets, clusters, findings analyzed; Anomaly Score + why-flagged; cluster size/dominant severity/avg CVSS+EPSS</td></tr>
           <tr><td>/asset-policy</td><td>Asset Policy</td><td>Bulk rule-based asset metadata</td><td class="col-fields">YAML editor; live match preview (Rule, Would set, Matched assets)</td></tr>
         </tbody>

@@ -100,7 +100,7 @@
     <a href="#approvals">04 · Approvals vs. exceptions</a>
     <a href="#policy">05 · Remediation policy engine</a>
     <a href="#boundary">06 · The execution boundary</a>
-    <a href="#tracks">07 · Three remediation tracks</a>
+    <a href="#tracks">07 · Four remediation tracks</a>
   </nav>
 
   <main>
@@ -115,7 +115,7 @@
       <p class="section-intro">Detection is covered in the Vulnerability Finding Engine document. This picks up once a finding is scored and continues through to a human decision.</p>
       <div class="steps">
         <div class="step"><div class="n">1</div><div><div class="who">Automatic</div><h4>Plan</h4><p><code>remediation-planner</code> assigns an action type, the automation mechanism that could handle it, a risk tier, and a rollback plan — written to <code>REMEDIATION_PLAN.md</code>.</p></div></div>
-        <div class="step"><div class="n">2</div><div><div class="who">Automatic, once eligible</div><h4>Generate</h4><p><code>remediation-fixer-windows</code> / <code>-unix</code> drafts a real Ansible playbook for <code>windows-server</code>/<code>unix-server</code> findings — the only two asset types with a working fixer today.</p></div></div>
+        <div class="step"><div class="n">2</div><div><div class="who">Automatic, once eligible</div><h4>Generate</h4><p><code>remediation-fixer-windows</code>/<code>-unix</code>/<code>-ot</code>/<code>-application</code> drafts a real artifact — an Ansible playbook, a compensating-control recommendation, or a dependency-upgrade plan, depending on domain (see §07) — for <code>windows-server</code>/<code>unix-server</code>/<code>iot-ot-device</code>/<code>application</code> findings, the four asset types with a working fixer today.</p></div></div>
         <div class="step"><div class="n">3</div><div><div class="who">Human</div><h4>Review</h4><p>Open the playbook, read its header (finding ID, risk tier, rollback instruction), honor a <code>CHANGE APPROVAL REQUIRED</code> comment if present, verify anything the fixer explicitly declined to guess.</p></div></div>
         <div class="step"><div class="n">4</div><div><div class="who">Human, recorded</div><h4>Request approval</h4><p>A <code>remediation-approvals</code> request is created against the next real maintenance window from the resolved remediation policy (§5).</p></div></div>
         <div class="step"><div class="n">5</div><div><div class="who">Human (admin)</div><h4>Approve or reject</h4><p>Recorded with who decided, when, and (if AD is configured) whether the approver's group membership was verified. A pending request past its window with no decision auto-reports as <code>expired</code>.</p></div></div>
@@ -170,22 +170,25 @@
     </section>
 
     <section id="tracks">
-      <h2><span class="num">07</span>Three remediation tracks — deliberately not one workflow</h2>
-      <p class="section-intro">Everything above describes the IT-infrastructure track in detail. VulnHunter actually runs <strong>three genuinely separate remediation mechanisms</strong>, each shaped for how that category of finding is really fixed in practice — not one generic "generate a fix" pipeline stretched to cover cases it doesn't fit.</p>
+      <h2><span class="num">07</span>Four remediation tracks — deliberately not one workflow</h2>
+      <p class="section-intro">Everything above describes the IT-infrastructure track in detail. VulnHunter actually runs <strong>four genuinely separate remediation mechanisms</strong>, each shaped for how that category of finding is really fixed in practice — not one generic "generate a fix" pipeline stretched to cover cases it doesn't fit.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Track</th><th>Findings</th><th>Mechanism</th><th>Output artifact</th><th>Default risk posture</th></tr></thead>
           <tbody>
             <tr><td><strong>IT Infrastructure</strong></td><td><code>windows-server</code>, <code>unix-server</code></td><td><code>remediation-fixer-windows</code>/<code>-unix</code></td><td>Generated Ansible playbook</td><td>Conservative default (<code>needs-change-approval</code> unless clearly low-risk)</td></tr>
-            <tr><td><strong>Application Security</strong></td><td>SAST (<code>/vulnhunt</code> code findings)</td><td><code>vuln-fixer</code> — a completely separate pipeline</td><td>A real git branch + commit + pushed PR</td><td>Only <code>auto_fixable: true</code> findings touched; everything else flagged for manual review</td></tr>
+            <tr><td><strong>Application Security (SAST)</strong></td><td>SAST (<code>/vulnhunt</code> code findings)</td><td><code>vuln-fixer</code> — a completely separate pipeline</td><td>A real git branch + commit + pushed PR</td><td>Only <code>auto_fixable: true</code> findings touched; everything else flagged for manual review</td></tr>
             <tr><td><strong>OT / IoT</strong></td><td><code>iot-ot-device</code></td><td><code>remediation-fixer-ot</code></td><td>Compensating-control + vendor-coordination recommendation (never a patch script)</td><td>Always <code>needs-change-approval</code> — never auto-approvable, by rule</td></tr>
+            <tr><td><strong>Application Security (SCA)</strong></td><td><code>application</code> findings with a CVE, routed to <code>automation_target: "dependency-upgrade"</code></td><td><code>remediation-fixer-application</code></td><td>Dependency-upgrade plan (never a manifest edit, package-manager run, or PR — see §&nbsp;below)</td><td>Follows the planner's general per-finding judgment, same as the infra tracks</td></tr>
           </tbody>
         </table>
       </div>
 
       <div class="grid2">
-        <div class="card"><h4>Why AppSec was never merged into the infra track</h4><p><code>vuln-fixer</code> edits source files directly and opens a pull request — a fundamentally different action than generating a standalone playbook for someone else to run. It has its own tool scope (<code>Bash</code> for git, <code>Edit</code> for source files) and its own trigger (<code>/vulnhunt --fix</code>), independent of <code>/remediate</code>'s pipeline entirely. DAST, SCA, Secrets, and Container findings don't have an equivalent fixer yet — they're honestly <code>manual-only</code> today, the same disclosed gap as network devices and certificates, tracked as a real next step (a <code>remediation-fixer-appsec</code> generating a dependency-upgrade or secret-rotation PR would follow the same pattern as <code>vuln-fixer</code>, not the Ansible one).</p></div>
+        <div class="card"><h4>Why AppSec (SAST) was never merged into the infra track</h4><p><code>vuln-fixer</code> edits source files directly and opens a pull request — a fundamentally different action than generating a standalone playbook for someone else to run. It has its own tool scope (<code>Bash</code> for git, <code>Edit</code> for source files) and its own trigger (<code>/vulnhunt --fix</code>), independent of <code>/remediate</code>'s pipeline entirely. DAST, Secrets, and Container findings don't have an equivalent fixer yet — they're honestly <code>manual-only</code> today, the same disclosed gap as network devices and certificates.</p></div>
         <div class="card"><h4>Why OT gets a different artifact shape, not just a different template</h4><p>NIST SP 800-82 (OT security guidance) treats direct automated patching as the exception in industrial environments, not the default — many OT devices can't be safely rebooted mid-production, some have no reachable network path at all, and an unplanned change to a safety-critical controller risks physical harm, not just downtime. <code>remediation-fixer-ot</code> reflects that directly: it never generates a config/patch script, only a recommendation for IT security and OT/plant operations to act on together.</p></div>
+        <div class="card"><h4>Why the SCA fixer follows the Ansible pattern, not vuln-fixer's</h4><p><code>remediation-fixer-application</code> has only <code>Read, Write</code> tools — no <code>Bash</code>, no git access — unlike <code>vuln-fixer</code>. A dependency bump's real risk is a transitive breaking change this subagent has no way to test (no build tooling, no test suite), so it generates the upgrade <em>plan</em> a developer executes through their own normal PR workflow, the same artifact-only posture as the Ansible/OT fixers, not a diff pretending to already be validated.</p></div>
+        <div class="card"><h4>Closing the loop: post-fix verification</h4><p>Only the SAST track has this today: <code>vuln-verifier</code> (part of the Vulnerability Finding Engine document's <code>/vulnhunt</code> pipeline, triggered by <code>--verify FINDING-ID BRANCH</code>) re-checks a fixed finding against its fix branch from a fresh read and logs a real resolved/still-present/inconclusive verdict — closing the gap where a fixer's own report was previously the only signal a fix worked. The three <code>/remediate</code>-side tracks don't have an equivalent re-check yet.</p></div>
       </div>
     </section>
 

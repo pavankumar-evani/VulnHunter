@@ -110,6 +110,7 @@
     <a href="#cvss">06 · CVE / CVSS handling</a>
     <a href="#aiml">07 · AI/ML vulnerability taxonomy</a>
     <a href="#catalog">08 · Source catalog summary</a>
+    <a href="#coverage">09 · Coverage, reachability &amp; SBOM</a>
   </nav>
 
   <main>
@@ -223,6 +224,7 @@ sequenceDiagram
         <div class="card"><h4>1 · ATT&amp;CK technique tagging</h4><p>A keyword heuristic against each finding's title/description (e.g. "sql injection" → T1190). <strong>Not authoritative attribution</strong> — a rough tactical grouping, not a substitute for real technique analysis.</p></div>
         <div class="card"><h4>2 · Threat-actor group reference</h4><p>6 real, MITRE-documented groups (APT28, APT29, Lazarus Group, FIN7, Sandworm Team, APT41), each independently verified against attack.mitre.org, tagged with the real industries MITRE's own pages document them targeting.</p></div>
         <div class="card"><h4>3 · Correlation against your data</h4><p>Matches a group's known technique IDs against techniques already tagged on your current findings. The Threat Intel dashboard page surfaces which groups share real technique overlap with what's actually in your queue today.</p></div>
+        <div class="card"><h4>4 · Attack-chain grouping</h4><p>Findings sharing an asset get bucketed by their tagged tactic into entry/pivot/impact (<code>remediation/enrichment/attack_chains.py</code>) — fixing a pivot finding breaks every chain it sits in, even if the entry and impact findings both stay open. Same heuristic, not-runtime-validated caveat as tagging itself; no new CWE/CAPEC dataset, built entirely on the tagging above. See the <code>/attack-paths</code> page.</p></div>
       </div>
       <div class="callout warn"><span class="label">Read this before citing any group name in a report</span><p>A technique match is an <strong>illustrative cross-reference, not an attribution claim</strong> — the same honesty pattern as the ATT&amp;CK tagging it builds on (a keyword heuristic, not authoritative attribution). Many groups share common techniques (phishing, PowerShell, valid-account abuse); a shared technique ID doesn't mean a specific finding was caused by, or is evidence of, that named group. Re-verify against attack.mitre.org before using this in anything formal.</p></div>
 
@@ -239,7 +241,7 @@ sequenceDiagram
           <thead><tr><th>Score</th><th>Formula (illustrative, not certified)</th><th>Feeds</th></tr></thead>
           <tbody>
             <tr><td><strong>Priority</strong></td><td>Weighted severity + asset criticality + asset type, mapped to a tier by admin-editable thresholds</td><td>SLA windows, the remediation queue's sort order</td></tr>
-            <tr><td><strong>Risk Score</strong></td><td>Impact × Likelihood per asset — NIST SP 800-30-inspired, explicitly not a certified RMF/800-30 assessment</td><td>Asset Inventory, Risk Dashboard</td></tr>
+            <tr><td><strong>Risk Score</strong></td><td>Impact × Likelihood per asset — NIST SP 800-30-inspired, explicitly not a certified RMF/800-30 assessment. Likelihood gains a real 5th component, weighted, only for an asset with real firewall/EDR data on file (see §09) — every other asset gets exactly today's 4-component score, unchanged</td><td>Asset Inventory, Risk Dashboard</td></tr>
             <tr><td><strong>Aggregate Exposure Score</strong></td><td>Fleet-wide 0–100 rollup of average Risk Score, CISA KEV prevalence, and average EPSS</td><td>Overview's lead KPI</td></tr>
           </tbody>
         </table>
@@ -277,6 +279,17 @@ sequenceDiagram
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section id="coverage">
+      <h2><span class="num">09</span>Compensating-control coverage, network reachability &amp; SBOM-aware remediation</h2>
+      <p class="section-intro">Three real, additive capabilities layered on top of everything above — each ships with an honest empty state until the underlying dataset exists, and none changes a score or a plan for an asset it has no data for.</p>
+      <div class="grid3">
+        <div class="card"><h4>Real coverage, not a suggestion</h4><p><code>remediation/enrichment/control_coverage.py</code> correlates a finding against a hand-maintained firewall-rule + EDR-policy dataset (<code>remediation/config/security_controls.yaml</code>, ships empty) to compute a real existing-coverage %, concrete recommended controls, incremental-coverage %, and residual-risk % — a documented, deterministic formula, not a black box. Shown on every finding's detail view.</p></div>
+        <div class="card"><h4>True external exposure</h4><p><code>remediation/enrichment/network_reachability.py</code> walks a hand-maintained hop-by-hop path to the internet (<code>remediation/config/network_topology.yaml</code>, ships empty) and returns an allowed/denied/unknown verdict — answering "is this asset actually reachable," not just "does one rule say allow."</p></div>
+        <div class="card"><h4>SBOM-derived blast radius</h4><p><code>remediation/enrichment/sbom.py</code> parses a real CycloneDX SBOM (<code>remediation/sample-data/sbom.json</code>) to show which other components depend on a vulnerable package — the <code>/dependencies</code> page. <code>remediation-fixer-application</code> (see the Remediation Engine document) generates the upgrade plan from the same data.</p></div>
+      </div>
+      <div class="callout warn"><span class="label">Manually-curated datasets, not live connectors</span><p>Neither <code>security_controls.yaml</code> nor <code>network_topology.yaml</code> is populated by a firewall/EDR-vendor API call — there is no such connector in this repo today. Same disclosed, honest posture as <code>remediation/sample-data/threat_intel.json</code>: real, usable data structures, hand-maintained until (or unless) a live connector is built for them.</p></div>
     </section>
 
     <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c" target="_blank" rel="noopener" data-suite-link="connectors">Connectors &amp; Adaptors Catalog</a> or <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a>.</footer>
