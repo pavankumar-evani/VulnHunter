@@ -201,8 +201,10 @@ python cli/vulnhunter.py /remediate --generate --max-budget-usd 5.00</pre></div>
     <section id="health">
       <h2><span class="num">08</span>Health checks &amp; operational monitoring</h2>
       <p class="section-intro">A real, machine-readable health/status endpoint exists — every field below is an actual checked fact at request time, not a hardcoded "OK":</p>
-      <div class="codeblock"><pre><span class="c"># Open by default (see the auth note below) - no credentials needed</span>
-curl http://127.0.0.1:5050/api/status</pre></div>
+      <div class="codeblock"><pre><span class="c"># Open by default (see the auth note below) - no credentials needed. -k accepts the</span>
+<span class="c"># local self-signed HTTPS cert this app now generates on first run (see the "HTTPS"</span>
+<span class="c"># section of dashboard/README.md) - a real deployment behind a CA-issued cert doesn't need it.</span>
+curl -k https://127.0.0.1:5050/api/status</pre></div>
       <div class="table-wrap"><table>
         <thead><tr><th>Field</th><th>What it actually reports</th></tr></thead>
         <tbody>

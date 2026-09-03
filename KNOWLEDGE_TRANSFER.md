@@ -405,7 +405,9 @@ calling the real API.
 ```bash
 pip install -r dashboard/requirements.txt
 python dashboard/app.py
-# open http://127.0.0.1:5050
+# open https://127.0.0.1:5050 - first run auto-generates a local HTTPS cert; your
+# browser will show a one-time trust warning for it, see dashboard/README.md's "HTTPS"
+# section for why and how to get past it
 ```
 
 A read-mostly web UI over the same artifacts: KPI overview, both findings tables, the

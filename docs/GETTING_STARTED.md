@@ -36,7 +36,12 @@ rather than just browsing the dashboard, see the root [README.md](../README.md) 
 python dashboard/app.py
 ```
 
-Open **http://127.0.0.1:5050** in a browser.
+Open **https://127.0.0.1:5050** in a browser. The first run auto-generates a local
+self-signed HTTPS cert, so your browser will show a one-time "not private"/"potential
+security risk" warning - that's expected for a self-signed cert, not a broken app; click
+"Advanced" → "Proceed" (Chrome/Edge) or "Advanced" → "Accept the Risk and Continue"
+(Firefox) once per browser. See [dashboard/README.md](../dashboard/README.md)'s "HTTPS"
+section for how to make the warning go away entirely, or turn HTTPS off.
 
 ## 4. Log in
 

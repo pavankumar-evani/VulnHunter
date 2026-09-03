@@ -12,7 +12,9 @@ the reasoning.
 pip install -r dashboard/requirements.txt
 python scripts/migrate_json_to_db.py  # one-time: seeds the SQLite DB from the committed example data
 python dashboard/app.py
-# open http://127.0.0.1:5050
+# open https://127.0.0.1:5050 - first run auto-generates a local HTTPS cert; your
+# browser will show a one-time trust warning for it, see "HTTPS" below for why and
+# exactly how to get past it
 ```
 
 The migration step carries the one seeded example in `remediation/exceptions/exceptions.json`
@@ -249,25 +251,44 @@ docstrings for the full design. Summary:
   real deployment (`python -c "import secrets; print(secrets.token_hex(32))"` generates
   one) - without it, a random secret is generated fresh per process, so every session is
   invalidated on restart and multiple worker processes mint incompatible cookies.
-- **HTTPS**: for local dev, generate a self-signed cert into `dashboard/certs/`
-  (gitignored - a private key must never be committed):
-  ```bash
-  mkdir -p dashboard/certs
-  openssl req -x509 -newkey rsa:2048 -nodes -keyout dashboard/certs/key.pem -out dashboard/certs/cert.pem -days 365 -subj "/CN=localhost"
-  ```
-  `python dashboard/app.py` (uvicorn's native TLS support - see the `__main__` block)
-  picks this pair up automatically on the next start - no env var needed for the common
-  case - and switches from `http://127.0.0.1:5050` to `https://127.0.0.1:5050`. To point
-  at a cert somewhere else instead, set `SSL_KEYFILE`/`SSL_CERTFILE` explicitly; either
-  env var takes priority over the `dashboard/certs/` default when set. To go back to
-  plain HTTP, move or delete the two files in `dashboard/certs/`.
+- **HTTPS**: **on by default**, not opt-in. `python dashboard/app.py` auto-generates a
+  self-signed cert into `dashboard/certs/` (gitignored - a private key must never be
+  committed) the first time you run it - the same `openssl req -x509 -newkey rsa:2048
+  ...` command as always, just run for you once instead of copy-pasted - and reuses that
+  same cert on every run after that. The app now serves `https://127.0.0.1:5050`, not
+  `http://127.0.0.1:5050` - update any bookmark/script that still says plain `http://`.
 
-  A self-signed cert makes every browser show a trust warning (expected - it's signed by
-  nobody a browser trusts, not a broken cert) and most non-browser HTTP clients need an
-  explicit "skip verification" flag (e.g. `curl -k`) to connect to it - both are exactly
-  why it's dev-only. Real deployments should terminate TLS at a reverse proxy instead of
-  uvicorn's own TLS directly - a self-signed cert is for local dev only, never
-  production. A minimal, real
+  **The browser warning you'll see, and what to do about it:** the first time you open
+  `https://127.0.0.1:5050`, your browser shows a full-page warning ("Your connection is
+  not private" / "Warning: Potential Security Risk") - this is expected and correct, not
+  a bug: a self-signed cert is signed by nobody your browser already trusts, so it can't
+  vouch for it automatically. Click through it once per browser:
+    - **Chrome/Edge**: click "Advanced", then "Proceed to 127.0.0.1 (unsafe)".
+    - **Firefox**: click "Advanced...", then "Accept the Risk and Continue".
+  That's a one-time step per browser profile, not per session - it won't ask again after
+  you accept it, unless the cert is regenerated (e.g. `dashboard/certs/` was deleted).
+
+  **To make the warning go away entirely** (optional - the app works fine without this,
+  it's purely cosmetic): import `dashboard/certs/cert.pem` into your OS's or browser's own
+  trusted-certificate store, the same way any locally-trusted-dev-cert tool (e.g.
+  `mkcert`) works under the hood. This is a real change to your machine's trust settings,
+  so do it yourself rather than asking an AI assistant to run it for you - on Windows,
+  double-click `cert.pem` → "Install Certificate" → "Local Machine" → "Place all
+  certificates in the following store" → "Trusted Root Certification Authorities"; on
+  macOS, open it in Keychain Access and set it to "Always Trust"; on Linux, follow your
+  distro's local-CA-trust process (varies by distro).
+
+  **To turn HTTPS off** (the one real reason: a reverse-proxy deployment that already
+  terminates TLS in front of this process - see the nginx example just below), set
+  `VULNHUNTER_DISABLE_TLS=true`. To point at a different cert instead of the
+  auto-generated one (e.g. a real CA-issued cert), set `SSL_KEYFILE`/`SSL_CERTFILE`
+  explicitly - either one being set skips the auto-generation entirely.
+
+  Most non-browser HTTP clients also need an explicit "skip verification" flag (e.g.
+  `curl -k`) to connect to a self-signed cert - same underlying reason as the browser
+  warning. Real deployments should terminate TLS at a reverse proxy instead of uvicorn's
+  own TLS directly - a self-signed cert is for local dev only, never production. A
+  minimal, real
   nginx config doing that (real TLS + WebSocket-safe headers + no path rewriting, since
   this app's own router expects the full path):
   ```nginx
@@ -291,12 +312,24 @@ docstrings for the full design. Summary:
       return 301 https://$host$request_uri;   # never serve real data over plain HTTP
   }
   ```
+  That `proxy_pass` line is deliberately plain `http://` - nginx is terminating the real,
+  public TLS above, then talking to the app over `localhost` only, which never leaves the
+  machine.
+
   Run the app itself with a real process manager, not `python dashboard/app.py`'s bare
-  `uvicorn.run()` (that binds `127.0.0.1` only, by design, precisely so it's never
+  `uvicorn.run()`, and invoke `uvicorn` directly rather than through this file's
+  `__main__` block (that binds `127.0.0.1` only, by design, precisely so it's never
   accidentally internet-reachable without the reverse proxy in front of it):
   ```bash
   uvicorn app:app --host 127.0.0.1 --port 5050 --workers 4
   ```
+  Note this sidesteps the HTTPS-by-default behavior entirely, not just via
+  `VULNHUNTER_DISABLE_TLS`: that env var (and the auto-generated cert) only exist inside
+  `dashboard/app.py`'s own `if __name__ == "__main__":` block, which `python
+  dashboard/app.py` runs and a direct `uvicorn app:app` invocation never reaches -
+  uvicorn's own CLI has no TLS enabled unless you pass its own `--ssl-keyfile`/
+  `--ssl-certfile` flags, which the command above deliberately doesn't, since nginx is
+  the one terminating TLS here.
   Multiple `--workers` is safe for this app's own session mechanism as long as
   `VULNHUNTER_SESSION_SECRET` is a real, shared, stable value (see above) - the signed-
   cookie design has no server-side session state to fall out of sync between workers.

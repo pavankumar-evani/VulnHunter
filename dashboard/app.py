@@ -5,7 +5,9 @@ from both pipelines. No Node/npm/build step - see dashboard/README.md for why, a
 what a production version would add on top of this.
 
 Run with: python dashboard/app.py
-Then open http://127.0.0.1:5050
+Then open https://127.0.0.1:5050 (first run auto-generates a local HTTPS cert - your
+browser will show a one-time trust warning for it; see dashboard/README.md's "HTTPS"
+section for why and how to get past it, or VULNHUNTER_DISABLE_TLS=true to disable).
 """
 import asyncio
 import datetime
@@ -2641,29 +2643,67 @@ def spa_fallback(full_path: str):
     return _serve_shell()
 
 
+def _ensure_dev_tls_cert(certs_dir):
+    """Returns (keyfile, certfile) as strings, generating a local self-signed cert into
+    certs_dir via the system `openssl` binary if key.pem/cert.pem aren't already there -
+    the exact command documented in dashboard/README.md's "HTTPS" section, run for you
+    once instead of copy-pasted. Never regenerates an existing pair, so a real cert
+    someone drops in here isn't silently overwritten on the next restart. Returns
+    (None, None) if openssl isn't available or generation fails for any reason - the
+    caller falls back to plain HTTP for that run rather than crashing the whole app
+    over a missing dev tool."""
+    keyfile = certs_dir / "key.pem"
+    certfile = certs_dir / "cert.pem"
+    if keyfile.is_file() and certfile.is_file():
+        return str(keyfile), str(certfile)
+    certs_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(
+            ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+             "-keyout", str(keyfile), "-out", str(certfile),
+             "-days", "365", "-subj", "/CN=localhost"],
+            check=True, capture_output=True, timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        print(f"Could not auto-generate a local HTTPS cert (openssl unavailable or failed: {exc}) "
+              f"- falling back to plain HTTP for this run. See dashboard/README.md's \"HTTPS\" "
+              f"section for the manual command, or set VULNHUNTER_DISABLE_TLS=true to silence this.")
+        return None, None
+    print(f"Generated a new local self-signed HTTPS cert at {certs_dir} (one-time - every future run reuses it).")
+    return str(keyfile), str(certfile)
+
+
 if __name__ == "__main__":
     import os
 
-    # Local dev HTTPS is opt-in via SSL_KEYFILE/SSL_CERTFILE env vars pointing at a
-    # self-signed cert - see dashboard/README.md for the one-line openssl command to
-    # generate one. Real deployments should terminate TLS at a reverse proxy
-    # (nginx/Caddy) instead of running uvicorn's own TLS directly - also documented
-    # there, along with why a self-signed cert is dev-only, never production.
+    # HTTPS is ON by default for this app, not opt-in: dashboard/certs/{key,cert}.pem
+    # (gitignored - a private key must never be committed) is auto-generated on first
+    # run if it doesn't exist yet, and reused on every run after that. "Remember to set
+    # an env var if you want encryption" is exactly how a security default gets skipped
+    # in practice, so this app doesn't ask you to remember it.
     #
-    # When the env vars aren't set, fall back to dashboard/certs/{key,cert}.pem if that
-    # conventional pair exists (gitignored - see .gitignore's "Local dev TLS cert/key"
-    # entry) so HTTPS turns on automatically once a cert has been generated there,
-    # without requiring the env vars to be re-set on every run. No cert there -> plain
-    # HTTP, exactly today's behavior; this is additive, not a breaking change.
-    _default_certs_dir = Path(__file__).resolve().parent / "certs"
-    ssl_keyfile = os.environ.get("SSL_KEYFILE") or (
-        str(_default_certs_dir / "key.pem") if (_default_certs_dir / "key.pem").is_file() else None
-    )
-    ssl_certfile = os.environ.get("SSL_CERTFILE") or (
-        str(_default_certs_dir / "cert.pem") if (_default_certs_dir / "cert.pem").is_file() else None
-    )
+    # Set SSL_KEYFILE/SSL_CERTFILE explicitly to use a different cert instead (e.g. a
+    # real CA-issued one for a real deployment). Set VULNHUNTER_DISABLE_TLS=true to
+    # serve plain HTTP unconditionally - the one real reason to do that is a
+    # reverse-proxy deployment that already terminates TLS in front of this process
+    # (see dashboard/README.md's nginx/Let's Encrypt example); never disable this for a
+    # deployment reachable from anywhere but 127.0.0.1.
+    ssl_keyfile = os.environ.get("SSL_KEYFILE")
+    ssl_certfile = os.environ.get("SSL_CERTFILE")
+    disable_tls = os.environ.get("VULNHUNTER_DISABLE_TLS", "").strip().lower() in ("1", "true", "yes")
+
+    if not ssl_keyfile and not ssl_certfile and not disable_tls:
+        ssl_keyfile, ssl_certfile = _ensure_dev_tls_cert(Path(__file__).resolve().parent / "certs")
+
     if ssl_keyfile and ssl_certfile:
-        print(f"HTTPS enabled - serving with {ssl_certfile} (self-signed: browsers will warn until you install a real cert; see dashboard/README.md)")
+        print(f"HTTPS enabled - serving with {ssl_certfile} (self-signed: browsers show a one-time "
+              f"trust warning until you install a real cert or trust this one locally; see "
+              f"dashboard/README.md's \"HTTPS\" section for exactly what that warning means and how "
+              f"to get past it).")
+    elif disable_tls:
+        print("HTTPS disabled via VULNHUNTER_DISABLE_TLS - serving plain HTTP. Only do this behind a "
+              "reverse proxy that already terminates TLS.")
+
     uvicorn.run(
         app, host="127.0.0.1", port=5050,
         ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile,

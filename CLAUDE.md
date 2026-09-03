@@ -42,7 +42,9 @@ subsystem in more depth than fits here and meant to be kept in sync with the app
 ```bash
 # The dashboard (see dashboard/README.md for TLS/env-var options before any real deployment)
 pip install -r dashboard/requirements.txt
-python dashboard/app.py                      # http://127.0.0.1:5050
+python dashboard/app.py                      # https://127.0.0.1:5050 (auto-generates a
+                                              # local HTTPS cert on first run - see
+                                              # dashboard/README.md's "HTTPS" section)
 # (.claude/launch.json config name: "vulnhunter-dashboard")
 
 # The two pipelines, interactively inside Claude Code
