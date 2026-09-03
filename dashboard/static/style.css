@@ -1081,6 +1081,13 @@ a.notif-item:hover { background: var(--bg); }
 .login-card .filter-count { color: #9fb3e0; }
 .login-card .secondary-button { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); color: #eaf0fe; }
 .login-card .secondary-button:hover { background: rgba(255,255,255,0.14); }
+.login-card .sso-button { font-weight: 600; }
+
+/* Divider between the SSO button and the email/password fallback - only rendered when
+   OIDC is actually configured, since it would otherwise sit above a form with nothing
+   above it to divide from. */
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: #9fb3e0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.14); }
 
 .live-badge {
   display: inline-flex;

@@ -92,24 +92,29 @@ Pulled directly from the gaps already named in
 first"](../KNOWLEDGE_TRANSFER.md#9-roadmap--path-to-commercial-grade), not invented for
 this document:
 
-- **Authentication, RBAC, SSO, multi-tenancy** — the dashboard currently has **zero
-  authentication**; every request re-reads local files with no access control at all.
-  A real compliance program (and honestly, any production deployment) needs this before
-  anything else in this list matters. See
-  [dashboard/README.md](../dashboard/README.md)'s "What this is NOT (yet)" section.
+- **Authentication, RBAC, SSO, multi-tenancy** — real local login exists (PBKDF2-HMAC-
+  SHA256 password hashing, HMAC-signed cookie sessions) alongside a real, OIDC-ready
+  Authorization Code + PKCE SSO client that stays inert until a real provider's
+  credentials are configured, plus a simple admin/non-admin role with server-side
+  team-scoped queries for non-admins. Two real gaps remain: every read (`GET`) route is
+  public by default unless `VULNHUNTER_REQUIRE_LOGIN_FOR_READS` is explicitly set, and
+  there is no true multi-tenant data boundary — the MSSP "tenant view" is a client-side
+  filter over one shared dataset, not server-side isolation. A real compliance program
+  needs both of those closed, not an authentication layer built from zero. See
+  [dashboard/README.md](../dashboard/README.md)'s "Authentication" section.
 - **Third-party audit / formal assessment** — SOC 2 specifically requires an audit by a
   licensed CPA firm over months of operational evidence; NIST CSF alignment requires a
   self-attestation or third-party assessment. No amount of internal documentation
   (including this one) substitutes for that process.
-- **A real deployment and data-handling architecture** — because the current MVP has no
-  database and no persistence (findings are re-read from disk on every request), there is
-  currently no encryption-at-rest posture, no data retention policy, and no formal
-  incident-response process to document for this product's own operation — those all
-  presuppose a persistence/deployment layer that doesn't exist yet
-  ([KNOWLEDGE_TRANSFER.md §9, item 6](../KNOWLEDGE_TRANSFER.md#9-roadmap--path-to-commercial-grade)
-  names "Persistence + audit log" as the relevant unbuilt foundation). Until that
-  architecture decision is made, any encryption/retention/incident-response policy
-  written for this product would be describing infrastructure that isn't there.
+- **A real deployment and data-handling architecture** — a real local SQLite database now
+  backs every record store that sees real read-modify-write traffic (approvals,
+  exceptions, activity/AI-usage logs, users) — the persistence layer this section used to
+  say didn't exist at all is real today. What's still genuinely missing: no
+  encryption-at-rest layer of its own (it inherits whatever the host disk provides —
+  enabling your OS's or cloud provider's disk-level encryption under the host is the
+  correct control for today's single-host deployment, not an app-level code change), no
+  data retention policy, and no formal incident-response process. And it's single-host
+  only regardless — no per-tenant data boundary, no distributed-deployment story.
 - **Deployment + pricing model** — SaaS vs. self-hosted, and what this costs per customer
   at scale given real Claude API usage, is a business decision this document (and the
   codebase) cannot make unilaterally.

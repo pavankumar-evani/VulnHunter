@@ -249,14 +249,25 @@ docstrings for the full design. Summary:
   real deployment (`python -c "import secrets; print(secrets.token_hex(32))"` generates
   one) - without it, a random secret is generated fresh per process, so every session is
   invalidated on restart and multiple worker processes mint incompatible cookies.
-- **HTTPS**: opt-in for local dev via `SSL_KEYFILE`/`SSL_CERTFILE` environment variables
-  (uvicorn's native TLS support - see `dashboard/app.py`'s `__main__` block). Generate a
-  self-signed cert for local testing:
+- **HTTPS**: for local dev, generate a self-signed cert into `dashboard/certs/`
+  (gitignored - a private key must never be committed):
   ```bash
-  openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 365 -subj "/CN=localhost"
+  mkdir -p dashboard/certs
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout dashboard/certs/key.pem -out dashboard/certs/cert.pem -days 365 -subj "/CN=localhost"
   ```
-  A real deployment should terminate TLS at a reverse proxy instead of uvicorn's own TLS
-  directly - a self-signed cert is for local dev only, never production. A minimal, real
+  `python dashboard/app.py` (uvicorn's native TLS support - see the `__main__` block)
+  picks this pair up automatically on the next start - no env var needed for the common
+  case - and switches from `http://127.0.0.1:5050` to `https://127.0.0.1:5050`. To point
+  at a cert somewhere else instead, set `SSL_KEYFILE`/`SSL_CERTFILE` explicitly; either
+  env var takes priority over the `dashboard/certs/` default when set. To go back to
+  plain HTTP, move or delete the two files in `dashboard/certs/`.
+
+  A self-signed cert makes every browser show a trust warning (expected - it's signed by
+  nobody a browser trusts, not a broken cert) and most non-browser HTTP clients need an
+  explicit "skip verification" flag (e.g. `curl -k`) to connect to it - both are exactly
+  why it's dev-only. Real deployments should terminate TLS at a reverse proxy instead of
+  uvicorn's own TLS directly - a self-signed cert is for local dev only, never
+  production. A minimal, real
   nginx config doing that (real TLS + WebSocket-safe headers + no path rewriting, since
   this app's own router expects the full path):
   ```nginx

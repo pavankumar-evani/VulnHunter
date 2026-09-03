@@ -33,6 +33,14 @@ export async function render(container) {
             </svg>
             <span>VulnHunter</span>
           </div>
+          <p class="subtitle" style="margin:-16px 0 22px">Sign in to your account</p>
+
+          ${oidc.enabled ? `
+            <a class="secondary-button sso-button" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none" href="/api/auth/oidc/login">
+              Continue with ${escapeHtml(oidc.provider_name)}
+            </a>
+            <div class="auth-divider"><span>or sign in with email</span></div>
+          ` : ``}
 
           <form class="run-form" id="login-form">
             <label>Email<input type="email" name="email" required autocomplete="username"></label>
@@ -40,13 +48,9 @@ export async function render(container) {
             <button type="submit">Sign in</button>
           </form>
 
-          ${oidc.enabled
-            ? `<a class="secondary-button" style="display:block;text-align:center;text-decoration:none" href="/api/auth/oidc/login">Sign in with ${escapeHtml(oidc.provider_name)}</a>`
-            : `<p class="filter-count" data-tooltip="Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URI to enable SSO">SSO is not configured on this server.</p>`}
-
           <div class="callout" style="margin-top:18px">
-            Demo credentials (this is a local demo seed, not a real secret) - see
-            <code>dashboard/README.md</code>. Change or remove these before any real deployment.
+            This is a local demo build. Seed credentials are documented in
+            <code>dashboard/README.md</code> — replace them before any real deployment.
           </div>
         </div>
       </div>

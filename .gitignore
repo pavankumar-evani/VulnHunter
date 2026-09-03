@@ -29,3 +29,10 @@ remediation/audit/ai_usage_log.json
 # alert_state/schedule_state, replacing their now-removed JSON files below. Runtime
 # output, not source, same reasoning as the JSON state files above.
 remediation/vulnhunter.db
+
+# Local dev TLS cert/key (see dashboard/README.md's "HTTPS" section) - a private key
+# must never be committed, self-signed or not.
+dashboard/certs/
+*.pem
+*.key
+*.crt

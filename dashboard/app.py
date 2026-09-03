@@ -2639,8 +2639,21 @@ if __name__ == "__main__":
     # generate one. Real deployments should terminate TLS at a reverse proxy
     # (nginx/Caddy) instead of running uvicorn's own TLS directly - also documented
     # there, along with why a self-signed cert is dev-only, never production.
-    ssl_keyfile = os.environ.get("SSL_KEYFILE")
-    ssl_certfile = os.environ.get("SSL_CERTFILE")
+    #
+    # When the env vars aren't set, fall back to dashboard/certs/{key,cert}.pem if that
+    # conventional pair exists (gitignored - see .gitignore's "Local dev TLS cert/key"
+    # entry) so HTTPS turns on automatically once a cert has been generated there,
+    # without requiring the env vars to be re-set on every run. No cert there -> plain
+    # HTTP, exactly today's behavior; this is additive, not a breaking change.
+    _default_certs_dir = Path(__file__).resolve().parent / "certs"
+    ssl_keyfile = os.environ.get("SSL_KEYFILE") or (
+        str(_default_certs_dir / "key.pem") if (_default_certs_dir / "key.pem").is_file() else None
+    )
+    ssl_certfile = os.environ.get("SSL_CERTFILE") or (
+        str(_default_certs_dir / "cert.pem") if (_default_certs_dir / "cert.pem").is_file() else None
+    )
+    if ssl_keyfile and ssl_certfile:
+        print(f"HTTPS enabled - serving with {ssl_certfile} (self-signed: browsers will warn until you install a real cert; see dashboard/README.md)")
     uvicorn.run(
         app, host="127.0.0.1", port=5050,
         ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile,

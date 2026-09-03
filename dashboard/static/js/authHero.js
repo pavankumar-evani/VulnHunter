@@ -77,11 +77,11 @@ export function authHeroHtml() {
   return `
     <div class="auth-hero-copy">
       <div class="auth-hero-brand">VulnHunter</div>
-      <p class="auth-hero-tagline">Real-time vulnerability intelligence — from first scan to verified fix.</p>
+      <p class="auth-hero-tagline">Vulnerability management that closes the loop — from first scan to a verified fix.</p>
       <ul class="auth-hero-points">
-        <li>Live CISA KEV + FIRST.org EPSS threat intel</li>
-        <li>Human-approved, change-managed remediation</li>
-        <li>Real, live-trained ML insights - not keyword heuristics</li>
+        <li>Findings ranked by real-world exploitability, using live CISA KEV and FIRST.org EPSS data</li>
+        <li>Every remediation reviewed and approved by a human before it ships</li>
+        <li>Anomaly detection that surfaces what a severity score alone would miss</li>
       </ul>
     </div>`;
 }
