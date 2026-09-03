@@ -75,7 +75,7 @@ class TenableTestConnection(unittest.TestCase):
         session.get.return_value = fake_response({"username": "alice", "email": "alice@example.com"})
         conn = TenableConnector("k", "s", session=session)
         result = conn.test_connection()
-        session.get.assert_called_once_with(f"{conn.base_url}/session")
+        session.get.assert_called_once_with(f"{conn.base_url}/session", timeout=30)
         self.assertEqual(result, {"ok": True, "username": "alice", "email": "alice@example.com"})
 
     def test_test_connection_raises_on_http_error(self):

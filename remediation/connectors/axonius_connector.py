@@ -35,7 +35,11 @@ normalize_device() below.
 """
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_PAGE_SIZE = 1000
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 # Best-effort, intentionally incomplete OS-type -> VulnHunter asset.type mapping (see
 # remediation/schema/normalized-finding-schema.md for the full asset.type vocabulary).
@@ -64,12 +68,16 @@ class AxoniusConnector:
         """POST /api/devices with a pagination body. Returns the raw JSON response
         (an object with an "assets" array - see the module docstring's envelope-key
         caveat)."""
-        resp = self.session.post(
-            f"{self.base_url}/api/devices",
-            json={"page": {"offset": offset, "limit": page_size}},
-        )
-        resp.raise_for_status()
-        return resp.json()
+        def _do_post():
+            resp = self.session.post(
+                f"{self.base_url}/api/devices",
+                json={"page": {"offset": offset, "limit": page_size}},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
 
     def test_connection(self):
         """Cheap, real connectivity/credential check - Axonius's REST API has no

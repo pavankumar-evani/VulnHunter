@@ -33,7 +33,9 @@ sys.path.insert(0, str(REPO_ROOT))
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, delete, insert  # noqa: E402
 
+import app as dashboard_app_module  # noqa: E402
 import data as dashboard_data  # noqa: E402
+import rate_limit  # noqa: E402
 import vulnhunter as cli  # noqa: E402
 from app import app as fastapi_app  # noqa: E402
 from auth import rbac as rbac_module  # noqa: E402
@@ -46,6 +48,7 @@ from remediation.config import remediation_policy_engine  # noqa: E402
 from remediation.enrichment import exploit_criteria  # noqa: E402
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, asset_policy  # noqa: E402
+from remediation.connectors import live_data_store  # noqa: E402
 from remediation.notifications import email_sender  # noqa: E402
 from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
 from remediation.utils import db as db_module  # noqa: E402
@@ -68,10 +71,22 @@ def _patch_db_engine(tmpdir_path):
     The returned patcher carries the engine as `.engine` - Windows won't delete a
     tempdir while a pooled connection still has its DB file open, so every caller
     must do `patcher.engine.dispose()` before `patcher.stop()` and the tmpdir cleanup
-    that follows (POSIX doesn't enforce this, so the bug is invisible there)."""
+    that follows (POSIX doesn't enforce this, so the bug is invisible there).
+
+    Also re-seeds the two standard demo accounts (TEST_ADMIN_EMAIL/TEST_USER_EMAIL) -
+    auth/users.py shares this same engine now that it's migrated too, so a fresh,
+    empty per-test/per-class engine has neither account until something creates them
+    here; nearly every test class in this file logs in as one or both, so doing it
+    once in this shared helper (rather than in each of those classes' own setUp)
+    keeps them from silently disappearing for that class's whole test run."""
     test_engine = create_engine(f"sqlite:///{Path(tmpdir_path) / 'test.db'}")
     patcher = patch.object(db_module, "get_engine", return_value=test_engine)
     patcher.engine = test_engine
+    # engine=test_engine passed explicitly - no need for the patch to be active yet,
+    # since these two calls target test_engine directly regardless of what
+    # db_module.get_engine() currently resolves to.
+    auth_users.create_user(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, "Test Admin", role="admin", engine=test_engine)
+    auth_users.create_user(TEST_USER_EMAIL, TEST_USER_PASSWORD, "Test User", role="user", engine=test_engine)
     return patcher
 
 # A temporary, module-scoped user store (never the real, shipped users.json) so every
@@ -83,27 +98,24 @@ TEST_USER_EMAIL = "user@test.local"
 TEST_USER_PASSWORD = "user-test-password-1"
 
 _auth_tmpdir = None
-_auth_patcher = None
 _db_engine_patcher = None
 _ai_governance_patcher = None
+_rate_limit_patchers = None
 
 
 def setUpModule():
-    global _auth_tmpdir, _auth_patcher, _db_engine_patcher, _ai_governance_patcher
+    global _auth_tmpdir, _db_engine_patcher, _ai_governance_patcher, _rate_limit_patchers
     _auth_tmpdir = tempfile.TemporaryDirectory()
-    tmp_users_path = Path(_auth_tmpdir.name) / "users.json"
-    _auth_patcher = patch.object(auth_users, "DEFAULT_USERS_PATH", tmp_users_path)
-    _auth_patcher.start()
-    auth_users.create_user(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD, "Test Admin", role="admin")
-    auth_users.create_user(TEST_USER_EMAIL, TEST_USER_PASSWORD, "Test User", role="user")
 
     # Every mutation route in this file (asset edits, exception revoke, approval
     # decisions, login attempts) also writes to the real, shared activity log and AI
-    # usage log (see remediation/audit/) unless redirected, and exceptions/approvals
-    # routes called with no more specific per-class override (below) would otherwise
-    # hit the real, shared remediation/vulnhunter.db too - one module-wide patch here
-    # (rather than repeating it in every affected test class) keeps this suite from
-    # ever touching real data.
+    # usage log (see remediation/audit/) unless redirected, and exceptions/approvals/
+    # asset-ownership/user-account routes called with no more specific per-class
+    # override (below) would otherwise hit the real, shared remediation/vulnhunter.db
+    # too - one module-wide patch here (rather than repeating it in every affected
+    # test class) keeps this suite from ever touching real data. _patch_db_engine()
+    # already seeds TEST_ADMIN_EMAIL/TEST_USER_EMAIL into the fresh engine itself, so
+    # there's no separate create_user() step needed here.
     _db_engine_patcher = _patch_db_engine(_auth_tmpdir.name)
     _db_engine_patcher.start()
 
@@ -111,12 +123,27 @@ def setUpModule():
     _ai_governance_patcher = patch.object(ai_governance, "DEFAULT_PATH", tmp_ai_governance_path)
     _ai_governance_patcher.start()
 
+    # The real rate limiters (dashboard/rate_limit.py) are module-level, process-
+    # lifetime singletons - this suite alone makes many thousands of /api/* calls
+    # against the SAME TestClient (and so the same client IP) well within their real
+    # windows, which would otherwise start returning real 429s partway through an
+    # unrelated test. Swapped for effectively-unlimited replacements for the whole
+    # module run; RateLimitMiddleware below patches its own, deliberately tiny limits
+    # back in just for its own tests, to verify the real 429 behavior actually works.
+    _rate_limit_patchers = [
+        patch.object(dashboard_app_module, "_GLOBAL_API_RATE_LIMITER", rate_limit.RateLimiter(10**9, 60)),
+        patch.object(dashboard_app_module, "_GENERIC_INGEST_RATE_LIMITER", rate_limit.RateLimiter(10**9, 60)),
+    ]
+    for p in _rate_limit_patchers:
+        p.start()
+
 
 def tearDownModule():
+    for p in _rate_limit_patchers:
+        p.stop()
     _ai_governance_patcher.stop()
     _db_engine_patcher.engine.dispose()
     _db_engine_patcher.stop()
-    _auth_patcher.stop()
     _auth_tmpdir.cleanup()
 
 
@@ -1896,25 +1923,36 @@ class ApiTeamScopedRbac(unittest.TestCase):
     of them) so this class's own team assignment can't leak into any other test.
     Exceptions/remediation-approvals tests use their own isolated temp DB, same
     pattern as ApiExceptions/ApiRemediationApprovals, so this class never mutates the
-    real, shared remediation/vulnhunter.db."""
+    real, shared remediation/vulnhunter.db.
+
+    Asset ownership and user accounts now live in that same shared DB - each test
+    method gets a brand-new, empty one (see setUp, and _patch_db_engine()'s own
+    docstring for why it already seeds the two standard demo accounts), so this
+    class's own team assignment and test account can't be created once in setUpClass
+    the way they used to be: setUpClass's writes would land in setUpModule's
+    module-wide DB, not the fresh per-test one any individual test method actually
+    runs against. Re-seeding both in setUp (cheap - a handful of single-row writes)
+    keeps every test method's DB self-contained while still starting genuinely empty
+    of exceptions/approvals, which is the isolation this class actually needs."""
 
     TEAM_USER_EMAIL = "rbac-team-member@test.local"
     TEAM_USER_PASSWORD = "rbac-team-password-1"
-
-    @classmethod
-    def setUpClass(cls):
-        auth_users.create_user(cls.TEAM_USER_EMAIL, cls.TEAM_USER_PASSWORD, "Team Member", role="user")
-        # A real team that real assets/findings in the shipped sample data actually
-        # carry - discovered from real data, not assumed, so this stays correct if the
-        # sample data's specific team names ever change.
-        assets = client.get("/api/assets").json()["assets"]
-        cls.real_team = next(a["team"] for a in assets if a.get("team"))
-        auth_users.set_team(cls.TEAM_USER_EMAIL, cls.real_team)
+    # Fixed teams, explicitly assigned below to two real assets (WIN-DC01/LNX-DB03,
+    # used throughout this test file and confirmed to carry real findings in the
+    # sample data) - not discovered from ambient ownership data, since the isolated
+    # per-test DB starts with none. Two distinct teams (not just one) so "some other
+    # team's finding" comparisons below have a real, different team to find.
+    real_team = "RBAC Test Team"
+    other_team = "RBAC Other Team"
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.db_patcher = _patch_db_engine(self.tmpdir.name)
         self.db_patcher.start()
+        auth_users.create_user(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD, "Team Member", role="user")
+        asset_inventory.set_owner("WIN-DC01", "Test Owner", self.real_team)
+        asset_inventory.set_owner("LNX-DB03", "Other Test Owner", self.other_team)
+        auth_users.set_team(self.TEAM_USER_EMAIL, self.real_team)
 
     def tearDown(self):
         _logout()
@@ -2104,6 +2142,7 @@ class SecurityHeadersMiddleware(unittest.TestCase):
         self.assertEqual(resp.headers.get("X-Frame-Options"), "DENY")
         self.assertEqual(resp.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin")
         self.assertIn("geolocation=()", resp.headers.get("Permissions-Policy", ""))
+        self.assertIn("max-age=31536000", resp.headers.get("Strict-Transport-Security", ""))
 
     def test_csp_absent_by_default(self):
         resp = client.get("/api/status")
@@ -2115,6 +2154,52 @@ class SecurityHeadersMiddleware(unittest.TestCase):
         csp = resp.headers.get("Content-Security-Policy", "")
         self.assertIn("default-src 'self'", csp)
         self.assertIn("style-src 'self' 'unsafe-inline'", csp)
+
+
+class RateLimitMiddleware(unittest.TestCase):
+    """Real per-IP rate limiting on /api/* (see dashboard/rate_limit.py) -
+    setUpModule() swaps in effectively-unlimited limiters for every other test in
+    this file (which alone makes many thousands of API calls against the same
+    TestClient/IP), so these tests patch their own, deliberately tiny limits back in
+    to verify the real 429 behavior actually fires past a real threshold. The
+    underlying RateLimiter class's own logic (independent per-key quotas, aging out
+    of the sliding window, Retry-After accuracy) is unit-tested directly in
+    tests/test_rate_limit.py - these are the integration seam only."""
+
+    def setUp(self):
+        self.global_patcher = patch.object(dashboard_app_module, "_GLOBAL_API_RATE_LIMITER", rate_limit.RateLimiter(3, 60))
+        self.ingest_patcher = patch.object(dashboard_app_module, "_GENERIC_INGEST_RATE_LIMITER", rate_limit.RateLimiter(2, 60))
+        self.global_patcher.start()
+        self.ingest_patcher.start()
+
+    def tearDown(self):
+        self.global_patcher.stop()
+        self.ingest_patcher.stop()
+
+    def test_requests_within_the_limit_succeed(self):
+        for _ in range(3):
+            self.assertEqual(client.get("/api/status").status_code, 200)
+
+    def test_request_past_the_limit_gets_a_429_with_retry_after(self):
+        for _ in range(3):
+            client.get("/api/status")
+        resp = client.get("/api/status")
+        self.assertEqual(resp.status_code, 429)
+        self.assertIn("Retry-After", resp.headers)
+
+    def test_non_api_routes_are_never_rate_limited(self):
+        for _ in range(5):
+            client.get("/api/status")  # exhaust the global limit (3)
+        resp = client.get("/")  # SPA shell route, not under /api/
+        self.assertEqual(resp.status_code, 200)
+
+    def test_generic_ingest_has_its_own_stricter_limit(self):
+        payload = {"findings": []}
+        for _ in range(2):
+            resp = client.post("/api/ingest/generic", json=payload)
+            self.assertEqual(resp.status_code, 200)
+        resp = client.post("/api/ingest/generic", json=payload)
+        self.assertEqual(resp.status_code, 429)
 
 
 class ApiReports(unittest.TestCase):
@@ -2463,16 +2548,15 @@ class ApiActivityLog(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
+        # One patch covers both: activity_log and asset_ownership now share the same
+        # DB (see remediation/utils/db.py), so redirecting db_module.get_engine once
+        # isolates both instead of needing a second DEFAULT_OWNERSHIP_PATH patch.
         self.activity_patcher = _patch_db_engine(self.tmpdir.name)
         self.activity_patcher.start()
-        self.tmp_ownership_path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.ownership_patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_ownership_path)
-        self.ownership_patcher.start()
         _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
 
     def tearDown(self):
         _logout()
-        self.ownership_patcher.stop()
         self.activity_patcher.engine.dispose()
         self.activity_patcher.stop()
         self.tmpdir.cleanup()
@@ -2521,18 +2605,18 @@ class ApiActivityLog(unittest.TestCase):
 
 
 class ApiAssets(unittest.TestCase):
-    """Every test here uses a temporary ownership file so the suite never mutates the
-    real, shipped asset_ownership.json."""
+    """Every test here uses an isolated temp DB so the suite never mutates the real,
+    shared remediation/vulnhunter.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.tmp_path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_path)
+        self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
         _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)  # owner/facing only require login
 
     def tearDown(self):
         _logout()
+        self.patcher.engine.dispose()
         self.patcher.stop()
         self.tmpdir.cleanup()
 
@@ -2755,8 +2839,8 @@ class ApiSearchAsk(unittest.TestCase):
 
 class ApiAssetPolicy(unittest.TestCase):
     """Every test here uses a temporary rules file (via patching DEFAULT_RULES_PATH)
-    plus a temporary ownership file, so the suite never mutates the real, shipped
-    asset_policy_rules.yaml or asset_ownership.json."""
+    plus an isolated temp DB, so the suite never mutates the real, shipped
+    asset_policy_rules.yaml or the real, shared remediation/vulnhunter.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -2764,13 +2848,13 @@ class ApiAssetPolicy(unittest.TestCase):
         self.tmp_rules_path.write_text("rules: []\n", encoding="utf-8")
         self.rules_patcher = patch.object(asset_policy, "DEFAULT_RULES_PATH", self.tmp_rules_path)
         self.rules_patcher.start()
-        self.tmp_ownership_path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.ownership_patcher = patch.object(asset_inventory, "DEFAULT_OWNERSHIP_PATH", self.tmp_ownership_path)
+        self.ownership_patcher = _patch_db_engine(self.tmpdir.name)
         self.ownership_patcher.start()
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
 
     def tearDown(self):
         _logout()
+        self.ownership_patcher.engine.dispose()
         self.ownership_patcher.stop()
         self.rules_patcher.stop()
         self.tmpdir.cleanup()
@@ -2882,15 +2966,19 @@ class ApiAiVulnerabilities(unittest.TestCase):
 
 
 class ApiIngestGeneric(unittest.TestCase):
-    """The vendor-agnostic ingestion webhook. Writes to remediation/live-data/ (real,
-    gitignored path, same as the live Tenable/Armis connectors) - cleaned up in
-    tearDown so no test artifact lingers."""
+    """The vendor-agnostic ingestion webhook. Writes to the shared SQLite database
+    (see remediation/connectors/live_data_store.py) - uses an isolated temp DB so this
+    suite never mutates the real, shared remediation/vulnhunter.db."""
 
-    LIVE_DATA_PATH = REPO_ROOT / "remediation" / "live-data" / "generic-ingested.json"
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.db_patcher = _patch_db_engine(self.tmpdir.name)
+        self.db_patcher.start()
 
     def tearDown(self):
-        if self.LIVE_DATA_PATH.exists():
-            self.LIVE_DATA_PATH.unlink()
+        self.db_patcher.engine.dispose()
+        self.db_patcher.stop()
+        self.tmpdir.cleanup()
 
     def test_valid_payload_is_accepted_and_normalized(self):
         resp = client.post("/api/ingest/generic", json={"findings": [{
@@ -2934,27 +3022,24 @@ class ApiIngestGeneric(unittest.TestCase):
         client.post("/api/ingest/generic", json={"findings": [{
             "title": "t", "severity": "Low", "asset_name": "a", "asset_type": "application",
         }]})
-        self.assertTrue(self.LIVE_DATA_PATH.exists())
+        self.assertEqual(live_data_store.count(live_data_store.SOURCE_GENERIC_INGEST), 1)
 
 
 class ApiNotifications(unittest.TestCase):
     """build_notifications() is real, system-generated data derived from the live
     queue/exceptions/ingestion state - not person-to-person messages. Exception- and
-    ingestion-derived notifications use temporary store files (same patching pattern as
-    ApiExceptions/ApiIngestGeneric) so this suite never touches the real shipped files."""
+    ingestion-derived notifications use an isolated temp DB (same pattern as
+    ApiExceptions/ApiIngestGeneric) so this suite never touches the real, shared
+    remediation/vulnhunter.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.exc_patcher = _patch_db_engine(self.tmpdir.name)
         self.exc_patcher.start()
-        self.ingest_path = Path(self.tmpdir.name) / "generic-ingested.json"
-        self.ingest_patcher = patch.object(dashboard_data, "GENERIC_INGESTED_PATH", self.ingest_path)
-        self.ingest_patcher.start()
 
     def tearDown(self):
         self.exc_patcher.engine.dispose()
         self.exc_patcher.stop()
-        self.ingest_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_sla_breached_findings_produce_danger_notifications(self):
@@ -2996,8 +3081,7 @@ class ApiNotifications(unittest.TestCase):
         self.assertEqual([n for n in notifications if n["category"] == "Exception"], [])
 
     def test_pending_generic_ingested_findings_produce_an_info_notification(self):
-        self.ingest_path.parent.mkdir(parents=True, exist_ok=True)
-        self.ingest_path.write_text('[{"id": "GEN-1", "title": "t"}]', encoding="utf-8")
+        live_data_store.append_findings(live_data_store.SOURCE_GENERIC_INGEST, [{"id": "GEN-1", "title": "t"}])
         notifications = client.get("/api/notifications").json()["notifications"]
         ingest_notifs = [n for n in notifications if n["category"] == "Ingestion"]
         self.assertEqual(len(ingest_notifs), 1)

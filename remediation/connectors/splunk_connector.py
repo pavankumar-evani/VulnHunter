@@ -27,7 +27,11 @@ import time as _time
 
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_SOURCETYPE = "vulnhunter:finding"
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class SplunkHECError(RuntimeError):
@@ -79,9 +83,13 @@ class SplunkConnector:
         """Sends one finding to Splunk as a HEC event. Returns the parsed HEC
         acknowledgement response (`{"text": "Success", "code": 0}` on success)."""
         body = build_hec_event(finding, sourcetype=sourcetype, index=index)
-        resp = self.session.post(self.hec_url, json=body)
-        resp.raise_for_status()
-        data = resp.json()
+
+        def _do_post():
+            resp = self.session.post(self.hec_url, json=body, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         if not isinstance(data, dict) or "text" not in data:
             raise SplunkHECError(f"Unexpected HEC response shape: {data!r}")
         return data

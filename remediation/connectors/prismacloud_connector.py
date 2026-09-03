@@ -40,9 +40,13 @@ needs that loop the same way ArmisConnector.search_all_pages() implements one.
 """
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_BASE_URL = None  # no honest default - see module docstring
 
 _KNOWN_TIERS = ("Critical", "High", "Medium", "Low")
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class PrismaCloudAuthError(RuntimeError):
@@ -63,12 +67,16 @@ class PrismaCloudConnector:
         """POST /login exchanges the access key ID + secret key for a short-lived
         token, carried as x-redlock-auth on every subsequent call - Prisma Cloud's
         real, documented header name (not a Bearer Authorization header)."""
-        resp = self.session.post(
-            f"{self.base_url}/login",
-            json={"username": self.access_key_id, "password": self.secret_key},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        def _do_post():
+            resp = self.session.post(
+                f"{self.base_url}/login",
+                json={"username": self.access_key_id, "password": self.secret_key},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         try:
             token = data["token"]
         except (KeyError, TypeError):
@@ -97,9 +105,13 @@ class PrismaCloudConnector:
             "filters": [{"name": "alert.status", "value": status, "operator": "="}],
             "timeRange": {"type": time_range_type, "value": time_range_value},
         }
-        resp = self.session.post(f"{self.base_url}/v2/alert", json=body)
-        resp.raise_for_status()
-        return resp.json()
+
+        def _do_post():
+            resp = self.session.post(f"{self.base_url}/v2/alert", json=body, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
 
     @staticmethod
     def _map_severity(alert):

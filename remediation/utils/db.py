@@ -136,6 +136,56 @@ ai_usage_log = Table(
 )
 
 
+# One row per asset, keyed by its real asset name - replacing asset_ownership.json's
+# {asset_name: {owner, team, ...}} shape directly. Every column besides the key is
+# nullable: a real asset row is built up incrementally, one field group at a time (a
+# "set owner" edit doesn't also set facing/environment), unlike the append-only or
+# full-record stores above. `remediation_schedule` is JSON-encoded text (a real nested
+# {cadence, maintenance_window} dict or None) - opaque to every caller except the page
+# that renders it, same reasoning as the JSON-encoded columns above.
+asset_ownership = Table(
+    "asset_ownership", metadata,
+    Column("asset_name", String, primary_key=True),
+    Column("owner", String, nullable=True),
+    Column("team", String, nullable=True),
+    Column("facing", String, nullable=True),
+    Column("environment", String, nullable=True),
+    Column("remediation_schedule", Text, nullable=True),  # JSON-encoded dict
+    Column("ip", String, nullable=True),
+    Column("mac", String, nullable=True),
+)
+
+
+# One row per local user account - replacing dashboard/auth/users.json's
+# {email: {name, role, team, password_hash}} shape. Every column but `team` is
+# required (create_user() always sets name/role/password_hash together at creation),
+# unlike asset_ownership above where most columns start unset.
+users = Table(
+    "users", metadata,
+    Column("email", String, primary_key=True),
+    Column("name", String, nullable=False),
+    Column("role", String, nullable=False),
+    Column("team", String, nullable=True),
+    Column("password_hash", String, nullable=False),
+)
+
+# One row per finding written by one of three "pending, not-yet-merged-into-the-queue"
+# adapters: the generic ingest webhook, and the PrismaCloud/Cortex XSIAM connectors'
+# own fetch routes (see remediation/connectors/live_data_store.py) - previously three
+# separate flat JSON files under remediation/live-data/. `data` is the finding's own
+# full, already-normalized Finding-schema dict, JSON-encoded whole rather than
+# exploded into columns - nothing queries into a finding's individual fields here, so
+# there's no reason to model the (large, evolving) Finding schema as real columns the
+# way, e.g., activity_log's own actor/action are. `source` distinguishes which of the
+# three writers produced a given row, letting all three share one table.
+live_data_findings = Table(
+    "live_data_findings", metadata,
+    Column("id", String, primary_key=True),
+    Column("source", String, nullable=False),
+    Column("data", Text, nullable=False),
+)
+
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -154,5 +204,5 @@ def ensure_schema(engine):
     with FileLock(_SCHEMA_LOCK_PATH):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
-            activity_log, ai_usage_log,
+            activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
         ])

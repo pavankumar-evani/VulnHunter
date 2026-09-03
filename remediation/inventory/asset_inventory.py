@@ -4,22 +4,31 @@ findings (remediation/output/normalized-findings.json) into one row per unique a
 finding count, highest severity, KEV exposure - plus an editable owner/team, since
 "who owns this asset" is real operational metadata no vendor scan ever reports.
 
-Ownership is a single local JSON file (remediation/inventory/asset_ownership.json),
-committed and seeded with a couple of realistic examples - the same real-editable-config
-pattern as remediation/config/priority_rules.yaml and remediation/exceptions/
-exceptions.json, not a database or a real CMDB integration. A production version would
-sync ownership from a real CMDB/asset-management system rather than a flat file edited
-by hand; this is the honest MVP version of that idea (see KNOWLEDGE_TRANSFER.md).
+Ownership is one row per asset in the shared SQLite database (see
+remediation/utils/db.py) - previously a flat JSON file, not a real CMDB integration
+either way. A production version would sync ownership from a real CMDB/asset-management
+system rather than a hand-edited store; this is the honest MVP version of that idea (see
+KNOWLEDGE_TRANSFER.md).
 """
 import json
 from pathlib import Path
 
+from sqlalchemy import insert, select, update
+
 from remediation.audit.activity_log import record_activity
 from remediation.enrichment.eol_lookup import classify_eol
 from remediation.inventory import pattern_recognition
+from remediation.utils import db as db_module
+from remediation.utils.file_lock import FileLock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_OWNERSHIP_PATH = Path(__file__).resolve().parent / "asset_ownership.json"
+# Real, on-disk lock guarding each asset row's read-modify-write cycle (see _upsert
+# below) - the same class of race every other migrated store in this repo guards
+# against, previously undocumented/unguarded here (see this module's own history in
+# CLAUDE.md before this migration).
+LOCK_PATH = Path(__file__).resolve().parent / ".asset_ownership.lock"
+
+_COLUMNS = ("owner", "team", "facing", "environment", "remediation_schedule", "ip", "mac")
 
 _SEVERITY_RANK = {"Critical": 3, "High": 2, "Medium": 1, "Low": 0}
 
@@ -45,64 +54,91 @@ DEFAULT_ENVIRONMENT = "unknown"
 VALID_CADENCE_VALUES = ("weekly", "monthly", "quarterly", "half-yearly", "yearly", "on-demand")
 
 
-def load_ownership(path=None):
-    # Resolved inside the body (not as a bound default parameter) so that patching
-    # DEFAULT_OWNERSHIP_PATH in tests actually takes effect for every caller that omits
-    # `path` - a bound default is captured once at function-definition time and is
-    # immune to patching afterwards (same gotcha as remediation/exceptions/store.py).
-    path = Path(path) if path is not None else DEFAULT_OWNERSHIP_PATH
-    if not path.exists():
-        return {}
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_ownership(ownership, path=None):
-    path = Path(path) if path is not None else DEFAULT_OWNERSHIP_PATH
-    path.write_text(json.dumps(ownership, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def set_owner(asset_name, owner, team, actor=None, path=None):
-    if not asset_name:
-        raise ValueError("asset_name is required")
-    ownership = load_ownership(path)
-    # setdefault (not a fresh dict) so this doesn't wipe out a facing classification
-    # already set on this asset - owner/team and facing are edited independently.
-    entry = ownership.setdefault(asset_name, {})
-    entry["owner"] = owner or ""
-    entry["team"] = team or ""
-    save_ownership(ownership, path)
-    record_activity(actor, "asset.set_owner", asset_name, {"owner": entry["owner"], "team": entry["team"]})
+def _row_to_entry(row):
+    """Returns only the columns that were actually ever set (never a None-valued key)
+    - matching the old JSON version's exact shape, where a key that was never written
+    was simply absent from the dict rather than present-with-null. Every reader (this
+    module's own build_asset_inventory() included) uses .get(key) or default, so an
+    absent key and a None-valued one are handled identically either way - but a test
+    asserting exact dict equality on a load_ownership()/set_*() result would see the
+    difference, so this stays behavior-preserving rather than just behavior-compatible."""
+    entry = {}
+    for k in _COLUMNS:
+        v = row[k]
+        if k == "remediation_schedule":
+            v = json.loads(v) if v else None
+        if v is not None:
+            entry[k] = v
     return entry
 
 
-def set_facing(asset_name, facing, actor=None, path=None):
+def load_ownership(engine=None):
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    with engine.connect() as conn:
+        rows = conn.execute(select(db_module.asset_ownership)).mappings().all()
+    return {r["asset_name"]: _row_to_entry(r) for r in rows}
+
+
+def _upsert(asset_name, engine=None, lock_path=None, **fields):
+    """Updates just `fields` on asset_name's row if one already exists, else inserts a
+    new row with `fields` set and every other column None - the same "first
+    non-conflicting write wins, nothing else is disturbed" behavior the old
+    ownership.setdefault(asset_name, {}) pattern had, now atomic under real concurrent
+    writers instead of racing on a full-file JSON rewrite. Returns the full merged
+    entry dict (matching load_ownership()'s per-asset shape)."""
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    row_fields = dict(fields)
+    if "remediation_schedule" in row_fields:
+        row_fields["remediation_schedule"] = (
+            json.dumps(row_fields["remediation_schedule"]) if row_fields["remediation_schedule"] is not None else None
+        )
+    table = db_module.asset_ownership
+    with FileLock(lock_path or LOCK_PATH):
+        with engine.begin() as conn:
+            existing = conn.execute(select(table).where(table.c.asset_name == asset_name)).mappings().first()
+            if existing is None:
+                conn.execute(insert(table), {
+                    "asset_name": asset_name,
+                    **{c: None for c in _COLUMNS},
+                    **row_fields,
+                })
+            else:
+                conn.execute(update(table).where(table.c.asset_name == asset_name).values(**row_fields))
+            merged = conn.execute(select(table).where(table.c.asset_name == asset_name)).mappings().first()
+    return _row_to_entry(merged)
+
+
+def set_owner(asset_name, owner, team, actor=None, engine=None, lock_path=None):
+    if not asset_name:
+        raise ValueError("asset_name is required")
+    entry = _upsert(asset_name, engine=engine, lock_path=lock_path, owner=owner or "", team=team or "")
+    record_activity(actor, "asset.set_owner", asset_name, {"owner": entry["owner"], "team": entry["team"]}, engine=engine)
+    return entry
+
+
+def set_facing(asset_name, facing, actor=None, engine=None, lock_path=None):
     if not asset_name:
         raise ValueError("asset_name is required")
     if facing not in VALID_FACING_VALUES:
         raise ValueError(f"facing must be one of {VALID_FACING_VALUES}, got {facing!r}")
-    ownership = load_ownership(path)
-    entry = ownership.setdefault(asset_name, {})
-    entry["facing"] = facing
-    save_ownership(ownership, path)
-    record_activity(actor, "asset.set_facing", asset_name, {"facing": facing})
+    entry = _upsert(asset_name, engine=engine, lock_path=lock_path, facing=facing)
+    record_activity(actor, "asset.set_facing", asset_name, {"facing": facing}, engine=engine)
     return entry
 
 
-def set_environment(asset_name, environment, actor=None, path=None):
+def set_environment(asset_name, environment, actor=None, engine=None, lock_path=None):
     if not asset_name:
         raise ValueError("asset_name is required")
     if environment not in VALID_ENVIRONMENT_VALUES:
         raise ValueError(f"environment must be one of {VALID_ENVIRONMENT_VALUES}, got {environment!r}")
-    ownership = load_ownership(path)
-    entry = ownership.setdefault(asset_name, {})
-    entry["environment"] = environment
-    save_ownership(ownership, path)
-    record_activity(actor, "asset.set_environment", asset_name, {"environment": environment})
+    entry = _upsert(asset_name, engine=engine, lock_path=lock_path, environment=environment)
+    record_activity(actor, "asset.set_environment", asset_name, {"environment": environment}, engine=engine)
     return entry
 
 
-def set_remediation_schedule(asset_name, cadence=None, maintenance_window=None, actor=None, path=None):
+def set_remediation_schedule(asset_name, cadence=None, maintenance_window=None, actor=None, engine=None, lock_path=None):
     """Per-asset remediation-schedule override - checked by
     remediation/config/remediation_policy_engine.py's policy_for_finding() before it
     falls back to the finding's remediation_domain's own default cadence/maintenance
@@ -115,18 +151,15 @@ def set_remediation_schedule(asset_name, cadence=None, maintenance_window=None, 
         raise ValueError("asset_name is required")
     if cadence is not None and cadence not in VALID_CADENCE_VALUES:
         raise ValueError(f"cadence must be one of {VALID_CADENCE_VALUES} or None, got {cadence!r}")
-    ownership = load_ownership(path)
-    entry = ownership.setdefault(asset_name, {})
-    if cadence is None and maintenance_window is None:
-        entry.pop("remediation_schedule", None)
-    else:
-        entry["remediation_schedule"] = {"cadence": cadence, "maintenance_window": maintenance_window}
-    save_ownership(ownership, path)
-    record_activity(actor, "asset.set_remediation_schedule", asset_name, entry.get("remediation_schedule"))
+    schedule = None if (cadence is None and maintenance_window is None) else {
+        "cadence": cadence, "maintenance_window": maintenance_window,
+    }
+    entry = _upsert(asset_name, engine=engine, lock_path=lock_path, remediation_schedule=schedule)
+    record_activity(actor, "asset.set_remediation_schedule", asset_name, entry.get("remediation_schedule"), engine=engine)
     return entry
 
 
-def set_network_info(asset_name, ip=None, mac=None, actor=None, path=None):
+def set_network_info(asset_name, ip=None, mac=None, actor=None, engine=None, lock_path=None):
     """Real, editable IP/MAC override for one asset - same manually-set,
     validated-not-guessed pattern as set_facing/set_environment above. A vendor scan
     finding sometimes already carries an ip/mac (see build_asset_inventory()'s
@@ -144,16 +177,12 @@ def set_network_info(asset_name, ip=None, mac=None, actor=None, path=None):
         raise ValueError(f"{ip!r} is not a valid IPv4 or IPv6 address")
     if mac and not pattern_recognition.is_valid_mac(mac):
         raise ValueError(f"{mac!r} is not a valid MAC address (expected e.g. aa:bb:cc:dd:ee:ff)")
-    ownership = load_ownership(path)
-    entry = ownership.setdefault(asset_name, {})
-    entry["ip"] = ip or None
-    entry["mac"] = mac or None
-    save_ownership(ownership, path)
-    record_activity(actor, "asset.set_network_info", asset_name, {"ip": entry["ip"], "mac": entry["mac"]})
+    entry = _upsert(asset_name, engine=engine, lock_path=lock_path, ip=ip or None, mac=mac or None)
+    record_activity(actor, "asset.set_network_info", asset_name, {"ip": entry.get("ip"), "mac": entry.get("mac")}, engine=engine)
     return entry
 
 
-def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, path=None):
+def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, engine=None):
     """Reconciles asset records pulled from a live connector (Infoblox/Axonius/Active
     Directory - see their fetch_and_normalize_*() output shape:
     {name, ip, mac, type, source, source_ref, extra}) against the real, finding-derived
@@ -183,7 +212,7 @@ def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, path=N
 
         real_name = known_lower.get(name.lower(), name)
         try:
-            set_network_info(real_name, ip=pulled.get("ip"), mac=pulled.get("mac"), actor=actor, path=path)
+            set_network_info(real_name, ip=pulled.get("ip"), mac=pulled.get("mac"), actor=actor, engine=engine)
         except ValueError as exc:
             skipped.append({"reason": str(exc), "asset_name": real_name})
             continue

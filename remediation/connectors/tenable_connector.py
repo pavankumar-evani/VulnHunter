@@ -24,12 +24,16 @@ from pathlib import Path
 
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_BASE_URL = "https://cloud.tenable.com"
 CSV_FIELDNAMES = [
     "Plugin ID", "CVE", "Risk", "CVSS v3.0 Base Score", "Host", "IP Address", "FQDN",
     "OS", "Name", "Synopsis", "Solution", "Port", "Protocol",
     "First Discovered", "Last Observed",
 ]
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class TenableExportError(RuntimeError):
@@ -52,9 +56,12 @@ class TenableConnector:
         dashboard's "Test Connection" action so a real access/secret key pair can be
         verified in under a second, before anyone kicks off a full (multi-minute)
         vulnerability export."""
-        resp = self.session.get(f"{self.base_url}/session")
-        resp.raise_for_status()
-        data = resp.json()
+        def _do_get():
+            resp = self.session.get(f"{self.base_url}/session", timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         return {"ok": True, "username": data.get("username"), "email": data.get("email")}
 
     def request_export(self, since=None, num_assets=50):
@@ -63,9 +70,13 @@ class TenableConnector:
         body = {"num_assets": num_assets}
         if since is not None:
             body["filters"] = {"since": int(since)}
-        resp = self.session.post(f"{self.base_url}/vulns/export", json=body)
-        resp.raise_for_status()
-        data = resp.json()
+
+        def _do_post():
+            resp = self.session.post(f"{self.base_url}/vulns/export", json=body, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         try:
             return data["export_uuid"]
         except KeyError:
@@ -80,9 +91,12 @@ class TenableConnector:
         real sleeps - can never produce elapsed==0 forever and loop infinitely."""
         deadline = time.monotonic() + timeout_seconds
         while True:
-            resp = self.session.get(f"{self.base_url}/vulns/export/{export_uuid}/status")
-            resp.raise_for_status()
-            data = resp.json()
+            def _do_get():
+                resp = self.session.get(f"{self.base_url}/vulns/export/{export_uuid}/status", timeout=30)
+                resp.raise_for_status()
+                return resp.json()
+
+            data = retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
             status = data.get("status")
             if status == "FINISHED":
                 return data.get("chunks_available", [])
@@ -93,9 +107,14 @@ class TenableConnector:
             time.sleep(poll_interval_seconds)
 
     def download_chunk(self, export_uuid, chunk_id):
-        resp = self.session.get(f"{self.base_url}/vulns/export/{export_uuid}/chunks/{chunk_id}")
-        resp.raise_for_status()
-        return resp.json()
+        def _do_get():
+            resp = self.session.get(
+                f"{self.base_url}/vulns/export/{export_uuid}/chunks/{chunk_id}", timeout=30
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
 
     def fetch_vulnerabilities(self, since=None, num_assets=50,
                                poll_interval_seconds=5, timeout_seconds=600):

@@ -24,12 +24,16 @@ in normalize_host_record() below.
 """
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_API_VERSION = "v2.12"
 
 # WAPI record:host fields we ask for. `extattrs` (Extensible Attributes) is included
 # because it's the standard place Infoblox admins stash org-specific metadata (owner,
 # environment, etc.) - kept in `extra` rather than the strict asset shape.
 RETURN_FIELDS = "name,ipv4addrs,view,extattrs"
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class InfobloxConnector:
@@ -47,12 +51,16 @@ class InfobloxConnector:
         objects (no envelope/pagination wrapper), each with `name`, `ipv4addrs` (a list
         of objects, since a single host record can have multiple IPs), `view` (the DNS
         view), and `_ref` (WAPI's own object reference string)."""
-        resp = self.session.get(
-            f"{self.base_url}/record:host",
-            params={"_return_fields": RETURN_FIELDS, "_max_results": max_results},
-        )
-        resp.raise_for_status()
-        return resp.json()
+        def _do_get():
+            resp = self.session.get(
+                f"{self.base_url}/record:host",
+                params={"_return_fields": RETURN_FIELDS, "_max_results": max_results},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
 
     def test_connection(self):
         """Cheap, real connectivity/credential check - WAPI has no dedicated 'ping'

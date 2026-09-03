@@ -51,9 +51,11 @@ export const CONNECTORS = [
     module: () => import("./pages/prismacloud.js"),
     blurb: "Test Connection + Fetch cloud posture/compliance alerts via the login + alert-search API.",
     authMethod: "Access key ID + secret key, exchanged for a token via the Prisma Cloud login endpoint", credentialShape: "per-request" },
-  { key: "xdr", label: "CrowdStrike Falcon", category: "XDR / EDR", iconName: "xdr", status: "live",
+  { key: "xdr", label: "CrowdStrike Falcon", category: "XDR / EDR", iconName: "xdr", status: "reference",
     module: () => import("./pages/xdr.js"),
-    blurb: "Pulls EDR/XDR alerts via OAuth2 client-credentials + query/fetch-entities.",
+    blurb: "Pulls EDR/XDR alerts via OAuth2 client-credentials + query/fetch-entities. Real connector "
+      + "module (remediation/connectors/crowdstrike_connector.py), but this page is documentation only - "
+      + "no working Test Connection + Fetch form, unlike the other \"live\" entries.",
     authMethod: "OAuth2 client-credentials (client ID + client secret)", credentialShape: "per-request" },
   { key: "tenable", label: "Tenable.io", category: "Vulnerability Scanners", iconName: "scan", status: "live",
     module: () => import("./pages/tenable.js"),

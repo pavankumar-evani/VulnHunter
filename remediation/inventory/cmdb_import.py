@@ -95,7 +95,7 @@ def reconcile_rows(rows, column_mapping, known_asset_names):
     return {"matched": matched, "unmatched": unmatched, "invalid": invalid}
 
 
-def apply_import(entries, path=None):
+def apply_import(entries, engine=None):
     """entries: list of {asset_name, owner, team} - already reconciled (and possibly
     hand-edited in the UI) rows from reconcile_rows()'s matched+unmatched lists. Calls
     asset_inventory.set_owner for each real asset name - the exact same upsert the
@@ -108,6 +108,6 @@ def apply_import(entries, path=None):
         name = (entry.get("asset_name") or "").strip()
         if not name:
             continue
-        asset_inventory.set_owner(name, entry.get("owner", ""), entry.get("team", ""), path=path)
+        asset_inventory.set_owner(name, entry.get("owner", ""), entry.get("team", ""), engine=engine)
         applied += 1
     return {"applied": applied, "skipped": len(entries) - applied}

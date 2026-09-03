@@ -12,8 +12,9 @@ Modules:
 - `sessions.py` - a signed-cookie session mechanism (HMAC-SHA256 over a JSON payload,
   stdlib only) - a from-scratch alternative to Starlette's `SessionMiddleware`
   (which depends on the third-party `itsdangerous` package).
-- `users.py` - the local user store (`dashboard/auth/users.json`) and login
-  verification.
+- `users.py` - the local user store (one row per account in the shared
+  `remediation/vulnhunter.db` SQLite database - see `remediation/utils/db.py`) and
+  login verification.
 - `oidc.py` - a real OpenID Connect Authorization Code + PKCE client, built against
   the OIDC discovery/token/userinfo spec. Functional but inert unless real provider
   environment variables are set - see its module docstring for the same

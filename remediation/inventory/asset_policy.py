@@ -72,7 +72,7 @@ def preview_matches(asset_rows, rules):
     return results
 
 
-def apply_rules(asset_rows, rules, actor=None, path=None):
+def apply_rules(asset_rows, rules, actor=None, engine=None):
     """Real writes via asset_inventory.py's own setters, one call per matched asset per
     field group that changed - each recorded in the real activity log the same way a
     single-asset edit already is. Returns {rules_applied, assets_changed}."""
@@ -86,21 +86,21 @@ def apply_rules(asset_rows, rules, actor=None, path=None):
                 # whole batch) - an earlier rule in this same apply_rules() call may
                 # already have changed this asset's owner/team, and a stale in-memory
                 # snapshot would silently clobber that with an out-of-date value.
-                current = asset_inventory.load_ownership(path).get(asset_name, {})
+                current = asset_inventory.load_ownership(engine).get(asset_name, {})
                 asset_inventory.set_owner(
                     asset_name,
                     set_fields.get("owner", current.get("owner", "")),
                     set_fields.get("team", current.get("team", "")),
-                    actor=actor, path=path,
+                    actor=actor, engine=engine,
                 )
             if "environment" in set_fields:
-                asset_inventory.set_environment(asset_name, set_fields["environment"], actor=actor, path=path)
+                asset_inventory.set_environment(asset_name, set_fields["environment"], actor=actor, engine=engine)
             if "facing" in set_fields:
-                asset_inventory.set_facing(asset_name, set_fields["facing"], actor=actor, path=path)
+                asset_inventory.set_facing(asset_name, set_fields["facing"], actor=actor, engine=engine)
             if "remediation_schedule" in set_fields:
                 schedule = set_fields["remediation_schedule"] or {}
                 asset_inventory.set_remediation_schedule(
-                    asset_name, schedule.get("cadence"), schedule.get("maintenance_window"), actor=actor, path=path,
+                    asset_name, schedule.get("cadence"), schedule.get("maintenance_window"), actor=actor, engine=engine,
                 )
             assets_changed.add(asset_name)
     return {"rules_applied": len(preview), "assets_changed": len(assets_changed)}

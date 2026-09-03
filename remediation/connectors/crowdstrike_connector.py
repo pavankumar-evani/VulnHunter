@@ -22,6 +22,8 @@ import datetime
 
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_BASE_URL = "https://api.crowdstrike.com"
 
 # Falcon alert severities are typically a 1-100 numeric score (severity_name is also
@@ -35,6 +37,8 @@ SEVERITY_HIGH_THRESHOLD = 70
 SEVERITY_MEDIUM_THRESHOLD = 40
 
 _KNOWN_TIERS = ("Critical", "High", "Medium", "Low")
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class CrowdStrikeAuthError(RuntimeError):
@@ -50,12 +54,16 @@ class CrowdStrikeConnector:
         self._access_token = None
 
     def authenticate(self):
-        resp = self.session.post(
-            f"{self.base_url}/oauth2/token",
-            data={"client_id": self.client_id, "client_secret": self.client_secret},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        def _do_post():
+            resp = self.session.post(
+                f"{self.base_url}/oauth2/token",
+                data={"client_id": self.client_id, "client_secret": self.client_secret},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         try:
             token = data["access_token"]
         except (KeyError, TypeError):
@@ -75,20 +83,29 @@ class CrowdStrikeConnector:
         params = {"limit": limit}
         if filter_query is not None:
             params["filter"] = filter_query
-        resp = self.session.get(f"{self.base_url}/alerts/queries/alerts/v1", params=params)
-        resp.raise_for_status()
-        return resp.json().get("resources", [])
+
+        def _do_get():
+            resp = self.session.get(f"{self.base_url}/alerts/queries/alerts/v1", params=params, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("resources", [])
 
     def fetch_alert_details(self, alert_ids):
         """Resolves a list of composite alert IDs (opaque strings combining several
         fields, per Falcon's alert entity ID scheme) into full alert objects."""
         self._ensure_authenticated()
-        resp = self.session.post(
-            f"{self.base_url}/alerts/entities/alerts/v2",
-            json={"composite_ids": list(alert_ids)},
-        )
-        resp.raise_for_status()
-        return resp.json().get("resources", [])
+
+        def _do_post():
+            resp = self.session.post(
+                f"{self.base_url}/alerts/entities/alerts/v2",
+                json={"composite_ids": list(alert_ids)},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("resources", [])
 
     @staticmethod
     def _map_severity(alert):

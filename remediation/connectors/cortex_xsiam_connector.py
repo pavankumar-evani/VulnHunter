@@ -43,7 +43,11 @@ import datetime
 
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_BASE_URL = None  # no honest default - see module docstring
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 # Cortex XSIAM's own severity vocabulary is info/low/medium/high/critical - one tier
 # ("info") this repo's four-tier scale has no equivalent for, mapped down to "Low"
@@ -87,12 +91,17 @@ class CortexXsiamConnector:
         request_data = {"search_from": search_from, "search_to": search_to}
         if statuses:
             request_data["filters"] = [{"field": "status", "operator": "eq", "value": list(statuses)}]
-        resp = self.session.post(
-            f"{self.base_url}/public_api/v1/incidents/get_incidents",
-            json={"request_data": request_data},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+
+        def _do_post():
+            resp = self.session.post(
+                f"{self.base_url}/public_api/v1/incidents/get_incidents",
+                json={"request_data": request_data},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         try:
             return data["reply"]["incidents"]
         except (KeyError, TypeError):

@@ -49,6 +49,7 @@ from pathlib import Path
 import requests
 
 from remediation.connectors.tenable_connector import CSV_FIELDNAMES
+from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_PLATFORM_URL = "https://qualysapi.qualys.com"
 
@@ -58,6 +59,8 @@ DEFAULT_PLATFORM_URL = "https://qualysapi.qualys.com"
 # approximate spirit as CrowdStrike's 90/70/40 numeric severity thresholds; retune
 # against real data before relying on it for triage prioritization.
 SEVERITY_MAP = {5: "Critical", 4: "High", 3: "Medium", 2: "Low", 1: "Low"}
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 def _text(el, tag):
@@ -92,9 +95,15 @@ class QualysConnector:
         params = {"action": "list", "truncation_limit": truncation_limit, "show_asset_id": 1}
         if id_min is not None:
             params["id_min"] = id_min
-        resp = self.session.get(f"{self.base_url}/api/2.0/fo/asset/host/vm/detection/", params=params)
-        resp.raise_for_status()
-        root = ET.fromstring(resp.text)
+
+        def _do_get():
+            resp = self.session.get(
+                f"{self.base_url}/api/2.0/fo/asset/host/vm/detection/", params=params, timeout=30
+            )
+            resp.raise_for_status()
+            return resp.text
+
+        root = ET.fromstring(retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS))
 
         hosts = []
         for host_el in root.findall(".//HOST"):
@@ -144,12 +153,17 @@ class QualysConnector:
         Returns {} without a network call when qids is empty."""
         if not qids:
             return {}
-        resp = self.session.get(
-            f"{self.base_url}/api/2.0/fo/knowledge_base/vuln/",
-            params={"action": "list", "ids": ",".join(str(q) for q in sorted(set(qids)))},
-        )
-        resp.raise_for_status()
-        root = ET.fromstring(resp.text)
+
+        def _do_get():
+            resp = self.session.get(
+                f"{self.base_url}/api/2.0/fo/knowledge_base/vuln/",
+                params={"action": "list", "ids": ",".join(str(q) for q in sorted(set(qids)))},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.text
+
+        root = ET.fromstring(retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS))
 
         kb = {}
         for vuln_el in root.findall(".//VULN"):

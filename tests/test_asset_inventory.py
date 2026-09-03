@@ -1,7 +1,7 @@
 """
 Tests for remediation/inventory/asset_inventory.py - aggregating findings into a
-per-asset inventory view, plus the editable ownership store. Ownership tests use a
-temporary file (never the real, shipped asset_ownership.json).
+per-asset inventory view, plus the editable ownership store. Ownership tests use an
+isolated temp DB (never the real, shared remediation/vulnhunter.db).
 """
 import sys
 import tempfile
@@ -121,180 +121,177 @@ class BuildAssetInventory(unittest.TestCase):
 
 class OwnershipStore(unittest.TestCase):
     """Every set_* call here also writes to the real, shared activity log (see
-    remediation/audit/activity_log.py) unless redirected - patch its default path to a
-    temp file too so this suite never pollutes the real, committed-empty log."""
+    remediation/audit/activity_log.py) unless redirected - patching db_module.get_engine
+    for the whole class redirects both to the same isolated on-disk DB."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.activity_patcher = _patch_db_engine(self.tmpdir.name)
-        self.activity_patcher.start()
+        self.db_patcher = _patch_db_engine(self.tmpdir.name)
+        self.db_patcher.start()
 
     def tearDown(self):
-        self.activity_patcher.engine.dispose()
-        self.activity_patcher.stop()
+        self.db_patcher.engine.dispose()
+        self.db_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_load_from_missing_file_returns_empty_dict(self):
-        self.assertEqual(asset_inventory.load_ownership(self.path), {})
+        self.assertEqual(asset_inventory.load_ownership(), {})
 
     def test_set_owner_persists_and_is_readable_back(self):
-        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"], {"owner": "Priya Nair", "team": "Identity"})
 
     def test_set_owner_overwrites_a_previous_entry_for_the_same_asset(self):
-        asset_inventory.set_owner("WIN-DC01", "First Owner", "Team A", path=self.path)
-        asset_inventory.set_owner("WIN-DC01", "Second Owner", "Team B", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_owner("WIN-DC01", "First Owner", "Team A")
+        asset_inventory.set_owner("WIN-DC01", "Second Owner", "Team B")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"], {"owner": "Second Owner", "team": "Team B"})
 
     def test_set_owner_requires_an_asset_name(self):
         with self.assertRaises(ValueError):
-            asset_inventory.set_owner("", "Someone", "Some Team", path=self.path)
+            asset_inventory.set_owner("", "Someone", "Some Team")
 
     def test_set_owner_does_not_clobber_an_existing_facing_classification(self):
-        asset_inventory.set_facing("WIN-DC01", "external", path=self.path)
-        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_facing("WIN-DC01", "external")
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["facing"], "external")
         self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
 
     def test_set_facing_does_not_clobber_existing_owner_team(self):
-        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
-        asset_inventory.set_facing("WIN-DC01", "internal", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity")
+        asset_inventory.set_facing("WIN-DC01", "internal")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
         self.assertEqual(loaded["WIN-DC01"]["facing"], "internal")
 
     def test_set_facing_rejects_an_invalid_value(self):
         with self.assertRaises(ValueError):
-            asset_inventory.set_facing("WIN-DC01", "space-station", path=self.path)
+            asset_inventory.set_facing("WIN-DC01", "space-station")
 
     def test_set_remediation_schedule_persists_cadence_and_window(self):
         window = {"day_of_week": "sunday", "start_time": "01:00", "end_time": "02:00", "timezone": "UTC"}
-        asset_inventory.set_remediation_schedule("WIN-DC01", "weekly", window, path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_remediation_schedule("WIN-DC01", "weekly", window)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["remediation_schedule"], {"cadence": "weekly", "maintenance_window": window})
 
     def test_set_remediation_schedule_rejects_an_invalid_cadence(self):
         with self.assertRaises(ValueError):
-            asset_inventory.set_remediation_schedule("WIN-DC01", "biannually", path=self.path)
+            asset_inventory.set_remediation_schedule("WIN-DC01", "biannually")
 
     def test_set_remediation_schedule_with_no_args_clears_an_existing_override(self):
-        asset_inventory.set_remediation_schedule("WIN-DC01", "weekly", path=self.path)
-        asset_inventory.set_remediation_schedule("WIN-DC01", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_remediation_schedule("WIN-DC01", "weekly")
+        asset_inventory.set_remediation_schedule("WIN-DC01")
+        loaded = asset_inventory.load_ownership()
         self.assertNotIn("remediation_schedule", loaded["WIN-DC01"])
 
     def test_set_remediation_schedule_does_not_clobber_owner(self):
-        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
-        asset_inventory.set_remediation_schedule("WIN-DC01", "monthly", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity")
+        asset_inventory.set_remediation_schedule("WIN-DC01", "monthly")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
         self.assertEqual(loaded["WIN-DC01"]["remediation_schedule"]["cadence"], "monthly")
 
     def test_set_facing_requires_an_asset_name(self):
         with self.assertRaises(ValueError):
-            asset_inventory.set_facing("", "external", path=self.path)
+            asset_inventory.set_facing("", "external")
 
     def test_set_network_info_persists_valid_ip_and_mac(self):
-        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", "aa:bb:cc:dd:ee:ff", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", "aa:bb:cc:dd:ee:ff")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["ip"], "10.20.30.41")
         self.assertEqual(loaded["WIN-DC01"]["mac"], "aa:bb:cc:dd:ee:ff")
 
     def test_set_network_info_accepts_a_real_ipv6_address(self):
-        asset_inventory.set_network_info("WIN-DC01", "2001:db8::1", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_network_info("WIN-DC01", "2001:db8::1")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["ip"], "2001:db8::1")
 
     def test_set_network_info_rejects_an_invalid_ip(self):
         with self.assertRaises(ValueError):
-            asset_inventory.set_network_info("WIN-DC01", "not-an-ip", path=self.path)
+            asset_inventory.set_network_info("WIN-DC01", "not-an-ip")
 
     def test_set_network_info_rejects_an_invalid_mac(self):
         with self.assertRaises(ValueError):
-            asset_inventory.set_network_info("WIN-DC01", mac="not-a-mac", path=self.path)
+            asset_inventory.set_network_info("WIN-DC01", mac="not-a-mac")
 
     def test_set_network_info_blank_clears_a_previous_value(self):
-        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", "aa:bb:cc:dd:ee:ff", path=self.path)
-        asset_inventory.set_network_info("WIN-DC01", "", "", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
-        self.assertIsNone(loaded["WIN-DC01"]["ip"])
-        self.assertIsNone(loaded["WIN-DC01"]["mac"])
+        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", "aa:bb:cc:dd:ee:ff")
+        asset_inventory.set_network_info("WIN-DC01", "", "")
+        loaded = asset_inventory.load_ownership()
+        self.assertIsNone(loaded["WIN-DC01"].get("ip"))
+        self.assertIsNone(loaded["WIN-DC01"].get("mac"))
 
     def test_set_network_info_does_not_clobber_existing_owner(self):
-        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity", path=self.path)
-        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41", path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_inventory.set_owner("WIN-DC01", "Priya Nair", "Identity")
+        asset_inventory.set_network_info("WIN-DC01", "10.20.30.41")
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["owner"], "Priya Nair")
         self.assertEqual(loaded["WIN-DC01"]["ip"], "10.20.30.41")
 
     def test_set_network_info_requires_an_asset_name(self):
         with self.assertRaises(ValueError):
-            asset_inventory.set_network_info("", "10.20.30.41", path=self.path)
+            asset_inventory.set_network_info("", "10.20.30.41")
 
 
 class ReconcilePulledAssets(unittest.TestCase):
     """reconcile_pulled_assets() drives set_network_info() per matched/unmatched
-    record, so it needs the same tmpdir + patched activity-log setup as
-    OwnershipStore above."""
+    record, so it needs the same tmpdir + patched DB setup as OwnershipStore above."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.activity_patcher = _patch_db_engine(self.tmpdir.name)
-        self.activity_patcher.start()
+        self.db_patcher = _patch_db_engine(self.tmpdir.name)
+        self.db_patcher.start()
 
     def tearDown(self):
-        self.activity_patcher.engine.dispose()
-        self.activity_patcher.stop()
+        self.db_patcher.engine.dispose()
+        self.db_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_matched_asset_gets_ip_mac_written(self):
         pulled = [{"name": "win-dc01", "ip": "10.1.1.5", "mac": None, "type": "windows-server",
                    "source": "infoblox", "source_ref": "ref1", "extra": {}}]
-        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"])
         self.assertEqual(result["matched"], [{"asset_name": "WIN-DC01", "ip": "10.1.1.5", "mac": None}])
         self.assertEqual(result["unmatched"], [])
-        loaded = asset_inventory.load_ownership(self.path)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WIN-DC01"]["ip"], "10.1.1.5")
 
     def test_matching_is_case_insensitive_and_normalizes_to_real_casing(self):
         pulled = [{"name": "WEB01.CORP.LOCAL", "ip": "10.0.0.9", "mac": None}]
-        result = asset_inventory.reconcile_pulled_assets(pulled, ["web01.corp.local"], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["web01.corp.local"])
         self.assertEqual(result["matched"][0]["asset_name"], "web01.corp.local")
 
     def test_unmatched_asset_is_still_stored_but_reported_unmatched(self):
         pulled = [{"name": "new-host", "ip": "10.0.0.1", "mac": None}]
-        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"])
         self.assertEqual(result["unmatched"], [{"asset_name": "new-host", "ip": "10.0.0.1", "mac": None}])
-        loaded = asset_inventory.load_ownership(self.path)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["new-host"]["ip"], "10.0.0.1")
 
     def test_record_with_no_name_is_skipped(self):
         pulled = [{"name": "", "ip": "10.0.0.1", "mac": None}]
-        result = asset_inventory.reconcile_pulled_assets(pulled, [], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, [])
         self.assertEqual(len(result["skipped"]), 1)
         self.assertEqual(result["matched"], [])
         self.assertEqual(result["unmatched"], [])
 
     def test_record_with_neither_ip_nor_mac_is_skipped_without_writing(self):
         pulled = [{"name": "ad-computer-01", "ip": None, "mac": None}]
-        result = asset_inventory.reconcile_pulled_assets(pulled, [], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, [])
         self.assertEqual(len(result["skipped"]), 1)
-        self.assertEqual(asset_inventory.load_ownership(self.path), {})
+        self.assertEqual(asset_inventory.load_ownership(), {})
 
     def test_invalid_ip_from_source_is_skipped_not_raised(self):
         pulled = [{"name": "bad-ip-host", "ip": "not-an-ip", "mac": None}]
-        result = asset_inventory.reconcile_pulled_assets(pulled, [], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, [])
         self.assertEqual(len(result["skipped"]), 1)
         self.assertIn("not a valid", result["skipped"][0]["reason"])
 
     def test_mac_only_record_is_reconciled(self):
         pulled = [{"name": "WIN-DC01", "ip": None, "mac": "aa:bb:cc:dd:ee:ff"}]
-        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"])
         self.assertEqual(result["matched"][0]["mac"], "aa:bb:cc:dd:ee:ff")
 
     def test_one_bad_record_does_not_abort_the_batch(self):
@@ -302,7 +299,7 @@ class ReconcilePulledAssets(unittest.TestCase):
             {"name": "bad-ip-host", "ip": "not-an-ip", "mac": None},
             {"name": "WIN-DC01", "ip": "10.1.1.5", "mac": None},
         ]
-        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"], path=self.path)
+        result = asset_inventory.reconcile_pulled_assets(pulled, ["WIN-DC01"])
         self.assertEqual(len(result["skipped"]), 1)
         self.assertEqual(len(result["matched"]), 1)
 
@@ -334,16 +331,6 @@ class BuildAssetInventoryNetworkInfo(unittest.TestCase):
         rows = asset_inventory.build_asset_inventory(findings, ownership={})
         self.assertIsNone(rows[0]["ip"])
         self.assertIsNone(rows[0]["ip_version"])
-
-
-class RealSeedFileIsValid(unittest.TestCase):
-    def test_shipped_ownership_file_is_well_formed(self):
-        ownership = asset_inventory.load_ownership()
-        self.assertIsInstance(ownership, dict)
-        for name, info in ownership.items():
-            self.assertIsInstance(name, str)
-            self.assertIn("owner", info)
-            self.assertIn("team", info)
 
 
 if __name__ == "__main__":

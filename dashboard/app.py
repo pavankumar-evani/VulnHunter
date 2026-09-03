@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
 import data as dashboard_data  # noqa: E402
+import rate_limit  # noqa: E402
 import reports  # noqa: E402
 import vulnhunter as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
@@ -45,6 +46,7 @@ from remediation.connectors.generic_connector import (  # noqa: E402
     normalize_generic_finding, validate_generic_payload,
 )
 from remediation.connectors.infoblox_connector import InfobloxConnector  # noqa: E402
+from remediation.connectors import live_data_store  # noqa: E402
 from remediation.connectors.jira_connector import (  # noqa: E402
     DEFAULT_ISSUE_TYPE as JIRA_DEFAULT_ISSUE_TYPE, JiraConnector, build_issue_body,
 )
@@ -104,6 +106,51 @@ async def _no_cache_static_assets(request: Request, call_next):
     return response
 
 
+# Real in-process sliding-window limiters (see dashboard/rate_limit.py) - a global,
+# generous one for every /api/* route, and a stricter one specifically for
+# POST /api/ingest/generic, which is both unauthenticated and (before this) completely
+# unthrottled - the single most-exposed route in this app to a caller hammering it.
+# Module-level singletons (not per-request) so counts actually accumulate across calls.
+_GLOBAL_API_RATE_LIMITER = rate_limit.RateLimiter(
+    max_requests=int(os.environ.get("VULNHUNTER_RATE_LIMIT_MAX", "300")),
+    window_seconds=int(os.environ.get("VULNHUNTER_RATE_LIMIT_WINDOW_SECONDS", "60")),
+)
+_GENERIC_INGEST_RATE_LIMITER = rate_limit.RateLimiter(
+    max_requests=int(os.environ.get("VULNHUNTER_INGEST_RATE_LIMIT_MAX", "20")),
+    window_seconds=int(os.environ.get("VULNHUNTER_INGEST_RATE_LIMIT_WINDOW_SECONDS", "60")),
+)
+
+
+def _client_ip(request: Request):
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def _rate_limit_api(request: Request, call_next):
+    """Real per-IP request throttling on every /api/* route - see
+    dashboard/rate_limit.py's own module docstring for the single-node scope this is
+    honestly limited to. POST /api/ingest/generic gets its own, stricter limiter on
+    top of the global one (checked first, since it's the tighter constraint) since
+    it's both unauthenticated and, unlike every other mutation route in this app,
+    callable by a machine-to-machine webhook client with no session to revoke."""
+    if request.url.path.startswith("/api/"):
+        ip = _client_ip(request)
+        if request.url.path == "/api/ingest/generic" and request.method == "POST":
+            if not _GENERIC_INGEST_RATE_LIMITER.allow(ip):
+                retry_after = _GENERIC_INGEST_RATE_LIMITER.retry_after_seconds(ip)
+                return JSONResponse(
+                    {"detail": "Rate limit exceeded for this endpoint. Try again later."},
+                    status_code=429, headers={"Retry-After": str(retry_after)},
+                )
+        if not _GLOBAL_API_RATE_LIMITER.allow(ip):
+            retry_after = _GLOBAL_API_RATE_LIMITER.retry_after_seconds(ip)
+            return JSONResponse(
+                {"detail": "Rate limit exceeded. Try again later."},
+                status_code=429, headers={"Retry-After": str(retry_after)},
+            )
+    return await call_next(request)
+
+
 def _csp_enabled():
     # Same read-fresh-from-env convention as _require_login_for_reads_enabled() below,
     # for the same reason (tests toggle it with patch.dict(os.environ, ...)).
@@ -112,13 +159,19 @@ def _csp_enabled():
 
 @app.middleware("http")
 async def _security_headers(request: Request, call_next):
-    """Standard OWASP Secure Headers on every response. The first four are
+    """Standard OWASP Secure Headers on every response. The first five are
     unconditional and cannot break this app - they only remove capabilities a same-
     origin, no-iframe, no-third-party-embed SPA never uses (clickjacking framing,
     MIME-sniffing, leaking the full referrer URL to other origins, camera/mic/geo
-    access). Content-Security-Policy is opt-in (VULNHUNTER_ENABLE_CSP=true, same
-    off-by-default convention as VULNHUNTER_REQUIRE_LOGIN_FOR_READS just below) rather
-    than unconditional: this codebase's own inline `style="..."` attributes (see
+    access), plus Strict-Transport-Security, which browsers only ever honor on a
+    response actually received over HTTPS in the first place (RFC 6797) - sending it
+    unconditionally is inert, not risky, on this app's own default plain-HTTP dev
+    server (`python dashboard/app.py`), and becomes real protection the moment a real
+    deployment puts this behind TLS (see dashboard/README.md's "HTTPS" section for the
+    recommended reverse-proxy setup) without needing a second flag to turn it on.
+    Content-Security-Policy is opt-in (VULNHUNTER_ENABLE_CSP=true, same off-by-default
+    convention as VULNHUNTER_REQUIRE_LOGIN_FOR_READS just below) rather than
+    unconditional: this codebase's own inline `style="..."` attributes (see
     login.js/logout.js and others) need `style-src 'unsafe-inline'` to keep rendering,
     and a CSP is the one header here that fails closed - shipping it on by default and
     getting the allow-list wrong would break the whole UI, not just narrow an attack
@@ -132,6 +185,7 @@ async def _security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if _csp_enabled():
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
@@ -1180,21 +1234,23 @@ def api_prismacloud_fetch(body: PrismaCloudFetchBody, request: Request):
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Prisma Cloud fetch failed: {exc}") from exc
 
-    out_path = LIVE_DATA_DIR / "prismacloud_findings.json"
-    existing = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else []
-    real_findings = dashboard_data.load_remediation_findings()
-    for finding in findings:
-        finding["id"] = _next_finding_id_for(real_findings + existing)
-        existing.append(finding)
-    LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    # Locked for the full read-existing/assign-ids/write cycle - see
+    # live_data_store.with_lock()'s own docstring for why.
+    with live_data_store.with_lock():
+        existing = live_data_store.load_findings(live_data_store.SOURCE_PRISMACLOUD)
+        real_findings = dashboard_data.load_remediation_findings()
+        for finding in findings:
+            finding["id"] = _next_finding_id_for(real_findings + existing)
+            existing.append(finding)
+        live_data_store.append_findings(live_data_store.SOURCE_PRISMACLOUD, findings)
 
     return {
         "preview_only": False,
-        "message": f"Wrote {len(findings)} normalized finding(s) to remediation/live-data/prismacloud_findings.json. "
-                   f"Like the generic ingest adapter's own output, this is deliberately not auto-merged into the "
-                   f"live queue - see docs/INTEGRATIONS.md.",
-        "written_to": "remediation/live-data/prismacloud_findings.json",
+        "message": f"Wrote {len(findings)} normalized finding(s) to the shared database "
+                   f"(remediation/connectors/live_data_store.py). Like the generic ingest adapter's own "
+                   f"output, this is deliberately not auto-merged into the live queue - see "
+                   f"docs/INTEGRATIONS.md.",
+        "written_to": "remediation/vulnhunter.db (source=prismacloud)",
         "count": len(findings),
     }
 
@@ -1240,21 +1296,23 @@ def api_cortex_xsiam_fetch(body: CortexXsiamFetchBody, request: Request):
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Cortex XSIAM fetch failed: {exc}") from exc
 
-    out_path = LIVE_DATA_DIR / "cortex_xsiam_findings.json"
-    existing = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else []
-    real_findings = dashboard_data.load_remediation_findings()
-    for finding in findings:
-        finding["id"] = _next_finding_id_for(real_findings + existing)
-        existing.append(finding)
-    LIVE_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    # Locked for the full read-existing/assign-ids/write cycle - see
+    # live_data_store.with_lock()'s own docstring for why.
+    with live_data_store.with_lock():
+        existing = live_data_store.load_findings(live_data_store.SOURCE_CORTEX_XSIAM)
+        real_findings = dashboard_data.load_remediation_findings()
+        for finding in findings:
+            finding["id"] = _next_finding_id_for(real_findings + existing)
+            existing.append(finding)
+        live_data_store.append_findings(live_data_store.SOURCE_CORTEX_XSIAM, findings)
 
     return {
         "preview_only": False,
-        "message": f"Wrote {len(findings)} normalized finding(s) to remediation/live-data/cortex_xsiam_findings.json. "
-                   f"Like the generic ingest adapter's own output, this is deliberately not auto-merged into the "
-                   f"live queue - see docs/INTEGRATIONS.md.",
-        "written_to": "remediation/live-data/cortex_xsiam_findings.json",
+        "message": f"Wrote {len(findings)} normalized finding(s) to the shared database "
+                   f"(remediation/connectors/live_data_store.py). Like the generic ingest adapter's own "
+                   f"output, this is deliberately not auto-merged into the live queue - see "
+                   f"docs/INTEGRATIONS.md.",
+        "written_to": "remediation/vulnhunter.db (source=cortex-xsiam)",
         "count": len(findings),
     }
 
@@ -2254,45 +2312,41 @@ def api_ingest_generic(body: GenericIngestBody):
     generic validated-payload adapter rather than N bespoke vendor connectors.
     Deliberately does NOT merge into remediation/output/normalized-findings.json or
     the live queue - consistent with how live Tenable/Armis connector output also
-    isn't auto-merged (see KNOWLEDGE_TRANSFER.md); it writes to
-    remediation/live-data/, gitignored, same as those.
+    isn't auto-merged (see KNOWLEDGE_TRANSFER.md); it writes to the shared
+    remediation/vulnhunter.db (see remediation/connectors/live_data_store.py), same
+    "pending review, not auto-merged" status as those.
 
     Deliberately NOT gated behind session login, unlike the mutation routes below -
     this is a machine-to-machine webhook receiver a SIEM/XDR would call directly, not
     something a logged-in browser session submits. A real deployment should protect it
     with a webhook-specific API key or HMAC request signature instead of cookie auth -
     that's a real follow-up, not implemented here. Being unauthenticated also means
-    there's no cap on how often it's called or how large remediation/live-data/
-    generic-ingested.json can grow (each call re-reads and rewrites the whole file) -
-    a real deployment needs request throttling/a size cap alongside the auth mentioned
+    there's no cap on how often it's called or how much data it can accumulate - a
+    real deployment needs request throttling/a size cap alongside the auth mentioned
     above, not implemented here either."""
-    live_data_dir = dashboard_data.REPO_ROOT / "remediation" / "live-data"
-    live_data_path = live_data_dir / "generic-ingested.json"
+    # Locked for the full read-existing/assign-ids/write cycle: two concurrent
+    # ingests could otherwise both compute the same "next" FIND-N id from the same
+    # stale read and collide - see live_data_store.with_lock()'s own docstring.
+    with live_data_store.with_lock():
+        existing = live_data_store.load_findings(live_data_store.SOURCE_GENERIC_INGEST)
 
-    existing = []
-    if live_data_path.exists():
-        existing = json.loads(live_data_path.read_text(encoding="utf-8"))
+        # IDs continue from the real pipeline's FIND-N sequence (not just this
+        # source's own), even though this data isn't merged into the queue - so an
+        # ingested finding's ID never collides with a real one if this ever does get
+        # merged later.
+        real_findings = dashboard_data.load_remediation_findings()
 
-    # IDs continue from the real pipeline's FIND-N sequence (not just this file's own),
-    # even though this data isn't merged into the queue - so a ingested finding's ID
-    # never collides with a real one if this ever does get merged later.
-    real_findings = dashboard_data.load_remediation_findings()
+        accepted = []
+        rejected = []
+        for i, payload in enumerate(body.findings):
+            errors = validate_generic_payload(payload)
+            if errors:
+                rejected.append({"index": i, "errors": errors})
+                continue
+            finding = normalize_generic_finding(payload, real_findings + existing + accepted)
+            accepted.append(finding)
 
-    accepted = []
-    rejected = []
-    for i, payload in enumerate(body.findings):
-        errors = validate_generic_payload(payload)
-        if errors:
-            rejected.append({"index": i, "errors": errors})
-            continue
-        finding = normalize_generic_finding(payload, real_findings + existing + accepted)
-        accepted.append(finding)
-
-    if accepted:
-        live_data_dir.mkdir(parents=True, exist_ok=True)
-        live_data_path.write_text(
-            json.dumps(existing + accepted, indent=2) + "\n", encoding="utf-8",
-        )
+        live_data_store.append_findings(live_data_store.SOURCE_GENERIC_INGEST, accepted)
 
     return {"accepted": len(accepted), "rejected": rejected, "findings": accepted}
 

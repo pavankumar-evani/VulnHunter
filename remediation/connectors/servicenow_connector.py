@@ -17,11 +17,15 @@ from pathlib import Path
 
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_TABLE = "incident"
 
 # VulnHunter risk_tier / severity -> ServiceNow's urgency/impact scale (1=High, 2=Medium, 3=Low)
 SEVERITY_TO_URGENCY = {"Critical": "1", "High": "1", "Medium": "2", "Low": "3"}
 SEVERITY_TO_IMPACT = {"Critical": "1", "High": "2", "Medium": "2", "Low": "3"}
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class ServiceNowError(RuntimeError):
@@ -72,12 +76,16 @@ class ServiceNowConnector:
         """Looks up an incident already created for this finding, keyed by
         correlation_id (set to the VulnHunter finding ID) - prevents creating a
         duplicate ticket every time the pipeline re-runs against the same finding."""
-        resp = self.session.get(
-            f"{self.base_url}/api/now/table/{self.table}",
-            params={"sysparm_query": f"correlation_id={correlation_id}", "sysparm_limit": 1},
-        )
-        resp.raise_for_status()
-        results = resp.json().get("result", [])
+        def _do_get():
+            resp = self.session.get(
+                f"{self.base_url}/api/now/table/{self.table}",
+                params={"sysparm_query": f"correlation_id={correlation_id}", "sysparm_limit": 1},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        results = retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("result", [])
         return results[0] if results else None
 
     def create_incident(self, finding, skip_if_exists=True):
@@ -92,11 +100,16 @@ class ServiceNowConnector:
                 return {**existing, "_vulnhunter_status": "already_existed"}
 
         body = build_incident_body(finding)
-        resp = self.session.post(f"{self.base_url}/api/now/table/{self.table}", json=body)
-        resp.raise_for_status()
-        result = resp.json().get("result")
+
+        def _do_post():
+            resp = self.session.post(f"{self.base_url}/api/now/table/{self.table}", json=body, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
+        result = data.get("result")
         if not result:
-            raise ServiceNowError(f"Unexpected create-incident response shape: {resp.json()!r}")
+            raise ServiceNowError(f"Unexpected create-incident response shape: {data!r}")
         return {**result, "_vulnhunter_status": "created"}
 
     def create_incidents_for_findings(self, findings, skip_if_exists=True):

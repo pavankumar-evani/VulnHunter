@@ -24,8 +24,12 @@ from pathlib import Path
 
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_BASE_URL = "https://YOUR_INSTANCE.armis.com"
 DEFAULT_ALERTS_AQL = "in:alerts"
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class ArmisAuthError(RuntimeError):
@@ -40,12 +44,16 @@ class ArmisConnector:
         self._access_token = None
 
     def authenticate(self):
-        resp = self.session.post(
-            f"{self.base_url}/api/v1/access_token/",
-            data={"secret_key": self.secret_key},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        def _do_post():
+            resp = self.session.post(
+                f"{self.base_url}/api/v1/access_token/",
+                data={"secret_key": self.secret_key},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        data = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         try:
             token = data["data"]["access_token"]
         except (KeyError, TypeError):
@@ -60,12 +68,17 @@ class ArmisConnector:
 
     def search(self, aql_query, from_=0, length=100):
         self._ensure_authenticated()
-        resp = self.session.get(
-            f"{self.base_url}/api/v1/search/",
-            params={"aql": aql_query, "from": from_, "length": length},
-        )
-        resp.raise_for_status()
-        return resp.json()
+
+        def _do_get():
+            resp = self.session.get(
+                f"{self.base_url}/api/v1/search/",
+                params={"aql": aql_query, "from": from_, "length": length},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
 
     def search_all_pages(self, aql_query, page_size=100, max_pages=100):
         """Follows Armis's `next` pagination cursor until exhausted. `max_pages` is a
@@ -87,9 +100,13 @@ class ArmisConnector:
 
     def fetch_device(self, device_id):
         self._ensure_authenticated()
-        resp = self.session.get(f"{self.base_url}/api/v1/devices/{device_id}/")
-        resp.raise_for_status()
-        return resp.json().get("data", {})
+
+        def _do_get():
+            resp = self.session.get(f"{self.base_url}/api/v1/devices/{device_id}/", timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        return retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("data", {})
 
     @staticmethod
     def _alert_to_sample_shape(alert):

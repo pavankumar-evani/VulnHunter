@@ -19,7 +19,11 @@ remediation/connectors/README.md for what "tested" means here.
 """
 import requests
 
+from remediation.utils.retry import retry_with_backoff
+
 DEFAULT_ISSUE_TYPE = "Bug"
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 class JiraError(RuntimeError):
@@ -96,12 +100,16 @@ class JiraConnector:
         """Looks up an issue already created for this finding, keyed by the
         `vulnhunter-{finding_id}` label - prevents creating a duplicate ticket every
         time the pipeline re-runs against the same finding."""
-        resp = self.session.get(
-            f"{self.base_url}/rest/api/3/search",
-            params={"jql": f'labels = "{_idempotency_label(finding_id)}"'},
-        )
-        resp.raise_for_status()
-        issues = resp.json().get("issues", [])
+        def _do_get():
+            resp = self.session.get(
+                f"{self.base_url}/rest/api/3/search",
+                params={"jql": f'labels = "{_idempotency_label(finding_id)}"'},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        issues = retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("issues", [])
         return issues[0] if issues else None
 
     def create_issue(self, finding, skip_if_exists=True):
@@ -116,9 +124,13 @@ class JiraConnector:
                 return {**existing, "_vulnhunter_status": "already_existed"}
 
         body = build_issue_body(finding, self.project_key)
-        resp = self.session.post(f"{self.base_url}/rest/api/3/issue", json=body)
-        resp.raise_for_status()
-        result = resp.json()
+
+        def _do_post():
+            resp = self.session.post(f"{self.base_url}/rest/api/3/issue", json=body, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        result = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         if not result.get("key"):
             raise JiraError(f"Unexpected create-issue response shape: {result!r}")
         return {**result, "_vulnhunter_status": "created"}

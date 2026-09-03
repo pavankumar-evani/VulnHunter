@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
 One-time migration: copies existing flat-JSON store content into the new shared
-SQLite database (see remediation/utils/db.py) for the four stores that moved off
-JSON files in this pass - exceptions, remediation_approvals, activity_log,
-ai_usage_log. Two of these JSON files are real, committed seed/example data
-(exceptions.json's one realistic waiver example); the other two are gitignored
-local runtime output from actually using the app - both are worth carrying
-forward rather than silently dropping on the day someone upgrades to this DB
-backend, so this script doesn't distinguish between them.
+SQLite database (see remediation/utils/db.py) for the stores that moved off JSON
+files - exceptions, remediation_approvals, activity_log, ai_usage_log,
+asset_ownership, and users. Several of these JSON files are real, committed
+seed/example data (exceptions.json's one realistic waiver example,
+asset_ownership.json's five, users.json's two demo accounts); others are gitignored
+local runtime output from actually using the app - both are worth carrying forward
+rather than silently dropping on the day someone upgrades to this DB backend, so this
+script doesn't distinguish between them.
 
-Safe to run more than once: skips any JSON file that's missing or empty, and
-skips any individual record whose id already exists in the target table, so a
-second run against an already-migrated (or partially migrated) DB is a no-op.
+Safe to run more than once: skips any JSON file that's missing or empty, and skips
+any individual record already present in the target table (matched by id for the
+flat-list stores, by key for the dict-shaped ones), so a second run against an
+already-migrated (or partially migrated) DB is a no-op.
 
 Usage:
     python scripts/migrate_json_to_db.py
@@ -118,6 +120,34 @@ def _migrate_flat_list(engine, table, json_path, defaults=None, row_transform=la
     return migrated
 
 
+def _migrate_dict(engine, table, json_path, key_column, defaults=None, row_transform=lambda r: r):
+    """Reads a JSON object shaped {key: {field: value, ...}} (asset_ownership.json,
+    keyed by asset name rather than an "id" field) and inserts whichever keys aren't
+    already present as a row into `table`. A JSON object's keys are already unique by
+    construction, so there's no id-collision case to handle the way the flat-list
+    stores above need."""
+    if not json_path.exists():
+        print(f"skip {json_path} (not present)")
+        return 0
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    if not data:
+        print(f"skip {json_path} (empty)")
+        return 0
+    with engine.connect() as conn:
+        existing = {row[0] for row in conn.execute(select(table.c[key_column]))}
+    rows = [
+        row_transform({key_column: key, **(defaults or {}), **fields})
+        for key, fields in data.items() if key not in existing
+    ]
+    if not rows:
+        print(f"skip {json_path} ({len(data)} record(s), already migrated)")
+        return 0
+    with engine.begin() as conn:
+        conn.execute(table.insert(), rows)
+    print(f"migrated {len(rows)} of {len(data)} record(s) from {json_path}")
+    return len(rows)
+
+
 def main():
     engine = db_module.get_engine()
     db_module.ensure_schema(engine)
@@ -151,6 +181,25 @@ def main():
         defaults={"model": None, "total_tokens": None, "total_cost_usd": None},
         row_transform=lambda r: {**r, "usage": json.dumps(r.get("usage") or {})},
         int_ids=True,
+    )
+    _migrate_dict(
+        engine, db_module.asset_ownership,
+        REPO_ROOT / "remediation" / "inventory" / "asset_ownership.json",
+        key_column="asset_name",
+        defaults={
+            "owner": None, "team": None, "facing": None, "environment": None,
+            "remediation_schedule": None, "ip": None, "mac": None,
+        },
+        row_transform=lambda r: {
+            **r,
+            "remediation_schedule": json.dumps(r["remediation_schedule"]) if r.get("remediation_schedule") is not None else None,
+        },
+    )
+    _migrate_dict(
+        engine, db_module.users,
+        REPO_ROOT / "dashboard" / "auth" / "users.json",
+        key_column="email",
+        defaults={"team": None},
     )
 
 

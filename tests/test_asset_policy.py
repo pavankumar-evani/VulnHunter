@@ -86,46 +86,45 @@ class ApplyRules(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.activity_patcher = _patch_db_engine(self.tmpdir.name)
-        self.activity_patcher.start()
+        self.db_patcher = _patch_db_engine(self.tmpdir.name)
+        self.db_patcher.start()
 
     def tearDown(self):
-        self.activity_patcher.engine.dispose()
-        self.activity_patcher.stop()
+        self.db_patcher.engine.dispose()
+        self.db_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_applies_owner_and_team_to_every_matched_asset(self):
         assets = [_asset("WEB-PORTAL01"), _asset("WEB-PORTAL02"), _asset("LNX-DB03")]
         rules = {"rules": [{"match": {"name_prefix": "WEB-PORTAL"}, "set": {"owner": "Web Ops", "team": "Platform"}}]}
-        result = asset_policy.apply_rules(assets, rules, actor="admin@test.local", path=self.path)
+        result = asset_policy.apply_rules(assets, rules, actor="admin@test.local")
         self.assertEqual(result, {"rules_applied": 1, "assets_changed": 2})
-        loaded = asset_inventory.load_ownership(self.path)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WEB-PORTAL01"]["owner"], "Web Ops")
         self.assertEqual(loaded["WEB-PORTAL02"]["team"], "Platform")
         self.assertNotIn("LNX-DB03", loaded)
 
     def test_setting_only_owner_preserves_an_assets_existing_team(self):
-        asset_inventory.set_owner("WEB-PORTAL01", "Old Owner", "Existing Team", path=self.path)
+        asset_inventory.set_owner("WEB-PORTAL01", "Old Owner", "Existing Team")
         assets = [_asset("WEB-PORTAL01")]
         rules = {"rules": [{"match": {"name_prefix": "WEB-PORTAL"}, "set": {"owner": "New Owner"}}]}
-        asset_policy.apply_rules(assets, rules, path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_policy.apply_rules(assets, rules)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WEB-PORTAL01"]["owner"], "New Owner")
         self.assertEqual(loaded["WEB-PORTAL01"]["team"], "Existing Team")
 
     def test_applies_remediation_schedule(self):
         assets = [_asset("NET-RTSW-01", asset_type="network-routing-switching")]
         rules = {"rules": [{"match": {"type": "network-routing-switching"}, "set": {"remediation_schedule": {"cadence": "weekly"}}}]}
-        asset_policy.apply_rules(assets, rules, path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_policy.apply_rules(assets, rules)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["NET-RTSW-01"]["remediation_schedule"]["cadence"], "weekly")
 
     def test_does_not_write_a_type_field_even_if_present_in_the_rule(self):
         assets = [_asset("A")]
         rules = {"rules": [{"match": {"name_prefix": "A"}, "set": {"type": "application"}}]}
-        asset_policy.apply_rules(assets, rules, path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_policy.apply_rules(assets, rules)
+        loaded = asset_inventory.load_ownership()
         # No settable field was actually present (type is stripped), so nothing about
         # this asset should have been written at all.
         self.assertNotIn("A", loaded)
@@ -136,17 +135,17 @@ class ApplyRules(unittest.TestCase):
             {"match": {"name_prefix": "WEB-PORTAL"}, "set": {"owner": "Web Ops", "team": "Platform"}},
             {"match": {"name_prefix": "WEB-PORTAL"}, "set": {"facing": "external"}},
         ]}
-        asset_policy.apply_rules(assets, rules, path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        asset_policy.apply_rules(assets, rules)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WEB-PORTAL01"]["owner"], "Web Ops")
         self.assertEqual(loaded["WEB-PORTAL01"]["facing"], "external")
 
     def test_no_matching_assets_changes_nothing(self):
         assets = [_asset("LNX-DB03")]
         rules = {"rules": [{"match": {"name_prefix": "WEB-PORTAL"}, "set": {"owner": "X", "team": "Y"}}]}
-        result = asset_policy.apply_rules(assets, rules, path=self.path)
+        result = asset_policy.apply_rules(assets, rules)
         self.assertEqual(result["assets_changed"], 0)
-        self.assertEqual(asset_inventory.load_ownership(self.path), {})
+        self.assertEqual(asset_inventory.load_ownership(), {})
 
 
 class RealRulesFileIsValid(unittest.TestCase):

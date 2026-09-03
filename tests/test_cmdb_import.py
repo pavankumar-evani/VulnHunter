@@ -111,13 +111,12 @@ class ApplyImport(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
-        self.path = Path(self.tmpdir.name) / "asset_ownership.json"
-        self.activity_patcher = _patch_db_engine(self.tmpdir.name)
-        self.activity_patcher.start()
+        self.db_patcher = _patch_db_engine(self.tmpdir.name)
+        self.db_patcher.start()
 
     def tearDown(self):
-        self.activity_patcher.engine.dispose()
-        self.activity_patcher.stop()
+        self.db_patcher.engine.dispose()
+        self.db_patcher.stop()
         self.tmpdir.cleanup()
 
     def test_applies_owner_and_team_for_each_entry(self):
@@ -125,25 +124,25 @@ class ApplyImport(unittest.TestCase):
             {"asset_name": "WEB-PORTAL01", "owner": "Web Ops", "team": "Platform"},
             {"asset_name": "WIN-DC01", "owner": "Priya Nair", "team": "Identity"},
         ]
-        result = cmdb_import.apply_import(entries, path=self.path)
+        result = cmdb_import.apply_import(entries)
         self.assertEqual(result["applied"], 2)
-        loaded = asset_inventory.load_ownership(self.path)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["WEB-PORTAL01"], {"owner": "Web Ops", "team": "Platform"})
         self.assertEqual(loaded["WIN-DC01"], {"owner": "Priya Nair", "team": "Identity"})
 
     def test_skips_entries_with_no_asset_name(self):
         entries = [{"asset_name": "", "owner": "X", "team": "Y"}]
-        result = cmdb_import.apply_import(entries, path=self.path)
+        result = cmdb_import.apply_import(entries)
         self.assertEqual(result["applied"], 0)
         self.assertEqual(result["skipped"], 1)
-        self.assertEqual(asset_inventory.load_ownership(self.path), {})
+        self.assertEqual(asset_inventory.load_ownership(), {})
 
     def test_applying_for_an_unmatched_asset_still_stores_ownership(self):
         """An asset with no findings yet still gets its ownership stored - it just
         won't show up on /assets until a finding against it exists."""
         entries = [{"asset_name": "FUTURE-SERVER-01", "owner": "Someone", "team": "SomeTeam"}]
-        cmdb_import.apply_import(entries, path=self.path)
-        loaded = asset_inventory.load_ownership(self.path)
+        cmdb_import.apply_import(entries)
+        loaded = asset_inventory.load_ownership()
         self.assertEqual(loaded["FUTURE-SERVER-01"]["owner"], "Someone")
 
 

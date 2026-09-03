@@ -37,6 +37,7 @@ from remediation.enrichment.scan_type_mapping import tag_scan_types  # noqa: E40
 from remediation.exceptions import store as exceptions_store  # noqa: E402
 from remediation.inventory import asset_inventory, asset_policy  # noqa: E402
 from remediation.remediation_approvals import store as remediation_approvals_store  # noqa: E402
+from remediation.connectors import live_data_store  # noqa: E402
 from remediation.utils import db as db_module  # noqa: E402
 
 
@@ -345,19 +346,26 @@ def _load_content_enriched_findings():
 
 
 def _scored_assets_cache_key():
-    """Every real, editable file whose content actually changes _load_scored_assets()'s
-    output - findings, asset ownership (owner/team/environment/facing/remediation
-    schedule - read by build_asset_inventory()), and the two rules files score_assets()
-    itself loads when not passed explicitly. Keying on each file's own mtime means an
-    edit to ANY of them invalidates the cache the instant it happens, not just after the
-    TTL below expires - that TTL is only a backstop for rapid repeat calls within the
-    same file state, never the mechanism a real edit relies on to be seen."""
-    ownership_path = asset_inventory.DEFAULT_OWNERSHIP_PATH
+    """Every real, editable file/store whose content actually changes
+    _load_scored_assets()'s output - findings, asset ownership (owner/team/environment/
+    facing/remediation schedule - read by build_asset_inventory()), and the two rules
+    files score_assets() itself loads when not passed explicitly. Keying on each one's
+    own mtime means an edit to ANY of them invalidates the cache the instant it
+    happens, not just after the TTL below expires - that TTL is only a backstop for
+    rapid repeat calls within the same file state, never the mechanism a real edit
+    relies on to be seen.
+
+    Asset ownership now lives in the shared SQLite DB (see remediation/utils/db.py) -
+    its path is read off the real engine (`engine.url.database`), not a separate
+    DEFAULT_OWNERSHIP_PATH constant, so this stays correct when tests patch
+    db_module.get_engine() to an isolated file (see _live_queue_cache_key()'s own
+    identical reasoning, right below)."""
+    db_path = Path(db_module.get_engine().url.database)
     risk_rules_path = risk_scoring.DEFAULT_RULES_PATH
     priority_rules_path = priority_engine.DEFAULT_RULES_PATH
     return (
         _findings_file_mtime(),
-        ownership_path.stat().st_mtime if ownership_path.exists() else None,
+        db_path.stat().st_mtime if db_path.exists() else None,
         risk_rules_path.stat().st_mtime if risk_rules_path.exists() else None,
         priority_rules_path.stat().st_mtime if priority_rules_path.exists() else None,
     )
@@ -489,7 +497,6 @@ def load_live_queue():
     return [dict(f) for f in scored]
 
 
-GENERIC_INGESTED_PATH = REPO_ROOT / "remediation" / "live-data" / "generic-ingested.json"
 EXCEPTION_EXPIRY_WARNING_DAYS = 14
 MAX_SLA_BREACH_NOTIFICATIONS = 10
 
@@ -557,22 +564,24 @@ def build_notifications(scored_findings):
                 "link": "/exceptions",
             })
 
-    if GENERIC_INGESTED_PATH.exists():
-        try:
-            ingested = json.loads(GENERIC_INGESTED_PATH.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            ingested = []
-        if ingested:
-            mtime = GENERIC_INGESTED_PATH.stat().st_mtime_ns
-            notifications.append({
-                "id": f"ingest-{mtime}",
-                "severity": "info",
-                "category": "Ingestion",
-                "message": f"{len(ingested)} finding(s) ingested via the generic webhook adapter are "
-                           f"pending review (not yet merged into the live queue - see docs/INTEGRATIONS.md).",
-                "date": None,
-                "link": None,
-            })
+    ingested_count = live_data_store.count(live_data_store.SOURCE_GENERIC_INGEST)
+    if ingested_count:
+        # The notification id includes the shared DB file's own mtime (not a
+        # per-source one - all sources share one physical file, see
+        # remediation/utils/db.py) so it changes whenever new data is ingested,
+        # keeping a client's localStorage dismissal-tracking from treating a stale
+        # id as "already seen" once fresh findings arrive.
+        db_path = Path(db_module.get_engine().url.database)
+        mtime = db_path.stat().st_mtime_ns if db_path.exists() else 0
+        notifications.append({
+            "id": f"ingest-{mtime}",
+            "severity": "info",
+            "category": "Ingestion",
+            "message": f"{ingested_count} finding(s) ingested via the generic webhook adapter are "
+                       f"pending review (not yet merged into the live queue - see docs/INTEGRATIONS.md).",
+            "date": None,
+            "link": None,
+        })
 
     severity_rank = {"danger": 0, "warn": 1, "info": 2}
     notifications.sort(key=lambda n: severity_rank.get(n["severity"], 3))
