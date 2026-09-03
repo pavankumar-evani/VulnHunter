@@ -160,13 +160,13 @@
 
     <section id="overview">
       <h2><span class="num">01</span>System overview</h2>
-      <p class="section-intro">VulnHunter is a single deployable web application: a FastAPI backend serving both a JSON API and a hand-rolled vanilla-JS single-page app, backed by flat files instead of a database, with an optional layer of Claude Code subagents doing the judgment-heavy work (classification, playbook drafting) that a deterministic script can't.</p>
+      <p class="section-intro">VulnHunter is a single deployable web application: a FastAPI backend serving both a JSON API and a hand-rolled vanilla-JS single-page app, backed by a real local SQLite database for its record stores and flat files for pipeline output/policy, with an optional layer of Claude Code subagents doing the judgment-heavy work (classification, playbook drafting) that a deterministic script can't.</p>
 
       <pre class="mermaid">
 flowchart LR
     Browser["Browser<br/>SPA (vanilla JS, no build step)"]
     API["FastAPI app<br/>dashboard/app.py"]
-    Files["Flat-file store<br/>JSON + YAML under remediation/"]
+    Files["Storage<br/>SQLite (record stores) +<br/>JSON/YAML files under remediation/"]
     Agents["Claude Code subagents<br/>.claude/agents/*.md"]
     Ext["External sources<br/>Tenable · Qualys · OpenVAS · Prisma Cloud ·<br/>Cortex XSIAM · Infoblox · Axonius · Active Directory"]
     Feeds["Public threat-intel feeds<br/>CISA KEV · FIRST.org EPSS · NVD"]
@@ -206,12 +206,12 @@ flowchart LR
         </table>
       </div>
 
-      <div class="callout warn"><span class="label">Read this before a production rollout</span><p>Every read (<code>GET</code>) route is public by default. Every state-changing route (<code>POST</code>) is gated per-route with an explicit RBAC dependency. Set <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code> to close the read gap — it requires a real, stable <code>VULNHUNTER_SESSION_SECRET</code> as a precondition (checked at startup).</p></div>
+      <div class="callout warn"><span class="label">Read this before a production rollout</span><p>Every read (<code>GET</code>) route is public by default. Every state-changing route (<code>POST</code>) is gated per-route with an explicit RBAC dependency. Set <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code> to close the read gap — it requires a real, stable <code>VULNHUNTER_SESSION_SECRET</code> as a precondition (checked at startup). Independently, set <code>VULNHUNTER_PRODUCTION=true</code> to enforce that same real-secret requirement unconditionally, even on a deployment that leaves the read gap open — the two flags are separate axes, not one gating the other.</p></div>
     </section>
 
     <section id="storage">
       <h2><span class="num">03</span>Data &amp; storage model</h2>
-      <p class="section-intro">There is deliberately no database. Every real piece of state is a JSON or YAML file under <code>remediation/</code>, read fresh (or from a short-TTL in-process cache) on every request and written back with an advisory file lock.</p>
+      <p class="section-intro">Pipeline output and admin-editable policy stay as files; the record stores that see real read-modify-write traffic — approvals, exceptions, audit/AI-usage logs, asset ownership, user accounts — now live in a real local SQLite database, accessed through SQLAlchemy Core so a future move to Postgres for multi-tenancy is a connection-string change, not a rewrite.</p>
 
       <div class="table-wrap">
         <table>
@@ -220,19 +220,18 @@ flowchart LR
             <tr><td class="mono">remediation/output/normalized-findings.json</td><td>Every finding, in the one common schema (§4) — the system of record.</td></tr>
             <tr><td class="mono">REMEDIATION_PLAN.md</td><td>A point-in-time snapshot: risk tier, action type, rollback plan per finding, written by the <code>remediation-planner</code> subagent.</td></tr>
             <tr><td class="mono">remediation/output/*.yml</td><td>Generated Ansible playbooks, one per remediable finding.</td></tr>
-            <tr><td class="mono">remediation/remediation_approvals/*.json</td><td>The human approval-request ledger — status, who decided, when, what window.</td></tr>
-            <tr><td class="mono">remediation/exceptions/*.json</td><td>SLA-exception records ("accept this risk instead of fixing it") — active / expired / revoked.</td></tr>
+            <tr><td class="mono">remediation/vulnhunter.db</td><td>Shared local SQLite database (gitignored) — approvals, exceptions, activity/AI-usage logs, asset ownership, user accounts, notification-scheduler dedup state, and pending live-data adapter output all live here now, one table each.</td></tr>
             <tr><td class="mono">remediation/config/*.yaml</td><td>Every admin-editable policy: priority weights, SLA windows, remediation policy per asset domain, risk-scoring weights, exposure-score weights.</td></tr>
-            <tr><td class="mono">remediation/live-data/*</td><td>Raw exports written by a connector's Fetch action (Tenable/Qualys/OpenVAS CSVs, Prisma Cloud/Cortex XSIAM JSON) before ingestion.</td></tr>
+            <tr><td class="mono">remediation/live-data/*</td><td>Raw CSV/XML exports written by a CVE-scoped connector's Fetch action (Tenable/Qualys/OpenVAS) before ingestion via <code>/remediate</code>.</td></tr>
           </tbody>
         </table>
       </div>
 
-      <h3>Why files, and the real tradeoff</h3>
-      <p>Every artifact is human-readable, diffable in git, and inspectable without a DB client — a deliberate fit for a system whose whole point is producing <em>reviewable</em> artifacts. The honest cost: single-writer concurrency (enforced by <code>remediation/utils/file_lock.py</code>, a real cross-platform advisory file lock with a timeout, not a placeholder), no historical trend storage (every chart is a live snapshot, not a time series), and a full-file rewrite on every mutation rather than a targeted update. This is the top item on VulnHunter's own roadmap (§8).</p>
+      <h3>Why a real database for the record stores, files for the rest</h3>
+      <p>Pipeline output (findings, the plan, generated playbooks) and admin policy stay as files — human-readable, diffable in git, inspectable without a DB client, a deliberate fit for artifacts whose whole point is being <em>reviewable</em>. The record stores above moved to SQLite specifically because each one is genuinely mutated by concurrent requests (an approval decision, an exception revoke, a login), and a flat-file read-modify-write cycle under real concurrency can silently drop a write. <code>remediation/utils/file_lock.py</code> (a real cross-platform advisory file lock with a timeout, not a placeholder) still guards each store's own multi-statement critical section — SQLite's own locking gives atomicity for a single statement, but a caller whose critical section spans more than one (compute-next-id-then-insert) still needs its own mutual exclusion. The honest cost that remains: no historical trend storage yet (every chart is a live snapshot, not a time series) and single-node deployment only — this is a real SQLite file on one machine, not a distributed database. This is the top item on VulnHunter's own roadmap (§8).</p>
 
       <h3>Data handling &amp; residency (SaaS target design)</h3>
-      <p>Everything in this subsection is a <strong>target design for a possible future hosted "VulnHunter Cloud" tier</strong> — proposed, not built. Stated plainly first: the current reality, per the storage-model table above and <code>dashboard/README.md</code>, is that VulnHunter persists every record as a flat JSON/YAML file under <code>remediation/</code> on whatever single host runs it — no database, no encryption-at-rest layer of its own (it inherits whatever the host filesystem/disk provides), and no enforced minimum TLS version (transit encryption today depends entirely on how an operator terminates TLS in front of it — see the reverse-proxy example in <code>dashboard/README.md</code>). None of the controls below exist yet; they are what a hosted offering would need to build.</p>
+      <p>Everything in this subsection is a <strong>target design for a possible future hosted "VulnHunter Cloud" tier</strong> — proposed, not built. Stated plainly first: the current reality, per the storage-model table above and <code>dashboard/README.md</code>, is that VulnHunter persists its record stores in a real local SQLite database and everything else in flat JSON/YAML files, all on whatever single host runs it — no encryption-at-rest layer of its own (it inherits whatever the host filesystem/disk provides), and no enforced minimum TLS version (transit encryption today depends entirely on how an operator terminates TLS in front of it — see the reverse-proxy example in <code>dashboard/README.md</code>). None of the controls below exist yet; they are what a hosted offering would need to build.</p>
 
       <div class="callout info"><span class="label">Framing: 2026 SOC 2 best-practice guidance for SaaS data handling</span><p>The controls below track common 2026 SOC 2 best-practice guidance for a multi-tenant SaaS platform — encryption at rest and in transit, documented key rotation, data-residency commitments, and tested backup/DR — rather than a specific numbered control framework VulnHunter has been audited against.</p></div>
 
@@ -352,7 +351,7 @@ flowchart LR
       <h2><span class="num">08</span>Honest current-state limits</h2>
       <p class="section-intro">Every enterprise reference in this suite says plainly where the product is today versus where a production rollout would need to invest further. Reused consistently across all eight documents:</p>
       <div class="grid2">
-        <div class="card"><h4>Single-tenant, file-based</h4><p>No database, no per-tenant data boundary. The MSSP "tenant switcher" in the UI is an illustrative client-side filter over one shared dataset — not real per-tenant isolation. See the RBAC/Governance document.</p></div>
+        <div class="card"><h4>Single-tenant, single-node</h4><p>A real local SQLite database now backs the record stores, but it's one file on one machine with no per-tenant data boundary. The MSSP "tenant switcher" in the UI is an illustrative client-side filter over one shared dataset — not real per-tenant isolation. See the RBAC/Governance document.</p></div>
         <div class="card"><h4>Reads are public by default</h4><p>Every GET route is open unless <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS</code> is explicitly set — a deliberate MVP default, not a bug, but one to close before a real rollout.</p></div>
         <div class="card"><h4>Synchronous pipeline execution</h4><p>A pipeline run blocks the request that started it. A production deployment needs a real job queue behind long-running operations (scans, large-tenant exports).</p></div>
         <div class="card"><h4>No historical trend storage</h4><p>Every chart is a live, current-moment snapshot — there is no daily-snapshot table yet, so "trend over time" views are honestly absent rather than faked.</p></div>

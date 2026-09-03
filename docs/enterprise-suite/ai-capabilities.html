@@ -380,7 +380,7 @@ Suggest concrete, specific remediation steps for this finding...</div>
 
       <div class="callout warn">
         <span class="label">Disclosed gap, not fixed here</span>
-        <p>There is no general request-throttling/rate-limiting middleware anywhere in the app today — confirmed by direct audit, not assumed. The two concrete unbounded-spend paths in the table above are closed; a blanket rate limiter is a larger, separate architectural change that hasn't been attempted. The daily AI token limit (Admin Settings) is real and enforced pre-flight, but defaults to unlimited until an admin sets one.</p>
+        <p>The daily AI token limit (Admin Settings) is real and enforced pre-flight, but defaults to unlimited until an admin sets one — not a bug, an opt-in cap rather than a surprise restriction on an unconfigured deployment. (A general request-throttling/rate-limiting middleware, previously missing app-wide, is now real — see the RBAC, Multi-Tenancy &amp; Governance document's AI &amp; security guardrails section for <code>dashboard/rate_limit.py</code>'s scope and its own disclosed single-node limit.)</p>
       </div>
 
       <h3>ML Insights' honest ceiling</h3>
@@ -407,7 +407,7 @@ Suggest concrete, specific remediation steps for this finding...</div>
       <p>No, and this document won't imply otherwise. Everything described here — the prompt-injection framing, the spend caps, the tool-scoping, the output escaping — was verified against the current OWASP Top 10 for LLM Applications (2026 edition) by direct code audit, not by a licensed third-party assessment. Treat the mapping in §04 as an engineering reference, the same "informational, not a certification" posture the RBAC &amp; Governance document states for its own compliance mapping.</p>
 
       <h3>Is there a gap we should know about before relying on this?</h3>
-      <p>Yes, disclosed rather than hidden: there is no general request-throttling/rate-limiting middleware anywhere in the app yet. The two concrete unbounded-AI-spend paths are closed (see above); a blanket rate limiter is a larger, separate change that hasn't been attempted. If you're evaluating this for production exposure, ask about this gap directly — the answer above is the current, honest one.</p>
+      <p>Yes, disclosed rather than hidden: the daily AI token limit (Admin Settings) defaults to unlimited until an admin sets one — an opt-in cap, not a surprise restriction on an unconfigured deployment. General request-throttling is no longer a gap here — a real per-IP rate limiter now covers every <code>/api/*</code> route app-wide (see the RBAC, Multi-Tenancy &amp; Governance document) — but it's single-node scoped today, so ask about that specific boundary if you're evaluating a multi-node deployment.</p>
 
       <h3>Why don't the owner suggestions, ATT&amp;CK tags, or compensating-control suggestions appear in this document?</h3>
       <p>Because they're not AI — they're transparent, disclosed keyword/pattern-matching heuristics with their exact reasoning shown on hover, not a model of any kind. This document covers only the surfaces that actually call an LLM (AI Assist, AI Trend Analysis) or a real trained model (ML Insights), plus the deterministic search (Ask VulnHunter) and the Claude Code subagent pipelines. Keeping that line sharp is deliberate — blurring "heuristic" and "AI" is exactly the kind of overclaiming a procurement reviewer is trained to catch.</p>

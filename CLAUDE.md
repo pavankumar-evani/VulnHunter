@@ -82,9 +82,12 @@ dashboard and `remediation/` Python modules are ordinary Python: edit, then re-r
 
 One FastAPI process (`dashboard/app.py`, ~2,450 lines) serves the JSON API, the SPA shell,
 and every static asset — no message queue, cache layer, or microservice boundary to
-operate. There is deliberately no database: every real piece of state is a JSON or YAML
-file under `remediation/`, read fresh on every request and written back under an advisory
-file lock. Judgment-heavy work (classification, playbook drafting) is delegated to the
+operate. Admin-editable policy still lives in YAML files under `remediation/config/`, read
+fresh on every request; the record stores that see real read-modify-write traffic
+(exceptions, approvals, activity/AI-usage logs, asset ownership, users, notification
+scheduler state, and pending live-data adapter output) now live in a real local SQLite
+database instead — see "Data & storage" below. Judgment-heavy work (classification,
+playbook drafting) is delegated to the
 same Claude Code subagents the pipelines use, invoked as a subprocess exactly the way
 `cli/vulnhunter.py` does it — the dashboard's `/run` page is a thin UI over that same CLI
 entry point (same dry-run default, same confirm gate, same budget cap), not a separate
@@ -130,17 +133,31 @@ The files most worth knowing:
 | `REMEDIATION_PLAN.md` | Point-in-time snapshot written by `remediation-planner` — risk tier, action type, rollback plan per finding |
 | `remediation/output/*.yml` | Generated Ansible playbooks, one per remediable finding |
 | `remediation/config/*.yaml` | Every admin-editable policy — priority weights, SLA windows, remediation policy, risk/exposure scoring, exploit-criteria rules, alerting, report schedules, AI governance |
-| `remediation/remediation_approvals/*.json`, `remediation/exceptions/*.json` | Human approval and SLA-exception ledgers |
-| `remediation/live-data/*` | Raw exports written by a connector's Fetch action, before ingestion |
+| `remediation/vulnhunter.db` | Shared local SQLite database (gitignored) — see below |
+| `remediation/live-data/*` | Raw CSV/XML exports written by a CVE-scoped connector's Fetch action (Tenable/Qualys/OpenVAS), before ingestion via `/remediate` |
 
-`remediation/utils/file_lock.py` — a real, dependency-free, cross-platform advisory file
-lock, not a placeholder — guards the highest-traffic/highest-consequence stores against a
-concurrent read-modify-write race silently dropping a write: `activity_log.py`,
-`ai_usage_log.py`, `exceptions/store.py`, and `remediation_approvals/store.py` today.
-`asset_inventory.py` and `auth/users.py` don't have it yet (same race, rarer/admin-gated
-edits) — real, scoped follow-up work, not done in this pass. None of this substitutes for
-a real database with real transactions; it's a genuine mitigation for a single-machine
-deployment, not a distributed-lock story.
+**`remediation/utils/db.py`** — a real local SQLite database (accessed through
+SQLAlchemy Core, not raw `sqlite3`, so a future move to Postgres for real multi-tenancy
+is a connection-string change, not a rewrite) backs every record store that sees real
+read-modify-write traffic: `alert_state`/`schedule_state` (notification scheduler dedup
+state), `exceptions`, `remediation_approvals`, `activity_log`, `ai_usage_log`,
+`asset_ownership`, `users` (the local login store), and `live_data_findings` (pending,
+not-yet-merged output from the generic ingest webhook and the PrismaCloud/Cortex XSIAM
+connectors' fetch routes — see `remediation/connectors/live_data_store.py`). Several of
+these were previously flat JSON files with real, committed seed/example data
+(`exceptions.json`'s one waiver example, `asset_ownership.json`'s five, `users.json`'s
+two demo accounts) — `scripts/migrate_json_to_db.py` is the one-time, idempotent
+migration that carries that seed content into the DB; run it once on a fresh checkout
+(see "Running things" above). `remediation/utils/file_lock.py` — a real, dependency-free,
+cross-platform advisory file lock, not a placeholder — still guards every one of these
+stores' own read-modify-write cycle (e.g. compute-next-id-then-insert) even though the
+storage backend is now a real database: SQLite's own locking gives atomicity for a
+single statement, but a caller whose critical section spans more than one statement (or
+slow I/O) still needs its own explicit mutual exclusion. `activity_log`/`ai_usage_log`
+are the one exception — a plain autoincrement `INSERT` has no read-modify-write gap left
+to protect, so those two dropped the lock entirely once migrated. None of this
+substitutes for a real multi-machine database story; it's a genuine mitigation for a
+single-machine deployment, not a distributed-lock story.
 
 ### The Finding schema
 

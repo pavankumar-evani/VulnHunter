@@ -182,10 +182,11 @@ docstrings for the full design. Summary:
   third-party `itsdangerous` package. Set `VULNHUNTER_SESSION_SECRET` to a real, stable
   value before any real deployment; without it, a random per-process secret is used and
   every session is invalidated on restart (a startup warning says so).
-- **Users**: `dashboard/auth/users.json`, a real, editable, committed seed file (same
-  pattern as `priority_rules.yaml`/`exceptions.json`) with two demo accounts (one admin,
-  one regular user) - see the demo credentials below. Not a real user-management system;
-  a production deployment should use real SSO instead (see OIDC below).
+- **Users**: one row per account in the shared SQLite database (see
+  `remediation/utils/db.py`) - previously a flat JSON file, seeded from the same two
+  demo accounts (one admin, one regular user) via `scripts/migrate_json_to_db.py` - see
+  the demo credentials below. Not a real user-management system; a production
+  deployment should use real SSO instead (see OIDC below).
 - **OIDC (SSO)**: `dashboard/auth/oidc.py` implements a real Authorization Code + PKCE
   flow against OIDC discovery/token/userinfo endpoints, using `requests` (already a
   dependency via the ServiceNow/Jira/Splunk/CrowdStrike connectors) - no `authlib`/

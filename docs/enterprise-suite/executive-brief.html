@@ -309,7 +309,7 @@
         <tbody>
           <tr><td class="mono">Python 3.11+</td><td>Runtime baseline for the dashboard and remediation pipeline.</td></tr>
           <tr><td>Target systems reachable on the network</td><td>Each connector needs real network reachability to whatever it's enriching or scanning — Tenable/Armis SaaS endpoints, or an on-prem OpenVAS/GVM, Qualys, or Active Directory target.</td></tr>
-          <tr><td><code>VULNHUNTER_SESSION_SECRET</code> set to a real value</td><td>Without it, a random per-process secret is used and every session is invalidated on restart — the app prints a startup warning when this is missing (see the dashboard's own README).</td></tr>
+          <tr><td><code>VULNHUNTER_SESSION_SECRET</code> set to a real value</td><td>Without it, a random per-process secret is used and every session is invalidated on restart — the app prints a startup warning when this is missing, and refuses to start at all once <code>VULNHUNTER_PRODUCTION=true</code> is set (see the dashboard's own README).</td></tr>
           <tr><td>RBAC mapped to your real roles/teams</td><td>The shipped role/team model (admin vs. not, team-scoping) needs to be configured for your actual analyst structure before go-live, not left on demo defaults.</td></tr>
           <tr><td>At least one real scan engine or feed connected</td><td>The bundled sample data (Tenable/Armis/threat-intel fixtures) is for demonstration only — live value requires a real connector such as OpenVAS/GVM, Tenable, or Armis feeding real findings.</td></tr>
         </tbody>
@@ -323,7 +323,7 @@
         <li>Vendor and scan-engine connectors (Tenable, Armis, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory, OpenVAS/GVM, and the rest) are built against each vendor's public API or protocol documentation and unit-tested against mocked responses shaped like that documentation. CISA KEV and FIRST.org EPSS threat-intel enrichment remain the only two integrations in the product confirmed working against a real live endpoint end-to-end.</li>
         <li>No formal third-party penetration test has been performed on this application yet.</li>
         <li>True multi-tenant SaaS isolation doesn't exist yet. Today's RBAC is single-tenant with a client-side tenant-label filter over one shared dataset — not a real per-tenant data boundary or server-side tenant trust. See the RBAC, Multi-Tenancy &amp; Governance document §02 for the standards a genuine multi-tenant claim would need to satisfy.</li>
-        <li>There is no general request-throttling/rate-limiting middleware in the application today — confirmed by direct audit, not assumed. Two specific unbounded-spend paths (AI Assist, AI trend analysis) are closed separately with their own per-call budget caps.</li>
+        <li>Request-throttling is real (a per-IP rate limiter now covers every <code>/api/*</code> route, with two further unbounded-spend paths — AI Assist, AI trend analysis — closed separately via their own per-call budget caps) but single-node scoped: each node counts independently, so a future multi-node deployment needs a shared store (e.g. Redis) rather than today's in-process limiter.</li>
       </ul>
     </div>
 

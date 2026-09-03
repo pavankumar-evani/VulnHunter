@@ -1,9 +1,21 @@
-# Live Tenable/Armis Connectors
+# Tenable/Armis Connectors — CLI Sample-File Replacement
+
+**This file covers only the original two connectors** (Tenable.io, Armis) and their
+specific `fetch_live_data.py` CLI workflow. This repo now has 15 connectors total —
+for the full, current list (Qualys, ServiceNow, Jira, Splunk, CrowdStrike, Prisma
+Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory, OpenVAS, and more), each
+with a real dashboard **Test Connection + Fetch** page, see
+[docs/INTEGRATIONS.md](../../docs/INTEGRATIONS.md) (what each one does and its real
+verification status) and [docs/GOING_LIVE.md](../../docs/GOING_LIVE.md) (how to
+actually point one at a real account). The SSRF-guardrail section below still applies
+repo-wide, not just to these two.
 
 Real API client code for Tenable.io's Vulnerability Export API and Armis's REST API v1,
 replacing the static sample-file ingestion in `remediation/sample-data/` with live data —
 while keeping `vuln-ingest-normalizer.md` completely unchanged, because both connectors
-write output in the exact same file shapes as the samples.
+write output in the exact same file shapes as the samples. Every other connector in this
+repo normalizes straight into the Finding/asset-inventory schema instead and is driven
+from its own dashboard page rather than this CLI - see the docs linked above.
 
 ## ⚠️ Honesty about test coverage
 
