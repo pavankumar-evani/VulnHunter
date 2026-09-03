@@ -38,6 +38,16 @@ the same 4-component score this module always computed, not a diluted one from a
 zero-valued fifth weight. See _likelihood_components()/score_assets() below for how that
 conditional inclusion is implemented.
 
+A third Impact component, "dependency_blast_radius", is added the same conditional way -
+ONLY for an asset that has at least one finding carrying a resolved `dependency.package`
+(see remediation/enrichment/sbom.py and the Finding schema's `dependency` field). An asset
+with no SBOM-matched finding gets exactly the same severity+criticality Impact score this
+module always computed. This mirrors control_coverage's own additive pattern exactly, and
+for the same reason: a package with a large number of real dependents (per the loaded
+CycloneDX SBOM) makes exploiting it worse than the same CVSS/criticality alone would
+suggest, precisely the "critical SBOM package affected" signal a real vulnerability-
+scoring formula needs to account for - not something this module invented independently.
+
 Note on what this is NOT: CVSS is stored in this pipeline only as a single rolled-up
 scalar (finding["cvss"]) - there is no Impact/Exploitability sub-score split (the
 Confidentiality/Integrity/Availability impact metrics, or the Attack Vector/Complexity/
@@ -52,6 +62,7 @@ import yaml
 
 from remediation.config import priority_engine
 from remediation.enrichment import control_coverage
+from remediation.enrichment import sbom as sbom_module
 
 DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent / "config" / "risk_scoring_rules.yaml"
 
@@ -129,6 +140,27 @@ def _control_coverage_component(asset_findings, security_controls):
     return max(residuals) if residuals else None
 
 
+def _dependency_blast_radius_component(asset_findings, sbom_doc, cap):
+    """Returns 0-100 (the largest dependency blast radius, scaled against `cap`, among
+    this asset's findings that carry a resolved `dependency.package`), or None if no
+    finding on this asset has one - the None case means "don't add this component at
+    all" (see score_assets()), same convention as _control_coverage_component(). A
+    finding whose package genuinely isn't in the loaded SBOM (blast radius 0) still
+    counts as real data (an honest zero), not a missing one - only the total absence of
+    a `dependency.package` value skips this component.
+
+    `sbom_doc` MUST be the already-loaded document, not None - same one-load-per-
+    score_assets()-call reasoning as security_controls (see score_assets())."""
+    radii = [
+        len(sbom_module.compute_blast_radius(sbom_doc, f["dependency"]["package"]))
+        for f in asset_findings
+        if (f.get("dependency") or {}).get("package")
+    ]
+    if not radii:
+        return None
+    return min(max(radii), cap) / cap * 100
+
+
 def _likelihood_components(asset_row, asset_findings, rules, security_controls):
     """Returns the raw 0-100 Likelihood sub-components for one asset - always the 4 base
     ones (kev/epss/exploit_criteria/eol), plus "control_coverage" only when at least one
@@ -169,7 +201,7 @@ def _tier_from_score(score, thresholds):
     return "Low"
 
 
-def score_assets(asset_rows, findings, rules=None, priority_rules=None, security_controls=None):
+def score_assets(asset_rows, findings, rules=None, priority_rules=None, security_controls=None, sbom_doc=None):
     """Returns a new list (doesn't mutate `asset_rows`) with `impact_score`,
     `likelihood_score`, `risk_score` (all 0-100 ints), and `risk_tier` added to every
     row. `findings` should already have `exploit_criteria_matches` tagged (see
@@ -177,13 +209,15 @@ def score_assets(asset_rows, findings, rules=None, priority_rules=None, security
     Likelihood score's exploit-criteria component to reflect anything - a finding
     missing that field is treated the same as one with no matches (honest, not a bug).
 
-    security_controls.yaml is loaded exactly ONCE here (like rules/priority_rules
-    already are) and threaded through to every asset's _control_coverage_component()
-    call - not reloaded per-asset, which at this pipeline's real data scale (thousands
-    of assets) would mean thousands of avoidable disk reads for one static file."""
+    security_controls.yaml and the SBOM are each loaded exactly ONCE here (like
+    rules/priority_rules already are) and threaded through to every asset's
+    _control_coverage_component()/_dependency_blast_radius_component() call - not
+    reloaded per-asset, which at this pipeline's real data scale (thousands of assets)
+    would mean thousands of avoidable disk reads for one static file each."""
     rules = rules if rules is not None else load_rules()
     priority_rules = priority_rules if priority_rules is not None else priority_engine.load_rules()
     security_controls = security_controls if security_controls is not None else control_coverage.load_controls()
+    sbom_doc = sbom_doc if sbom_doc is not None else sbom_module.load_sbom()
 
     findings_by_asset = {}
     for f in findings:
@@ -196,13 +230,21 @@ def score_assets(asset_rows, findings, rules=None, priority_rules=None, security
     for row in asset_rows:
         asset_findings = findings_by_asset.get(row["name"], [])
 
-        impact = _weighted(
-            {
-                "severity": _severity_component(asset_findings, row, priority_rules["severity_weights"]),
-                "criticality": _criticality_component(row, priority_rules),
-            },
-            rules["impact_weights"],
-        )
+        impact_components = {
+            "severity": _severity_component(asset_findings, row, priority_rules["severity_weights"]),
+            "criticality": _criticality_component(row, priority_rules),
+        }
+        blast_radius_cap = rules.get("dependency_blast_radius_cap", 10) or 1
+        blast_radius_component = _dependency_blast_radius_component(asset_findings, sbom_doc, blast_radius_cap)
+        if blast_radius_component is not None:
+            impact_components["dependency_blast_radius"] = blast_radius_component
+        # Only the weights for components actually present this time - an asset with no
+        # dependency_blast_radius component gets exactly today's 2-way weighted average,
+        # not one diluted by a 3rd weight sitting at an implicit zero (see module
+        # docstring) - same pattern as likelihood_weights below.
+        impact_weights = {k: v for k, v in rules["impact_weights"].items() if k in impact_components}
+        impact = _weighted(impact_components, impact_weights)
+
         likelihood_components = _likelihood_components(row, asset_findings, rules, security_controls)
         # Only the weights for components actually present this time - an asset with no
         # control_coverage component gets exactly today's 4-way weighted average, not one

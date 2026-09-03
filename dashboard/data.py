@@ -363,14 +363,14 @@ def _load_content_enriched_findings():
 def _scored_assets_cache_key():
     """Every real, editable file/store whose content actually changes
     _load_scored_assets()'s output - findings, asset ownership (owner/team/environment/
-    facing/remediation schedule - read by build_asset_inventory()), and the three files
+    facing/remediation schedule - read by build_asset_inventory()), and the four files
     score_assets() itself loads when not passed explicitly (risk_scoring_rules.yaml,
-    priority_rules.yaml, and security_controls.yaml, the last feeding the
-    control_coverage Likelihood component). Keying on each one's
-    own mtime means an edit to ANY of them invalidates the cache the instant it
-    happens, not just after the TTL below expires - that TTL is only a backstop for
-    rapid repeat calls within the same file state, never the mechanism a real edit
-    relies on to be seen.
+    priority_rules.yaml, security_controls.yaml feeding the control_coverage Likelihood
+    component, and sbom.json feeding the dependency_blast_radius Impact component).
+    Keying on each one's own mtime means an edit to ANY of them invalidates the cache the
+    instant it happens, not just after the TTL below expires - that TTL is only a
+    backstop for rapid repeat calls within the same file state, never the mechanism a
+    real edit relies on to be seen.
 
     Asset ownership now lives in the shared SQLite DB (see remediation/utils/db.py) -
     its path is read off the real engine (`engine.url.database`), not a separate
@@ -381,12 +381,14 @@ def _scored_assets_cache_key():
     risk_rules_path = risk_scoring.DEFAULT_RULES_PATH
     priority_rules_path = priority_engine.DEFAULT_RULES_PATH
     security_controls_path = control_coverage.DEFAULT_CONTROLS_PATH
+    sbom_path = sbom.DEFAULT_SBOM_PATH
     return (
         _findings_file_mtime(),
         db_path.stat().st_mtime if db_path.exists() else None,
         risk_rules_path.stat().st_mtime if risk_rules_path.exists() else None,
         priority_rules_path.stat().st_mtime if priority_rules_path.exists() else None,
         security_controls_path.stat().st_mtime if security_controls_path.exists() else None,
+        sbom_path.stat().st_mtime if sbom_path.exists() else None,
     )
 
 

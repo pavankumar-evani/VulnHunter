@@ -16,6 +16,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from remediation.config import priority_engine  # noqa: E402
 from remediation.enrichment import control_coverage  # noqa: E402
+from remediation.enrichment import sbom  # noqa: E402
 from remediation.enrichment.risk_scoring import load_rules, score_assets  # noqa: E402
 
 
@@ -200,6 +201,48 @@ class ControlCoverageIsAdditive(unittest.TestCase):
         # Unblocked internet-facing exposure (0% firewall coverage -> 100% residual risk
         # for that finding) should push likelihood strictly higher than the no-data case.
         self.assertGreater(scored_with_data["likelihood_score"], scored_no_data["likelihood_score"])
+
+
+class DependencyBlastRadiusIsAdditive(unittest.TestCase):
+    """Same additive contract as ControlCoverageIsAdditive above, on the Impact side:
+    a finding with no `dependency.package` at all (the real, current state of every
+    finding in this pipeline's own sample data) must score identically to before this
+    component existed; a finding whose package has a real blast radius in the loaded
+    SBOM must score strictly higher."""
+
+    def test_asset_with_no_dependency_field_scores_identically_regardless_of_sbom(self):
+        # The real, current state of every finding in this pipeline's own data (no
+        # `dependency` field at all) must score the same no matter which SBOM happens to
+        # be loaded - this component only ever activates from real per-finding data,
+        # never from the mere presence of an SBOM file.
+        rows = [_asset_row(name="A")]
+        findings = [_finding("A", cvss=7.0)]
+        scored_default_sbom = score_assets(rows, findings)[0]
+        fake_sbom = {"components": [{"bom-ref": "x", "name": "some-lib"}], "dependencies": []}
+        with patch.object(sbom, "load_sbom", return_value=fake_sbom):
+            scored_other_sbom = score_assets(rows, findings)[0]
+        self.assertEqual(scored_default_sbom["impact_score"], scored_other_sbom["impact_score"])
+
+    def test_asset_with_real_dependency_data_scores_differently(self):
+        rows = [_asset_row(name="A")]
+        dependency = {"package": "leaf-lib", "ecosystem": "maven", "version": "1.0",
+                      "fixed_version": "1.1", "direct": True}
+        findings_with_dep = [_finding("A", cvss=7.0, dependency=dependency)]
+        findings_no_dep = [_finding("A", cvss=7.0)]
+        # 10 direct dependents on "leaf-lib" - at or above dependency_blast_radius_cap,
+        # so the component is pinned at its max (100), guaranteed to push the Impact
+        # weighted average up regardless of what severity/criticality happen to be.
+        fake_sbom = {
+            "components": (
+                [{"bom-ref": "leaf", "name": "leaf-lib"}]
+                + [{"bom-ref": f"root{i}", "name": f"root-app-{i}"} for i in range(10)]
+            ),
+            "dependencies": [{"ref": f"root{i}", "dependsOn": ["leaf"]} for i in range(10)],
+        }
+        with patch.object(sbom, "load_sbom", return_value=fake_sbom):
+            scored_no_data = score_assets(rows, findings_no_dep)[0]
+            scored_with_data = score_assets(rows, findings_with_dep)[0]
+        self.assertGreater(scored_with_data["impact_score"], scored_no_data["impact_score"])
 
 
 class DoesNotMutateInput(unittest.TestCase):
