@@ -26,9 +26,10 @@ unrelated projects sharing a repo.
 
 For depth beyond this file: [dashboard/README.md](dashboard/README.md) and
 [cli/README.md](cli/README.md) are the primary sources this file draws from and defers to.
-`docs/enterprise-suite/` holds seven longer technical references (`architecture.html`,
+`docs/enterprise-suite/` holds nine longer technical references (`architecture.html`,
 `vuln-engine.html`, `remediation-engine.html`, `connectors.html`, `rbac-governance.html`,
-`pages.html`, `developer-guide.html`) plus a task-oriented `user-guide.html` for
+`ai-capabilities.html`, `reporting.html`, `pages.html`, `developer-guide.html`) plus a
+task-oriented `user-guide.html` for
 end-users ("how do I...?" — kept in sync with `docs/FAQ.md` and
 `dashboard/static/js/pages/faq.js`'s own hardcoded FAQ array, per
 `docs/enterprise-suite/MANIFEST.md`'s sync table) — indexed in
@@ -462,11 +463,11 @@ image tag, secret baked into an image layer via `ENV`.
 
 ## Enterprise documentation suite — keep it in sync with the application
 
-`docs/enterprise-suite/` holds 11 HTML documents (an executive brief, 7 technical
-references, a POC methodology, and a commercial pricing/SLA page — indexed in
-`docs/enterprise-suite/MANIFEST.md`, each also published as a live, shareable Artifact
-page at the URL listed there) plus `docs/PRICING.md`, the plain-markdown source of truth
-for pricing/SLA terms.
+`docs/enterprise-suite/` holds 14 HTML documents (an executive brief, a companion
+whitepaper, 9 technical references, a POC methodology, a commercial pricing/SLA page,
+and a task-oriented user guide — indexed in `docs/enterprise-suite/MANIFEST.md`, each
+also published as a live, shareable Artifact page at the URL listed there) plus
+`docs/PRICING.md`, the plain-markdown source of truth for pricing/SLA terms.
 
 **Whenever a change to the application would make a claim in one of these documents — or
 in this file — wrong, stale, or incomplete, update the affected document(s) in the same

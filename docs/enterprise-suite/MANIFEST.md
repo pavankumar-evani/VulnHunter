@@ -1,6 +1,6 @@
 # Enterprise Documentation Suite — Manifest
 
-Fourteen HTML documents, version-controlled here so they survive alongside the code they
+Fifteen HTML documents, version-controlled here so they survive alongside the code they
 document. Each is also published as a Claude Artifact (a hosted, shareable page) at the
 URL below. **The files in this directory are the source of truth** — the published
 Artifact is a mirror, kept in sync by republishing from these exact files (see "Keeping
@@ -8,7 +8,7 @@ this in sync" below).
 
 | File | Published URL | Audience |
 |---|---|---|
-| `hub.html` | https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b | Landing page — links to all 13 below |
+| `hub.html` | https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b | Landing page — links to all 14 below |
 | `executive-brief.html` | https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b | Enterprise evaluators |
 | `whitepaper.html` | https://claude.ai/code/artifact/2d57679f-6e91-4a8f-83b6-a9469bbcb4da | Enterprise evaluators — deep research/POV companion to `executive-brief.html`: why-now, vs. ServiceNow USEM, FAQs, patent/publication feasibility |
 | `architecture.html` | https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7 | Technical |
