@@ -4,6 +4,8 @@
 // modal (see dom.js) - this one just renders, it never submits anything.
 import { escapeHtml, openModal, closeModal } from "./dom.js";
 import { api } from "./api.js";
+import { getCurrentUser } from "./auth.js";
+import { openAssignModal, statusPillHtml, assigneeLabel } from "./assignModal.js";
 
 function row(label, valueHtml, wrap = false) {
   if (valueHtml === null || valueHtml === undefined || valueHtml === "") return "";
@@ -102,6 +104,11 @@ export function openFindingDetail(f) {
       <h3>Recommended fix</h3>
       <p>${escapeHtml(f.recommended_fix)}</p>` : ""}
 
+    <h3>Ownership</h3>
+    <div id="ownership-body">
+      <p class="filter-count">Loading — who owns this and what state it is in…</p>
+    </div>
+
     <h3>Compensating control coverage</h3>
     <div id="control-coverage-body">
       <p class="filter-count">Loading — checking real firewall/EDR coverage data…</p>
@@ -132,9 +139,61 @@ export function openFindingDetail(f) {
     a.addEventListener("click", () => closeModal());
   });
 
+  loadOwnership(f, modalBody);
   loadSimilarFindings(f.id, modalBody);
   loadControlCoverage(f.id, modalBody);
   loadNetworkPath(asset.name, modalBody);
+}
+
+// Who owns this finding, which team it is routed to, and its work-state - plus the
+// assignment history from the audit log. Fetched lazily like the sections below, and only
+// for a signed-in viewer (assignee identity is never shown to an anonymous caller).
+async function loadOwnership(f, modalBody) {
+  const el = modalBody.querySelector("#ownership-body");
+  if (!el) return;
+  const me = await getCurrentUser();
+  if (!me) {
+    el.innerHTML = `<p class="filter-count"><a href="/login" data-link>Sign in</a> to see and change who owns this finding.</p>`;
+    el.querySelector("a[data-link]").addEventListener("click", () => closeModal());
+    return;
+  }
+  let detail;
+  try {
+    detail = await api.findingAssignment(f.id);
+  } catch (err) {
+    el.innerHTML = `<p class="filter-count">Couldn't load ownership (${escapeHtml(err.message || String(err))}).</p>`;
+    return;
+  }
+  if (!modalBody.querySelector("#ownership-body")) return; // modal closed/replaced meanwhile
+  const a = detail.assignment;
+  const stateText = {
+    assigned: "Assigned to a person",
+    team_only: "Routed to a team - nobody has picked it up",
+    unowned: "Unowned - no person and no team",
+  }[detail.ownership_state];
+  const history = (detail.history || []).slice(0, 5).map((h) => {
+    const d = h.details || {};
+    const what = h.action === "finding.status" ? `status ${escapeHtml(d.from)} → ${escapeHtml(d.to)}`
+      : h.action === "finding.unassign" ? "removed the assignment"
+      : h.action === "finding.auto_assign" ? `auto-routed to ${escapeHtml(d.team || "a team")}`
+      : `assigned to ${escapeHtml(d.assignee || d.team || "-")}`;
+    return `<li>${escapeHtml(h.timestamp.slice(0, 16).replace("T", " "))} · ${escapeHtml(h.actor)} · ${what}</li>`;
+  }).join("");
+  el.innerHTML = `
+    <div class="table-scroll">
+      <table class="data-table finding-detail-table"><tbody>
+        ${row("State", escapeHtml(stateText))}
+        ${row("Assignee", a && a.assignee_email ? `${escapeHtml(assigneeLabel(a))} <span class="muted">(${escapeHtml(a.assignee_email)})</span>` : `<span class="muted">Nobody</span>`)}
+        ${row("Team", detail.team ? escapeHtml(detail.team) : `<span class="muted">None</span>`)}
+        ${row("Work status", statusPillHtml(a && a.status))}
+        ${a && a.notes ? row("Note", escapeHtml(a.notes), true) : ""}
+      </tbody></table>
+    </div>
+    <p style="margin:10px 0 0"><button type="button" class="secondary-button" id="ownership-assign">${a ? "Reassign" : "Assign"}</button></p>
+    ${history ? `<ul class="ownership-history">${history}</ul>` : ""}`;
+  el.querySelector("#ownership-assign").addEventListener("click", () => {
+    openAssignModal({ findingId: f.id, title: f.title, onSaved: () => openFindingDetail(f) });
+  });
 }
 
 // Real firewall/EDR coverage assessment (remediation/enrichment/control_coverage.py) -

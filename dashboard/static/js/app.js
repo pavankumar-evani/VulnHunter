@@ -68,6 +68,9 @@ const routes = [
   { pattern: /^\/logout\/?$/, load: () => import("./pages/logout.js") },
   { pattern: /^\/profile\/?$/, load: () => import("./pages/profile.js") },
   { pattern: /^\/admin\/?$/, load: () => import("./pages/adminSettings.js") },
+  { pattern: /^\/admin\/people\/?$/, load: () => import("./pages/usersTeams.js") },
+  { pattern: /^\/assignments\/?$/, load: () => import("./pages/assignments.js") },
+  { pattern: /^\/ownership\/?$/, load: () => import("./pages/ownership.js") },
   { pattern: /^\/playbooks\/([^/]+)$/, load: () => import("./pages/playbookDetail.js") },
 ];
 

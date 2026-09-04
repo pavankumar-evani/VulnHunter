@@ -51,6 +51,8 @@ const ICONS = {
   signal: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="16.6" r="0.6" fill="currentColor" stroke="none"/><path d="M9 13.6a4.2 4.2 0 016 0"/><path d="M6.6 10.8a7.6 7.6 0 0110.8 0"/>',
   document: '<path d="M8.5 4h5.5l3 3v12.5a1 1 0 01-1 1h-7.5a1 1 0 01-1-1V5a1 1 0 011-1z"/><path d="M14 4v3h3"/><line x1="10" y1="12.5" x2="15" y2="12.5"/><line x1="10" y1="15.5" x2="15" y2="15.5"/>',
   approved: '<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7 5.3-5.8"/>',
+  users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.3c2.8.2 5 2.3 5 5.2"/>',
+  ownership: '<circle cx="8" cy="8" r="3"/><path d="M2.5 19c0-3 2.5-5.5 5.5-5.5"/><path d="M13 12h8"/><polyline points="18 9 21 12 18 15"/>',
   dispatched: '<circle cx="12" cy="12" r="9"/><path d="M12 15.5V8.3"/><path d="M8.6 11.5L12 8l3.4 3.5"/>',
 };
 
