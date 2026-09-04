@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Developer &amp; Contributor Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --ink: #eef1fb;
+    --paper: #0a0e1a;
+    --surface: #10172a;
+    --surface-2: #151d35;
+    --line: #263153;
+    --muted: #97a2c2;
+    --accent: #6d97f7;
+    --accent-deep: #a9c2fb;
+    --accent-soft: #16204a;
+    --signal: #34d399;
+    --crit: #f87171;
+    --high: #fb923c;
+    --med: #fbbf24;
+    --low: #60a5fa;
+    --code-bg: #060a16;
+    --code-text: #cfe0ff;
+    --sans: 'Chakra Petch', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  @page { margin: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Chakra Petch', sans-serif;
+    line-height: 1.65;
+    font-size: 15.5px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { background: var(--paper) !important; color: var(--ink) !important; }
+  }
+  a { color: var(--accent); }
+  h1, h2, h3 { font-family: var(--sans); letter-spacing: -0.01em; color: var(--ink); font-weight: 700; }
+  strong { color: var(--ink); }
+
+  /* ---------- Suitebar ---------- */
+  .suitebar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 13px 28px; background: #060a16; color: #cdd8ff;
+    font-size: 0.82rem;
+  }
+  .suitebar .mark { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #fff;
+    font-variant-caps: small-caps; letter-spacing: 0.04em; font-size: 0.98rem; }
+  .suitebar .sep { opacity: 0.35; }
+  .suitebar .doclabel { opacity: 0.88; }
+
+  /* ---------- Doc shell ---------- */
+  .doc { max-width: 900px; margin: 0 auto; padding: 46px 36px 120px; }
+
+  /* ---------- Cover ---------- */
+  .cover { padding-top: 54px; page-break-after: always; break-after: page; }
+  .cover-kicker { font-family: var(--mono); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.28em;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 24px; }
+  .cover-title { font-size: 2.65rem; font-weight: 700; margin: 0 0 22px; line-height: 1.16; color: var(--ink); }
+  .cover-tagline { font-size: 1.15rem; color: var(--muted); max-width: 46ch; line-height: 1.55; margin: 0 0 100px; }
+  .cover-meta { font-size: 0.88rem; color: var(--muted); }
+  .cover-meta .dot { margin: 0 10px; color: var(--accent-deep); }
+
+  /* ---------- TOC ---------- */
+  .toc-page { page-break-after: always; break-after: page; }
+  h1.toc-heading { font-size: 1.65rem; margin: 0 0 18px; }
+  ul.toc-list { list-style: none; margin: 22px 0 0; padding: 0; }
+  ul.toc-list li a {
+    display: block; padding: 9px 4px; color: var(--ink); text-decoration: none;
+    border-bottom: 1px solid var(--line); font-size: 0.98rem;
+  }
+  ul.toc-list li.h2 a {
+    padding-left: 28px; color: var(--muted); font-size: 0.87rem; border-bottom: 1px dashed var(--line);
+  }
+  ul.toc-list li a:hover { color: var(--accent-deep); }
+
+  /* ---------- Sections ---------- */
+  section.doc-section { margin-top: 48px; }
+  h1.section-h1 {
+    font-size: 1.6rem; margin: 0 0 16px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--line); scroll-margin-top: 20px;
+  }
+  h2.section-h2 { font-size: 1.2rem; color: var(--accent-deep); margin: 32px 0 10px; scroll-margin-top: 20px; }
+  p { margin: 0 0 14px; max-width: 74ch; }
+  p.muted-note { color: var(--muted); font-style: italic; font-size: 0.92rem; }
+  ul.bullets, ol.numbered { margin: 10px 0 20px; padding-left: 26px; max-width: 74ch; }
+  ul.bullets li, ol.numbered li { margin-bottom: 10px; line-height: 1.55; }
+
+  /* ---------- Inline code ---------- */
+  code { font-family: var(--mono); font-size: 0.87em; color: var(--accent-deep);
+    background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+  /* ---------- Code blocks ---------- */
+  pre.codeblock {
+    background: var(--code-bg); color: var(--code-text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px 18px; margin: 14px 0 22px;
+    font-family: var(--mono); font-size: 0.78rem; line-height: 1.7;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  pre.codeblock code { background: none; padding: 0; color: inherit; font-size: 1em; }
+
+  /* ---------- Callouts ---------- */
+  .callout {
+    background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 4px;
+    padding: 14px 20px; margin: 16px 0 22px; max-width: 78ch;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .callout .label {
+    display: block; text-transform: uppercase; letter-spacing: 0.07em;
+    font-weight: 700; font-size: 0.76rem; color: var(--accent-deep); margin-bottom: 6px;
+  }
+  .callout p { margin: 0; color: var(--ink); font-size: 0.95rem; }
+
+  /* ---------- Tables ---------- */
+  .table-wrap {
+    overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; margin: 14px 0 24px;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); color: var(--muted); text-transform: uppercase;
+    font-size: 0.72rem; letter-spacing: 0.05em; font-weight: 600; }
+  td { color: var(--ink); }
+  tr:last-child td { border-bottom: none; }
+  td.mono { font-family: var(--mono); font-size: 0.85rem; color: var(--accent-deep); white-space: nowrap; }
+
+  /* ---------- Appendix ---------- */
+  .appendix { page-break-before: always; break-before: page; }
+</style>
+</head>
+<body>
+
+<div class="suitebar">
+  <span class="mark"><svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</span>
+  <span class="sep">/</span><span class="doclabel">Developer &amp; Contributor Guide</span>
+</div>
+
+<div class="doc">
+
+  <!-- ============ Cover ============ -->
+  <section class="cover">
+    <div class="cover-kicker">VULNHUNTER</div>
+    <h1 class="cover-title">Developer &amp; Contributor Guide</h1>
+    <p class="cover-tagline">Cloning the repo, running the app, extending the two pipelines, and the git workflow this project actually uses.</p>
+    <div class="cover-meta">VulnHunter Development LLC<span class="dot">&middot;</span>Prepared September 2026</div>
+  </section>
+
+  <!-- ============ Contents ============ -->
+  <section class="toc-page">
+    <h1 class="toc-heading">Contents</h1>
+    <ul class="toc-list">
+      <li><a href="#sec-1">1. Introduction</a></li>
+      <li><a href="#sec-2">2. Getting the code</a></li>
+      <li class="h2"><a href="#sec-2-1">2.1 Working across multiple sessions in parallel</a></li>
+      <li><a href="#sec-3">3. Repository layout</a></li>
+      <li><a href="#sec-4">4. Running the application locally</a></li>
+      <li><a href="#sec-5">5. Running the two pipelines</a></li>
+      <li class="h2"><a href="#sec-5-1">5.1 Interactively, inside Claude Code</a></li>
+      <li class="h2"><a href="#sec-5-2">5.2 Headless &mdash; CI, cron, or the dashboard's own Run Pipeline page</a></li>
+      <li><a href="#sec-6">6. Testing</a></li>
+      <li><a href="#sec-7">7. Git workflow conventions</a></li>
+      <li><a href="#sec-8">8. Extending the product</a></li>
+      <li class="h2"><a href="#sec-8-1">8.1 Adding a new connector</a></li>
+      <li class="h2"><a href="#sec-8-2">8.2 Adding a new remediation fixer</a></li>
+      <li class="h2"><a href="#sec-8-3">8.3 Other extension points</a></li>
+      <li><a href="#sec-9">9. The subagent safety model</a></li>
+      <li><a href="#sec-10">10. Where to go deeper</a></li>
+      <li><a href="#appendix-a">Appendix A: Command reference</a></li>
+    </ul>
+  </section>
+
+  <!-- ============ 1. Introduction ============ -->
+  <section class="doc-section" id="sec-1">
+    <h1 class="section-h1">1. Introduction</h1>
+    <p>VulnHunter is two things sharing one repository: a pair of Claude Code subagent pipelines (&ldquo;/vulnhunt&rdquo; for source-code scanning, &ldquo;/remediate&rdquo; for infrastructure-finding remediation), and a full FastAPI + vanilla-JS dashboard application that reads and drives them. This guide is for anyone who needs to work in the codebase directly &mdash; a new developer, a contractor, or the product's own owner returning after time away &mdash; covering how to get the code, run it, test it, extend it, and the git conventions this specific repository follows.</p>
+    <p>It assumes basic familiarity with git, Python, and the command line. It does not replace the deeper reference material this repo already ships &mdash; &sect;10 points to each of those documents by name.</p>
+  </section>
+
+  <!-- ============ 2. Getting the code ============ -->
+  <section class="doc-section" id="sec-2">
+    <h1 class="section-h1">2. Getting the code</h1>
+    <p>The canonical repository lives on GitHub:</p>
+    <pre class="codeblock"><code>https://github.com/pavankumar-evani/VulnHunter</code></pre>
+    <p>Clone it and check out the trunk branch, which is master:</p>
+    <pre class="codeblock"><code>git clone https://github.com/pavankumar-evani/VulnHunter.git
+cd VulnHunter</code></pre>
+
+    <h2 class="section-h2" id="sec-2-1">2.1 Working across multiple sessions in parallel</h2>
+    <p>This repository is regularly worked on by more than one Claude Code session at once, each in its own git worktree &mdash; a second working directory attached to the same repository, on its own branch, without needing a second clone:</p>
+    <pre class="codeblock"><code>git worktree add ../vulnhunter-feature-x -b feature-x
+git worktree list          # see every active worktree
+git worktree remove ../vulnhunter-feature-x   # after merging</code></pre>
+    <div class="callout">
+      <span class="label">Before pushing</span>
+      <p>Always git fetch origin master and check for divergence before pushing to master &mdash; with more than one session or contributor active, origin/master moves. On a non-fast-forward rejection, fetch and inspect what changed (git show / git diff) before merging; don't force-push.</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. Repository layout ============ -->
+  <section class="doc-section" id="sec-3">
+    <h1 class="section-h1">3. Repository layout</h1>
+    <p>The real paths that matter day to day:</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Path</th><th>What lives there</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">dashboard/</td><td>The FastAPI app (<code>app.py</code>), auth (<code>auth/rbac.py</code>, <code>sessions.py</code>), data access (<code>data.py</code>), and the hand-rolled vanilla-JS SPA under <code>static/js/</code>. No build step &mdash; edit a <code>.js</code> file, reload the browser.</td></tr>
+        <tr><td class="mono">remediation/connectors/</td><td>One module per vendor data source &mdash; Tenable, Qualys, OpenVAS/GVM, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory, plus push connectors (ServiceNow, Jira, Splunk). All follow one contract &mdash; see &sect;8.1.</td></tr>
+        <tr><td class="mono">remediation/enrichment/</td><td>KEV/EPSS threat-intel enrichment, priority/risk/exposure scoring, control-coverage and network-reachability analysis, SBOM parsing, attack-chain grouping.</td></tr>
+        <tr><td class="mono">remediation/schema/</td><td><code>normalized-finding-schema.md</code> &mdash; the single source of truth for every field name in the Finding schema.</td></tr>
+        <tr><td class="mono">remediation/config/</td><td>Every admin-editable policy as YAML &mdash; priority weights, SLA windows, remediation policy, risk-scoring weights &mdash; read fresh on every request, never hardcoded.</td></tr>
+        <tr><td class="mono">.claude/agents/*.md</td><td>Every subagent's prompt and its tool-access frontmatter &mdash; the actual enforcement point behind &ldquo;never executes against real infrastructure.&rdquo; See &sect;9.</td></tr>
+        <tr><td class="mono">.claude/commands/*.md</td><td>The <code>/vulnhunt</code> and <code>/remediate</code> slash-command orchestrators that sequence the subagents.</td></tr>
+        <tr><td class="mono">cli/vulnhunter.py</td><td>Headless pipeline runner &mdash; the same entry point the dashboard's <code>/run</code> page calls as a subprocess.</td></tr>
+        <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group &mdash; 1,458 tests today, all passing. Hand-rolled fakes, not vendor mock libraries.</td></tr>
+        <tr><td class="mono">docs/enterprise-suite/</td><td>Fifteen HTML reference documents (architecture, RBAC, connectors, pricing, etc.), each also published as a shareable page &mdash; see <code>MANIFEST.md</code> for the sync rules.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ 4. Running the application locally ============ -->
+  <section class="doc-section" id="sec-4">
+    <h1 class="section-h1">4. Running the application locally</h1>
+    <ol class="numbered">
+      <li>Install the dashboard's dependencies: <code>pip install -r dashboard/requirements.txt</code></li>
+      <li>Start the server: <code>python dashboard/app.py</code></li>
+      <li>Open <code>https://127.0.0.1:5050</code> in a browser.</li>
+    </ol>
+    <div class="callout">
+      <span class="label">HTTPS is on by default</span>
+      <p>The first run auto-generates a local self-signed certificate into dashboard/certs/ and serves HTTPS from then on &mdash; your browser will show a one-time &ldquo;not private&rdquo; warning, which is expected for a self-signed cert. Click through it (Advanced &rarr; Proceed in Chrome/Edge), or install dashboard/certs/cert.pem into your OS's trusted-root store once to make the warning disappear permanently. Set VULNHUNTER_DISABLE_TLS=true before running the command above to fall back to plain HTTP instead.</p>
+    </div>
+    <p>Two seed accounts ship with the repository (see dashboard/auth/users.json) so the app is usable immediately:</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Email</th><th>Password</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">admin@vulnhunter.local</td><td class="mono">ChangeMe123!</td><td>Admin</td></tr>
+        <tr><td class="mono">analyst@vulnhunter.local</td><td class="mono">ChangeMe123!</td><td>User</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="muted-note">These are intentionally public demo credentials, documented in the repo itself &mdash; change or remove them (same users.json file, or a real user record once auth/users.json is replaced with real accounts) before any deployment a real customer will reach.</p>
+  </section>
+
+  <!-- ============ 5. Running the two pipelines ============ -->
+  <section class="doc-section" id="sec-5">
+    <h1 class="section-h1">5. Running the two pipelines</h1>
+
+    <h2 class="section-h2" id="sec-5-1">5.1 Interactively, inside Claude Code</h2>
+    <pre class="codeblock"><code>claude
+/vulnhunt &lt;path-to-target-repo&gt; [--fix]
+/vulnhunt vulnerable-demo-app --fix
+/vulnhunt vulnerable-demo-app --verify VULN-2 vulnhunter/auto-fixes-&lt;branch&gt;
+/remediate                     # ingests remediation/sample-data/* by default
+/remediate --generate          # also generates Ansible playbooks</code></pre>
+
+    <h2 class="section-h2" id="sec-5-2">5.2 Headless &mdash; CI, cron, or the dashboard's own Run Pipeline page</h2>
+    <pre class="codeblock"><code>python cli/vulnhunter.py --dry-run scan vulnerable-demo-app --fix   # preview only, no spend
+python cli/vulnhunter.py scan vulnerable-demo-app --fix             # real run, spends API usage
+python cli/vulnhunter.py --dry-run remediate --generate
+python cli/vulnhunter.py remediate --generate</code></pre>
+    <p>The dashboard's own /run page is a thin UI over this exact same entry point &mdash; same dry-run default, same confirm gate, same budget cap (default $2.00, admin-adjustable up to $500).</p>
+  </section>
+
+  <!-- ============ 6. Testing ============ -->
+  <section class="doc-section" id="sec-6">
+    <h1 class="section-h1">6. Testing</h1>
+    <pre class="codeblock"><code>python -m unittest discover -s tests -p "test_*.py"    # everything &mdash; 1,458 tests today
+python -m unittest tests.test_dashboard -v               # dashboard API + auth-gating tests
+python -m unittest tests.test_auth -v                     # passwords/sessions/users/OIDC</code></pre>
+    <p>GitHub Actions (.github/workflows/ci.yml) runs the full suite on every push and pull request. For JavaScript, <code>node --check &lt;file&gt;</code> only catches syntax errors &mdash; it will not catch a missing import, which only surfaces as a runtime error in the browser. Reload the actual page and check the console before calling a frontend change done.</p>
+  </section>
+
+  <!-- ============ 7. Git workflow conventions ============ -->
+  <section class="doc-section" id="sec-7">
+    <h1 class="section-h1">7. Git workflow conventions</h1>
+    <ul class="bullets">
+      <li>Branch off master for any real change; name the branch for what it does (fix-, feature-, or a short slug &mdash; this repo doesn't enforce a strict prefix, but a descriptive name beats a ticket number nobody else can look up).</li>
+      <li>Commit messages lead with what changed and, in the body, why &mdash; not a restatement of the diff. Two real examples from this repo's own history:</li>
+    </ul>
+    <pre class="codeblock"><code>Fix /api/status reporting a not-yet-created store as existing when
+checked after activity_log
+
+Make Chakra Petch the app's primary font, not just the login page's
+
+Scoped to .auth-hero-brand/.auth-hero-tagline/.login-brand before - now
+the single body-level font-family (everything else inherits it) so the
+same typeface carries through the sidebar, every dashboard, and every
+data table.</code></pre>
+    <ul class="bullets">
+      <li>Stage specific files by name, not git add -A &mdash; review git status before committing so a stray .env or credential file never lands in a commit.</li>
+      <li>Open a pull request with the gh CLI: <code>gh pr create --title "..." --body "..."</code> &mdash; summarize what changed and how it was tested, not a restatement of the title.</li>
+      <li>Never force-push to master, and never amend a commit that's already been pushed &mdash; create a new commit instead.</li>
+      <li>Run the full test suite before opening a PR, and again on the merged tree if you had to resolve a conflict &mdash; two branches can each be individually correct and still not verified together.</li>
+    </ul>
+  </section>
+
+  <!-- ============ 8. Extending the product ============ -->
+  <section class="doc-section" id="sec-8">
+    <h1 class="section-h1">8. Extending the product</h1>
+
+    <h2 class="section-h2" id="sec-8-1">8.1 Adding a new connector</h2>
+    <p>Every pull connector follows one small contract:</p>
+    <pre class="codeblock"><code>class SomeConnector:
+    def __init__(self, ...credentials..., session=None):
+        self.session = session or requests.Session()   # DI seam for tests
+
+    def test_connection(self):
+        """Cheapest real authenticated call - no confirm gate needed."""
+
+    def fetch_and_write_csv(self, output_path):
+        """Real fetch, confirm-gated at the route level, never here."""</code></pre>
+    <ol class="numbered">
+      <li>Write <code>remediation/connectors/&lt;name&gt;_connector.py</code> against the vendor's real, public API.</li>
+      <li>Decide the output shape: flatten into tenable_connector.CSV_FIELDNAMES (CVE-scoped host source), normalize directly to the Finding schema (already-typed posture source), or the asset-inventory shape.</li>
+      <li>Unit-test against a hand-rolled fake object, not the vendor SDK's own mocks.</li>
+      <li>Add <code>POST /api/&lt;name&gt;/test-connection</code> (admin-gated, no confirm) and <code>POST /api/&lt;name&gt;/fetch</code> (confirm-gated).</li>
+      <li>Wire api.js, a page module under pages/, and an app.js router entry.</li>
+      <li>Disclose the real verification status in the module docstring and the dashboard page &mdash; &ldquo;built against public docs, unit-tested against mocked responses, never exercised against a real account&rdquo; is the default and expected state for a new connector.</li>
+    </ol>
+
+    <h2 class="section-h2" id="sec-8-2">8.2 Adding a new remediation fixer</h2>
+    <div class="callout">
+      <span class="label">The one rule that's never relaxed</span>
+      <p>Any subagent that drafts a change to real infrastructure config gets Read, Write tools only &mdash; never Bash, never a network tool, never stored credentials. This is what makes &ldquo;nothing in this repository ever executes against real infrastructure automatically&rdquo; true by construction rather than by policy, and it applies to every fixer subagent without exception.</p>
+    </div>
+
+    <h2 class="section-h2" id="sec-8-3">8.3 Other extension points</h2>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>To add</th><th>Start here</th></tr></thead>
+      <tbody>
+        <tr><td>A new scoring rule</td><td><code>remediation/config/priority_rules.yaml</code> &mdash; no code change needed</td></tr>
+        <tr><td>A new dashboard page</td><td><code>dashboard/static/js/pages/</code> + an <code>app.js</code> router entry</td></tr>
+        <tr><td>A new finding taxonomy</td><td><code>remediation/enrichment/</code> + <code>normalized-finding-schema.md</code></td></tr>
+        <tr><td>A new remediable asset type</td><td>A new <code>remediation-fixer-*</code> subagent, Read/Write only</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ 9. The subagent safety model ============ -->
+  <section class="doc-section" id="sec-9">
+    <h1 class="section-h1">9. The subagent safety model</h1>
+    <p>Every subagent's tools: list in its own YAML frontmatter is a hard boundary, not a suggestion &mdash; the actual enforcement mechanism, not a runtime check the agent could talk its way around.</p>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Subagent</th><th>Tools</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">vuln-scanner</td><td class="mono">Read, Grep, Glob, Bash</td><td>No Edit/Write &mdash; physically cannot modify what it's scanning</td></tr>
+        <tr><td class="mono">vuln-triage-reporter</td><td class="mono">Write</td><td>Produces a report only &mdash; cannot scan or fix</td></tr>
+        <tr><td class="mono">vuln-fixer</td><td class="mono">Read, Edit, Write, Bash</td><td>New-branch-only git workflow; never commits to master</td></tr>
+        <tr><td class="mono">vuln-verifier</td><td class="mono">Read, Grep, Glob, Bash</td><td>Re-checks a fix via git show/git grep against a named branch; never checks it out</td></tr>
+        <tr><td class="mono">remediation-fixer-windows / -unix</td><td class="mono">Read, Write</td><td>Drafts a playbook; cannot run one &mdash; no Bash, no network</td></tr>
+        <tr><td class="mono">remediation-fixer-ot</td><td class="mono">Read, Write</td><td>Compensating-control recommendation only, never a patch script</td></tr>
+        <tr><td class="mono">remediation-fixer-application</td><td class="mono">Read, Write</td><td>Dependency-upgrade plan only; cannot edit a manifest or run a package manager</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ 10. Where to go deeper ============ -->
+  <section class="doc-section" id="sec-10">
+    <h1 class="section-h1">10. Where to go deeper</h1>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Topic</th><th>Read this</th></tr></thead>
+      <tbody>
+        <tr><td>Full product story, both pipelines, roadmap</td><td><code>KNOWLEDGE_TRANSFER.md</code></td></tr>
+        <tr><td>Dashboard architecture, auth, production hardening</td><td><code>dashboard/README.md</code></td></tr>
+        <tr><td>Headless CLI usage in detail</td><td><code>cli/README.md</code></td></tr>
+        <tr><td>Every technical subsystem in depth</td><td><code>docs/enterprise-suite/</code> (architecture, vuln-engine, remediation-engine, connectors, rbac-governance, ai-capabilities, reporting, pages, developer-guide)</td></tr>
+        <tr><td>Task-oriented &ldquo;how do I&hellip;?&rdquo; answers</td><td><code>docs/enterprise-suite/user-guide.html</code> and <code>docs/FAQ.md</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ Appendix A ============ -->
+  <section class="doc-section appendix" id="appendix-a">
+    <h1 class="section-h1">Appendix A: Command reference</h1>
+    <pre class="codeblock"><code>git clone https://github.com/pavankumar-evani/VulnHunter.git
+pip install -r dashboard/requirements.txt
+python dashboard/app.py                 # https://127.0.0.1:5050
+python -m unittest discover -s tests -p "test_*.py"
+python cli/vulnhunter.py --dry-run scan &lt;path&gt; --fix
+python cli/vulnhunter.py --dry-run remediate --generate
+gh pr create --title "..." --body "..."</code></pre>
+  </section>
+
+</div>
+</body>
+</html>

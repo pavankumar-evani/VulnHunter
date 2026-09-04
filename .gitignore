@@ -36,3 +36,4 @@ dashboard/certs/
 *.pem
 *.key
 *.crt
+deliverables/

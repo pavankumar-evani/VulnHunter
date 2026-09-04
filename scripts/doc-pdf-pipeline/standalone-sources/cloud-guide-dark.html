@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VulnHunter Cloud Hosting &amp; Commercial Launch Guide</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+  --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+  --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+  --med: #fbbf24; --low: #60a5fa;
+  --warn: #d9a441; --warn-soft: #241d10;
+  --sans: 'Chakra Petch', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+}
+
+@page { margin: 0; }
+tr { break-inside: avoid; page-break-inside: avoid; }
+h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+
+* { box-sizing: border-box; }
+html { background: var(--paper); -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--sans); font-size: 15px; line-height: 1.65;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+h1, h2, h3 { font-family: var(--sans); letter-spacing: -0.01em; }
+p, li { max-width: 74ch; }
+code, .mono { font-family: var(--mono); }
+
+.brk { break-before: page; page-break-before: always; }
+
+/* ---------- Suitebar ---------- */
+.suitebar { display: flex; align-items: center; gap: 10px; padding: 11px 26px; background: #060a16; color: #fff; font-size: 0.8rem; }
+.suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.78rem; color: #fff; }
+.suitebar .sep { opacity: 0.35; }
+.suitebar .doclabel { opacity: 0.85; }
+
+/* ---------- Shell / layout ---------- */
+.shell { max-width: 860px; margin: 0 auto; padding: 50px 50px 90px; }
+
+/* ---------- Cover ---------- */
+.cover { padding-top: 26vh; min-height: 46vh; }
+.cover-mark { color: var(--accent); font-weight: 700; font-size: 0.85rem; letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 22px; }
+.cover-title { font-size: 2.7rem; font-weight: 700; color: var(--ink); line-height: 1.12; margin: 0 0 22px; max-width: 20ch; }
+.cover-sub { font-size: 1.1rem; color: var(--muted); max-width: 56ch; line-height: 1.6; margin: 0 0 60px; }
+.cover-foot { font-size: 0.85rem; color: var(--muted); }
+
+/* ---------- TOC ---------- */
+.toc-page h1 { margin-top: 0; }
+.toc-list { margin-top: 18px; }
+.toc-h1 { margin-top: 14px; }
+.toc-h1 a { font-weight: 600; font-size: 1rem; color: var(--ink); }
+.toc-h2 { margin: 2px 0 2px 22px; }
+.toc-h2 a { font-size: 0.86rem; color: var(--muted); }
+.toc-list a { text-decoration: none; }
+
+/* ---------- Headings ---------- */
+h1 { font-size: 1.65rem; font-weight: 700; color: var(--ink); margin: 44px 0 18px; }
+section:first-of-type h1, .shell > h1:first-child { margin-top: 0; }
+h2 { font-size: 1.2rem; font-weight: 600; color: var(--accent-deep); margin: 32px 0 12px; }
+h3 { font-size: 1.02rem; font-weight: 600; color: var(--ink); margin: 22px 0 8px; }
+
+/* ---------- Body text ---------- */
+p { margin: 0 0 16px; color: var(--ink); }
+p.note { font-style: italic; color: var(--muted); font-size: 0.86rem; }
+ul, ol { margin: 0 0 18px; padding-left: 1.4em; }
+ul li, ol li { margin-bottom: 8px; line-height: 1.6; max-width: 70ch; }
+ul li::marker { color: var(--accent); }
+ol li::marker { color: var(--accent-deep); font-weight: 600; }
+
+/* ---------- Tables ---------- */
+.table-wrap { margin: 18px 0 26px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.82rem; }
+thead th {
+  background: var(--surface-2); color: var(--muted); text-align: left;
+  text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.66rem; font-weight: 600;
+  padding: 9px 13px; border-bottom: 1px solid var(--line);
+}
+tbody td { padding: 9px 13px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink); line-height: 1.5; }
+tbody tr:last-child td { border-bottom: none; }
+tbody td:first-child { font-weight: 600; }
+tr.total td { background: var(--surface-2); font-weight: 700; }
+tr { break-inside: avoid; page-break-inside: avoid; }
+
+/* ---------- Callouts ---------- */
+.callout { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 3px 10px 10px 3px; padding: 14px 20px; margin: 20px 0; break-inside: avoid; page-break-inside: avoid; }
+.callout .label { color: var(--accent-deep); font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+.callout p { margin: 0; font-size: 0.92rem; color: var(--ink); line-height: 1.6; max-width: none; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout.warn .label { color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="suitebar">
+  <span class="mark">
+    <svg width="14" height="14" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>
+    VulnHunter
+  </span>
+  <span class="sep">/</span><span class="doclabel">Cloud Hosting &amp; Commercial Launch Guide</span>
+</div>
+
+<div class="shell">
+
+<section class="cover">
+  <div class="cover-mark">VULNHUNTER</div>
+  <div class="cover-title">Cloud Hosting &amp; Commercial Launch Guide</div>
+  <p class="cover-sub">Compute, database, storage, networking, licensing, and go-to-market costs for running VulnHunter as a commercial service — on AWS, Azure, OCI, or a budget-friendly alternative.</p>
+  <p class="cover-foot">VulnHunter Development LLC  ·  Prepared September 2026</p>
+</section>
+
+<section class="toc-page brk">
+  <h1>Contents</h1>
+  <nav class="toc-list">
+<div class="toc-h1"><a href="#s1">1. How to use this guide</a></div>
+<div class="toc-h1"><a href="#s2">2. What you're actually deploying</a></div>
+<div class="toc-h1"><a href="#s3">3. Sizing tiers used throughout this guide</a></div>
+<div class="toc-h1"><a href="#s4">4. Cost snapshot: all four clouds, all three tiers</a></div>
+<div class="toc-h1"><a href="#s5">5. Amazon Web Services</a></div>
+<div class="toc-h2"><a href="#s5-1">5.1 Compute</a></div>
+<div class="toc-h2"><a href="#s5-2">5.2 Database</a></div>
+<div class="toc-h2"><a href="#s5-3">5.3 Storage</a></div>
+<div class="toc-h2"><a href="#s5-4">5.4 Load balancing &amp; TLS</a></div>
+<div class="toc-h2"><a href="#s5-5">5.5 Web Application Firewall</a></div>
+<div class="toc-h2"><a href="#s5-6">5.6 DNS &amp; domain</a></div>
+<div class="toc-h2"><a href="#s5-7">5.7 Network &amp; firewall rules</a></div>
+<div class="toc-h2"><a href="#s5-8">5.8 Outbound email</a></div>
+<div class="toc-h2"><a href="#s5-9">5.9 Free tier &amp; startup credits</a></div>
+<div class="toc-h2"><a href="#s5-10">5.10 Provisioning checklist</a></div>
+<div class="toc-h1"><a href="#s6">6. Microsoft Azure</a></div>
+<div class="toc-h2"><a href="#s6-1">6.1 Compute</a></div>
+<div class="toc-h2"><a href="#s6-2">6.2 Database</a></div>
+<div class="toc-h2"><a href="#s6-3">6.3 Cost by tier</a></div>
+<div class="toc-h2"><a href="#s6-4">6.4 Network &amp; firewall rules</a></div>
+<div class="toc-h2"><a href="#s6-5">6.5 Free tier &amp; credits</a></div>
+<div class="toc-h2"><a href="#s6-6">6.6 Provisioning checklist</a></div>
+<div class="toc-h1"><a href="#s7">7. Oracle Cloud Infrastructure (OCI)</a></div>
+<div class="toc-h2"><a href="#s7-1">7.1 Compute</a></div>
+<div class="toc-h2"><a href="#s7-2">7.2 Database</a></div>
+<div class="toc-h2"><a href="#s7-3">7.3 Storage, load balancing, WAF, DNS</a></div>
+<div class="toc-h2"><a href="#s7-4">7.4 Network &amp; firewall rules</a></div>
+<div class="toc-h2"><a href="#s7-5">7.5 Provisioning checklist</a></div>
+<div class="toc-h1"><a href="#s8">8. Budget-friendly alternative: DigitalOcean</a></div>
+<div class="toc-h2"><a href="#s8-1">8.1 Cost by tier</a></div>
+<div class="toc-h2"><a href="#s8-2">8.2 Network &amp; firewall rules</a></div>
+<div class="toc-h2"><a href="#s8-3">8.3 Provisioning checklist</a></div>
+<div class="toc-h1"><a href="#s9">9. Licenses required</a></div>
+<div class="toc-h1"><a href="#s10">10. Domain registration &amp; launching the website</a></div>
+<div class="toc-h1"><a href="#s11">11. Support portal options</a></div>
+<div class="toc-h1"><a href="#s12">12. Community &amp; documentation portal options</a></div>
+<div class="toc-h1"><a href="#s13">13. Marketing / landing site hosting</a></div>
+<div class="toc-h1"><a href="#s14">14. CI/CD and uptime monitoring</a></div>
+<div class="toc-h1"><a href="#s15">15. Standing up the business side</a></div>
+<div class="toc-h2"><a href="#s15-1">15.1 Entity formation</a></div>
+<div class="toc-h2"><a href="#s15-2">15.2 Payment processing</a></div>
+<div class="toc-h2"><a href="#s15-3">15.3 Insurance</a></div>
+<div class="toc-h1"><a href="#s16">16. All-in monthly cost worksheet</a></div>
+<div class="toc-h1"><a href="#s17">17. Recommended path by growth stage</a></div>
+<div class="toc-h1"><a href="#s18">18. What to verify before you commit</a></div>
+<div class="toc-h1"><a href="#appendix-a">Appendix A: Network &amp; firewall rule reference</a></div>
+<div class="toc-h1"><a href="#appendix-b">Appendix B: Glossary</a></div>
+  </nav>
+</section>
+
+<h1 id="s1" class="brk">1. How to use this guide</h1>
+<p>This guide prices out everything needed to run VulnHunter as a real, commercially-hosted product: the application infrastructure itself (compute, database, storage, networking, TLS, a firewall/WAF, DNS), the licenses the software stack requires (there are none that cost money — see §9), and the business-side services a paying product needs on top of the code (a support desk, a documentation/community portal, a marketing site, and the basic legal/financial scaffolding of a company that can accept payment).</p>
+<p>Every dollar figure below comes from each vendor's own public pricing page or pricing API, checked in September 2026, and is labeled with what it covers. Cloud pricing changes — sometimes with very little notice, as several of the callouts below show — so treat every number here as a planning estimate, not a quote, and re-check the vendor's own calculator before committing budget. Two things are deliberately excluded from every total in this guide, called out again in §18: outbound data-transfer (egress) charges, which depend on real traffic volume this guide has no way to predict, and any vendor's promotional first-year discount, since those expire and this guide prices what the service actually costs to run.</p>
+<div class="callout warn"><div class="label">⚠ Read this before budgeting</div><p>Wherever a number in this guide could not be verified against a real, current, public source — most notably Oracle Cloud's own database pricing in §7.2 — it is called out explicitly, in the same amber box as this one, rather than filled in with a guess. Section 18 collects every one of those gaps in a single checklist.</p></div>
+<h1 id="s2">2. What you're actually deploying</h1>
+<p>VulnHunter's dashboard is one FastAPI process (Python) serving a JSON API and a hand-rolled vanilla-JS single-page app — no message queue, cache layer, or microservice boundary to provision. It talks to a local SQLite database today, accessed through SQLAlchemy Core specifically so that moving to a real managed Postgres database for production is a connection-string change, not a rewrite. That's the one architecture change every deployment in this guide makes: point the app at a managed PostgreSQL instance instead of the local SQLite file, so the database survives an instance restart or redeploy and can be backed up and scaled independently of the app.</p>
+<p>Beyond the app and its database, a real deployment needs: persistent storage for generated artifacts and logs; a load balancer terminating TLS in front of the app (uvicorn's own built-in TLS, used today for local development, is not what should face the public internet); a Web Application Firewall in front of that; a registered domain with DNS pointed at the load balancer; outbound email for the notification scheduler's alerts; and network/firewall rules that allow exactly the traffic the app needs and nothing else (§ Network &amp; firewall in each cloud section gives the concrete rule set). If either pipeline is triggered from the dashboard's own Run Pipeline page in production, the host running the dashboard also needs the Claude Code CLI installed and its own API credentials — that spend is metered separately by Anthropic, not by the cloud host, and is not part of any figure in this guide.</p>
+<h1 id="s3">3. Sizing tiers used throughout this guide</h1>
+<p>Every cost table below is priced at three tiers, defined by roughly how many assets (hosts, applications, cloud resources — whatever normalized findings are tracked against) the deployment carries at once. Concurrent dashboard users scale with asset count in practice, so a separate axis wasn't needed.</p>
+<div class="table-wrap"><table><colgroup><col style="width:20.00%"><col style="width:26.00%"><col style="width:54.00%"></colgroup><thead><tr><th>Tier</th><th>Assets tracked</th><th>Typical customer</th></tr></thead><tbody><tr><td>Pilot</td><td>~1,500</td><td>A single design partner or an internal proof-of-concept before the first paying contract.</td></tr><tr><td>Mid</td><td>~7,500</td><td>A handful of paying mid-market customers, or one larger customer's full estate.</td></tr><tr><td>Large</td><td>25,000+</td><td>Multiple enterprise customers, or one enterprise customer at full scale — availability and change-management expectations rise here too, not just data volume.</td></tr></tbody></table></div>
+<p class="note">These map to infrastructure sizing, not to VulnHunter's own per-team data scoping (see the RBAC model in the main repo's documentation) — a single deployment at any tier can still serve multiple customer teams if VULNHUNTER_REQUIRE_LOGIN_FOR_READS is enabled and teams are assigned.</p>
+<h1 id="s4">4. Cost snapshot: all four clouds, all three tiers</h1>
+<p>Infrastructure only — compute, database, storage, load balancer/TLS, WAF, DNS, outbound email. Business-side costs (support desk, docs portal, entity formation, etc.) are tallied separately in §16, since those don't scale with cloud choice.</p>
+<div class="table-wrap"><table><colgroup><col style="width:23.53%"><col style="width:25.49%"><col style="width:25.49%"><col style="width:25.49%"></colgroup><thead><tr><th>Cloud</th><th>Pilot (~1,500)</th><th>Mid (~7,500)</th><th>Large (25,000+)</th></tr></thead><tbody><tr><td>AWS</td><td>~$120 / mo</td><td>~$378 / mo</td><td>~$809 / mo (~$1,089 HA)</td></tr><tr><td>Azure — WAF off</td><td>~$29 / mo</td><td>~$287 / mo</td><td>not recommended at this scale</td></tr><tr><td>Azure — WAF on</td><td>$262.80 fixed floor makes this disproportionate at pilot scale</td><td>~$557 / mo</td><td>~$1,364 / mo (WAF included)</td></tr><tr><td>OCI — paid tier</td><td>~$93 / mo</td><td>~$189 / mo</td><td>~$399 / mo</td></tr><tr><td>OCI — Always Free compute</td><td>~$39 / mo</td><td>not applicable at this scale</td><td>not applicable</td></tr><tr><td>DigitalOcean (budget)</td><td>~$99 / mo</td><td>~$237 / mo</td><td>not separately modeled — see §8</td></tr></tbody></table></div>
+<div class="callout warn"><div class="label">⚠ Two footnotes that change these numbers</div><p>OCI's figures above exclude its managed-database price, which Oracle's own pricing page would not return to an automated check — get a live quote before treating any OCI total as final (§7.2). And every figure in every row excludes data-transfer/egress — see §18.</p></div>
+<h1 id="s5">5. Amazon Web Services</h1>
+<p>The most mature option of the four, with the deepest managed-service catalog and the largest ecosystem of Ansible/Terraform tooling already available if VulnHunter's own remediation-fixer playbooks need a reference target.</p>
+<h2 id="s5-1">5.1 Compute</h2>
+<p>Run the FastAPI app on EC2, behind the load balancer described in §5.4 — not directly exposed to the internet. A single instance is enough through the Mid tier; Large should run at least two instances behind the load balancer for availability, not just capacity.</p>
+<div class="table-wrap"><table><colgroup><col style="width:29.41%"><col style="width:23.53%"><col style="width:23.53%"><col style="width:23.53%"></colgroup><thead><tr><th>Tier</th><th>Instance class</th><th>Instances</th><th>Cost</th></tr></thead><tbody><tr><td>Pilot</td><td>t3.medium (2 vCPU / 4 GB)</td><td>1</td><td>$30.37 / mo</td></tr><tr><td>Mid</td><td>larger general-purpose class (e.g. m5.xlarge tier)</td><td>1</td><td>included in $378 / mo total</td></tr><tr><td>Large</td><td>larger general-purpose class, load-balanced pair for HA</td><td>2+</td><td>included in $809–1,089 / mo total</td></tr></tbody></table></div>
+<h2 id="s5-2">5.2 Database</h2>
+<p>Amazon RDS for PostgreSQL. This is the connection-string change described in §2 — point SQLAlchemy at the RDS endpoint instead of the local SQLite file.</p>
+<div class="table-wrap"><table><colgroup><col style="width:32.61%"><col style="width:39.13%"><col style="width:28.26%"></colgroup><thead><tr><th>Tier</th><th>Configuration</th><th>Cost</th></tr></thead><tbody><tr><td>Pilot</td><td>db.t4g.medium, 20 GB storage, single-AZ</td><td>$49.75 / mo</td></tr><tr><td>Mid</td><td>larger instance class, single-AZ or Multi-AZ</td><td>included in $378 / mo total</td></tr><tr><td>Large</td><td>larger instance class, Multi-AZ for automatic failover</td><td>included in $809–1,089 / mo total</td></tr></tbody></table></div>
+<h2 id="s5-3">5.3 Storage</h2>
+<p>EBS gp3 for the instance's own disk (generated Ansible playbooks, logs, the local artifact tree) plus S3 for durable backups of the database and those same artifacts. At Pilot scale this is a small line item — roughly $4/mo for 20 GB of gp3 plus incidental S3 backup storage — that grows with retention policy and artifact volume rather than asset count directly.</p>
+<h2 id="s5-4">5.4 Load balancing &amp; TLS</h2>
+<p>An Application Load Balancer (ALB) terminating TLS with a free AWS Certificate Manager (ACM) certificate, forwarding to the EC2 instance(s) on the app's port. This replaces uvicorn's own self-signed development certificate for any real deployment.</p>
+<div class="table-wrap"><table><colgroup><col style="width:36.96%"><col style="width:63.04%"></colgroup><thead><tr><th>Component</th><th>Pilot cost</th></tr></thead><tbody><tr><td>Application Load Balancer + ACM certificate</td><td>$22.27 / mo</td></tr></tbody></table></div>
+<h2 id="s5-5">5.5 Web Application Firewall</h2>
+<p>AWS WAF attached to the ALB, with a managed rule group (e.g. the Core Rule Set) covering common injection and bot patterns before traffic reaches the app.</p>
+<div class="table-wrap"><table><colgroup><col style="width:36.96%"><col style="width:63.04%"></colgroup><thead><tr><th>Component</th><th>Pilot cost</th></tr></thead><tbody><tr><td>AWS WAF, one Web ACL + managed rule group</td><td>$12.60 / mo</td></tr></tbody></table></div>
+<h2 id="s5-6">5.6 DNS &amp; domain</h2>
+<p>Route 53 hosts the DNS zone ($0.90/mo for the hosted zone at Pilot scale) regardless of where the domain itself was registered — see §10 for registrar comparison, including Route 53 Domains as one of the options.</p>
+<h2 id="s5-7">5.7 Network &amp; firewall rules</h2>
+<p>A VPC with a public subnet (load balancer only) and a private subnet (app instances and the RDS database, no direct internet route). Concrete security-group rules:</p>
+<ul><li>Inbound to the ALB: TCP 443 from 0.0.0.0/0 (and only from there — nothing else in the VPC accepts a public inbound connection).</li><li>Inbound to the app instance(s): TCP 8000 (or whatever port the app listens on) from the ALB's security group only.</li><li>Inbound to RDS: TCP 5432 from the app instances' security group only — never from 0.0.0.0/0.</li><li>Outbound from the app instance(s): HTTPS to CISA's KEV feed and FIRST.org's EPSS API (threat-intel enrichment), to api.anthropic.com if the dashboard triggers a pipeline run, and to github.com/api.github.com if vuln-fixer pushes a branch. Deny outbound by default and allow these explicitly rather than opening all outbound traffic.</li><li>SSH/admin access: no open port 22 to 0.0.0.0/0 — use AWS Systems Manager Session Manager (no inbound port needed at all) or restrict TCP 22 to a specific admin IP range.</li></ul><h2 id="s5-8">5.8 Outbound email</h2>
+<p>Amazon SES for the notification scheduler's outbound alerts — $0.05/mo at Pilot scale (SES bills per message sent, so this line grows with alert volume, not asset count).</p>
+<h2 id="s5-9">5.9 Free tier &amp; startup credits</h2>
+<p>AWS restructured its free tier on July 15, 2025: new accounts now get up to $200 in credit over their first 6 months, replacing the older “12 months free” model — plan for that credit to run out well before Pilot-tier revenue does. Separately, AWS Activate (for genuinely new companies) offers $1,000–$5,000 in the self-serve Founders tier, and up to $200,000 for companies backed by a participating VC or accelerator (Portfolio tier) — worth applying for regardless of which cloud is chosen for production, since Activate credit can be used to offset the AWS bill specifically.</p>
+<h2 id="s5-10">5.10 Provisioning checklist</h2>
+<ol><li>Create the VPC (public + private subnets) and security groups from §5.7.</li><li>Launch the RDS PostgreSQL instance in the private subnet; note its endpoint.</li><li>Point the app's database connection string at the RDS endpoint instead of the local SQLite file; run any pending migrations.</li><li>Launch the EC2 instance(s) in the private subnet; deploy the app; confirm it's reachable only from inside the VPC so far.</li><li>Request or import an ACM certificate for the domain; create the ALB in the public subnet with an HTTPS listener using that certificate; target the app instance(s).</li><li>Create a WAF Web ACL with a managed rule group; associate it with the ALB.</li><li>Create the Route 53 hosted zone; point the domain's nameservers at it (or, if the domain is registered elsewhere, add the NS records there); create an A/ALIAS record for the domain pointing at the ALB.</li><li>Verify a sending domain/address in SES and request production access (new SES accounts start in a sending-limited sandbox).</li><li>Set VULNHUNTER_SESSION_SECRET to a real, stable value before pointing real users at the deployment.</li></ol><h1 id="s6" class="brk">6. Microsoft Azure</h1>
+<p>Azure's per-tier numbers below were priced directly against the live Azure Retail Prices API (prices.azure.com), not the calculator web page, because that page's totals are rendered client-side by JavaScript in a way an automated check can't read reliably. The prices themselves are Microsoft's own published rates either way.</p>
+<h2 id="s6-1">6.1 Compute</h2>
+<div class="table-wrap"><table><colgroup><col style="width:31.91%"><col style="width:34.04%"><col style="width:34.04%"></colgroup><thead><tr><th>Tier</th><th>Configuration</th><th>Cost</th></tr></thead><tbody><tr><td>Pilot</td><td>App Service Plan, B1 tier</td><td>$12.41 / mo</td></tr><tr><td>Mid / Large</td><td>larger App Service tier or a small VM Scale Set</td><td>included in tier totals below</td></tr></tbody></table></div>
+<h2 id="s6-2">6.2 Database</h2>
+<div class="table-wrap"><table><colgroup><col style="width:31.91%"><col style="width:34.04%"><col style="width:34.04%"></colgroup><thead><tr><th>Tier</th><th>Configuration</th><th>Cost</th></tr></thead><tbody><tr><td>Pilot</td><td>Azure Database for PostgreSQL — Flexible Server, B1ms</td><td>$16.09 / mo</td></tr></tbody></table></div>
+<p>Storage, the DNS zone, and outbound email add well under $1/mo combined at Pilot scale on Azure — small enough relative to compute and database that they're folded into the tier totals below rather than broken out.</p>
+<div class="callout warn"><div class="label">⚠ Azure's WAF has a fixed floor, not a linear cost</div><p>Application Gateway WAF_v2 — the product that provides load balancing, TLS termination, and the WAF together on Azure — has a fixed cost of $262.80/mo regardless of traffic. That's larger than the entire rest of the Pilot-tier stack combined, which is why the Pilot and Mid “no-WAF” figures below deliberately exclude it: paying $262.80/mo to protect a few thousand dollars a month of Pilot-tier infrastructure is a real business decision, not a default. Budget for it explicitly once real customer traffic — and the compliance expectations that come with it — justify the fixed cost.</p></div>
+<h2 id="s6-3">6.3 Cost by tier</h2>
+<div class="table-wrap"><table><colgroup><col style="width:25.00%"><col style="width:29.17%"><col style="width:22.92%"><col style="width:22.92%"></colgroup><thead><tr><th>Tier</th><th>Configuration</th><th>No WAF</th><th>With WAF</th></tr></thead><tbody><tr><td>Pilot</td><td>B1 App Service + B1ms Postgres</td><td>$29.41 / mo</td><td>not recommended — WAF floor alone exceeds this whole tier</td></tr><tr><td>Mid</td><td>scaled App Service + Postgres tier</td><td>$287.23 / mo</td><td>$557 / mo</td></tr><tr><td>Large</td><td>scaled App Service + Postgres tier</td><td>not recommended at this scale</td><td>$1,364.18 / mo (Application Gateway WAF_v2 covers LB + TLS + WAF in one product at this tier)</td></tr></tbody></table></div>
+<h2 id="s6-4">6.4 Network &amp; firewall rules</h2>
+<p>A Virtual Network (VNet) with an application subnet and a database subnet, Network Security Groups (NSGs) enforcing the same shape of rules as AWS's security groups in §5.7: public HTTPS only at the Application Gateway, app-to-database traffic restricted to the app subnet's address range, no public inbound management port, and outbound restricted to the KEV/EPSS feeds, api.anthropic.com, and GitHub.</p>
+<h2 id="s6-5">6.5 Free tier &amp; credits</h2>
+<p>Azure's standard free account includes $200 of credit for the first 30 days plus a set of always-free service tiers (which can cover the B1 App Service tier itself for a time). Microsoft for Startups Founders Hub is Azure's equivalent of AWS Activate, offering credit tiers up to $150,000 for qualifying early-stage companies.</p>
+<h2 id="s6-6">6.6 Provisioning checklist</h2>
+<ol><li>Create the VNet with app and database subnets, and the NSGs from §6.4.</li><li>Provision the PostgreSQL Flexible Server in the database subnet; point the app's connection string at it.</li><li>Create the App Service Plan and deploy the app, restricted to the app subnet via VNet integration.</li><li>Decide on the WAF question in the callout above; provision Application Gateway (with WAF_v2 if justified) or a plain Standard Load Balancer with a separately-managed TLS certificate if not.</li><li>Create the Azure DNS zone, delegate the domain's nameservers to it (or add equivalent records at the existing registrar), and point the domain at the Application Gateway/Load Balancer's public IP.</li><li>Set VULNHUNTER_SESSION_SECRET before real traffic arrives.</li></ol><h1 id="s7" class="brk">7. Oracle Cloud Infrastructure (OCI)</h1>
+<div class="callout warn"><div class="label">⚠ Lower confidence than the AWS/Azure sections above</div><p>oracle.com's own pricing pages returned an HTTP 403 to every automated pricing check made while researching this guide — confirmed on two separate attempts, not a one-off network hiccup. The compute and Always Free figures below come from docs.oracle.com and secondary sources and are reasonably solid; the managed-database figure could not be sourced at all (see §7.2) and must not be treated as final.</p></div>
+<h2 id="s7-1">7.1 Compute</h2>
+<p>OCI's most distinctive offer is its Always Free tier, which includes a genuinely usable amount of Arm-based Ampere A1 compute at zero cost — but that allowance recently shrank:</p>
+<div class="callout warn"><div class="label">⚠ The Always Free allowance was cut in half, mid-2026</div><p>Effective June 15, 2026, Oracle reduced the Always Free Ampere A1 allocation from 4 OCPU / 24 GB RAM to 2 OCPU / 12 GB RAM — and, as of August 18, 2026, has already begun terminating instances that were still running on the old, larger allocation. Any Pilot-tier plan that leans on Always Free compute needs to be sized to the new 2 OCPU / 12 GB ceiling and should not assume the allowance is stable going forward.</p></div>
+<div class="table-wrap"><table><colgroup><col style="width:31.91%"><col style="width:34.04%"><col style="width:34.04%"></colgroup><thead><tr><th>Tier</th><th>Compute approach</th><th>Cost</th></tr></thead><tbody><tr><td>Pilot (Always Free)</td><td>2 OCPU / 12 GB Ampere A1 (current allowance)</td><td>~$39 / mo all-in (paid components only)</td></tr><tr><td>Pilot (paid tier)</td><td>Paid VM shape, no reliance on Always Free</td><td>~$93 / mo all-in</td></tr><tr><td>Mid</td><td>Paid VM shape, scaled up</td><td>~$189 / mo all-in</td></tr><tr><td>Large</td><td>Paid VM shape, scaled up further</td><td>~$399 / mo all-in</td></tr></tbody></table></div>
+<h2 id="s7-2">7.2 Database</h2>
+<div class="callout warn"><div class="label">⚠ Not priced — get a live quote before budgeting</div><p>OCI's managed PostgreSQL-compatible database pricing could not be retrieved from any public source during this research, despite repeated attempts against Oracle's own pricing pages. The “all-in” figures above are therefore compute, storage, and networking only — they do not include a database line item, unlike every other cloud in this guide. Use OCI's own Cost Estimator tool (accessible from the OCI Console) to get a real, current database quote before treating OCI as comparable to the AWS/Azure/DigitalOcean totals elsewhere in this guide.</p></div>
+<h2 id="s7-3">7.3 Storage, load balancing, WAF, DNS</h2>
+<p>OCI Object Storage for backups and artifacts, an OCI Load Balancer for TLS termination, the OCI Web Application Firewall service in front of it, and OCI DNS (or an external registrar's DNS) for the domain — all included in the compute-approach totals in §7.1's table, subject to the same database caveat above.</p>
+<h2 id="s7-4">7.4 Network &amp; firewall rules</h2>
+<p>A Virtual Cloud Network (VCN) with public and private subnets, Network Security Groups scoped the same way as §5.7 and §6.4: public HTTPS only at the load balancer, database reachable only from the app subnet, no public admin port, outbound restricted to the KEV/EPSS feeds, api.anthropic.com, and GitHub.</p>
+<h2 id="s7-5">7.5 Provisioning checklist</h2>
+<ol><li>Before anything else: run OCI's Cost Estimator for the managed-database product and confirm the real price against §7.2's caveat.</li><li>Create the VCN, subnets, and security lists/NSGs from §7.4.</li><li>Provision the database service confirmed in step 1; point the app's connection string at it.</li><li>Launch the compute instance(s) — Always Free Ampere A1 (sized to the current 2 OCPU / 12 GB ceiling) for Pilot, a paid shape for Mid/Large — and deploy the app.</li><li>Provision the Load Balancer with a TLS certificate and the Web Application Firewall service in front of it.</li><li>Point the domain at the Load Balancer via OCI DNS or the existing registrar.</li><li>Set VULNHUNTER_SESSION_SECRET before real traffic arrives.</li></ol><h1 id="s8" class="brk">8. Budget-friendly alternative: DigitalOcean</h1>
+<p>Of the lower-cost providers checked for this guide, DigitalOcean came out as the most complete budget option — a real managed Postgres product and a real load balancer, which not every low-cost provider offers. Two comparable alternatives are worth naming directly: Vultr prices its equivalent droplets identically to DigitalOcean ($24/mo and $48/mo tiers), and Hetzner — historically the standout budget option — is no longer dramatically cheaper after four price increases through 2026 that cumulatively raised its CPX line roughly 225%; its comparable instance now runs about $22.61/mo against DigitalOcean's $24, which is closer to parity than a meaningful discount.</p>
+<h2 id="s8-1">8.1 Cost by tier</h2>
+<div class="table-wrap"><table><colgroup><col style="width:29.79%"><col style="width:46.81%"><col style="width:23.40%"></colgroup><thead><tr><th>Tier</th><th>Configuration</th><th>Cost</th></tr></thead><tbody><tr><td>Small (~Pilot)</td><td>Droplet ($24) + Managed PostgreSQL ($15.15) + block/Spaces storage (~$7.50) + Load Balancer ($12) + Cloudflare Pro as a WAF substitute ($20) + backups/monitoring add-ons</td><td>~$98.60 / mo</td></tr><tr><td>Mid</td><td>Scaled droplet + managed database tier, same component shape</td><td>~$237.05 / mo</td></tr><tr><td>Large</td><td>Not separately modeled — DigitalOcean's own component costs scale roughly linearly with droplet/database tier, but at 25,000+ assets, re-evaluate against AWS/Azure/OCI rather than assuming linear scaling holds</td><td>—</td></tr></tbody></table></div>
+<div class="callout warn"><div class="label">⚠ No native WAF product</div><p>DigitalOcean does not offer a Web Application Firewall of its own at any tier — the $20/mo Cloudflare Pro line above is a real substitute (Cloudflare's proxy sits in front of the droplet and applies its own WAF rules), not a DigitalOcean product. Confirm this tradeoff is acceptable before committing to DigitalOcean for a deployment that needs to make a specific WAF claim to a customer or auditor.</p></div>
+<h2 id="s8-2">8.2 Network &amp; firewall rules</h2>
+<p>DigitalOcean Cloud Firewalls, scoped the same way as every other cloud in this guide: public HTTPS only at the load balancer (or at Cloudflare, if proxying through it), database access restricted to the droplet's private network, no public admin port (use DigitalOcean's console access instead of exposing SSH, or restrict it to a specific admin IP), outbound restricted to the KEV/EPSS feeds, api.anthropic.com, and GitHub.</p>
+<h2 id="s8-3">8.3 Provisioning checklist</h2>
+<ol><li>Create the Droplet and the Managed PostgreSQL cluster in the same region/VPC; point the app's connection string at the managed database.</li><li>Create the Load Balancer with a Let's Encrypt certificate (DigitalOcean provisions and renews this automatically) targeting the Droplet.</li><li>If using Cloudflare as a WAF substitute, proxy the domain through Cloudflare and enable its WAF ruleset, pointing Cloudflare's origin record at the Load Balancer.</li><li>Configure the Cloud Firewall rules from §8.2.</li><li>Set VULNHUNTER_SESSION_SECRET before real traffic arrives.</li></ol><h1 id="s9" class="brk">9. Licenses required</h1>
+<p>None of VulnHunter's own software stack carries a license fee. Every component is permissively licensed open-source software, safe to use in a commercial, closed-source product without royalty:</p>
+<div class="table-wrap"><table><colgroup><col style="width:34.78%"><col style="width:28.26%"><col style="width:36.96%"></colgroup><thead><tr><th>Component</th><th>License</th><th>Commercial-use note</th></tr></thead><tbody><tr><td>Python, FastAPI, Starlette, Uvicorn</td><td>PSF / MIT / BSD</td><td>No fee, no attribution requirement in the shipped product.</td></tr><tr><td>SQLAlchemy</td><td>MIT</td><td>No fee.</td></tr><tr><td>PostgreSQL</td><td>The PostgreSQL License (permissive, similar to MIT)</td><td>No fee, no restriction on commercial or SaaS use.</td></tr><tr><td>SQLite (local/dev use)</td><td>Public domain</td><td>No fee.</td></tr><tr><td>Chakra Petch (typeface)</td><td>SIL Open Font License 1.1</td><td>No fee; may be embedded in the product and in generated documents. May not be sold on its own as a font product, which VulnHunter does not do.</td></tr></tbody></table></div>
+<p>The one recurring “license-shaped” cost some buyers expect is a paid TLS certificate from a commercial certificate authority — this is not actually required. Let's Encrypt issues the same trust-level certificate for $0, automatically renewed, and is what most of the checklists above already assume. A paid CA certificate (roughly $99–217/yr where offered) buys a vendor logo and a support contract, not stronger encryption, and is a procurement-checklist item for certain enterprise buyers rather than a technical necessity — see §13 for the current industry-wide certificate-lifetime change that applies regardless of which CA is used.</p>
+<h1 id="s10">10. Domain registration &amp; launching the website</h1>
+<div class="table-wrap"><table><colgroup><col style="width:27.66%"><col style="width:29.79%"><col style="width:42.55%"></colgroup><thead><tr><th>Registrar</th><th>Price</th><th>Note</th></tr></thead><tbody><tr><td>Cloudflare Registrar</td><td>~$10.44 / yr today, rising to ~$11.15 / yr on Nov 1, 2026</td><td>Sells at Cloudflare's own wholesale cost, no markup — the most transparent option; the increase tracks Verisign's wholesale price change, not a Cloudflare markup.</td></tr><tr><td>Porkbun</td><td>$11.08 / yr flat</td><td>No renewal-year price jump, which some registrars use as a bait-and-switch.</td></tr><tr><td>AWS Route 53 Domains</td><td>$16.00 / yr flat (effective July 1, 2026)</td><td>Convenient if already on AWS, but not the cheapest option.</td></tr><tr><td>Namecheap</td><td>~$10.98–18.48 / yr depending on year</td><td>Promo-driven first-year pricing that could not be verified against a stable published rate — confirm the actual renewal price, not just the first-year offer, before registering here.</td></tr></tbody></table></div>
+<p>Steps to go live, regardless of registrar or cloud: (1) register the domain; (2) point its nameservers at the DNS zone created in whichever cloud section above was chosen (or keep DNS at the registrar and just add the records that cloud's load balancer needs); (3) create the DNS record — typically an A or ALIAS/CNAME record — pointing the domain at the load balancer's address; (4) confirm the load balancer's TLS certificate covers that exact domain name; (5) wait for DNS propagation (usually minutes, occasionally up to 24–48 hours) and confirm the site loads over HTTPS with no certificate warning.</p>
+<h1 id="s11">11. Support portal options</h1>
+<div class="table-wrap"><table><colgroup><col style="width:25.53%"><col style="width:36.17%"><col style="width:38.30%"></colgroup><thead><tr><th>Product</th><th>Pricing</th><th>Note</th></tr></thead><tbody><tr><td>Help Scout</td><td>Free for up to 5 users / 1 shared inbox; paid plans beyond that</td><td>Genuinely usable at Pilot scale for $0 — the strongest starting point.</td></tr><tr><td>Freshdesk</td><td>Growth $19, Pro $55, Enterprise $89 per agent/month</td><td>No longer has a permanent free plan as of June 2025 — budget for it from day one rather than assuming a free tier exists.</td></tr><tr><td>Zendesk</td><td>Support Team $19/agent/mo up to Suite Professional $115/agent/mo</td><td>No free plan at any tier; Zendesk is the more expensive, more enterprise-oriented option of the two paid choices here.</td></tr></tbody></table></div>
+<p>Recommended path: Help Scout's free tier through Pilot; move to Freshdesk Growth once the support volume or team size outgrows 5 users; consider Zendesk only once an enterprise customer specifically requires it (some large buyers do ask which desk tool is in use during procurement review).</p>
+<h1 id="s12">12. Community &amp; documentation portal options</h1>
+<div class="table-wrap"><table><colgroup><col style="width:25.53%"><col style="width:36.17%"><col style="width:38.30%"></colgroup><thead><tr><th>Product</th><th>Pricing</th><th>Note</th></tr></thead><tbody><tr><td>Docusaurus or MkDocs</td><td>$0 (open-source static-site generator) + hosting</td><td>Hosting is free too if placed on Cloudflare Pages or Netlify (§13) — genuinely $0 all-in, at the cost of doing your own setup and styling.</td></tr><tr><td>GitBook</td><td>Free tier → Premium $65/mo + $12/user → Ultimate $249/mo</td><td>Polished editor and hosting with no setup; costs scale with team size, not just traffic.</td></tr><tr><td>ReadMe.com</td><td>Starter free → Pro $250/mo</td><td>Strong for API-reference-style documentation specifically.</td></tr><tr><td>Document360</td><td>No longer publishes pricing</td><td>Requires contacting sales for a quote — could not be verified for this guide.</td></tr></tbody></table></div>
+<p>For a real community forum rather than just documentation, Discourse is the standard choice: hosted plans run Free/$100/$500 per month depending on tier, or self-host it for the cost of a small server (needs at least 2 GB of RAM — roughly $12–24/mo on any of the clouds in this guide). Recommended path: Docusaurus or MkDocs on free static hosting through Pilot and Mid; move to GitBook or ReadMe.com once documentation authoring speed for a growing, non-technical team matters more than the $0 cost.</p>
+<h1 id="s13">13. Marketing / landing site hosting</h1>
+<div class="table-wrap"><table><colgroup><col style="width:27.66%"><col style="width:36.17%"><col style="width:36.17%"></colgroup><thead><tr><th>Host</th><th>Cost</th><th>Note</th></tr></thead><tbody><tr><td>Cloudflare Pages</td><td>$0</td><td>Genuinely free for commercial use, no ToS restriction.</td></tr><tr><td>Netlify</td><td>$0 on the free tier</td><td>Same — genuinely free for commercial use.</td></tr><tr><td>Vercel (Hobby tier)</td><td>$0, but not usable here</td><td>Vercel's free Hobby tier explicitly forbids commercial use in its own Terms of Service — this is a contractual restriction, not just a usage-limit ceiling that quietly raises the bill. Use a paid Vercel plan if the platform is otherwise preferred, or use Cloudflare Pages/Netlify instead.</td></tr><tr><td>GitHub Pages</td><td>$0</td><td>Fine for a purely informational marketing page; not built for anything storefront-like (checkout, login, dynamic content).</td></tr></tbody></table></div>
+<h1 id="s14">14. CI/CD and uptime monitoring</h1>
+<ul><li>GitHub Actions: free for 2,000–3,000 minutes/month on a private repository, effectively unlimited on a public one — this repo's existing .github/workflows/ci.yml already runs on it at $0.</li><li>UptimeRobot: free tier covers 50 monitors at a 5-minute check interval — enough to watch the production dashboard, its API, and each cloud's health-check endpoint from day one at no cost.</li></ul><h1 id="s15">15. Standing up the business side</h1>
+<h2 id="s15-1">15.1 Entity formation</h2>
+<div class="table-wrap"><table><colgroup><col style="width:25.53%"><col style="width:27.66%"><col style="width:46.81%"></colgroup><thead><tr><th>Path</th><th>Cost</th><th>Note</th></tr></thead><tbody><tr><td>Delaware LLC (self-filed)</td><td>$110 filing + $300/yr franchise tax</td><td>The $300/yr figure is confirmed directly from the State of Delaware's own franchise-tax page; some secondary sources quote $400 — trust the state's own published figure over a secondary source.</td></tr><tr><td>Wyoming LLC (self-filed)</td><td>$100 filing + $60/yr annual report fee</td><td>No state income tax; the lowest ongoing-cost option of the two if Delaware's specific investor-familiarity advantage doesn't matter for this business.</td></tr><tr><td>Stripe Atlas</td><td>$500 one-time, flat</td><td>Handles incorporation (typically Delaware), EIN, and a business bank account as one bundled service — the fastest path if the founder's time is worth more than the price difference versus self-filing.</td></tr></tbody></table></div>
+<h2 id="s15-2">15.2 Payment processing</h2>
+<div class="table-wrap"><table><colgroup><col style="width:25.53%"><col style="width:34.04%"><col style="width:40.43%"></colgroup><thead><tr><th>Processor</th><th>Pricing</th><th>Note</th></tr></thead><tbody><tr><td>Stripe (standard)</td><td>2.9% + $0.30 per transaction</td><td>Add Stripe Billing (+0.7% of volume) for subscription/usage billing.</td></tr><tr><td>Chargebee</td><td>Free up to $250,000 lifetime billed volume, then 0.75%</td><td>Best fit if starting from $0 revenue — the free tier is generous.</td></tr><tr><td>Paddle</td><td>Flat 5% + $0.50, all-in</td><td>Paddle acts as Merchant of Record, meaning it also handles sales-tax/VAT compliance across jurisdictions as part of that fee — worth the higher rate specifically to avoid handling international tax compliance manually.</td></tr></tbody></table></div>
+<h2 id="s15-3">15.3 Insurance</h2>
+<div class="callout warn"><div class="label">⚠ Quote-driven — treat this as a planning range, not a price</div><p>Cyber and technology errors-and-omissions (E&amp;O) insurance is fundamentally underwritten per-business, not sold off a rate card, so this range could not be verified to a specific number the way the cloud and SaaS prices above could. As a planning ballpark only: roughly $1,500–$2,500/yr for small-business cyber coverage alone, or $3,500–$15,000/yr for combined cyber + tech E&amp;O coverage appropriate for a security product specifically. Get an actual quote from a commercial insurance broker before this becomes a real line item in a budget — a security vulnerability-management product is exactly the kind of business an enterprise customer's procurement team will expect to see this coverage for.</p></div>
+<h1 id="s16">16. All-in monthly cost worksheet</h1>
+<p>Infrastructure (§4–8) plus the business-side services that apply regardless of cloud choice, at their recommended starting tier from each section above. Entity formation (§15.1) and insurance (§15.3) are one-time or annual, not monthly, and are called out separately rather than smeared into a monthly figure.</p>
+<div class="table-wrap"><table><colgroup><col style="width:36.17%"><col style="width:27.66%"><col style="width:36.17%"></colgroup><thead><tr><th>Line item</th><th>Pilot</th><th>Recommended starting choice</th></tr></thead><tbody><tr><td>Cloud infrastructure</td><td>~$29–120 / mo</td><td>Azure (no WAF) or AWS, per §4</td></tr><tr><td>Domain (amortized monthly)</td><td>~$1 / mo</td><td>Cloudflare Registrar or Porkbun, per §10</td></tr><tr><td>Support portal</td><td>$0</td><td>Help Scout free tier, per §11</td></tr><tr><td>Docs/community portal</td><td>$0</td><td>Docusaurus/MkDocs on Cloudflare Pages, per §12</td></tr><tr><td>Marketing site</td><td>$0</td><td>Cloudflare Pages or Netlify, per §13</td></tr><tr><td>CI/CD + uptime monitoring</td><td>$0</td><td>GitHub Actions + UptimeRobot, per §14</td></tr><tr><td>Payment processing</td><td>% of revenue, not a fixed cost</td><td>Chargebee (free to $250K volume), per §15.2</td></tr><tr class="total"><td>Total fixed monthly cost</td><td>~$30–121 / mo</td><td>before any revenue-linked payment-processing fees</td></tr></tbody></table></div>
+<p>One-time/annual, not in the monthly total above: entity formation ($100–500 depending on path, §15.1), the Delaware franchise tax or Wyoming annual report fee ($60–300/yr, §15.1), and insurance once the business is far enough along to need it ($1,500–15,000/yr, §15.3).</p>
+<h1 id="s17">17. Recommended path by growth stage</h1>
+<h3>Pilot / pre-revenue</h3>
+<p>Azure without a WAF, or DigitalOcean, for the lowest fixed cost while proving the product with a design partner. Let's Encrypt (already the default), Help Scout's free support tier, Docusaurus on Cloudflare Pages for docs, and Wyoming for the entity if self-filing. Apply for cloud startup credits (AWS Activate or Microsoft for Startups) regardless — free runway either way.</p>
+<h3>Mid / early paying customers</h3>
+<p>Move to AWS or Azure with a WAF now in place — the fixed WAF cost becomes proportionate once real customer traffic and the first compliance questionnaires arrive. Upgrade the database to Multi-AZ. Move support to Freshdesk Growth once the team outgrows Help Scout's 5-user free tier. Consider GitBook or ReadMe.com for docs if a non-technical team member now owns that content.</p>
+<h3>Large / enterprise scale</h3>
+<p>AWS or Azure with full Multi-AZ/HA and a WAF are the only two options modeled at this tier in this guide — OCI and DigitalOcean's own figures don't extend cleanly to 25,000+ assets without a fresh quote. Formalize cyber/tech E&amp;O insurance if it isn't already in place; move to Chargebee or Paddle for billing if usage-based pricing or multi-jurisdiction tax handling is now needed; Zendesk Suite Professional if an enterprise buyer specifically requires it during procurement.</p>
+<h1 id="s18">18. What to verify before you commit</h1>
+<p>Collected in one place — every figure in this guide that is a planning estimate rather than a locked-in quote:</p>
+<ul><li>OCI managed-database pricing (§7.2) — not published anywhere this research could reach; get a live quote from OCI's own Cost Estimator before treating any OCI total as comparable to AWS/Azure/DigitalOcean.</li><li>Data-transfer/egress charges — excluded from every total in §4–§8 on every cloud, because they depend on real traffic volume this guide has no way to predict. Model this once there's real usage data, not before.</li><li>Namecheap's actual renewal-year domain price (§10) — its promotional first-year rate could not be verified against a stable published renewal price.</li><li>Document360 pricing (§12) — no longer publicly published; requires a sales quote.</li><li>Cyber/tech E&amp;O insurance (§15.3) — fundamentally quote-driven; the range given is a planning ballpark, not a price.</li><li>Every cloud vendor's promotional or startup-credit pricing (§5.9, §6.5) — credits expire and Activate/Founders Hub award amounts are awarded case-by-case, not guaranteed at the figures quoted.</li></ul><h1 id="appendix-a" class="brk">Appendix A: Network &amp; firewall rule reference</h1>
+<p>The same five rules apply on every cloud in this guide — only the product name implementing each one changes:</p>
+<div class="table-wrap"><table><colgroup><col style="width:34.78%"><col style="width:65.22%"></colgroup><thead><tr><th>Rule</th><th>Implemented as</th></tr></thead><tbody><tr><td>Public HTTPS only at the edge</td><td>ALB (AWS) / Application Gateway (Azure) / Load Balancer (OCI, DigitalOcean) — the only thing with a public inbound rule on port 443.</td></tr><tr><td>App reachable only from the edge</td><td>Security group / NSG / security list rule scoping the app's port to the load balancer's own security group — never to 0.0.0.0/0.</td></tr><tr><td>Database reachable only from the app</td><td>Security group / NSG rule scoping the database port (5432 for Postgres) to the app tier's security group — never public.</td></tr><tr><td>No public admin port</td><td>Systems Manager Session Manager (AWS) or an equivalent console-based access method instead of exposing SSH/RDP; if SSH must stay open, restrict it to a specific admin IP range.</td></tr><tr><td>Outbound allow-list, not allow-all</td><td>KEV/EPSS threat-intel feeds, api.anthropic.com (if pipelines run from this host), and github.com/api.github.com (if vuln-fixer pushes branches) — deny everything else outbound by default.</td></tr></tbody></table></div>
+<h1 id="appendix-b">Appendix B: Glossary</h1>
+<div class="table-wrap"><table><colgroup><col style="width:23.91%"><col style="width:76.09%"></colgroup><thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody><tr><td>WAF</td><td>Web Application Firewall — inspects HTTP traffic for known attack patterns before it reaches the app.</td></tr><tr><td>ALB</td><td>Application Load Balancer (AWS) — distributes HTTP/HTTPS traffic and terminates TLS.</td></tr><tr><td>ACM</td><td>AWS Certificate Manager — issues and renews free TLS certificates for AWS resources.</td></tr><tr><td>RDS</td><td>Relational Database Service (AWS) — managed database hosting, including PostgreSQL.</td></tr><tr><td>VPC / VNet / VCN</td><td>Virtual Private Cloud (AWS) / Virtual Network (Azure) / Virtual Cloud Network (OCI) — an isolated private network within the cloud provider.</td></tr><tr><td>NSG</td><td>Network Security Group (Azure, OCI) — the firewall-rule object attached to a subnet or network interface.</td></tr><tr><td>Multi-AZ</td><td>A database or service replicated across multiple physically separate data centers (Availability Zones) for automatic failover.</td></tr><tr><td>Egress / data transfer</td><td>Data leaving the cloud provider's network — billed per GB by every provider in this guide, and excluded from every total per §18.</td></tr><tr><td>Merchant of Record</td><td>A payment provider (e.g. Paddle) that legally sells on the business's behalf, taking on tax-compliance responsibility in exchange for a higher fee.</td></tr></tbody></table></div>
+
+</div>
+</body>
+</html>
