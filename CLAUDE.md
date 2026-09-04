@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**New session, especially in a fresh account with no memory of prior work on this
+repo**: read [SESSION_SNAPSHOT.md](SESSION_SNAPSHOT.md) at the repo root right after
+this file. This file describes what the repo *is*, timelessly; that one describes what's
+*already been decided* (the dark-navy theme, Chakra Petch everywhere, no Deloitte
+branding, and a handful of other standing preferences a from-scratch read of the code
+won't surface) and what was in progress as of the date at its top.
+
 ## What this repository is
 
 VulnHunter started as a Claude Code **extension** — two slash commands plus seven scoped
@@ -484,3 +491,20 @@ This cuts both ways: if `docs/PRICING.md` or the commercial model changes, sweep
 `docs/enterprise-suite/pricing.html`, `executive-brief.html`, and
 `docs/VR_PLATFORM_COMPARISON.md` for now-stale cost claims (e.g. an old "$0 / free"
 framing) before considering the change done.
+
+### Generating PDFs and an offline copy from the suite
+
+`scripts/doc-pdf-pipeline/` regenerates, from the real `docs/enterprise-suite/*.html`
+files, every dark-navy PDF the suite ships as (15 individual chapter PDFs, one combined
+PDF with a bookmark outline) plus a single self-contained offline HTML file with a
+sidebar that switches between all 15 — all without touching the source `.html` files
+themselves, which stay light-themed and print-CSS-free (the dark/print treatment is
+applied on the fly to copies). It also regenerates the 3 standalone documents (Developer
+& Contributor Guide, Commercial Brochure, Cloud Hosting & Commercial Launch Guide) from
+their own already-dark-themed sources. See `scripts/doc-pdf-pipeline/README.md` for exact
+commands and two real, hard-won gotchas: Puppeteer/Playwright cannot drive Chrome on a
+machine where an enterprise policy disallows the DevTools remote-debugging protocol (this
+one's machine included) — use plain `--headless --print-to-pdf` instead — and
+`@page { margin: 0; }` is required for a full-bleed dark background in the PDF output,
+not optional polish (Chrome's print margin gutter doesn't get painted by any element's
+own `background`, regardless of what `body` says).
