@@ -9,6 +9,10 @@ this file. This file describes what the repo *is*, timelessly; that one describe
 branding, and a handful of other standing preferences a from-scratch read of the code
 won't surface) and what was in progress as of the date at its top.
 
+**If you're joining as one of several parallel sessions working this repo at once**:
+also read [BRANCHES.md](BRANCHES.md) — it says which branch owns which folder, so you
+can stay in your lane without needing to check out or read anyone else's branch.
+
 ## What this repository is
 
 VulnHunter started as a Claude Code **extension** — two slash commands plus seven scoped

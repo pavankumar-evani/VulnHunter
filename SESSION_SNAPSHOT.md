@@ -181,3 +181,16 @@ deliberately overlaps with it (§3 above) rather than assuming you have it.
 - Nothing else is mid-flight. Run `python -m unittest discover -s tests -p "test_*.py"`
   to confirm the suite is still green (1,458 tests as of the last full run this session
   knows about) before assuming any of the above.
+
+## 8. Addendum, later the same day: parallel-branch scaffold
+
+The user asked about running multiple Claude accounts/sessions on this repo at once.
+Four scoped branches now exist on `origin` for exactly that — `claude/dashboard`,
+`claude/vuln-scan-engine`, `claude/remediation-engine`, `claude/connectors` — each
+already pushed, each still at the same commit as `master` (no work started on any of
+them yet as of this writing). **[BRANCHES.md](BRANCHES.md)** is the registry describing
+what each one owns; read it before starting work on any of them, and keep its Status
+line current as you go. The workflow: each branch's own work happens there, gets pushed,
+and comes back to `master` only via a reviewed pull request — never a direct push of
+real code changes to `master` (a pure `BRANCHES.md`-only bookkeeping commit is the one
+narrow exception, per that file's own last section).
