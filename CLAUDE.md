@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/vulnhunter.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,458 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,523 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,458 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,523 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -512,3 +512,21 @@ one's machine included) — use plain `--headless --print-to-pdf` instead — an
 `@page { margin: 0; }` is required for a full-bleed dark background in the PDF output,
 not optional polish (Chrome's print margin gutter doesn't get painted by any element's
 own `background`, regardless of what `body` says).
+
+## Ownership & assignment (ITSM-style)
+
+Findings can be assigned to a person and/or a team. Tables `teams` and `finding_assignments`
+(`remediation/utils/db.py`); logic in `remediation/assignments/store.py` (assign, bulk
+assign up to 2,000, status, auto-route from asset ownership, history) and `analytics.py`
+(coverage, ageing, by-team, by-person, unowned-urgent). Routes: `/api/teams`,
+`/api/assignable-users`, `/api/assignments*`, `/api/findings/{id}/assign|assignment`,
+`/api/admin/teams*`. Pages: `/assignments`, `/ownership`, `/admin/people`. States:
+assigned / team_only / unowned; work status open / in_progress / blocked / resolved.
+An assignment's team overrides the asset's team. Ownership routes require login.
+
+## Naming
+
+The customer-facing product name is **Quanta** (renamed from VulnHunter). Internal
+identifiers deliberately keep the old name for now: `VULNHUNTER_*` env vars, `cli/vulnhunter.py`,
+`remediation/vulnhunter.db`, the `vulnhunter_session` cookie, `*@vulnhunter.local` demo accounts,
+and the repository folder. Do not reintroduce "VulnHunter" in UI or customer documents.

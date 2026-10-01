@@ -150,7 +150,22 @@
     </section>
 
     <section id="assets">
-      <h2><span class="num">03</span>Managing assets</h2>
+      <h2><span class="num">03</span>Managing assets &amp; ownership</h2>
+
+      <details class="howto">
+        <summary>How do I assign a finding to a person or a team?<span class="route">/assignments</span></summary>
+        <div class="body"><p>Open any finding and use the Ownership panel, or select rows on Assignments and choose Assign. Pick an owner, a team, or both: a finding can sit with a team until someone picks it up. Every assignment is written to the audit trail with who made it and when.</p><p>Bulk assignment handles up to 2,000 findings at once. "Auto-route from asset ownership" previews first, then fills only the gaps using each asset's owning team; findings that already have an owner are never overwritten.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I see who owns what, and where ownership is missing?<span class="route">/ownership</span></summary>
+        <div class="body"><p>Ownership Analytics shows coverage (assigned, team-only, unowned), work status by team and by person, ageing of open work, and the most urgent unowned findings so gaps are visible before an SLA is missed. Owners move findings through Open, In progress, Blocked and Resolved; "Resolved" means the owner reports it fixed and the next scan confirms it.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I manage users and teams?<span class="route">/admin/people</span></summary>
+        <div class="body"><p>Admins create teams with a manager and description, assign people to teams, and see each person's and team's live workload on one page. A team cannot be deleted while findings are assigned to it. Non-admin users see only their own team's findings and can update status only on findings assigned to them or their team.</p></div>
+      </details>
 
       <details class="howto">
         <summary>How do I change an asset's owner, team, IP/MAC, or environment?<span class="route">/assets</span></summary>

@@ -120,6 +120,17 @@ unless someone explicitly revokes it first. One honest scope limit: an active ex
 doesn't yet pause SLA-breach counting in the priority engine, so an accepted-risk finding
 can still show as "SLA breached" today - see the module docstring.
 
+### How are findings assigned to people and teams?
+
+Each finding can carry an assignee, a team, a work status (open, in progress, blocked,
+resolved) and notes, stored in the local SQLite `finding_assignments` table; teams live in
+a first-class `teams` table with a manager. An assignment's team overrides the asset's
+team. Auto-route fills gaps from asset ownership (preview by default, one batch audit
+entry). `/ownership` shows coverage and workload analytics; `/assignments` is the work
+queue; `/admin/people` manages users and teams. "Resolved" is the owner's report, not
+proof: the next scan confirms it. Ownership routes require login, and findings outside a
+non-admin user's team return 404.
+
 ### Does it track who owns each asset?
 
 Yes — `/assets` aggregates every asset with findings against it (finding count, highest

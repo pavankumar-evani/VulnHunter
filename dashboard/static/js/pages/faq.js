@@ -1,6 +1,12 @@
 export const title = "FAQ";
 
 const FAQS = [
+  ["How are findings assigned to people and teams?",
+    "Each finding can carry an assignee, a team, a work status (open, in progress, blocked, " +
+    "resolved) and notes. Teams are first-class records with a manager. Auto-route fills " +
+    "gaps from asset ownership (preview first). Ownership Analytics shows coverage and " +
+    "workload; Assignments is the work queue; Users & Teams manages people. Resolved is the " +
+    "owner's report - the next scan confirms it."],
   ["Does this actually scan production infrastructure?",
     "No. Infra findings are ingested from Tenable/Armis exports or their APIs; " +
     "Quanta itself never touches a target system. The connectors are built against " +
