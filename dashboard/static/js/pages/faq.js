@@ -3,7 +3,7 @@ export const title = "FAQ";
 const FAQS = [
   ["Does this actually scan production infrastructure?",
     "No. Infra findings are ingested from Tenable/Armis exports or their APIs; " +
-    "VulnHunter itself never touches a target system. The connectors are built against " +
+    "Quanta itself never touches a target system. The connectors are built against " +
     "each vendor's public API docs and unit-tested against mocked HTTP - they've never " +
     "been exercised against a real Tenable/Armis tenant (no credentials were available " +
     "while building them)."],
@@ -21,7 +21,7 @@ const FAQS = [
     "Code scanning (/vulnhunt) is agentless - it reads source code already in a git " +
     "repo, nothing is installed on any target. Infrastructure findings come from " +
     "Tenable/Armis, and whether THEY use an agent or an agentless scan is a " +
-    "configuration choice made in those tools, not something VulnHunter re-implements."],
+    "configuration choice made in those tools, not something Quanta re-implements."],
   ["Is this SOC2 / NIST / PCI compliant?",
     "No, and it can't claim to be from a codebase alone - those are audits/" +
     "certifications performed by a licensed third party over operational evidence, not " +
@@ -207,7 +207,7 @@ const FAQS = [
     "installed and an untested React build isn't \"modern,\" it's just unverified. See " +
     "dashboard/README.md's \"Why FastAPI + vanilla JS\" section. Perl only appears as " +
     "one of six languages the code scanner can find vulnerabilities IN, not something " +
-    "VulnHunter is built in. Real Infrastructure-as-Code already exists though: the " +
+    "Quanta is built in. Real Infrastructure-as-Code already exists though: the " +
     "remediation-fixer subagents generate real, reviewable Ansible playbooks (or " +
     "PowerShell DSC for Windows) - never auto-applied. /api/*'s JSON contract is " +
     "already the seam a future React frontend would build against."],
@@ -254,10 +254,10 @@ const FAQS = [
     "schedule config, team alert-subscription rules, a Preview-then-confirm Send-Test " +
     "flow, and a \"Run checks now\" button. Real sending needs SMTP configured " +
     "server-side."],
-  ["How is AI Assist different from Ask VulnHunter?",
+  ["How is AI Assist different from Ask Quanta?",
     "AI Assist calls the real Claude API (explain/draft remediation/summarize a " +
     "finding, confirm-gated, real cost) - free preview of the prompt if unconfirmed. " +
-    "Ask VulnHunter is free and deterministic: it matches a finding ID/CVE/count/asset " +
+    "Ask Quanta is free and deterministic: it matches a finding ID/CVE/count/asset " +
     "name, or this FAQ's own entries by keyword overlap. It is explicitly not an LLM " +
     "and not a chatbot - there is no persistent conversational chat interface " +
     "anywhere in this app."],
@@ -270,7 +270,7 @@ const FAQS = [
     "compensating-control-only track for OT/IoT) under one RBAC model, rather than " +
     "one generic 'auto-remediate' button. See docs/enterprise-suite/whitepaper.html " +
     "§02 for the full comparison, including where legacy tools still legitimately win."],
-  ["Has VulnHunter filed for, or been granted, any patents?",
+  ["Has Quanta filed for, or been granted, any patents?",
     "No. A patent-landscape review (not a legal opinion) found the broad 'AI generates " +
     "a remediation playbook' concept already claimed by other companies' existing " +
     "patents, so that alone is unlikely to be novel. A couple of narrower angles are " +

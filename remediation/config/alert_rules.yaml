@@ -1,4 +1,4 @@
-# Team alert subscriptions for VulnHunter's dashboard - real-time-ish (polling-interval)
+# Team alert subscriptions for Quanta's dashboard - real-time-ish (polling-interval)
 # email alerts for critical vulnerabilities, zero-day-style findings, and threat-intel
 # (MITRE ATT&CK threat-actor-group) correlated findings, scoped to one team.
 #

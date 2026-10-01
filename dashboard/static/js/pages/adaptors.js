@@ -143,7 +143,7 @@ export async function render(container) {
 
   container.innerHTML = `
     <p class="subtitle">
-      Every external system VulnHunter talks to (or has a documented, real API contract
+      Every external system Quanta talks to (or has a documented, real API contract
       researched for) - browse by category, click a card for its real connection
       settings and (for "Configure &amp; connect" connectors) a working preview/send or
       Test Connection + Fetch form.

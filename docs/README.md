@@ -1,4 +1,4 @@
-# VulnHunter — `docs/` Index
+# Quanta — `docs/` Index
 
 **How to use this doc:** start here if you landed in `docs/` directly and need to find
 the right file. Everything below is task-oriented reference material that sits
@@ -19,7 +19,7 @@ that context.
 | [GOING_LIVE.md](GOING_LIVE.md) | The operational checklist for actually connecting a real account — exact credentials needed per connector, exact commands/steps, and which connectors are ready entirely from the dashboard today (ServiceNow/Jira/Splunk/Tenable/Qualys/Prisma Cloud/Cortex XSIAM/Infoblox/Axonius/Active Directory) versus which still need a script run outside the dashboard (Armis/CrowdStrike). |
 | [REMEDIATION_WORKFLOWS.md](REMEDIATION_WORKFLOWS.md) | The full `/remediate` lifecycle end to end: ingest → normalize → enrich → risk-tier/priority/SLA scoring (and why there are two separate scoring mechanisms) → playbook generation → human review → manual apply. Includes MITRE ATT&CK tagging, ServiceNow ticketing, and which asset classes have no fixer yet. |
 | [COMPLIANCE_MAPPING.md](COMPLIANCE_MAPPING.md) | An informational (**not certifying**) map of existing capabilities to NIST CSF / SOC 2 control categories, plus an explicit list of what's missing before any real compliance claim could be made. |
-| [VR_PLATFORM_COMPARISON.md](VR_PLATFORM_COMPARISON.md) | VulnHunter vs. ServiceNow VR and four modern alternatives (Nucleus Security, DefectDojo, Brinqa, ArmorCode) — independently-verified connector/pricing facts, VulnHunter's real current gaps (no dedup, only 8 unverified connectors), and a prioritized roadmap. |
+| [VR_PLATFORM_COMPARISON.md](VR_PLATFORM_COMPARISON.md) | Quanta vs. ServiceNow VR and four modern alternatives (Nucleus Security, DefectDojo, Brinqa, ArmorCode) — independently-verified connector/pricing facts, Quanta's real current gaps (no dedup, only 8 unverified connectors), and a prioritized roadmap. |
 | [SUPPORT.md](SUPPORT.md) | How to get help, report a bug, or report a security issue — and where to look first. |
 
 ## Also see
@@ -29,7 +29,7 @@ that context.
 - [../KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md) — the canonical deep-dive: problem
   statement, design rationale, step-by-step run instructions, test evidence, roadmap, and
   troubleshooting log.
-- [../SECURITY.md](../SECURITY.md) — how to report a security issue in VulnHunter itself.
+- [../SECURITY.md](../SECURITY.md) — how to report a security issue in Quanta itself.
 - [../TEST_CASES.md](../TEST_CASES.md) — the full test case log (456 cases, steps,
   expected vs. actual).
 - [../CHANGELOG.md](../CHANGELOG.md) — what's changed, in order.

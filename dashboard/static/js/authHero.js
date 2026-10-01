@@ -76,7 +76,7 @@ export function authHeroBackgroundHtml() {
 export function authHeroHtml() {
   return `
     <div class="auth-hero-copy">
-      <div class="auth-hero-brand">VulnHunter</div>
+      <div class="auth-hero-brand">Quanta</div>
       <p class="auth-hero-tagline">Vulnerability management that closes the loop — from first scan to a verified fix.</p>
       <ul class="auth-hero-points">
         <li>Findings ranked by real-world exploitability, using live CISA KEV and FIRST.org EPSS data</li>

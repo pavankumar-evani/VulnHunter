@@ -1,4 +1,4 @@
-# VulnHunter — Test Cases & Results
+# Quanta — Test Cases & Results
 
 Formal test case log for all twenty-six test files: `tests/test_pipeline_artifacts.py` (both
 pipelines' real output artifacts), `tests/test_cli.py` (the headless CLI),
@@ -678,7 +678,7 @@ covered by TC-INV-06/09/10.
 **Purpose:** prove the vendor-agnostic ingestion adapter — for any XDR/EDR/SIEM that can
 send a custom outbound webhook, rather than one bespoke connector per named product —
 correctly validates an inbound JSON payload against its documented minimal shape, and
-normalizes an accepted payload into VulnHunter's normalized Finding schema with a
+normalizes an accepted payload into Quanta's normalized Finding schema with a
 collision-safe ID.
 **Preconditions (all TC-GENC):** `remediation/connectors/generic_connector.py`
 importable; pure functions only — no network, no file I/O (the actual write to
@@ -1120,7 +1120,7 @@ ServiceNow's pure body-builder tests.
 alert-ID-query-then-fetch-entities flow (CrowdStrike's documented two-step "query IDs,
 then batch-resolve composite IDs into full alert objects" pattern — conceptually the same
 shape as Armis's token-auth + paginated AQL search, just batch-fetch instead of cursor
-pagination), and its mapping of a raw Falcon alert into VulnHunter's normalized Finding
+pagination), and its mapping of a raw Falcon alert into Quanta's normalized Finding
 schema are all correct against mocked HTTP shaped like CrowdStrike's documented Falcon
 Alerts API — this connector has never been exercised against a real CrowdStrike tenant,
 the same caveat that applies to every other connector in this repo (see
@@ -1205,7 +1205,7 @@ classifying each row against the real, finding-derived asset list (matched / not
 
 **Purpose:** prove the connector's HTTP Basic-auth session construction, its WAPI
 `record:host` fetch (endpoint URL, `_return_fields`/`_max_results` query params), and its
-mapping of a raw WAPI host-record object into VulnHunter's shared asset-inventory shape
+mapping of a raw WAPI host-record object into Quanta's shared asset-inventory shape
 (`name`, `ip`, `mac`, `type`, `source`, `source_ref`, `extra`) are all correct against
 mocked HTTP shaped like Infoblox's publicly documented WAPI Guide — this connector has
 never been exercised against a real Infoblox NIOS grid, the same caveat that applies to
@@ -1248,7 +1248,7 @@ Infoblox credentials, no real grid touched.
 
 **Purpose:** prove the connector's `api-key`/`api-secret` header-based auth
 construction, its `/api/devices` fetch (endpoint URL, offset/limit pagination body), and
-its mapping of a raw (assumed-flattened) Axonius device record into VulnHunter's shared
+its mapping of a raw (assumed-flattened) Axonius device record into Quanta's shared
 asset-inventory shape are all correct against mocked HTTP shaped like Axonius's publicly
 documented REST API — this connector has never been exercised against a real Axonius
 tenant, the same caveat that applies to every other connector in this repo (see

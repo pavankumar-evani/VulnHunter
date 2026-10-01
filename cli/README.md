@@ -1,4 +1,4 @@
-# VulnHunter Headless CLI
+# Quanta Headless CLI
 
 A thin Python wrapper around `claude -p` (Claude Code's non-interactive mode) that lets
 `/vulnhunt` and `/remediate` run from a script, a CI job, or a cron schedule instead of

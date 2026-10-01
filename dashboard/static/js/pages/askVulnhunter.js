@@ -1,4 +1,4 @@
-// "Ask VulnHunter" - a free, real, deterministic "ask your data" search over the
+// "Ask Quanta" - a free, real, deterministic "ask your data" search over the
 // live queue, code-scan findings, and asset inventory (POST /api/search/ask, see
 // remediation/search/query_engine.py). Deliberately NOT a chatbot and not an LLM: no
 // external API call, no signup, no cost, no data leaves this machine, and - the real
@@ -11,7 +11,7 @@
 import { api } from "../api.js";
 import { escapeHtml, flash } from "../dom.js";
 
-export const title = "Ask VulnHunter";
+export const title = "Ask Quanta";
 
 const EXAMPLES = [
   "how many critical KEV findings are breached",

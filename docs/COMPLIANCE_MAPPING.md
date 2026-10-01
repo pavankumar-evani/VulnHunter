@@ -1,4 +1,4 @@
-# VulnHunter — Compliance Mapping
+# Quanta — Compliance Mapping
 
 > **DISCLAIMER — READ BEFORE USING THIS DOCUMENT FOR ANYTHING**
 >
@@ -12,7 +12,7 @@
 > or any summary of it, to a customer, auditor, or regulator as evidence of compliance.
 
 **How to use this doc:** read this if you need a quick internal reference for "which
-existing VulnHunter capability relates to which compliance control category" — and
+existing Quanta capability relates to which compliance control category" — and
 just as importantly, what's missing before any real compliance claim could be made. For
 the authoritative statement on why compliance certification isn't a coding deliverable,
 see [KNOWLEDGE_TRANSFER.md §9, Tier 3](../KNOWLEDGE_TRANSFER.md#9-roadmap--path-to-commercial-grade).

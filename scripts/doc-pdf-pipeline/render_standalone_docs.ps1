@@ -26,9 +26,9 @@ $outDir = Join-Path $scriptDir "_build"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 $docs = @(
-  @{ src = "dev-guide-dark.html";    out = "VulnHunter_Developer_Contributor_Guide.pdf" },
-  @{ src = "brochure-dark.html";     out = "VulnHunter_Commercial_Brochure.pdf" },
-  @{ src = "cloud-guide-dark.html";  out = "VulnHunter_Cloud_Hosting_Guide.pdf" }
+  @{ src = "dev-guide-dark.html";    out = "Quanta_Developer_Contributor_Guide.pdf" },
+  @{ src = "brochure-dark.html";     out = "Quanta_Commercial_Brochure.pdf" },
+  @{ src = "cloud-guide-dark.html";  out = "Quanta_Cloud_Hosting_Guide.pdf" }
 )
 
 foreach ($doc in $docs) {

@@ -21,7 +21,7 @@ from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_TABLE = "incident"
 
-# VulnHunter risk_tier / severity -> ServiceNow's urgency/impact scale (1=High, 2=Medium, 3=Low)
+# Quanta risk_tier / severity -> ServiceNow's urgency/impact scale (1=High, 2=Medium, 3=Low)
 SEVERITY_TO_URGENCY = {"Critical": "1", "High": "1", "Medium": "2", "Low": "3"}
 SEVERITY_TO_IMPACT = {"Critical": "1", "High": "2", "Medium": "2", "Low": "3"}
 
@@ -55,12 +55,12 @@ def build_incident_body(finding):
     description_lines.append(f"Recommended fix: {finding.get('recommended_fix', '?')}")
 
     return {
-        "short_description": f"[VulnHunter {finding['id']}] {finding.get('title', '')}",
+        "short_description": f"[Quanta {finding['id']}] {finding.get('title', '')}",
         "description": "\n".join(description_lines),
         "urgency": SEVERITY_TO_URGENCY.get(severity, "3"),
         "impact": SEVERITY_TO_IMPACT.get(severity, "3"),
         "correlation_id": finding["id"],
-        "correlation_display": "VulnHunter",
+        "correlation_display": "Quanta",
     }
 
 
@@ -74,7 +74,7 @@ class ServiceNowConnector:
 
     def find_existing_incident(self, correlation_id):
         """Looks up an incident already created for this finding, keyed by
-        correlation_id (set to the VulnHunter finding ID) - prevents creating a
+        correlation_id (set to the Quanta finding ID) - prevents creating a
         duplicate ticket every time the pipeline re-runs against the same finding."""
         def _do_get():
             resp = self.session.get(

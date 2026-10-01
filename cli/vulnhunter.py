@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Headless CLI wrapper for VulnHunter's two pipelines.
+Headless CLI wrapper for Quanta's two pipelines.
 
 This does NOT reimplement vuln-scanner/vuln-fixer/remediation-planner/etc. in Python -
 that would create a second source of truth alongside the .claude/agents/*.md prompts and
@@ -189,7 +189,7 @@ def run(prompt, pipeline_name, dry_run=False, on_result=None, **build_kwargs):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="vulnhunter",
-        description="Headless CLI wrapper for VulnHunter's /vulnhunt and /remediate pipelines.",
+        description="Headless CLI wrapper for Quanta's /vulnhunt and /remediate pipelines.",
     )
     parser.add_argument("--dry-run", action="store_true",
                          help="Print the command that would run, without calling the API.")

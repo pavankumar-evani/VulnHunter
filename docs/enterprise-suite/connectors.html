@@ -80,7 +80,7 @@
 </style>
 
 <div class="suitebar">
-  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>Quanta</a>
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
@@ -101,12 +101,12 @@
     <div class="hero">
       <div class="kicker">Technical Reference · 4 of 7</div>
       <h1>Connectors &amp; Adaptors Catalog</h1>
-      <p class="lede">One consolidated hub for every system VulnHunter can pull from, push to, or scan directly — organized honestly by what's actually working versus what's researched and ready to build next.</p>
+      <p class="lede">One consolidated hub for every system Quanta can pull from, push to, or scan directly — organized honestly by what's actually working versus what's researched and ready to build next.</p>
     </div>
 
     <section id="hub">
       <h2><span class="num">01</span>The Adaptors hub</h2>
-      <p class="section-intro">Every connector below is a risk-management decision, not just a technical integration — this is the only way real vulnerability, asset, and threat data enters VulnHunter's pipeline at all. The seven-stage remediation lifecycle (documented in the Remediation Engine &amp; Workflows document) only ever sees what a connected source actually reported: an unconnected scanner, an unconfigured CNAPP, or an asset-discovery source nobody wired up is a coverage gap in your risk picture, not a limitation of the scoring or planning logic downstream of it. How current and complete that picture is — and how much the KEV/EPSS-aware prioritization described in the Vulnerability Finding Engine document is protecting against real, live threats rather than a stale snapshot — depends entirely on which of the sources below are actually connected in your environment.</p>
+      <p class="section-intro">Every connector below is a risk-management decision, not just a technical integration — this is the only way real vulnerability, asset, and threat data enters Quanta's pipeline at all. The seven-stage remediation lifecycle (documented in the Remediation Engine &amp; Workflows document) only ever sees what a connected source actually reported: an unconnected scanner, an unconfigured CNAPP, or an asset-discovery source nobody wired up is a coverage gap in your risk picture, not a limitation of the scoring or planning logic downstream of it. How current and complete that picture is — and how much the KEV/EPSS-aware prioritization described in the Vulnerability Finding Engine document is protecting against real, live threats rather than a stale snapshot — depends entirely on which of the sources below are actually connected in your environment.</p>
       <p class="section-intro">Every integration lives in one place (<code>/adaptors</code>), filterable by category, with a two-tier honesty label instead of a single "supported" checkmark:</p>
       <div class="grid3">
         <div class="catcard"><h4><span class="chip live">live</span></h4><p class="count" style="margin-top:6px">A real, working connector class + a real dashboard page — Test Connection, Fetch/Send, or (for the scan engine) the full scan lifecycle.</p></div>
@@ -136,7 +136,7 @@
       </div>
 
       <h3>A fourth path: findings pushed in, not pulled out</h3>
-      <p><code>remediation/connectors/generic_connector.py</code> is a different shape from every connector above — the receiving side of a webhook, for any SIEM/XDR/EDR/SOAR tool that already supports posting a custom outbound webhook. VulnHunter never calls out; the outside tool calls <code>POST /api/ingest/generic</code> with a JSON body validated against a minimal required shape (<code>title</code>, <code>severity</code>, <code>asset_name</code>, <code>asset_type</code>) and normalized into the same Finding schema every other source uses. One real, generic, testable adapter instead of another bespoke vendor connector nobody has real API access to verify.</p>
+      <p><code>remediation/connectors/generic_connector.py</code> is a different shape from every connector above — the receiving side of a webhook, for any SIEM/XDR/EDR/SOAR tool that already supports posting a custom outbound webhook. Quanta never calls out; the outside tool calls <code>POST /api/ingest/generic</code> with a JSON body validated against a minimal required shape (<code>title</code>, <code>severity</code>, <code>asset_name</code>, <code>asset_type</code>) and normalized into the same Finding schema every other source uses. One real, generic, testable adapter instead of another bespoke vendor connector nobody has real API access to verify.</p>
       <div class="callout warn"><span class="label">Deliberately unauthenticated today</span><p>Unlike every connector above, this route is not gated behind <code>rbac.require_admin</code> or any session — a machine-to-machine webhook receiver, not something a logged-in browser session submits. That also means there is no cap on call frequency or on how large the resulting <code>remediation/live-data/generic-ingested.json</code> can grow. A real deployment needs a webhook-specific API key or HMAC signature, plus request throttling, in front of this route — a disclosed, real gap, not implemented here (see §05 below).</p></div>
     </section>
 
@@ -185,7 +185,7 @@
 
     <section id="limits">
       <h2><span class="num">05</span>Rate limits &amp; operational constraints</h2>
-      <p class="section-intro">Real constraints from two directions: what each vendor's own API imposes on VulnHunter, and what VulnHunter itself does — or, honestly, doesn't yet — enforce on the way in.</p>
+      <p class="section-intro">Real constraints from two directions: what each vendor's own API imposes on Quanta, and what Quanta itself does — or, honestly, doesn't yet — enforce on the way in.</p>
 
       <h3>Vendor-side: async jobs and pagination, not simple request caps</h3>
       <div class="table-wrap">
@@ -200,7 +200,7 @@
         </table>
       </div>
 
-      <h3>VulnHunter's own side — honestly incomplete, not silently assumed complete</h3>
+      <h3>Quanta's own side — honestly incomplete, not silently assumed complete</h3>
       <div class="callout warn"><span class="label">No client-side retry/backoff in any vendor connector, and no explicit request timeout either</span><p>Only the CISA KEV/EPSS threat-intel client retries a dropped connection or timeout, with exponential backoff, up to 3 times — and that module is the only place in this codebase that sets an explicit HTTP timeout on its calls at all. None of the 13 named-vendor connectors in <code>remediation/connectors/</code> do either: a transient network blip during a Tenable export or an Armis page fetch fails the whole action rather than self-healing, and a slow/hung vendor endpoint has nothing forcing it to give up. A real production deployment calling any of these connectors on a schedule should add the same retry-with-timeout pattern already proven in the threat-intel client, not assume it's already there.</p></div>
       <div class="callout info"><span class="label">Fixed: inbound rate-limiting now covers every connector route</span><p>This closes the gap the RBAC, Multi-Tenancy &amp; Governance document's AI &amp; security guardrails section also tracks: a real in-process, per-IP sliding-window rate limiter (<code>dashboard/rate_limit.py</code>) now sits in front of every <code>/api/*</code> route, including every connector's test/fetch/send route, with a stricter dedicated limit on the generic-ingestion webhook (<code>POST /api/ingest/generic</code>, §02 above) specifically — still the sharpest edge, since it takes no session or API key at all. This bounds call <em>frequency</em>; it does not cap how much data accumulates in total over time, which stays a real, disclosed follow-up. Single-node scope, disclosed plainly: each node counts independently, so a future multi-node deployment needs a shared store (e.g. Redis) instead.</p></div>
     </section>
@@ -228,7 +228,7 @@
       <div class="callout warn"><span class="label">Per-request, never stored, no exceptions</span><p>Every connector page asks for real credentials fresh, on every Test Connection or Fetch/Send/Scan action. Nothing is persisted server-side. There is no vault, no saved-connection list, no "remember this account" option anywhere in this catalog.</p></div>
     </section>
 
-    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> or <a href="https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4" target="_blank" rel="noopener" data-suite-link="developer">Developer Guide</a>.</footer>
+    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> or <a href="https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4" target="_blank" rel="noopener" data-suite-link="developer">Developer Guide</a>.</footer>
   </main>
 </div>
 

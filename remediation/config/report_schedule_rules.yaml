@@ -1,4 +1,4 @@
-# Scheduled security report subscriptions for VulnHunter's dashboard.
+# Scheduled security report subscriptions for Quanta's dashboard.
 #
 # Each entry sends a periodic report, scoped to one security sub-domain, to one team's
 # recipient email address(es) - "sub-domain, team-wise" scheduled reporting. Reports are

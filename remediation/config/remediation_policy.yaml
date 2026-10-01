@@ -1,4 +1,4 @@
-# Remediation Policy Engine configuration for VulnHunter.
+# Remediation Policy Engine configuration for Quanta.
 #
 # This is the admin-editable "how should remediation actually happen" layer, sitting on
 # top of the existing per-finding classification (asset.type, infra_category,

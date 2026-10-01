@@ -1,4 +1,4 @@
-# VulnHunter — Remediation Workflows
+# Quanta — Remediation Workflows
 
 **How to use this doc:** read this for the full `/remediate` lifecycle end to end — every
 stage a finding passes through, in order, from raw vendor export to a human running a

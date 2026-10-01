@@ -1,5 +1,5 @@
 """
-Builds VulnHunter_Documentation_Offline.html: a single, self-contained,
+Builds Quanta_Documentation_Offline.html: a single, self-contained,
 network-independent HTML file with a sidebar that switches between all 15
 enterprise-suite chapters (loaded into an <iframe> per chapter via srcdoc),
 Chakra Petch embedded as base64 data-URI fonts so it renders correctly with
@@ -12,11 +12,11 @@ import os, re, json, base64
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OFFLINE_SRC = os.path.join(SCRIPT_DIR, "_build", "dark_offline_src")
 FONTS_DIR = os.path.join(SCRIPT_DIR, "fonts")
-OUT_PATH = os.path.join(SCRIPT_DIR, "_build", "VulnHunter_Documentation_Offline.html")
+OUT_PATH = os.path.join(SCRIPT_DIR, "_build", "Quanta_Documentation_Offline.html")
 
 # (filename, sidebar title, sidebar icon, sidebar group - None for no group label)
 CHAPTERS = [
-    ("hub.html", "VulnHunter Documentation", "🧭", None),
+    ("hub.html", "Quanta Documentation", "🧭", None),
     ("executive-brief.html", "Solution Brief", "🎯", "For enterprise evaluators"),
     ("whitepaper.html", "The Governed Remediation Thesis", "🔬", "For enterprise evaluators"),
     ("architecture.html", "Architecture & Schema Reference", "🏗️", "Technical reference"),
@@ -29,7 +29,7 @@ CHAPTERS = [
     ("pages.html", "Page-by-Page Reference", "🗺️", "Technical reference"),
     ("developer-guide.html", "Developer Guide", "🧩", "Technical reference"),
     ("poc-methodology.html", "Proof-of-Concept Methodology", "🧪", "Business planning"),
-    ("pricing.html", "VulnHunter Pricing", "💠", "Business planning"),
+    ("pricing.html", "Quanta Pricing", "💠", "Business planning"),
     ("user-guide.html", "User & Operations Guide", "📖", "For everyday users"),
 ]
 
@@ -114,7 +114,7 @@ def main():
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VulnHunter Documentation - Offline</title>
+<title>Quanta Documentation - Offline</title>
 {font_css}
 <style>
   :root {{
@@ -160,7 +160,7 @@ def main():
     <div id="sidebar-header">
       <div class="mark">
         <svg class="hexicon" viewBox="0 0 24 24" fill="none"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z" stroke="#6d97f7" stroke-width="1.6"/><circle cx="12" cy="12" r="3" fill="#6d97f7"/></svg>
-        VulnHunter
+        Quanta
       </div>
       <div class="tagline">Enterprise Documentation Suite</div>
       <span id="offline-badge">Offline copy - no network needed</span>
@@ -171,7 +171,7 @@ def main():
   </div>
   <div id="main">
     <div id="topbar">
-      <span>Viewing:</span> <span class="doctitle" id="doctitle">VulnHunter Documentation</span>
+      <span>Viewing:</span> <span class="doctitle" id="doctitle">Quanta Documentation</span>
     </div>
     <iframe id="viewer" title="Document viewer"></iframe>
   </div>

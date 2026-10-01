@@ -1,4 +1,4 @@
-# VulnHunter Dashboard (MVP)
+# Quanta Dashboard (MVP)
 
 A read-only-by-default web UI over both pipelines' real generated artifacts, plus a form
 to trigger a run via the [headless CLI](../cli/README.md). A FastAPI JSON API

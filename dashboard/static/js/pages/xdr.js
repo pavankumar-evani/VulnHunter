@@ -1,4 +1,4 @@
-// Unlike ServiceNow/Jira/Splunk (VulnHunter pushes findings/events OUT to them, so a
+// Unlike ServiceNow/Jira/Splunk (Quanta pushes findings/events OUT to them, so a
 // "preview what would be sent per finding" form makes sense), CrowdStrike Falcon - like
 // Tenable and Armis - is a PULL connector: it fetches alerts FROM CrowdStrike and
 // normalizes them into findings. There's nothing to "preview" without real credentials
@@ -28,7 +28,7 @@ export async function render(container) {
       <li>Authenticates via OAuth2 client-credentials (<code>POST /oauth2/token</code>)</li>
       <li>Queries matching alert IDs (<code>GET /alerts/queries/alerts/v1</code>, optional Falcon Query Language filter)</li>
       <li>Resolves those IDs to full alert objects (<code>POST /alerts/entities/alerts/v2</code>)</li>
-      <li>Normalizes each alert into VulnHunter's normalized Finding schema</li>
+      <li>Normalizes each alert into Quanta's normalized Finding schema</li>
     </ol>
 
     <div class="callout">

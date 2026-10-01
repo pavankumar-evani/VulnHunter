@@ -91,7 +91,7 @@
 <div class="suitebar">
   <a class="mark" href="#" onclick="return false">
     <svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>
-    VulnHunter
+    Quanta
   </a>
   <span class="sep">/</span>
   <span class="doclabel">Enterprise Documentation Suite</span>
@@ -122,7 +122,7 @@
 
     <section id="taxonomy">
       <h2><span class="num">01</span>Source taxonomy</h2>
-      <p class="section-intro">Every integration in VulnHunter falls into exactly one of three categories. The category decides how much judgment is required to turn its output into a finding — which is why some sources write straight into the dashboard and others need one extra, human-supervised step.</p>
+      <p class="section-intro">Every integration in Quanta falls into exactly one of three categories. The category decides how much judgment is required to turn its output into a finding — which is why some sources write straight into the dashboard and others need one extra, human-supervised step.</p>
 
       <div class="grid3">
         <div class="card">
@@ -170,12 +170,12 @@
       </div>
 
       <h3>Why a 4-step flow, not one "Fetch" button</h3>
-      <p>Every pull connector above has one blocking action because the source already ran its scan. GVM is different — VulnHunter has to launch the scan itself, and a real authenticated network scan can run for minutes to hours. Blocking one HTTP request that long is the wrong shape, so the flow is <strong>Test Connection → Start Scan → Check Status (poll) → Import Results</strong>, each a separate, fast call.</p>
+      <p>Every pull connector above has one blocking action because the source already ran its scan. GVM is different — Quanta has to launch the scan itself, and a real authenticated network scan can run for minutes to hours. Blocking one HTTP request that long is the wrong shape, so the flow is <strong>Test Connection → Start Scan → Check Status (poll) → Import Results</strong>, each a separate, fast call.</p>
 
       <pre class="mermaid">
 sequenceDiagram
     participant U as Admin
-    participant V as VulnHunter
+    participant V as Quanta
     participant G as GVM (GMP protocol)
     U->>V: Start Scan (target + authorization checkbox)
     V->>G: create_target, create_task, start_task
@@ -292,7 +292,7 @@ sequenceDiagram
       <div class="callout warn"><span class="label">Manually-curated datasets, not live connectors</span><p>Neither <code>security_controls.yaml</code> nor <code>network_topology.yaml</code> is populated by a firewall/EDR-vendor API call — there is no such connector in this repo today. Same disclosed, honest posture as <code>remediation/sample-data/threat_intel.json</code>: real, usable data structures, hand-maintained until (or unless) a live connector is built for them.</p></div>
     </section>
 
-    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c" target="_blank" rel="noopener" data-suite-link="connectors">Connectors &amp; Adaptors Catalog</a> or <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a>.</footer>
+    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c" target="_blank" rel="noopener" data-suite-link="connectors">Connectors &amp; Adaptors Catalog</a> or <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a>.</footer>
   </main>
 </div>
 

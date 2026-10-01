@@ -1,4 +1,4 @@
-# VulnHunter — AI Commands & Agents Reference
+# Quanta — AI Commands & Agents Reference
 
 **How to use this doc:** the reference for every AI-facing entry point in this repo —
 exact slash-command syntax, every subagent's name/purpose/tool-scope (pulled directly

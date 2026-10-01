@@ -1,5 +1,5 @@
 """
-Team alert checking for VulnHunter's dashboard (remediation/config/alert_rules.yaml) -
+Team alert checking for Quanta's dashboard (remediation/config/alert_rules.yaml) -
 critical-severity, zero-day-style, and threat-intel (MITRE ATT&CK threat-actor-group
 correlated) findings, emailed to a subscribed team once per finding per subscription
 (tracked in alert_state.json), not once per poll.
@@ -115,7 +115,7 @@ _ALERT_LABELS = {
 
 def build_subject(subscription):
     label = _ALERT_LABELS.get(subscription.get("alert_type"), "Alert")
-    bits = [f"VulnHunter {label}"]
+    bits = [f"Quanta {label}"]
     if subscription.get("scope", "all") != "all":
         bits.append(subscription["scope"])
     if subscription.get("team"):

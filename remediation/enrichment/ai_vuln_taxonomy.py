@@ -18,7 +18,7 @@ tactic/technique ID against https://atlas.mitre.org/ before citing it in a compl
 report or incident writeup. Same reasoning applies to `map_finding_to_ai_vuln()`'s
 keyword heuristic below: it's a rough categorization aid, not a certified detection.
 
-Honest scope note: VulnHunter's scanner does analyze AI/ML-specific code paths
+Honest scope note: Quanta's scanner does analyze AI/ML-specific code paths
 (prompt construction, model loading, agent tool-calling) - see
 .claude/agents/vuln-scanner.md's "AI/ML security" guidance for exactly what it looks
 for. This is demonstrated against real code, not just documented: the demo app's

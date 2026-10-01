@@ -11,8 +11,8 @@ page breaks.
 | Command | Produces |
 |---|---|
 | `patch_dark.py` → `render_docs.ps1` → `finalize_pdfs.py` | 15 individual chapter PDFs in `_build/final_out_dark/` |
-| ...then `combine_pdfs.py` | One combined 100+ page PDF with a bookmark outline, `_build/VulnHunter_Documentation_Complete.pdf` |
-| `patch_dark.py` → `build_offline_hub.py` | One self-contained offline HTML file, `_build/VulnHunter_Documentation_Offline.html` |
+| ...then `combine_pdfs.py` | One combined 100+ page PDF with a bookmark outline, `_build/Quanta_Documentation_Complete.pdf` |
+| `patch_dark.py` → `build_offline_hub.py` | One self-contained offline HTML file, `_build/Quanta_Documentation_Offline.html` |
 | `render_standalone_docs.ps1` | The 3 standalone docs (Developer Guide, Commercial Brochure, Cloud Hosting Guide) as PDFs in `_build/` |
 
 None of these outputs are committed (`_build/` is gitignored) - only the

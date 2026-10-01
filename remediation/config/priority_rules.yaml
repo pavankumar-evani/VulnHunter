@@ -1,4 +1,4 @@
-# Configurable priority rules for VulnHunter's remediation queue.
+# Configurable priority rules for Quanta's remediation queue.
 #
 # This is read by remediation/config/priority_engine.py, which the DASHBOARD uses to
 # live-recompute priority/SLA for every finding using whatever weights are configured

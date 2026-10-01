@@ -8,12 +8,12 @@ import pypdf
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 FINAL_DIR = os.path.join(SCRIPT_DIR, "_build", "final_out_dark")
-OUT_PATH = os.path.join(SCRIPT_DIR, "_build", "VulnHunter_Documentation_Complete.pdf")
+OUT_PATH = os.path.join(SCRIPT_DIR, "_build", "Quanta_Documentation_Complete.pdf")
 
 # (filename in final_out_dark, bookmark title, bookmark group - None for no parent)
 ORDERED = [
-    ("01_VulnHunter_Documentation.pdf", "VulnHunter Documentation (start here)", None),
-    ("02_VulnHunter_Solution_Brief.pdf", "Solution Brief", "For enterprise evaluators"),
+    ("01_Quanta_Documentation.pdf", "Quanta Documentation (start here)", None),
+    ("02_Quanta_Solution_Brief.pdf", "Solution Brief", "For enterprise evaluators"),
     ("03_The_Governed_Remediation_Thesis.pdf", "The Governed Remediation Thesis", "For enterprise evaluators"),
     ("04_Architecture_and_Schema_Reference.pdf", "Architecture & Schema Reference", "Technical reference"),
     ("05_Vulnerability_Finding_Engine.pdf", "Vulnerability Finding Engine", "Technical reference"),
@@ -25,7 +25,7 @@ ORDERED = [
     ("11_Page-by-Page_Reference.pdf", "Page-by-Page Reference", "Technical reference"),
     ("12_Developer_Guide.pdf", "Developer Guide", "Technical reference"),
     ("13_Proof-of-Concept_Methodology.pdf", "Proof-of-Concept Methodology", "Business planning"),
-    ("14_VulnHunter_Pricing.pdf", "VulnHunter Pricing", "Business planning"),
+    ("14_Quanta_Pricing.pdf", "Quanta Pricing", "Business planning"),
     ("15_User_and_Operations_Guide.pdf", "User & Operations Guide", "For everyday users"),
 ]
 
@@ -50,8 +50,8 @@ def main():
         print(f"+ {fname} ({len(reader.pages)} pages) -> '{title}' at page {page_cursor - len(reader.pages) + 1}")
 
     writer.add_metadata({
-        "/Title": "VulnHunter Enterprise Documentation - Complete",
-        "/Author": "VulnHunter Development LLC",
+        "/Title": "Quanta Enterprise Documentation - Complete",
+        "/Author": "Quanta",
     })
 
     with open(OUT_PATH, "wb") as f:

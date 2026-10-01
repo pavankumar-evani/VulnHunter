@@ -29,7 +29,7 @@ no honest single default that works for every tenant.
 
 Output mapping: like crowdstrike_connector.py and prismacloud_connector.py, XSIAM
 incidents are correlated detections, not CVE-scoped known-vulnerability findings - so
-this connector normalizes directly into VulnHunter's Finding schema itself
+this connector normalizes directly into Quanta's Finding schema itself
 (cve/cvss/kev/epss always None - a deliberate, expected property of this source) rather
 than routing through vuln-ingest-normalizer.md. `id` is left None on every normalized
 finding - FIND-N assignment is the pipeline's job, the same convention
@@ -120,7 +120,7 @@ class CortexXsiamConnector:
 
     @staticmethod
     def normalize_incident(incident):
-        """Maps one raw Cortex XSIAM incident object into VulnHunter's normalized
+        """Maps one raw Cortex XSIAM incident object into Quanta's normalized
         Finding shape (see remediation/schema/normalized-finding-schema.md). See
         module docstring for why cve/cvss/kev/epss are always None, id is always None,
         and asset.type is always "unknown" here."""

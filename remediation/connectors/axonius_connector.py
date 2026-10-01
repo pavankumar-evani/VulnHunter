@@ -41,7 +41,7 @@ DEFAULT_PAGE_SIZE = 1000
 
 _RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
-# Best-effort, intentionally incomplete OS-type -> VulnHunter asset.type mapping (see
+# Best-effort, intentionally incomplete OS-type -> Quanta asset.type mapping (see
 # remediation/schema/normalized-finding-schema.md for the full asset.type vocabulary).
 # Real deployments should extend this as they encounter more `os_type` values.
 OS_TYPE_TO_ASSET_TYPE = {
@@ -90,7 +90,7 @@ class AxoniusConnector:
     @staticmethod
     def normalize_device(device):
         """Maps one raw (assumed-flattened, see module docstring) Axonius device
-        record into VulnHunter's shared asset shape:
+        record into Quanta's shared asset shape:
             {name, ip, mac, type, source, source_ref, extra}
 
         - `name` comes from a top-level `hostname` key.

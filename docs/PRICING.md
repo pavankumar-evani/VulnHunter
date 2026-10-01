@@ -1,6 +1,6 @@
-# VulnHunter Pricing
+# Quanta Pricing
 
-**VulnHunter is a commercial product**, licensed annually by environment size, with a
+**Quanta is a commercial product**, licensed annually by environment size, with a
 real, credited support SLA at every paid tier. This file is the source of truth for the
 pricing/SLA/licensing model — the published enterprise documentation suite's pricing
 page (`docs/enterprise-suite/pricing.html`) restates this content visually; if the two
@@ -33,7 +33,7 @@ remediation as a phased *task* process — "verifying import completion, triagin
 vulnerabilities, and monitoring progress to completion" — workflow/ticket automation,
 not automated generation of an actual fix artifact. Tenable, Qualys, and Rapid7 don't
 generate fixes at any price either — they're scanners that feed a ticketing system like
-ServiceNow. **Professional is priced on VulnHunter being the one product in this
+ServiceNow. **Professional is priced on Quanta being the one product in this
 comparison set that turns a finding into a real, reviewable Ansible playbook
 automatically** — a capability gap, not a bundling choice.
 
@@ -46,9 +46,9 @@ as a team grows).
 
 | Platform | Per asset/year | Basis |
 |---|---|---|
-| **VulnHunter Enterprise** | **$3.40** | at the 25,000-asset custom-quote threshold |
-| **VulnHunter Professional** | **$5.07** | $38,000 ÷ 7,500-asset cap |
-| **VulnHunter Standard** | **$8.00** | $12,000 ÷ 1,500-asset cap |
+| **Quanta Enterprise** | **$3.40** | at the 25,000-asset custom-quote threshold |
+| **Quanta Professional** | **$5.07** | $38,000 ÷ 7,500-asset cap |
+| **Quanta Standard** | **$8.00** | $12,000 ÷ 1,500-asset cap |
 | Rapid7 InsightVM | ~$19–23 | $1.62–$1.93/asset/month, ≥512-asset minimum |
 | Tenable Vulnerability Management | ~$28–45 | list price, base tier |
 | Microsoft Defender Vulnerability Management | ~$24–36 | $2–3/user/month — endpoint-adjacent, not full infra/cloud scanning |
@@ -77,7 +77,7 @@ before use in a real negotiation.
   and Enterprise.
 - **Multi-year commitment discount** — 10% (2-year) / 15% (3-year), prepaid or annual
   invoicing. Deliberately more modest than the ~38–45% Qualys reportedly discounts at
-  3-year/10,000+-asset scale, since VulnHunter's list price already starts well below
+  3-year/10,000+-asset scale, since Quanta's list price already starts well below
   that comparison point.
 
 ## Vertical modules — OT/IoT & AppSec
@@ -128,9 +128,9 @@ see the Architecture & Schema Reference document's storage-model section for wha
 
 ### Illustrative SaaS infrastructure cost model (roadmap)
 
-**This is a proposed, illustrative model for a possible future hosted "VulnHunter
+**This is a proposed, illustrative model for a possible future hosted "Quanta
 Cloud" tier — nothing below is a current cost, a committed price, or a built product.**
-VulnHunter is self-hosted/single-tenant today (see the Architecture & Schema Reference
+Quanta is self-hosted/single-tenant today (see the Architecture & Schema Reference
 document, §03, and its "Data handling & residency (SaaS target design)" subsection).
 These figures exist so a future hosting build has a documented starting point, not
 because hosting is being sold today.
@@ -150,7 +150,7 @@ generically — not a quote from any one vendor's pricing page):
   runs $5,000-$20,000/month at meaningful scale; a small deployment (~1,000 monthly
   active users) can run on a single VM/small container setup for $50-$200/month.
 
-**A rough, illustrative VulnHunter-shaped estimate** — arithmetic shown, not a vendor
+**A rough, illustrative Quanta-shaped estimate** — arithmetic shown, not a vendor
 quote, rounded generously: for a mid-tier customer sized like Professional (~7,500
 assets), a plausible all-in infra band is in the **low-to-mid hundreds of dollars per
 month**. Illustratively: 1-2 app/worker instances (~$150-$300/mo blended, cheaper with
@@ -163,7 +163,7 @@ intentionally rough, assumption-driven arithmetic, not a costed engineering esti
 **Two possible pricing mechanisms for a hosted tier** (options for the business to
 decide between — neither is a decision made here):
 
-1. **"VulnHunter Cloud" SKU — license + hosting uplift.** Keep every existing license
+1. **"Quanta Cloud" SKU — license + hosting uplift.** Keep every existing license
    tier unchanged and add a hosting uplift of roughly +15-25% over the self-hosted
    price, framed as covering infra/ops/monitoring/on-call — not a firm commitment.
    Applied illustratively to today's real prices: Standard ($12,000/yr) →
@@ -200,7 +200,7 @@ in this document — this is additive, future-hosting content only.
 **Why ServiceNow's headline number looks small until you scale it:** $11,000 is a
 per-user starting price that grows with every analyst added, plus a separate
 device-based component — exactly why real deployments land at $40K–$120K/year.
-VulnHunter's unlimited-user model doesn't recreate that growth curve.
+Quanta's unlimited-user model doesn't recreate that growth curve.
 
 ### Sources
 

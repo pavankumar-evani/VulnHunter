@@ -25,7 +25,7 @@ token-refresh/retry-on-401 logic - a real long-running integration should add th
 
 Output mapping: unlike Tenable/Armis/Qualys, Prisma Cloud alerts are cloud
 posture/compliance violations, not CVE-scoped known-vulnerability findings - so, like
-crowdstrike_connector.py, this connector normalizes directly into VulnHunter's Finding
+crowdstrike_connector.py, this connector normalizes directly into Quanta's Finding
 schema itself (cve/cvss/kev/epss always None - a deliberate, expected property of this
 source, not a mapping gap) rather than routing through vuln-ingest-normalizer.md. `id` is
 left None on every normalized finding - FIND-N assignment is the pipeline's job (it needs
@@ -124,7 +124,7 @@ class PrismaCloudConnector:
 
     @staticmethod
     def normalize_alert(alert):
-        """Maps one raw Prisma Cloud alert object into VulnHunter's normalized Finding
+        """Maps one raw Prisma Cloud alert object into Quanta's normalized Finding
         shape (see remediation/schema/normalized-finding-schema.md). See module
         docstring for why cve/cvss/kev/epss are always None and id is always None
         here."""

@@ -29,7 +29,7 @@ DEFAULT_BASE_URL = "https://api.crowdstrike.com"
 # Falcon alert severities are typically a 1-100 numeric score (severity_name is also
 # sometimes present, but its exact vocabulary varies by alert type/product). These
 # thresholds are a reasonable-but-arbitrary starting point for mapping onto
-# VulnHunter's four-tier Critical/High/Medium/Low scale - they are NOT sourced from
+# Quanta's four-tier Critical/High/Medium/Low scale - they are NOT sourced from
 # official CrowdStrike docs, and exact cutoffs vary by alert type in practice. Tune
 # against a real tenant before relying on this for triage prioritization.
 SEVERITY_CRITICAL_THRESHOLD = 90
@@ -126,7 +126,7 @@ class CrowdStrikeConnector:
         return "Low"
 
     def normalize_alert(self, alert):
-        """Maps one raw Falcon alert object into VulnHunter's normalized Finding shape
+        """Maps one raw Falcon alert object into Quanta's normalized Finding shape
         (see remediation/schema/normalized-finding-schema.md).
 
         Falcon EDR alerts are behavioral detections ("process X injected into process
@@ -149,7 +149,7 @@ class CrowdStrikeConnector:
         # Falcon's platform taxonomy has more values than a simple Windows/not-Windows
         # split (macOS, various Linux distros, etc.) - a real implementation would map
         # the full taxonomy. This is a reasonable two-bucket fallback given the
-        # asset.type vocabulary VulnHunter currently defines (see
+        # asset.type vocabulary Quanta currently defines (see
         # normalized-finding-schema.md).
         asset_type = "windows-endpoint" if platform == "Windows" else "unix-server"
 

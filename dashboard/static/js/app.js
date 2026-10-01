@@ -1,4 +1,4 @@
-// Client-side router for the VulnHunter dashboard SPA. Each page module lives in
+// Client-side router for the Quanta dashboard SPA. Each page module lives in
 // ./pages/*.js and exports `render(container, ...params)` plus a `title` (string
 // or function taking the matched URL params). No framework, no build step -
 // dynamic import() is a native browser feature, not a bundler trick.
@@ -125,7 +125,7 @@ async function renderRoute() {
   const matched = matchRoute(pathname);
   if (!matched) {
     titleEl.textContent = "Not Found";
-    document.title = "Not Found · VulnHunter";
+    document.title = "Not Found · Quanta";
     appEl.innerHTML = `<p class="empty-state">Page not found.</p>`;
     return;
   }
@@ -135,7 +135,7 @@ async function renderRoute() {
     const mod = await matched.route.load();
     const heading = typeof mod.title === "function" ? mod.title(...matched.params) : mod.title;
     titleEl.textContent = heading;
-    document.title = `${heading} · VulnHunter`;
+    document.title = `${heading} · Quanta`;
     currentCleanup = (await mod.render(appEl, ...matched.params)) || null;
   } catch (err) {
     console.error(err);

@@ -54,7 +54,7 @@ One markdown file, `remediation/output/<finding-id>-ot-recommendation.md`, with:
      "alert on any connection attempt to <asset-name> on <affected port> from outside
      the control-system VLAN").
 3. **Vendor-coordination checklist**: a real, actionable checklist for scheduling the
-   actual fix, since VulnHunter cannot generate OT firmware/patch changes itself:
+   actual fix, since Quanta cannot generate OT firmware/patch changes itself:
    - Confirm with the equipment vendor whether a firmware update addressing this CVE
      exists, and whether it's certified for this specific device model/firmware
      version (OT vendors frequently require this before a customer applies anything).

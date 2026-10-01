@@ -20,7 +20,7 @@ structure:
 3. **Findings, most severe first**. For each: title, severity badge (use text like
    `**CRITICAL**`), CWE, file/line, plain-English description of the risk (what could an
    attacker actually do), the evidence snippet, and the recommended fix.
-4. **Remediation plan**: which findings VulnHunter will auto-fix now, and which need
+4. **Remediation plan**: which findings Quanta will auto-fix now, and which need
    human review/design decisions (with a one-line reason why each can't be auto-fixed
    safely).
 5. Keep it tight — this should be skimmable in under 2 minutes. Use severity ordering:

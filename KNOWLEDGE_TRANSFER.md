@@ -1,6 +1,6 @@
-# VulnHunter — Knowledge Transfer & Product Overview
+# Quanta — Knowledge Transfer & Product Overview
 
-This document is the single place to understand *what VulnHunter is, why it exists, how
+This document is the single place to understand *what Quanta is, why it exists, how
 it works, and how to actually run it* — written so anyone picking up this repo cold
 (a teammate, a judge, a future you) can get productive without a walkthrough call.
 
@@ -16,7 +16,7 @@ This document goes deeper than either: it's the KT.
 
 ## 1. Executive Summary
 
-VulnHunter is a **Claude Code extension** — not a standalone application — built as an
+Quanta is a **Claude Code extension** — not a standalone application — built as an
 independent, self-directed project. It adds two slash-command pipelines to Claude Code:
 
 | Pipeline | What it does | Status |
@@ -308,7 +308,7 @@ by construction, not by policy:
 
 ```bash
 git clone https://github.com/pavankumar-evani/VulnHunter.git
-cd VulnHunter
+cd Quanta
 claude
 ```
 
@@ -1123,9 +1123,9 @@ ServiceNow/Jira/Splunk send forms refusing to pretend a preview is a real send.
 **CrowdStrike Falcon got a reference page (`/xdr`) instead of a send form**, unlike
 Jira and Splunk which each got a full preview/send page. This isn't an oversight or a
 lesser feature — it's the same distinction Tenable and Armis already established:
-CrowdStrike Falcon's Alerts API is something VulnHunter **pulls from** (query alert IDs,
+CrowdStrike Falcon's Alerts API is something Quanta **pulls from** (query alert IDs,
 fetch full alert objects, normalize into the Finding schema), the same shape as Tenable's
-export API and Armis's AQL search, not something VulnHunter **pushes to** the way
+export API and Armis's AQL search, not something Quanta **pushes to** the way
 ServiceNow/Jira (ticket creation) and Splunk (HEC event ingestion) are. There is nothing
 to preview-and-confirm-sending for a pull connector — the "preview" *is* the connector's
 own documented fetch-and-normalize behavior, which is why `/xdr` is a description of what

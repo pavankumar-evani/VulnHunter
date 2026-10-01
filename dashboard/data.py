@@ -1,5 +1,5 @@
 """
-Reads VulnHunter's real generated artifacts (git history for /vulnhunt, files under
+Reads Quanta's real generated artifacts (git history for /vulnhunt, files under
 remediation/ for /remediate) and shapes them for the dashboard templates.
 
 Deliberately has no pipeline logic of its own - it only parses what vuln-triage-reporter

@@ -65,7 +65,7 @@ def build_issue_body(finding, project_key, issue_type=DEFAULT_ISSUE_TYPE):
     return {
         "fields": {
             "project": {"key": project_key},
-            "summary": f"[VulnHunter {finding['id']}] {finding.get('title', '')}",
+            "summary": f"[Quanta {finding['id']}] {finding.get('title', '')}",
             "issuetype": {"name": issue_type},
             "description": {
                 "type": "doc",

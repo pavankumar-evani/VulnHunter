@@ -5,7 +5,7 @@ Prisma Cloud, ...) only ever pulls findings out of a scanner someone else alread
 bought, deployed, and pointed at their network. GVM is the one well-known,
 enterprise-used, genuinely free/open-source engine in that category (the actual
 upstream Nessus forked from, still maintained by Greenbone) - this connector lets
-VulnHunter drive it directly: define a target, launch a real authenticated scan
+Quanta drive it directly: define a target, launch a real authenticated scan
 against it, poll until done, and pull real per-host CVE results back. See
 docs/VULNERABILITY_ENGINE_ARCHITECTURE.md for the full design and why GVM was chosen
 over Nuclei/OWASP ZAP/Trivy for this role.
@@ -187,7 +187,7 @@ class OpenVasConnector:
             target_response = gmp.create_target(name=target_name, hosts=hosts)
             target_id = target_response.get("id")
             task_response = gmp.create_task(
-                name=task_name or f"VulnHunter scan of {target_name}",
+                name=task_name or f"Quanta scan of {target_name}",
                 config_id=self.scan_config_id,
                 target_id=target_id,
                 scanner_id=self.scanner_id,

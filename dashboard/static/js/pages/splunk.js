@@ -44,7 +44,7 @@ export async function render(container) {
       credentials were available while building it. It implements Splunk's documented
       HTTP Event Collector (HEC) contract and is unit-tested against mocked responses
       shaped like that documentation. Verify against a test/non-production index before
-      relying on it. This is one-directional push - VulnHunter sends findings to Splunk
+      relying on it. This is one-directional push - Quanta sends findings to Splunk
       as events, it does not read anything back. Re-sending the same finding on every
       pipeline run is expected (HEC events are an append-only stream, not a ticket
       system - there is deliberately no dedup here). See

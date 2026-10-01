@@ -3,7 +3,7 @@
 ## Reporting a Vulnerability
 
 This is a security tooling project, so we hold it to the standard it's meant to enforce
-on others. If you find a security issue in VulnHunter itself — in the code pipeline, the
+on others. If you find a security issue in Quanta itself — in the code pipeline, the
 remediation pipeline, the demo app's handling outside its intended sandboxed use, or
 anywhere else in this repository — please report it privately rather than opening a
 public issue.

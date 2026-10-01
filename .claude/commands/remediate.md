@@ -4,7 +4,7 @@ argument-hint: [--generate] [--finding-id FIND-N]
 allowed-tools: Task, Read, Bash
 ---
 
-Run the VulnHunter remediation pipeline. Arguments: $ARGUMENTS
+Run the Quanta remediation pipeline. Arguments: $ARGUMENTS
 
 By default this ingests the sample data in `remediation/sample-data/` (`tenable_export.csv`,
 `armis_export.json`, `threat_intel.json`) — if the user passed different file paths in

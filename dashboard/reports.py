@@ -118,7 +118,7 @@ def report_title(report):
     period_title = report["period"].replace("-", " ").title()
     scope_bit = "" if report.get("scope", "all") == "all" else f" - {report['scope']}"
     team_bit = f" - {report['team']}" if report.get("team") else ""
-    return f"VulnHunter {period_title} Security Report{scope_bit}{team_bit}"
+    return f"Quanta {period_title} Security Report{scope_bit}{team_bit}"
 
 
 def render_report_html(report):

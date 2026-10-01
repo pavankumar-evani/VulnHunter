@@ -1,5 +1,5 @@
 """
-VulnHunter Dashboard - a FastAPI JSON API plus a hand-rolled vanilla-JS single-page
+Quanta Dashboard - a FastAPI JSON API plus a hand-rolled vanilla-JS single-page
 frontend (static/index.html + static/js/*.js) reading the real generated artifacts
 from both pipelines. No Node/npm/build step - see dashboard/README.md for why, and
 what a production version would add on top of this.
@@ -85,7 +85,7 @@ from remediation.utils import db as db_module  # noqa: E402
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-app = FastAPI(title="VulnHunter Dashboard API", version="1.0.0")
+app = FastAPI(title="Quanta Dashboard API", version="1.0.0")
 
 # Real process-uptime clock (monotonic, so a system clock change can't skew it) and a
 # handle onto the background scheduler task, both purely for honest self-reporting in
@@ -1572,7 +1572,7 @@ def api_openvas_scan_start(body: OpenVasScanStartBody, request: Request):
         raise HTTPException(status_code=400, detail="At least one target host, CIDR range, or hostname is required.")
     conn = _openvas_connector(body)
     try:
-        task_id = conn.create_and_start_scan(body.target_name or f"VulnHunter target ({hosts[0]})", hosts)
+        task_id = conn.create_and_start_scan(body.target_name or f"Quanta target ({hosts[0]})", hosts)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"OpenVAS/GVM scan launch failed: {exc}") from exc
     return {
@@ -2846,7 +2846,7 @@ def api_auth_oidc_callback(code: str, state: str):
     # Every OIDC-authenticated user lands as role "user", never "admin" - there's no
     # reliable, provider-agnostic way to know someone's real org role from a generic
     # userinfo claim set. A real deployment would map the IdP's own group/role claims
-    # (which vary per provider) onto VulnHunter's admin/user roles; that mapping isn't
+    # (which vary per provider) onto Quanta's admin/user roles; that mapping isn't
     # implemented here.
     user = {"email": email, "name": userinfo.get("name", email), "role": "user"}
     cookie_value = sessions.create_session_cookie(user, rbac.SESSION_SECRET)

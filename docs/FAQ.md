@@ -1,4 +1,4 @@
-# VulnHunter — FAQ
+# Quanta — FAQ
 
 **How to use this doc:** specific yes/no and "does it actually..." questions about this
 product, answered plainly. If you want task-oriented how-to instead, see
@@ -485,7 +485,7 @@ section for the full reasoning (this machine had no Node.js/npm installed, so a 
 build couldn't be *written and verified running* here - shipping an untested frontend
 isn't "modern," it's just unverified). Perl only appears as one of the six languages
 `vuln-scanner` can find vulnerabilities *in* ([.claude/agents/vuln-scanner.md](../.claude/agents/vuln-scanner.md))
-- VulnHunter itself has no Perl in it.
+- Quanta itself has no Perl in it.
 
 Real Infrastructure-as-Code already exists, though: `remediation-fixer-windows`/`-unix`
 generate real, reviewable Ansible playbooks (or PowerShell DSC for Windows where more
@@ -590,12 +590,12 @@ works if `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM_ADDRESS` are configured), and a "Run
 now" button that runs the same due-subscription logic the background scheduler runs
 hourly, on demand.
 
-### How do I use AI Assist, and how is it different from Ask VulnHunter?
+### How do I use AI Assist, and how is it different from Ask Quanta?
 
 **AI Assist** (`/ai-assist`) is the one feature that calls the real Claude API: pick a
 finding, pick an action (explain it in plain English / draft remediation steps / write an
 executive summary), and confirm to spend real API usage - unconfirmed, you get a free
-preview of the exact prompt that would be sent. **Ask VulnHunter** (`/ask`) is a
+preview of the exact prompt that would be sent. **Ask Quanta** (`/ask`) is a
 different, free feature: type a question in plain English and it deterministically
 matches it against real query shapes (a finding ID, a CVE, a count, an asset name) or, if
 nothing structured matches, against this FAQ file's own entries by keyword overlap - it
@@ -616,7 +616,7 @@ forecasting).
 
 ### How does this compare to ServiceNow's Vulnerability Response / USEM module?
 
-The short version: VulnHunter's core bet is that **remediation**, not just detection, is
+The short version: Quanta's core bet is that **remediation**, not just detection, is
 the differentiator — three separate mechanisms by asset domain (Ansible playbooks for
 Windows/Unix, a real git-branch-and-PR flow for application code, and a
 compensating-control-only recommendation track for OT/IoT that deliberately never
@@ -626,11 +626,11 @@ generates a patch script) under one RBAC/approval model, rather than one generic
 validates that gap as real and shows ServiceNow actively closing it, so treat this as a
 genuine ongoing competitive space, not a settled advantage. The full breakdown (cost-per-
 asset research, feature-by-feature comparison, and where legacy tools still legitimately
-win — longer track record, bigger integration ecosystems, formal certifications VulnHunter
+win — longer track record, bigger integration ecosystems, formal certifications Quanta
 doesn't have yet) is in `docs/enterprise-suite/whitepaper.html` §02 and
 `docs/enterprise-suite/pricing.html` §02/§09.
 
-### Has VulnHunter filed for, or been granted, any patents?
+### Has Quanta filed for, or been granted, any patents?
 
 No. A patent-landscape review (not a legal opinion — no attorney has been consulted) found
 that the broad concept of "AI analyzes a vulnerability and generates remediation

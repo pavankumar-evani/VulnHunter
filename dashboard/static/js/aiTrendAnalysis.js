@@ -12,7 +12,7 @@
 // whenever the row got tight, which is exactly the "gaps between graphs" complaint this
 // redesign exists to remove. Clicking it opens a small anchored panel with 3 real
 // actions (preview the prompt, generate a real analysis, or open the full Ask
-// VulnHunter assistant) - selecting one shows its result in that same small panel.
+// Quanta assistant) - selecting one shows its result in that same small panel.
 import { api } from "./api.js";
 import { escapeHtml, flash } from "./dom.js";
 
@@ -42,7 +42,7 @@ function menuViewHtml(scopeLabel) {
       <span class="ai-trend-menu-option-note">Calls the real Claude API - spends credits</span>
     </button>
     <a class="ai-trend-menu-option" href="/ask" data-link data-action="ask">
-      <span class="ai-trend-menu-option-title">💬 Ask VulnHunter</span>
+      <span class="ai-trend-menu-option-title">💬 Ask Quanta</span>
       <span class="ai-trend-menu-option-note">Open the full search assistant</span>
     </a>`;
 }

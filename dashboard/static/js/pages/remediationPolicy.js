@@ -70,7 +70,7 @@ export async function render(container) {
     </p>
 
     <div class="callout callout-warn">
-      This never causes VulnHunter itself to connect to, or execute anything against,
+      This never causes Quanta itself to connect to, or execute anything against,
       real infrastructure. "Auto-remediate" only means the generated playbook doesn't
       need a per-instance Approve click before it's considered ready - a human or an
       existing enterprise system (SCCM, Ansible Tower/AWX, your own change-management

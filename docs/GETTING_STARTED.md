@@ -10,7 +10,7 @@ see [docs/enterprise-suite/hub.html](enterprise-suite/hub.html).
 
 ```bash
 git clone https://github.com/pavankumar-evani/VulnHunter.git
-cd VulnHunter
+cd Quanta
 git checkout feature/remediation-engine
 ```
 

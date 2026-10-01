@@ -738,7 +738,7 @@ a.notif-item:hover { background: var(--bg); }
   .lifecycle-arrow { display: none; }
 }
 
-/* --- Ask VulnHunter (askVulnhunter.js) - example-query quick-fill buttons --- */
+/* --- Ask Quanta (askVulnhunter.js) - example-query quick-fill buttons --- */
 .ask-examples { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .ask-examples .link-button { font-size: 0.85rem; }
 
@@ -949,7 +949,7 @@ a.notif-item:hover { background: var(--bg); }
    commercial pattern for premium sign-in pages (animated gradient mesh + glassmorphism
    + a live-feeling illustration, the same real direction Stripe/Linear/Vercel-style
    auth pages and dedicated tools like Auth0's Universal Login templates use today) and
-   built fresh for VulnHunter's own security-network visual language. */
+   built fresh for Quanta's own security-network visual language. */
 .auth-shell {
   position: relative;
   display: flex;

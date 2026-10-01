@@ -10,7 +10,7 @@ Reference: https://docs.splunk.com/Documentation/Splunk/latest/Data/UsetheHTTPEv
 
 This is genuinely one-directional and push-based - the *opposite* direction of the
 Tenable/Armis/CrowdStrike connectors in this package, which pull data out of the vendor
-using the vendor's own auth and query APIs. Here, VulnHunter is the client making the
+using the vendor's own auth and query APIs. Here, Quanta is the client making the
 call, but Splunk is the destination, not the source: this module hands a finding to
 Splunk as a log event, the same way an app would ship any other event to a SIEM. That's
 a deliberate, honest description of what this integration actually is, not a limitation

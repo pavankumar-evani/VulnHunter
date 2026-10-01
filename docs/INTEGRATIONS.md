@@ -1,6 +1,6 @@
-# VulnHunter — Integrations
+# Quanta — Integrations
 
-**How to use this doc:** read this to understand every external system VulnHunter
+**How to use this doc:** read this to understand every external system Quanta
 actually talks to — what each integration does, and critically, what's genuinely
 **live-verified** versus **built against public docs but never exercised against a real
 tenant**. This distinction is treated as load-bearing throughout this repo, not a
@@ -132,7 +132,7 @@ free/open-source scan engine descended from the original Nessus) directly, via G
 HTTP), using Greenbone's own `python-gvm` client library. It creates a target, creates
 and starts a task, polls the task until done, and pulls real per-host CVE results back -
 this is the piece that lets a company with **no existing vulnerability scanner** get
-real findings out of VulnHunter, not just a company that already pays for Tenable or
+real findings out of Quanta, not just a company that already pays for Tenable or
 Qualys.
 
 Results are flattened into **Tenable's exact CSV column shape**
@@ -217,7 +217,7 @@ Sends each finding to Splunk as an event via the documented HTTP Event Collector
 contract — token auth via an `Authorization: Splunk <token>` header (not Basic auth, not
 OAuth), one `POST` per event. This is genuinely one-directional and push-based, the
 opposite direction from Tenable/Armis/CrowdStrike (which pull data out of the vendor):
-here VulnHunter is the client, and Splunk is the destination, the same way any app ships
+here Quanta is the client, and Splunk is the destination, the same way any app ships
 a log event to a SIEM. The whole normalized finding is passed through as the event body
 (`build_hec_event()`, a pure function, no network) rather than a hand-picked subset, so
 nothing gets silently dropped before it reaches Splunk — this also powers the
@@ -243,7 +243,7 @@ default index/sourcetype match what you expect, or pass explicit overrides.
 Pulls EDR/XDR alerts via CrowdStrike Falcon's documented OAuth2 client-credentials flow,
 then a query-then-fetch-entities pattern (`GET /alerts/queries/alerts/v1` for matching
 alert composite IDs, `POST /alerts/entities/alerts/v2` to resolve them into full alert
-objects), and normalizes each into VulnHunter's Finding schema
+objects), and normalizes each into Quanta's Finding schema
 (`normalize_alert()`). Like Armis, this is a **pull** connector with no dashboard form —
 only a reference page at `/xdr` describing what it does and how to use it from Python,
 since there's nothing to preview/send, only to fetch and normalize. Unlike Prisma
@@ -279,7 +279,7 @@ contract: exchanges an access key ID + secret key for a token
 not a Bearer `Authorization` header), then fetches open alerts (`POST /v2/alert`).
 Like `crowdstrike_connector.py`, Prisma Cloud alerts are cloud posture/compliance
 violations, not CVE-scoped known-vulnerability findings — so this connector normalizes
-directly into VulnHunter's Finding schema itself (`cve`/`cvss`/`kev`/`epss` always
+directly into Quanta's Finding schema itself (`cve`/`cvss`/`kev`/`epss` always
 `null`, `asset.type` always `cloud-infrastructure`) rather than routing through
 `vuln-ingest-normalizer.md`. `id` is left `null` on every normalized finding, the same
 convention `crowdstrike_connector.normalize_alert()` already establishes. Fetches a
@@ -337,7 +337,7 @@ behavior as Prisma Cloud's dashboard form above, to
 
 Pulls DNS host records from an Infoblox NIOS grid via the documented WAPI (Web API)
 `record:host` object (`GET /wapi/{version}/record:host`, HTTP Basic auth), and normalizes
-each into VulnHunter's shared **asset-inventory** shape (`name`, `ip`, `mac`, `type`,
+each into Quanta's shared **asset-inventory** shape (`name`, `ip`, `mac`, `type`,
 `source`, `source_ref`, `extra`) — unlike every connector above, this produces asset
 records, not vulnerability findings, because Infoblox is a DNS/IPAM system, not a
 vulnerability scanner. A DNS host record doesn't carry MAC address or OS/platform data (those live
@@ -506,7 +506,7 @@ Instead: almost every modern SIEM/XDR/EDR/SOAR tool supports sending a **custom 
 webhook** with a JSON body you control. This adapter is the receiving side of that -
 validate an inbound payload against a documented minimal shape (`title`, `severity`,
 `asset_name`, `asset_type` required; `cve`, `description`, `source_ref`, etc. optional),
-normalize it into VulnHunter's normalized Finding schema, and write it to
+normalize it into Quanta's normalized Finding schema, and write it to
 `remediation/live-data/generic-ingested.json` (gitignored, same convention as live
 Tenable/Armis output). IDs continue the real pipeline's `FIND-N` sequence so an ingested
 finding's ID never collides with a real one. **Deliberately not auto-merged** into the
@@ -526,8 +526,8 @@ internal schema, mocked-HTTP unit tests, an explicit "built vs. verified" caveat
 proven thirteen times over for vulnerability-finding connectors (Tenable, Armis, Qualys,
 OpenVAS/GVM, ServiceNow, Jira, Splunk, CrowdStrike, Prisma Cloud, Cortex XSIAM) and
 asset-inventory connectors (Infoblox, Axonius, Active Directory), plus the generic
-webhook adapter above for anything that can push data to VulnHunter rather than needing
-VulnHunter to pull from it.
+webhook adapter above for anything that can push data to Quanta rather than needing
+Quanta to pull from it.
 
 The entries below are the same idea one stage earlier: real, researched facts about
 each product's actual public API (auth model, real endpoint/data shape, what would flow)

@@ -23,8 +23,8 @@ CROP_BOTTOM = 0
 
 # (raw filename from render_docs.ps1, human-readable title used for the final filename)
 ORDERED = [
-    ("01_hub.pdf", "VulnHunter Documentation"),
-    ("02_executive-brief.pdf", "VulnHunter Solution Brief"),
+    ("01_hub.pdf", "Quanta Documentation"),
+    ("02_executive-brief.pdf", "Quanta Solution Brief"),
     ("03_whitepaper.pdf", "The Governed Remediation Thesis"),
     ("04_architecture.pdf", "Architecture and Schema Reference"),
     ("05_vuln-engine.pdf", "Vulnerability Finding Engine"),
@@ -36,7 +36,7 @@ ORDERED = [
     ("11_pages.pdf", "Page-by-Page Reference"),
     ("12_developer-guide.pdf", "Developer Guide"),
     ("13_poc-methodology.pdf", "Proof-of-Concept Methodology"),
-    ("14_pricing.pdf", "VulnHunter Pricing"),
+    ("14_pricing.pdf", "Quanta Pricing"),
     ("15_user-guide.pdf", "User and Operations Guide"),
 ]
 

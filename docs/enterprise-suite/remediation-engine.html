@@ -86,7 +86,7 @@
 </style>
 
 <div class="suitebar">
-  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>Quanta</a>
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
@@ -120,7 +120,7 @@
         <div class="step"><div class="n">4</div><div><div class="who">Human, recorded</div><h4>Request approval</h4><p>A <code>remediation-approvals</code> request is created against the next real maintenance window from the resolved remediation policy (§5).</p></div></div>
         <div class="step"><div class="n">5</div><div><div class="who">Human (admin)</div><h4>Approve or reject</h4><p>Recorded with who decided, when, and (if AD is configured) whether the approver's group membership was verified. A pending request past its window with no decision auto-reports as <code>expired</code>.</p></div></div>
         <div class="step"><div class="n">6</div><div><div class="who">Human, one click</div><h4>Trigger</h4><p>Marks the approval <code>remediation_triggered</code> — the honest ceiling of what this app tracks. Not independent confirmation the fix was applied.</p></div></div>
-        <div class="step"><div class="n">7</div><div><div class="who">Outside this app, always</div><h4>Apply</h4><p>Run by a person or your org's own change-managed automation platform (Ansible Tower/AWX, SCCM, Intune). VulnHunter performs this step in zero cases.</p></div></div>
+        <div class="step"><div class="n">7</div><div><div class="who">Outside this app, always</div><h4>Apply</h4><p>Run by a person or your org's own change-managed automation platform (Ansible Tower/AWX, SCCM, Intune). Quanta performs this step in zero cases.</p></div></div>
       </div>
     </section>
 
@@ -166,12 +166,12 @@
 
     <section id="boundary">
       <h2><span class="num">06</span>The execution boundary</h2>
-      <div class="callout warn"><span class="label">Verbatim — this is the load-bearing sentence in this entire engine</span><p>"Nothing in this repository ever executes against real infrastructure automatically — by construction, not by policy." The fixer subagents hold <code>Read, Write</code> tool access only — no <code>Bash</code>, no network tool, no stored credentials. They cannot reach a host even if instructed to. PAM/Vault integration is a lookup-plugin snippet resolved by <em>your</em> infrastructure at playbook-run time — VulnHunter never holds a live secret.</p></div>
+      <div class="callout warn"><span class="label">Verbatim — this is the load-bearing sentence in this entire engine</span><p>"Nothing in this repository ever executes against real infrastructure automatically — by construction, not by policy." The fixer subagents hold <code>Read, Write</code> tool access only — no <code>Bash</code>, no network tool, no stored credentials. They cannot reach a host even if instructed to. PAM/Vault integration is a lookup-plugin snippet resolved by <em>your</em> infrastructure at playbook-run time — Quanta never holds a live secret.</p></div>
     </section>
 
     <section id="tracks">
       <h2><span class="num">07</span>Four remediation tracks — deliberately not one workflow</h2>
-      <p class="section-intro">Everything above describes the IT-infrastructure track in detail. VulnHunter actually runs <strong>four genuinely separate remediation mechanisms</strong>, each shaped for how that category of finding is really fixed in practice — not one generic "generate a fix" pipeline stretched to cover cases it doesn't fit.</p>
+      <p class="section-intro">Everything above describes the IT-infrastructure track in detail. Quanta actually runs <strong>four genuinely separate remediation mechanisms</strong>, each shaped for how that category of finding is really fixed in practice — not one generic "generate a fix" pipeline stretched to cover cases it doesn't fit.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Track</th><th>Findings</th><th>Mechanism</th><th>Output artifact</th><th>Default risk posture</th></tr></thead>
@@ -192,7 +192,7 @@
       </div>
     </section>
 
-    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> or <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener" data-suite-link="pages">Page-by-Page Reference</a>.</footer>
+    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> or <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener" data-suite-link="pages">Page-by-Page Reference</a>.</footer>
   </main>
 </div>
 

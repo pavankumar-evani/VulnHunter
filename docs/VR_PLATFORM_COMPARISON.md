@@ -1,14 +1,14 @@
-# VulnHunter vs. ServiceNow VR and modern alternatives
+# Quanta vs. ServiceNow VR and modern alternatives
 
 **How to use this doc:** pavane's stated pain points with ServiceNow's Vulnerability
 Response (VR)/USEM module — too much documentation, very high cost, too complex, not
-user/support-friendly — plus a request to research whether VulnHunter can be repositioned
+user/support-friendly — plus a request to research whether Quanta can be repositioned
 as a modern in-house alternative, informed by four named platforms: Nucleus Security,
 DefectDojo Pro, Brinqa, and ArmorCode. This doc separates **verified facts** (cited,
 independently re-checked) from the source material's unverified claims, states
-VulnHunter's actual current capability against that real data (not aspiration), and ends
+Quanta's actual current capability against that real data (not aspiration), and ends
 with a prioritized, phased roadmap. See also [INTEGRATIONS.md](INTEGRATIONS.md) for the
-authoritative list of what VulnHunter's connectors actually do today, and
+authoritative list of what Quanta's connectors actually do today, and
 [KNOWLEDGE_TRANSFER.md §9](../KNOWLEDGE_TRANSFER.md#9-roadmap--path-to-commercial-grade)
 for the broader roadmap this feeds into.
 
@@ -24,7 +24,7 @@ needs... must not be considered final deliverables." Concretely:
 
 - The deck repeatedly references **"Tyson"** ("consolidating vulnerability findings from
   all key Tyson tools," "integrate Tyson's stack," "positions Tyson for scalable...
-  vulnerability management") — a company name with no connection to VulnHunter or
+  vulnerability management") — a company name with no connection to Quanta or
   Deloitte. This is a leftover/hallucinated artifact from generating the deck, not a
   real requirement — a concrete sign the deck was not built specifically for this
   project and wasn't proofread before being shared.
@@ -91,7 +91,7 @@ different integration shape (findings import) than a live API connector like Ten
 Prisma Cloud — worth confirming directly with either vendor before assuming it, rather
 than treating the deck's claim as settled.
 
-## 4. VulnHunter's actual current position
+## 4. Quanta's actual current position
 
 Real strengths already shipped (from the codebase, not aspiration):
 
@@ -106,12 +106,12 @@ Real strengths already shipped (from the codebase, not aspiration):
   internal/external-facing asset classification on the Risk Management page — the same
   "link findings to business context" idea Brinqa leads with, already present in some
   form.
-- **Priced well below the incumbent, with a real SLA** — VulnHunter is now a commercial
+- **Priced well below the incumbent, with a real SLA** — Quanta is now a commercial
   product (see [PRICING.md](PRICING.md)): Professional tier lists at $38,000/year
   against VR's real $40K–$120K/year benchmark, and includes a credited support SLA
   (99.9% uptime, 4-hour Sev1 response) rather than no formal support commitment at all.
   Still not a fully apples-to-apples comparison — VR's pricing reflects a mature,
-  decades-old support organization VulnHunter's is not yet built out to match (see
+  decades-old support organization Quanta's is not yet built out to match (see
   PRICING.md §7's launch-readiness checklist).
 - **Remediation-plan/playbook generation** (Ansible) — directionally similar to
   ArmorCode's playbook pitch, though it generates a reviewable script for a human to run
@@ -125,11 +125,11 @@ assumption):
 
 - **Only 12 real connectors** (Tenable, Armis, Qualys, ServiceNow, Jira, Splunk,
   CrowdStrike, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory) versus
-  200–350+ for each alternative above. **12 of VulnHunter's 14 total integrations —
+  200–350+ for each alternative above. **12 of Quanta's 14 total integrations —
   including both threat-intel feeds' connector-side counterparts — have never been
   exercised against a real live account**, only mocked HTTP (or, for Active Directory, a
   fake LDAP connection) built against public docs. Every competitor's connector count
-  implicitly assumes production-tested-by-paying-customers; VulnHunter's cannot make
+  implicitly assumes production-tested-by-paying-customers; Quanta's cannot make
   that claim yet.
 - ~~**No cross-scanner deduplication at all.**~~ — **built** (`remediation/enrichment/dedup.py`):
   matches by `(cve, asset.name)`, falling back to `(normalized_title, asset.name)` when
@@ -169,15 +169,15 @@ assumption):
    live API pull like the others.
 
 **Phase 3 — deferred until scoped:**
-5. Log correlation — define concretely what this means for VulnHunter (which log
+5. Log correlation — define concretely what this means for Quanta (which log
    sources, what "correlation" produces) before estimating or building anything.
 6. No-code-style remediation actions — grow the existing Ansible-playbook generator
    toward a "one-click apply" mode for auto-approvable, low-risk fixes only, rather than
-   promising full no-code automation VulnHunter doesn't have the safety rails for yet.
+   promising full no-code automation Quanta doesn't have the safety rails for yet.
 
 ## 6. Recommendation
 
-Don't try to out-feature all four alternatives at once. VulnHunter's real, already-true
+Don't try to out-feature all four alternatives at once. Quanta's real, already-true
 advantages are **price** ($38,000/year Professional tier vs. a real $40K–$120K/year
 ServiceNow VR benchmark, with a comparable SLA) and **simplicity** (one dashboard vs.
 VR's workflow engine) — both directly answer pavane's original complaint and don't need

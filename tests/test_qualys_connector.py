@@ -109,7 +109,7 @@ class QualysConstruction(unittest.TestCase):
         session = MagicMock()
         QualysConnector("user", "pw", session=session)
         header = session.headers.update.call_args[0][0]
-        self.assertEqual(header["X-Requested-With"], "VulnHunter")
+        self.assertEqual(header["X-Requested-With"], "Quanta")
 
     def test_base_url_strips_trailing_slash(self):
         session = MagicMock()

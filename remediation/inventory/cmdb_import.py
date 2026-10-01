@@ -1,5 +1,5 @@
 """
-CMDB import: reconciles an uploaded asset-details export against VulnHunter's real,
+CMDB import: reconciles an uploaded asset-details export against Quanta's real,
 finding-derived asset list, to help bulk-assign owner/team on the Asset Inventory page
 instead of hand-editing each asset one at a time.
 

@@ -80,7 +80,7 @@
 </style>
 
 <div class="suitebar">
-  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>Quanta</a>
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
@@ -108,7 +108,7 @@
       <input type="text" id="hs-input" placeholder="Search this guide — e.g. &quot;change password&quot;, &quot;EOL status&quot;, &quot;approve remediation&quot;" />
       <button id="hs-btn">Search</button>
     </div>
-    <p class="helpsearch-note">This searches the guide on this page. Inside the running app, <strong>Ask VulnHunter</strong> (<code>/ask</code>) searches this same content live, deterministically — see §06.</p>
+    <p class="helpsearch-note">This searches the guide on this page. Inside the running app, <strong>Ask Quanta</strong> (<code>/ask</code>) searches this same content live, deterministically — see §06.</p>
 
     <section id="account">
       <h2><span class="num">01</span>Your account</h2>
@@ -212,7 +212,7 @@
       </details>
 
       <details class="howto">
-        <summary>How do I use Ask VulnHunter?<span class="route">/ask</span></summary>
+        <summary>How do I use Ask Quanta?<span class="route">/ask</span></summary>
         <div class="body"><p>Type a plain-English question. It deterministically matches a finding ID, a CVE, a count, or an asset name — or, failing that, matches this guide's FAQ content by keyword overlap. Explicitly not an LLM: it can never hallucinate an answer, because "no match" is always an option.</p></div>
       </details>
 
@@ -231,22 +231,22 @@
       </details>
 
       <details class="howto">
-        <summary>How do I check if VulnHunter is running and healthy?</summary>
+        <summary>How do I check if Quanta is running and healthy?</summary>
         <div class="body"><p>There's no dedicated status page in the UI, but there's a real, honest answer. The simplest check: if the Overview page's KPIs load and keep refreshing every 20 seconds without an error, the API and backend are up — a genuine signal, not a guess. For a definitive, scriptable check (worth doing before filing a bug), call <code>/api/status</code> directly — it returns real, live-checked facts (overall status, app version, process uptime, live finding/playbook counts, and whether the background notification scheduler is alive), not a hardcoded "OK". No login is required, unless your deployment has turned on the stricter login-for-reads setting.</p></div>
       </details>
 
       <details class="howto">
         <summary>How do I report a bug, or a real security issue?<span class="route">/support</span></summary>
-        <div class="body"><p>Bugs/unexpected behavior: a GitHub issue with the exact command, full error output, and environment. A real security issue in VulnHunter itself: the private contact in <code>SECURITY.md</code> — never a public issue.</p></div>
+        <div class="body"><p>Bugs/unexpected behavior: a GitHub issue with the exact command, full error output, and environment. A real security issue in Quanta itself: the private contact in <code>SECURITY.md</code> — never a public issue.</p></div>
       </details>
 
       <details class="howto">
         <summary>What's the fastest way to find an answer myself?<span class="route">/ask</span></summary>
-        <div class="body"><p>Try Ask VulnHunter first — it searches this exact guide's content live, with no page reload and no cost. This page's own search box above does the same search, offline.</p></div>
+        <div class="body"><p>Try Ask Quanta first — it searches this exact guide's content live, with no page reload and no cost. This page's own search box above does the same search, offline.</p></div>
       </details>
     </section>
 
-    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> document for the full access-control model, or <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener" data-suite-link="pages">Page-by-Page Reference</a> for every route.</footer>
+    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> document for the full access-control model, or <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener" data-suite-link="pages">Page-by-Page Reference</a> for every route.</footer>
   </main>
 </div>
 

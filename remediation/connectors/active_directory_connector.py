@@ -118,7 +118,7 @@ class ActiveDirectoryConnector:
 
     @staticmethod
     def normalize_computer_entry(entry):
-        """Maps one raw AD computer Entry into VulnHunter's shared asset shape:
+        """Maps one raw AD computer Entry into Quanta's shared asset shape:
             {name, ip, mac, type, source, source_ref, extra}
         See module docstring for why ip/mac are always None and how type is inferred."""
         attr = ActiveDirectoryConnector._attr

@@ -1,4 +1,4 @@
-# VulnHunter 🔍🛡️
+# Quanta 🔍🛡️
 
 [![CI](https://github.com/pavankumar-evani/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/pavankumar-evani/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
@@ -78,11 +78,11 @@ hardcoded API key, plaintext passwords, debug mode) plus 3 more in its `Dockerfi
 more in two more fixture files, `ai_assistant.py` (AI/ML: hardcoded LLM API key,
 insecure model deserialization, prompt injection, excessive agency) and `admin_api.py`
 (secrets/API-authorization: hardcoded AWS keys, hardcoded JWT secret, unauthenticated
-admin route, wildcard CORS, mass assignment) — 18 total. This is what we run VulnHunter
+admin route, wildcard CORS, mass assignment) — 18 total. This is what we run Quanta
 against on stage.
 
 ```bash
-# 1. Point VulnHunter at the vulnerable demo app
+# 1. Point Quanta at the vulnerable demo app
 claude
 /vulnhunt vulnerable-demo-app
 
@@ -101,7 +101,7 @@ in GitHub's web UI or VS Code's Source Control panel.
 ## Why this approach
 
 - **Separation of concerns mirrors real security teams**: a scanner shouldn't have write
-  access, a fixer should never guess on ambiguous cases. This is also VulnHunter's safety
+  access, a fixer should never guess on ambiguous cases. This is also Quanta's safety
   mechanism instead of container sandboxing — `vuln-scanner` is architecturally incapable
   of modifying files (no Edit/Write tool access at all), and `vuln-fixer` only ever acts
   on findings pre-approved as `auto_fixable` by the scan stage, on a fresh branch, never
@@ -338,7 +338,7 @@ docstring for exactly what it does and doesn't claim.
 ## Disclaimer
 
 `vulnerable-demo-app/` is intentionally insecure and exists **only** to demonstrate
-VulnHunter. Do not deploy it anywhere reachable.
+Quanta. Do not deploy it anywhere reachable.
 
 `remediation/sample-data/` contains fabricated Tenable/Armis/threat-intel exports for
 demo purposes — hostnames, IPs, and device names are all fictional. The CVE IDs

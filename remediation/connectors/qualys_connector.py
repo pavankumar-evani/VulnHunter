@@ -76,7 +76,7 @@ class QualysConnector:
         # Qualys requires a non-empty, real identifier on every API call via this
         # header (a documented requirement, not optional) - requests without it are
         # rejected outright.
-        self.session.headers.update({"X-Requested-With": "VulnHunter"})
+        self.session.headers.update({"X-Requested-With": "Quanta"})
 
     def test_connection(self):
         """Cheap, real connectivity/credential check - a host-detection list call

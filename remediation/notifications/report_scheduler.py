@@ -1,5 +1,5 @@
 """
-Cadence-based scheduling for VulnHunter's scheduled report subscriptions
+Cadence-based scheduling for Quanta's scheduled report subscriptions
 (remediation/config/report_schedule_rules.yaml). Pure, testable date-math functions
 (is_due/due_subscriptions) plus a thin orchestrator (check_and_send_due_reports) tying
 them to the real report generator (dashboard/reports.py) and the real SMTP sender

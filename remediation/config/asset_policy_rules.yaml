@@ -1,4 +1,4 @@
-# Bulk asset-metadata policy for VulnHunter.
+# Bulk asset-metadata policy for Quanta.
 #
 # Editing owner/team/environment/facing/remediation-schedule one asset at a time on
 # /assets works, but doesn't scale past a handful of assets. This file declares

@@ -219,7 +219,7 @@ export async function render(container) {
     </div>
     <p class="filter-count">Per the
       <a href="https://www.first.org/cvss/v4.0/specification-document" target="_blank" rel="noopener">FIRST.org CVSS v4.0 specification</a> -
-      the industry-standard scale, not a VulnHunter-specific invention. The qualitative
+      the industry-standard scale, not a Quanta-specific invention. The qualitative
       Critical/High/Medium/Low bands above are unchanged from CVSS v3.x, so this table
       applies whichever version a given finding's own score was reported in by its
       source scanner - real scan/NVD data today is still a mix of v3.0/v3.1/v4.0,

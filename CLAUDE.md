@@ -15,7 +15,7 @@ can stay in your lane without needing to check out or read anyone else's branch.
 
 ## What this repository is
 
-VulnHunter started as a Claude Code **extension** — two slash commands plus seven scoped
+Quanta started as a Claude Code **extension** — two slash commands plus seven scoped
 subagents, no runnable application. It has since grown a second, much larger half on top:
 a real, deployable web application. Both halves are real and current today:
 

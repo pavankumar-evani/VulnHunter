@@ -106,7 +106,7 @@
 </style>
 
 <div class="suitebar">
-  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</a>
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>Quanta</a>
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
@@ -125,11 +125,11 @@
     <div class="hero">
       <div class="kicker">Technical Reference · AI Capabilities</div>
       <h1>AI Capabilities &amp; Guardrails</h1>
-      <p class="lede">Every real AI or trained-model surface in VulnHunter, in one place — what each one is, exactly how to use it, what runs underneath it, and the line it does not cross. Grounded entirely in the current code; nothing below is a roadmap item described as if it already shipped.</p>
+      <p class="lede">Every real AI or trained-model surface in Quanta, in one place — what each one is, exactly how to use it, what runs underneath it, and the line it does not cross. Grounded entirely in the current code; nothing below is a roadmap item described as if it already shipped.</p>
     </div>
 
     <section id="where">
-      <h2><span class="num">01</span>Where AI shows up in VulnHunter</h2>
+      <h2><span class="num">01</span>Where AI shows up in Quanta</h2>
       <p class="section-intro">Five real surfaces call an LLM or a trained model today. A sixth — deterministic, and easy to mistake for the others — deliberately doesn't, and it belongs in this inventory precisely because of that contrast.</p>
 
       <div class="legend-row">
@@ -156,9 +156,9 @@
               <td>Same explain/draft idea as AI Assist, but over that page's own already-computed aggregate stats (severity/team/priority breakdowns, KPI totals) instead of a single finding.</td>
             </tr>
             <tr>
-              <td><strong>Ask VulnHunter</strong></td>
+              <td><strong>Ask Quanta</strong></td>
               <td><span class="kind-tag det">Deterministic</span></td>
-              <td>Sidebar → Overview → Ask VulnHunter (<code>/ask</code>)</td>
+              <td>Sidebar → Overview → Ask Quanta (<code>/ask</code>)</td>
               <td>Answers a free-text question with a real lookup (finding ID, CVE, count, asset, team/owner) against live data, or a keyword-overlap match against <code>docs/FAQ.md</code>. No external call, no cost, no login, never guesses.</td>
             </tr>
             <tr>
@@ -185,7 +185,7 @@
 
       <div class="callout info">
         <span class="label">Not on this list, on purpose</span>
-        <p>The <strong>AI Vulnerabilities</strong> page (a card on the Application Vulnerabilities hub, <code>aiVulnerabilities.js</code>) isn't a place VulnHunter uses AI — it's a findings <em>category</em> for AI/ML security issues (prompt injection, insecure model deserialization, excessive agency, etc.) that the code scanner detects <em>inside a scanned target's own code</em>, cross-referenced against MITRE ATLAS. And the "smart-looking" suggestions elsewhere — Asset Inventory's owner suggestion, MITRE ATT&amp;CK tagging, the Exceptions form's compensating-control suggestions — are disclosed, transparent keyword/pattern-matching heuristics with their exact reasoning shown on hover, not a model of any kind. Keeping that line sharp is deliberate: this document covers only what genuinely calls an LLM or a trained model, plus the deterministic search and the subagent pipelines built on top of the same platform.</p>
+        <p>The <strong>AI Vulnerabilities</strong> page (a card on the Application Vulnerabilities hub, <code>aiVulnerabilities.js</code>) isn't a place Quanta uses AI — it's a findings <em>category</em> for AI/ML security issues (prompt injection, insecure model deserialization, excessive agency, etc.) that the code scanner detects <em>inside a scanned target's own code</em>, cross-referenced against MITRE ATLAS. And the "smart-looking" suggestions elsewhere — Asset Inventory's owner suggestion, MITRE ATT&amp;CK tagging, the Exceptions form's compensating-control suggestions — are disclosed, transparent keyword/pattern-matching heuristics with their exact reasoning shown on hover, not a model of any kind. Keeping that line sharp is deliberate: this document covers only what genuinely calls an LLM or a trained model, plus the deterministic search and the subagent pipelines built on top of the same platform.</p>
       </div>
 
       <p>Two more pages don't call an LLM themselves but govern every real spend above: <strong>Admin Settings</strong> (<code>/admin</code>, admin-only) sets which real Claude Code model every call uses, each user's daily token ceiling, and shows real usage/cost by user; <strong>Run Pipeline</strong> (<code>/run</code>) keeps the audit log of every real (non-preview) pipeline run — timestamp, pipeline, exit code, and the exact command that ran.</p>
@@ -208,14 +208,14 @@
       <h3>AI Trend Analysis</h3>
       <ol class="steps">
         <li>On Overview, Infrastructure, Application Vulnerabilities, Risk Management, or Certificate Vulnerabilities, click the floating <strong>✨</strong> button.</li>
-        <li>A small panel opens with three options: <em>Preview prompt</em> (free), <em>Generate analysis</em> (spends credits — asks you to confirm first), or <em>Ask VulnHunter</em> (jumps to that page instead).</li>
+        <li>A small panel opens with three options: <em>Preview prompt</em> (free), <em>Generate analysis</em> (spends credits — asks you to confirm first), or <em>Ask Quanta</em> (jumps to that page instead).</li>
         <li>Preview shows the exact prompt built from that page's own already-displayed real stats — nothing re-fetched, nothing invented.</li>
         <li>Generate requires an explicit "Yes, generate" confirmation, then shows the analysis text plus the exact prompt that was sent.</li>
       </ol>
 
-      <h3>Ask VulnHunter</h3>
+      <h3>Ask Quanta</h3>
       <ol class="steps">
-        <li>Open Sidebar → Ask VulnHunter and type a question, or click one of the example chips (a count question, a finding ID, a CVE, "findings owned by team Platform", an asset name).</li>
+        <li>Open Sidebar → Ask Quanta and type a question, or click one of the example chips (a count question, a finding ID, a CVE, "findings owned by team Platform", an asset name).</li>
         <li>Press Ask, or Enter.</li>
         <li>Read the answer plus a badge naming what it recognized — Finding lookup, CVE lookup, Count, List, Asset lookup, Documentation match, or No match.</li>
         <li>Follow "View in the app →" to jump to the matching Queue/Assets view when one applies, or to the FAQ page when it matched a documentation entry instead.</li>
@@ -386,7 +386,7 @@ Suggest concrete, specific remediation steps for this finding...</div>
       <h3>ML Insights' honest ceiling</h3>
       <p>Deliberately unsupervised only — anomaly detection, clustering, text similarity — because this app's real labeled data (a handful of asset-ownership entries) is nowhere near enough to train or validate a supervised model on. It never replaces or feeds into the deterministic Remediation Policy or Priority Rules engines, and it doesn't do remediation-outcome prediction: there's no real resolved/fixed-at field anywhere to learn that from, so it isn't offered rather than faked.</p>
 
-      <h3>Ask VulnHunter's honest ceiling</h3>
+      <h3>Ask Quanta's honest ceiling</h3>
       <p>Not natural-language understanding — a fixed, disclosed set of real query shapes (a finding ID, a CVE, a severity/KEV/SLA/team/owner filter, a count question) plus a keyword-overlap match against the real FAQ. A phrasing outside that set gets an honest "no confident match," on purpose, never a guessed answer — the payoff of not being an LLM here is that it structurally cannot hallucinate one.</p>
     </section>
 
@@ -410,10 +410,10 @@ Suggest concrete, specific remediation steps for this finding...</div>
       <p>Yes, disclosed rather than hidden: the daily AI token limit (Admin Settings) defaults to unlimited until an admin sets one — an opt-in cap, not a surprise restriction on an unconfigured deployment. General request-throttling is no longer a gap here — a real per-IP rate limiter now covers every <code>/api/*</code> route app-wide (see the RBAC, Multi-Tenancy &amp; Governance document) — but it's single-node scoped today, so ask about that specific boundary if you're evaluating a multi-node deployment.</p>
 
       <h3>Why don't the owner suggestions, ATT&amp;CK tags, or compensating-control suggestions appear in this document?</h3>
-      <p>Because they're not AI — they're transparent, disclosed keyword/pattern-matching heuristics with their exact reasoning shown on hover, not a model of any kind. This document covers only the surfaces that actually call an LLM (AI Assist, AI Trend Analysis) or a real trained model (ML Insights), plus the deterministic search (Ask VulnHunter) and the Claude Code subagent pipelines. Keeping that line sharp is deliberate — blurring "heuristic" and "AI" is exactly the kind of overclaiming a procurement reviewer is trained to catch.</p>
+      <p>Because they're not AI — they're transparent, disclosed keyword/pattern-matching heuristics with their exact reasoning shown on hover, not a model of any kind. This document covers only the surfaces that actually call an LLM (AI Assist, AI Trend Analysis) or a real trained model (ML Insights), plus the deterministic search (Ask Quanta) and the Claude Code subagent pipelines. Keeping that line sharp is deliberate — blurring "heuristic" and "AI" is exactly the kind of overclaiming a procurement reviewer is trained to catch.</p>
     </section>
 
-    <footer class="docfoot">Part of the VulnHunter Enterprise Documentation Suite. For the full OWASP LLM Top 10 2026 mapping and the real access-control model these guardrails sit on top of, see <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener">RBAC, Multi-Tenancy &amp; Governance</a>. For task-oriented, non-AI how-to answers, see the <a href="https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578" target="_blank" rel="noopener">User &amp; Operations Guide</a>.</footer>
+    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. For the full OWASP LLM Top 10 2026 mapping and the real access-control model these guardrails sit on top of, see <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener">RBAC, Multi-Tenancy &amp; Governance</a>. For task-oriented, non-AI how-to answers, see the <a href="https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578" target="_blank" rel="noopener">User &amp; Operations Guide</a>.</footer>
   </main>
 </div>
 

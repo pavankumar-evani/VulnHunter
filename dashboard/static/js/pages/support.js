@@ -7,7 +7,7 @@ export async function render(container) {
 
     <div class="callout" style="margin-bottom:18px">
       <strong>Looking for how to do something specific?</strong> Try
-      <a href="/ask" data-link>Ask VulnHunter</a> first - type your question in plain
+      <a href="/ask" data-link>Ask Quanta</a> first - type your question in plain
       English (e.g. "how do I approve a remediation" or "change asset owner") and it
       searches this app's own real How-To content live, deterministically, at no cost.
       It's not a chatbot and never guesses - if nothing matches, it says so honestly
@@ -20,7 +20,7 @@ export async function render(container) {
         <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/enterprise-suite/user-guide.html" target="_blank" rel="noopener">User &amp; Operations Guide</a>
         - task-oriented answers for login/logout, RBAC, asset edits, exceptions vs.
         approvals, reports, and the AI features - or just ask
-        <a href="/ask" data-link>Ask VulnHunter</a> above.</li>
+        <a href="/ask" data-link>Ask Quanta</a> above.</li>
       <li><strong>Bug or unexpected behavior:</strong> open a GitHub issue with the exact
         command you ran (e.g. <code>/vulnhunt vulnerable-demo-app</code> or
         <code>python dashboard/app.py</code>), the full error output, and your OS/Python
@@ -28,7 +28,7 @@ export async function render(container) {
       <li><strong>Feature request:</strong> open a GitHub issue with the Feature
         Request template - it walks through the safety-model checklist before anything
         is scoped.</li>
-      <li><strong>Security issue in VulnHunter itself:</strong> see
+      <li><strong>Security issue in Quanta itself:</strong> see
         <code>SECURITY.md</code> for the private disclosure contact - please don't open a
         public issue for a real vulnerability in this tool.</li>
       <li><strong>"Is this safe to point at production?"</strong> read the safety model in

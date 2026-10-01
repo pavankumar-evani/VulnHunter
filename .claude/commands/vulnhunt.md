@@ -1,10 +1,10 @@
 ---
-description: Run the full VulnHunter pipeline (scan, triage/report, optionally auto-fix) against a target codebase, or re-verify one already-fixed finding.
+description: Run the full Quanta pipeline (scan, triage/report, optionally auto-fix) against a target codebase, or re-verify one already-fixed finding.
 argument-hint: [path-to-target-repo] [--fix] | [path-to-target-repo] --verify FINDING-ID BRANCH
 allowed-tools: Task, Read, Bash
 ---
 
-Run the VulnHunter security pipeline against the target path: $ARGUMENTS
+Run the Quanta security pipeline against the target path: $ARGUMENTS
 
 Parse the arguments: the first token is the target path (default to the current
 directory if omitted).
@@ -25,7 +25,7 @@ Instead:
 4. Log the outcome to the real activity log via Bash:
    `python remediation/audit/record_verification.py --finding-id FINDING-ID --branch
    BRANCH --status <verdict's status> --detail "<verdict's detail>"` (run from the repo
-   root, not the target path — this script is part of VulnHunter itself, not the
+   root, not the target path — this script is part of Quanta itself, not the
    scanned target). If this call fails for any reason (e.g. no network path to the
    database file), still report the verdict to the user - a logging failure should
    never hide a real verification result.

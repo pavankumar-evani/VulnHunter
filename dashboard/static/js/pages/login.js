@@ -31,7 +31,7 @@ export async function render(container) {
               <circle cx="32" cy="32" r="11" fill="none" stroke="#ffffff" stroke-width="3.6"/>
               <path d="M32 20V16M32 44V48M20 32H16M44 32H48" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
             </svg>
-            <span>VulnHunter</span>
+            <span>Quanta</span>
           </div>
           <p class="subtitle" style="margin:-16px 0 22px">Sign in to your account</p>
 

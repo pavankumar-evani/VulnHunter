@@ -1,5 +1,5 @@
 """
-Shared SQLite persistence layer - the first real database backing for VulnHunter's
+Shared SQLite persistence layer - the first real database backing for Quanta's
 record stores, replacing ad hoc flat-JSON read-modify-write. See the project's
 production-readiness plan for the full migration this is part of; this module starts
 with the two stores that had a confirmed, currently-active write race

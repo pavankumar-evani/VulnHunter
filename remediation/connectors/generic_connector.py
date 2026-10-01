@@ -18,7 +18,7 @@ remediation/schema/normalized-finding-schema.md). One real, generic, testable ad
 that any tool can plug into today, instead of N fabricated vendor-specific ones.
 
 This is genuinely one-directional and push-based (the outside tool sends data in),
-unlike Tenable/Armis (VulnHunter pulls, using that vendor's auth). That's a deliberate,
+unlike Tenable/Armis (Quanta pulls, using that vendor's auth). That's a deliberate,
 honest design choice, not a limitation of what could be built - see the module-level
 note in dashboard/app.py's /api/ingest/generic route for how this gets exposed.
 """
@@ -66,7 +66,7 @@ def _next_finding_id(existing_findings):
 
 
 def normalize_generic_finding(payload, existing_findings, source_name="generic", as_of=None):
-    """Maps a validated generic payload into VulnHunter's normalized Finding schema.
+    """Maps a validated generic payload into Quanta's normalized Finding schema.
     Caller must run validate_generic_payload() first - this does not re-validate.
     Assigns the next stable/incremental FIND-N id the same way
     vuln-ingest-normalizer.md documents (never renumbers existing findings)."""

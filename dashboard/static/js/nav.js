@@ -13,7 +13,7 @@ export const NAV = [
       tip: "KPIs, SLA status, and coverage across both pipelines at a glance." },
     { path: "/ai-assist", label: "AI Assist", icon: "ai",
       tip: "Ask Claude to explain a finding or draft remediation guidance - preview free, confirm to spend." },
-    { path: "/ask", label: "Ask VulnHunter", icon: "search",
+    { path: "/ask", label: "Ask Quanta", icon: "search",
       tip: "Free, real search over your live data - findings, CVEs, assets, real counts. No AI call, no cost, never fabricates." },
     { path: "/inbox", label: "Inbox", icon: "bell",
       tip: "Real system-generated notifications - SLA breaches, KEV, expiring exceptions - not person-to-person messages." },
@@ -105,7 +105,7 @@ export const NAV = [
   // whichever one is selected. See adaptorCatalog.js.
   { group: "Connectors / Adaptors", items: [
     { path: "/adaptors", label: "Connectors / Adaptors", icon: "adaptor",
-      tip: "Every external system VulnHunter talks to (or has researched), in one place - pick a connector from the dropdown." },
+      tip: "Every external system Quanta talks to (or has researched), in one place - pick a connector from the dropdown." },
   ] },
   { group: "Operations", items: [
     { path: "/run", label: "Run Pipeline", icon: "run",
@@ -145,9 +145,9 @@ export function renderSidebar(currentPath, currentSearch = "") {
   }).join("");
 
   el.innerHTML = `
-    <a class="brand" href="/" data-link data-tooltip="VulnHunter - AI-driven vulnerability detection &amp; remediation">
+    <a class="brand" href="/" data-link data-tooltip="Quanta - AI-driven vulnerability detection &amp; remediation">
       <span class="brand-mark">${LOGO_SVG}</span>
-      <span class="brand-text">VulnHunter</span>
+      <span class="brand-text">Quanta</span>
     </a>
 
     <button type="button" class="side-nav-scroll side-nav-scroll-up" data-nav-scroll="up" aria-label="Scroll navigation up">

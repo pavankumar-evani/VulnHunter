@@ -36,7 +36,7 @@ export function initPageFooter() {
           <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/dashboard/README.md" target="_blank" rel="noopener">Scope &amp; limitations &#8599;</a>
         </span>
         <div class="page-footer-meta">
-          <div class="page-footer-version">VulnHunter v${status.app_version || "1.0.0"} · &copy; 2026 VulnHunter LLC. All rights reserved.</div>
+          <div class="page-footer-version">Quanta v${status.app_version || "1.0.0"} · &copy; 2026 Quanta LLC. All rights reserved.</div>
           <div class="footer-compliance-badges">
             <a class="badge" href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/COMPLIANCE_MAPPING.md" target="_blank" rel="noopener">NIST CSF</a>
             <a class="badge" href="https://github.com/pavankumar-evani/VulnHunter/blob/master/docs/COMPLIANCE_MAPPING.md" target="_blank" rel="noopener">SOC 2</a>

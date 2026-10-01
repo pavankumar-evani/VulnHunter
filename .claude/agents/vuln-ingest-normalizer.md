@@ -1,6 +1,6 @@
 ---
 name: vuln-ingest-normalizer
-description: Parses raw vulnerability/asset-risk exports from Tenable (CSV), Armis (JSON), and manual threat-intel (JSON) and normalizes them into one common Finding schema (see remediation/schema/normalized-finding-schema.md). Use this whenever the user wants to bring external vulnerability scanner or threat-intel data into VulnHunter for remediation planning. Read-only, never modifies source files.
+description: Parses raw vulnerability/asset-risk exports from Tenable (CSV), Armis (JSON), and manual threat-intel (JSON) and normalizes them into one common Finding schema (see remediation/schema/normalized-finding-schema.md). Use this whenever the user wants to bring external vulnerability scanner or threat-intel data into Quanta for remediation planning. Read-only, never modifies source files.
 tools: Read, Glob, Write
 model: sonnet
 ---

@@ -1,9 +1,9 @@
-# VulnHunter — User Guide
+# Quanta — User Guide
 
 **How to use this doc:** read this if you're the person actually running `/vulnhunt` or
 `/remediate` day-to-day — interactively, headlessly, or through the dashboard — and want
 to know what a command does, what a field on screen means, and what's safe to click.
-For *what VulnHunter is and why it's built this way*, read
+For *what Quanta is and why it's built this way*, read
 [KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md) first. For the pitch-oriented tour, see
 [README.md](../README.md). Other docs in this set: [FAQ.md](FAQ.md),
 [AI_COMMANDS.md](AI_COMMANDS.md), [INTEGRATIONS.md](INTEGRATIONS.md),
@@ -15,7 +15,7 @@ For *what VulnHunter is and why it's built this way*, read
 
 ## 1. Running the pipelines interactively (inside a Claude Code session)
 
-VulnHunter has no separate server process for its core pipelines — `/vulnhunt` and
+Quanta has no separate server process for its core pipelines — `/vulnhunt` and
 `/remediate` are Claude Code slash commands (`.claude/commands/vulnhunt.md` and
 `.claude/commands/remediate.md`) that orchestrate a chain of subagents
 (`.claude/agents/*.md`). You need Claude Code installed and authenticated, and this repo
@@ -23,7 +23,7 @@ as your working directory (subagents are project-scoped — see
 [KNOWLEDGE_TRANSFER.md §12](../KNOWLEDGE_TRANSFER.md#12-troubleshooting--things-that-tripped-us-up)).
 
 ```bash
-cd VulnHunter
+cd Quanta
 claude
 ```
 
@@ -134,7 +134,7 @@ precise, current split between the two.
 | Exceptions | `/exceptions` | Request/auto-expire/revoke a time-boxed risk-acceptance waiver per finding, with keyword-suggested compensating controls on the request form. There's no separate in-app "approve" step - "approved by" is recorded as a text field at request time (see the FAQ entry on this). Doesn't yet pause SLA-breach counting - see the module docstring in `remediation/exceptions/store.py`. `[SCREENSHOT: Exceptions]` |
 | Remediation Approvals | `/remediation-approvals` | The real human sign-off gate, distinct from Exceptions above ("proceed with this fix" vs. "accept the risk instead") - request, approve/reject (with an optional real AD group-membership check), mark staging-validated, and trigger remediation for findings whose policy calls for change management. `[SCREENSHOT: Remediation Approvals]` |
 | Asset Inventory | `/assets` | Every asset with findings against it, aggregated, with an Edit modal covering owner, team, IP/MAC address, environment, and a remediation-schedule override (local file, not a CMDB sync - bulk changes come from a CSV import on the same page). `[SCREENSHOT: Asset Inventory]` |
-| Ask VulnHunter | `/ask` | Free-text search - deterministically matched against real query shapes (finding ID, CVE, count, asset name) or, failing that, against this FAQ's own entries by keyword overlap. Explicitly not an LLM or a chatbot; see the FAQ entry on how this differs from AI Assist. `[SCREENSHOT: Ask VulnHunter]` |
+| Ask Quanta | `/ask` | Free-text search - deterministically matched against real query shapes (finding ID, CVE, count, asset name) or, failing that, against this FAQ's own entries by keyword overlap. Explicitly not an LLM or a chatbot; see the FAQ entry on how this differs from AI Assist. `[SCREENSHOT: Ask Quanta]` |
 | ML Insights | `/ml-insights` | Real, unsupervised scikit-learn analysis of the live data - anomalous-asset detection (IsolationForest) and finding clustering (KMeans) - no login required. See the FAQ entry on what this does and doesn't compute. `[SCREENSHOT: ML Insights]` |
 | Admin Settings | `/admin` | Admin-only: add users, set role/team (this is also where RBAC is actually configured - see the FAQ entry), AI model/token-limit policy, and system health. `[SCREENSHOT: Admin Settings]` |
 | Notification Settings | `/notification-settings` | Configure scheduled-report recipients and team alert subscriptions, preview and send-test an email, or run the due-check logic on demand. `[SCREENSHOT: Notification Settings]` |
@@ -266,21 +266,21 @@ footprint on a server, container, or endpoint. "Point it at a path" means exactl
 a filesystem path, not a network target or a fleet of hosts with something installed on
 them.
 
-**Infrastructure findings are ingested, not scanned, by VulnHunter.** The vulnerability
+**Infrastructure findings are ingested, not scanned, by Quanta.** The vulnerability
 data behind `/remediate` — CVEs on hosts, device-risk alerts — comes from Tenable and
 Armis, via their own export formats (or, per [INTEGRATIONS.md](INTEGRATIONS.md), their
 live APIs once you have credentials). **Whether Tenable or Armis themselves use an
 agent-based or agentless scanning approach against your infrastructure is a
 configuration choice made in *that vendor's own product*** — Tenable, for instance, has
 separate agent-based (Nessus Agent) and agentless (network scanner) deployment modes;
-Armis is inherently agentless (passive network/traffic-based device discovery). VulnHunter
+Armis is inherently agentless (passive network/traffic-based device discovery). Quanta
 does not re-implement, control, or care which mode produced the export it's reading — it
 is a **consumer and normalizer** of whatever Tenable/Armis already reported
 (`vuln-ingest-normalizer.md`), not a network scanner or an endpoint agent itself. If your
 organization needs to decide agent vs. agentless for infrastructure vulnerability
 scanning, that decision is made in Tenable/Armis's own console, not in this repository.
 
-("Claude Code subagents," the mechanism behind every VulnHunter pipeline stage, is an
+("Claude Code subagents," the mechanism behind every Quanta pipeline stage, is an
 unrelated, third use of the word "agent" — a Claude Code orchestration concept, not a
 scanning deployment mode. See [AI_COMMANDS.md](AI_COMMANDS.md) for what each one does.)
 
@@ -326,7 +326,7 @@ Remediation Queue and Asset Inventory pages already show — not a new data sour
   [FIRST.org CVSS v4.0 specification](https://www.first.org/cvss/v4.0/specification-document).
   The qualitative bands are unchanged from CVSS v3.x, so this reference applies
   regardless of which CVSS version a given finding's own score was originally reported
-  in - VulnHunter never re-scores a finding itself.
+  in - Quanta never re-scores a finding itself.
 
 ## 10. The notification inbox
 

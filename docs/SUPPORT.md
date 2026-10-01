@@ -1,7 +1,7 @@
-# VulnHunter — Support
+# Quanta — Support
 
 **How to use this doc:** short reference for how to get help, report a bug, or file a
-security issue against this project. If your question is "does VulnHunter do X," check
+security issue against this project. If your question is "does Quanta do X," check
 [FAQ.md](FAQ.md) first — it's faster than filing anything. See also
 [USER_GUIDE.md](USER_GUIDE.md), [AI_COMMANDS.md](AI_COMMANDS.md), or the
 [docs/README.md](README.md) index.
@@ -57,13 +57,13 @@ before a change is scoped.
 
 ## Reporting a security issue
 
-Do **not** open a public issue for a security vulnerability in VulnHunter itself. Follow
+Do **not** open a public issue for a security vulnerability in Quanta itself. Follow
 [SECURITY.md](../SECURITY.md): report privately to the contact listed there, with a
 description of the issue, impact, reproduction steps, and which component is affected.
 Acknowledgment target is 5 business days. Note the scope carveouts in that same file:
 findings against `vulnerable-demo-app/` (intentionally vulnerable, expected) and
 generated `remediation/output/` artifacts (unreviewed drafts by design) are not security
-reports against VulnHunter itself.
+reports against Quanta itself.
 
 ## See also
 

@@ -145,7 +145,7 @@
 <body>
 
 <div class="suitebar">
-  <span class="mark"><svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>VulnHunter</span>
+  <span class="mark"><svg width="16" height="16" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>Quanta</span>
   <span class="sep">/</span><span class="doclabel">Developer &amp; Contributor Guide</span>
 </div>
 
@@ -153,10 +153,10 @@
 
   <!-- ============ Cover ============ -->
   <section class="cover">
-    <div class="cover-kicker">VULNHUNTER</div>
+    <div class="cover-kicker">QUANTA</div>
     <h1 class="cover-title">Developer &amp; Contributor Guide</h1>
     <p class="cover-tagline">Cloning the repo, running the app, extending the two pipelines, and the git workflow this project actually uses.</p>
-    <div class="cover-meta">VulnHunter Development LLC<span class="dot">&middot;</span>Prepared September 2026</div>
+    <div class="cover-meta">Quanta<span class="dot">&middot;</span>Prepared September 2026</div>
   </section>
 
   <!-- ============ Contents ============ -->
@@ -186,7 +186,7 @@
   <!-- ============ 1. Introduction ============ -->
   <section class="doc-section" id="sec-1">
     <h1 class="section-h1">1. Introduction</h1>
-    <p>VulnHunter is two things sharing one repository: a pair of Claude Code subagent pipelines (&ldquo;/vulnhunt&rdquo; for source-code scanning, &ldquo;/remediate&rdquo; for infrastructure-finding remediation), and a full FastAPI + vanilla-JS dashboard application that reads and drives them. This guide is for anyone who needs to work in the codebase directly &mdash; a new developer, a contractor, or the product's own owner returning after time away &mdash; covering how to get the code, run it, test it, extend it, and the git conventions this specific repository follows.</p>
+    <p>Quanta is two things sharing one repository: a pair of Claude Code subagent pipelines (&ldquo;/vulnhunt&rdquo; for source-code scanning, &ldquo;/remediate&rdquo; for infrastructure-finding remediation), and a full FastAPI + vanilla-JS dashboard application that reads and drives them. This guide is for anyone who needs to work in the codebase directly &mdash; a new developer, a contractor, or the product's own owner returning after time away &mdash; covering how to get the code, run it, test it, extend it, and the git conventions this specific repository follows.</p>
     <p>It assumes basic familiarity with git, Python, and the command line. It does not replace the deeper reference material this repo already ships &mdash; &sect;10 points to each of those documents by name.</p>
   </section>
 
@@ -197,7 +197,7 @@
     <pre class="codeblock"><code>https://github.com/pavankumar-evani/VulnHunter</code></pre>
     <p>Clone it and check out the trunk branch, which is master:</p>
     <pre class="codeblock"><code>git clone https://github.com/pavankumar-evani/VulnHunter.git
-cd VulnHunter</code></pre>
+cd Quanta</code></pre>
 
     <h2 class="section-h2" id="sec-2-1">2.1 Working across multiple sessions in parallel</h2>
     <p>This repository is regularly worked on by more than one Claude Code session at once, each in its own git worktree &mdash; a second working directory attached to the same repository, on its own branch, without needing a second clone:</p>

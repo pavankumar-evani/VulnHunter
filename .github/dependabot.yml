@@ -1,4 +1,4 @@
-# Automated dependency version-bump PRs for VulnHunter's real product dependencies.
+# Automated dependency version-bump PRs for Quanta's real product dependencies.
 #
 # Deliberately does NOT cover vulnerable-demo-app/ or vulnerable-demo-multilang/ -
 # those directories are intentionally vulnerable, planted fixtures for /vulnhunt to

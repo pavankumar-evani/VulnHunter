@@ -16,7 +16,7 @@ remediation/connectors/README.md.
 
 Output mapping: unlike the Tenable/Armis connectors (which produce vulnerability
 Findings, see remediation/schema/normalized-finding-schema.md), this connector produces
-plain asset/inventory records - VulnHunter's asset inventory
+plain asset/inventory records - Quanta's asset inventory
 (remediation/inventory/asset_inventory.py) is currently built entirely from findings, not
 from a real CMDB/DNS/IPAM system. See infoblox_connector's and axonius_connector's shared
 asset-record shape (a plain dict with name/ip/mac/type/source/source_ref/extra) documented
@@ -71,7 +71,7 @@ class InfobloxConnector:
 
     @staticmethod
     def normalize_host_record(record):
-        """Maps one raw WAPI record:host object into VulnHunter's shared asset shape:
+        """Maps one raw WAPI record:host object into Quanta's shared asset shape:
             {name, ip, mac, type, source, source_ref, extra}
 
         - `ip` is taken from the first entry in `ipv4addrs` (or None if there are no

@@ -28,7 +28,7 @@ represented here or anywhere in this taxonomy.
 
 Classification is intentionally simple and honest: it's a lookup against
 `asset.type`, not a claim that Tenable/Armis/etc. themselves report a scan
-methodology - they don't. VulnHunter infers it from what kind of asset the finding is
+methodology - they don't. Quanta infers it from what kind of asset the finding is
 against.
 
 Three more real methodologies, added alongside the IaC/GitHub-GitLab/runtime finding
