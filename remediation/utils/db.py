@@ -186,6 +186,41 @@ live_data_findings = Table(
 )
 
 
+# First-class assignment groups (ServiceNow-style "teams"). Before this table a team
+# was only ever a free-text string on a user or an asset; this gives a team a real
+# identity (description, accountable manager) without replacing those strings - a
+# user's / asset's `team` still just names a team here. Teams that exist only as a
+# string on a user or asset (every pre-existing deployment) are surfaced too, by
+# remediation/assignments/store.py's list_teams(), so nothing has to be migrated.
+teams = Table(
+    "teams", metadata,
+    Column("name", String, primary_key=True),
+    Column("description", String, nullable=True),
+    Column("manager_email", String, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=True),
+)
+
+# One row per finding that has been explicitly assigned (a finding with no row here is
+# simply unassigned - the table is sparse, since most of a large queue never needs a
+# row). `assignee_email` and `assigned_team` are each optional but at least one is
+# always set; `status` is the assignee's own work-state, independent of whether the
+# scanner still sees the vulnerability (a "resolved" assignment on a still-open
+# finding means "the owner says it's fixed, awaiting rescan", never a silent close).
+# Who changed what, and when, lives in activity_log (action "finding.*"), not here.
+finding_assignments = Table(
+    "finding_assignments", metadata,
+    Column("finding_id", String, primary_key=True),
+    Column("assignee_email", String, nullable=True),
+    Column("assigned_team", String, nullable=True),
+    Column("status", String, nullable=False),
+    Column("notes", Text, nullable=True),
+    Column("assigned_by", String, nullable=False),
+    Column("assigned_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -205,4 +240,5 @@ def ensure_schema(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
+            teams, finding_assignments,
         ])

@@ -39,6 +39,8 @@ import vulnhunter as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
+from remediation.assignments import analytics as ownership_analytics  # noqa: E402
+from remediation.assignments import store as assignments_store  # noqa: E402
 from remediation.audit import ai_usage_log  # noqa: E402
 from remediation.config import ai_governance  # noqa: E402
 from remediation.connectors.active_directory_connector import ActiveDirectoryConnector  # noqa: E402
@@ -390,34 +392,50 @@ def _team_by_asset_name():
     return {a["name"]: a.get("team") for a in assets}
 
 
-def _annotate_finding_teams(findings, team_by_asset_name=None):
-    """Adds a real `team` field to each finding, resolved via its own asset's real
-    ownership team - mutates and returns `findings` in place. Safe to do
-    unconditionally: load_live_queue() already hands back fresh per-call shallow
-    copies specifically so a caller can do exactly this without corrupting the
-    shared cache other routes read from."""
+def _annotate_finding_teams(findings, team_by_asset_name=None, with_assignment=False):
+    """Adds a real `team` field to each finding - the team a finding is *routed to*:
+    its explicit assignment's team if it has one (the ITSM "assignment group"), else
+    its asset's owning team. Mutates and returns `findings` in place (safe: see
+    load_live_queue()'s per-call shallow copies). With `with_assignment=True` also
+    attaches an `assignment` summary (None when unassigned) - callers pass that only
+    for a logged-in viewer, since it names the assignee."""
     team_by_asset_name = team_by_asset_name if team_by_asset_name is not None else _team_by_asset_name()
+    assignments = assignments_store.assignments_by_finding()
     for f in findings:
         asset = f.get("asset") or {}
-        f["team"] = team_by_asset_name.get(asset.get("name"))
+        team = team_by_asset_name.get(asset.get("name"))
+        a = assignments.get(f["id"])
+        if a and a.get("assigned_team"):
+            team = a["assigned_team"]
+        f["team"] = team
+        if with_assignment:
+            f["assignment"] = (
+                {"assignee_email": a["assignee_email"], "assigned_team": a["assigned_team"], "status": a["status"]}
+                if a else None
+            )
     return findings
 
 
 def _finding_team_by_id(queue_findings, team_by_asset_name=None):
     """{finding_id: team} for every real finding in the live queue - the join
     exceptions/remediation-approvals need to team-scope their own records, since
-    those are stored keyed by finding_id, not with a team (or asset) of their own."""
+    those are stored keyed by finding_id, not with a team (or asset) of their own.
+    Honors an explicit assignment's team over the asset's, matching
+    _annotate_finding_teams()."""
     team_by_asset_name = team_by_asset_name if team_by_asset_name is not None else _team_by_asset_name()
+    assignments = assignments_store.assignments_by_finding()
     result = {}
     for f in queue_findings:
         asset = f.get("asset") or {}
-        result[f["id"]] = team_by_asset_name.get(asset.get("name"))
+        a = assignments.get(f["id"])
+        result[f["id"]] = (a or {}).get("assigned_team") or team_by_asset_name.get(asset.get("name"))
     return result
 
 
 @app.get("/api/queue")
 def api_queue(user: dict = Depends(rbac.get_current_user)):
-    scored = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    scored = _scope_to_team(
+        _annotate_finding_teams(dashboard_data.load_live_queue(), with_assignment=user is not None), user)
     return _fast_json({"findings": scored, "sla": dashboard_data.sla_summary(scored)})
 
 
@@ -1979,6 +1997,347 @@ def api_set_user_role(email: str, body: SetUserRoleBody, user: dict = Depends(rb
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ------------------------------------------------- ownership & assignment (ITSM layer)
+#
+# Who owns each finding, which team it is routed to, and how far along the owner is -
+# plus the admin-side team records and the analytics over all of it. Storage and rules
+# live in remediation/assignments/; this section is only the HTTP surface and the access
+# checks. Every route here requires a login (assignee emails are personal data, so unlike
+# the public-by-default finding reads these never answer an anonymous caller), and every
+# finding lookup goes through the caller's team scope, so an out-of-scope finding is
+# indistinguishable from one that doesn't exist (404, never 403).
+
+ASSIGNMENT_VIEWS = ("mine", "team", "needs_owner", "unowned", "all")
+_PRIORITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+
+
+def _explicit_and_known_team_names():
+    names = {u["team"] for u in auth_users.list_users() if u.get("team")}
+    names.update(t for t in _team_by_asset_name().values() if t)
+    return names
+
+
+def _team_catalog():
+    return assignments_store.list_teams(known_team_names=_explicit_and_known_team_names())
+
+
+def _canonical_team(name):
+    """The catalog's own spelling of `name` (case-insensitive), or None if it isn't a
+    team that exists. Keeps "platform" and "Platform" from becoming two teams."""
+    wanted = (name or "").strip().lower()
+    return next((t["name"] for t in _team_catalog() if t["name"].lower() == wanted), None)
+
+
+def _visible_finding(finding_id, user):
+    """The finding with this id as the caller is allowed to see it (team-scoped), or a
+    404. Annotated with its routing team."""
+    findings = _scope_to_team(
+        _annotate_finding_teams(dashboard_data.load_live_queue(), with_assignment=True), user)
+    found = next((f for f in findings if f["id"] == finding_id), None)
+    if not found:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return found
+
+
+def _assignment_view(a, users_by_email):
+    if not a:
+        return None
+    u = users_by_email.get((a.get("assignee_email") or "").lower())
+    return {**a, "assignee_name": (u or {}).get("name")}
+
+
+@app.get("/api/teams")
+def api_list_teams(user: dict = Depends(rbac.require_login)):
+    users = auth_users.list_users()
+    assignments = assignments_store.load_assignments()
+    members, assigned = {}, {}
+    for u in users:
+        if u.get("team"):
+            members[u["team"].lower()] = members.get(u["team"].lower(), 0) + 1
+    for a in assignments:
+        if a.get("assigned_team") and a["status"] != "resolved":
+            assigned[a["assigned_team"].lower()] = assigned.get(a["assigned_team"].lower(), 0) + 1
+    teams = _team_catalog()
+    if user.get("role") != "admin" and user.get("team"):
+        teams = [t for t in teams if t["name"] == user["team"]]
+    return {"teams": [
+        {**t, "members": members.get(t["name"].lower(), 0), "open_assignments": assigned.get(t["name"].lower(), 0)}
+        for t in teams
+    ]}
+
+
+class TeamBody(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    manager_email: str | None = None
+
+
+def _validated_manager(email):
+    email = (email or "").strip().lower()
+    if email and not auth_users.find_user(email):
+        raise HTTPException(status_code=400, detail=f"Manager {email!r} is not an existing user account")
+    return email or None
+
+
+@app.post("/api/admin/teams")
+def api_create_team(body: TeamBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        return assignments_store.create_team(
+            body.name, user["email"], description=body.description, manager_email=_validated_manager(body.manager_email))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/admin/teams/{name}")
+def api_update_team(name: str, body: TeamBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        return assignments_store.update_team(
+            name, user["email"], description=body.description, manager_email=_validated_manager(body.manager_email))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+
+
+@app.delete("/api/admin/teams/{name}")
+def api_delete_team(name: str, user: dict = Depends(rbac.require_admin)):
+    key = name.lower()
+    in_use = sum(1 for u in auth_users.list_users() if (u.get("team") or "").lower() == key)
+    in_use += sum(1 for a in assignments_store.load_assignments()
+                  if (a.get("assigned_team") or "").lower() == key and a["status"] != "resolved")
+    try:
+        return assignments_store.delete_team(name, user["email"], in_use_count=in_use)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/assignable-users")
+def api_assignable_users(user: dict = Depends(rbac.require_login)):
+    """Who the caller may assign work to: everyone for an admin, otherwise their own
+    team's members (or just themselves if they have no team)."""
+    users = auth_users.list_users()
+    if user.get("role") != "admin":
+        users = [u for u in users if u["email"] == user["email"]
+                 or (user.get("team") and u.get("team") == user["team"])]
+    return {"users": [{"email": u["email"], "name": u["name"], "team": u.get("team")} for u in users]}
+
+
+@app.get("/api/assignments")
+def api_list_assignments(view: str = "mine", status: str = "", team: str = "", priority: str = "",
+                         include_resolved: bool = False, limit: int = 250,
+                         user: dict = Depends(rbac.require_login)):
+    """The ITSM work queue. `view`: mine (assigned to me), team (routed to my team),
+    needs_owner (no individual assignee yet), unowned (no person AND no team), all.
+    Counts for every view are returned alongside the rows so the tabs can badge them."""
+    if view not in ASSIGNMENT_VIEWS:
+        raise HTTPException(status_code=400, detail=f"view must be one of {ASSIGNMENT_VIEWS}")
+    limit = max(1, min(limit, 1000))
+    findings = _scope_to_team(
+        _annotate_finding_teams(dashboard_data.load_live_queue(), with_assignment=True), user)
+    by_assignment = assignments_store.assignments_by_finding()
+    users_by_email = {u["email"]: u for u in auth_users.list_users()}
+    me, my_team = user["email"].lower(), user.get("team")
+    counts = dict.fromkeys(ASSIGNMENT_VIEWS, 0)
+    rows = []
+    for f in findings:
+        a = by_assignment.get(f["id"])
+        if a and a["status"] == "resolved" and not include_resolved:
+            continue
+        state = ownership_analytics.ownership_state(f, a)
+        eff = ownership_analytics.effective_team(f, a)
+        member_of = {
+            "mine": bool(a and (a.get("assignee_email") or "") == me),
+            "team": bool(my_team and eff == my_team),
+            "needs_owner": state != "assigned",
+            "unowned": state == "unowned",
+            "all": True,
+        }
+        for v, ok in member_of.items():
+            counts[v] += ok
+        if not member_of[view]:
+            continue
+        if status and (a["status"] if a else "unassigned") != status:
+            continue
+        if team and eff != team:
+            continue
+        if priority and f.get("priority") != priority:
+            continue
+        rows.append((f, a, state, eff))
+    rows.sort(key=lambda r: (
+        0 if (r[0].get("sla") or {}).get("breached") else 1,
+        _PRIORITY_ORDER.get(r[0].get("priority"), 9), -(r[0].get("score") or 0), r[0]["id"]))
+    total = len(rows)
+    return _fast_json({
+        "view": view, "counts": counts, "total": total, "truncated": total > limit,
+        "rows": [{
+            "id": f["id"], "title": f.get("title"), "priority": f.get("priority"), "severity": f.get("severity"),
+            "asset": (f.get("asset") or {}).get("name"), "cve": f.get("cve"), "first_seen": f.get("first_seen"),
+            "sla": f.get("sla"), "team": eff, "ownership_state": state,
+            "assignment": _assignment_view(a, users_by_email),
+        } for f, a, state, eff in rows[:limit]],
+    })
+
+
+@app.get("/api/findings/{finding_id}/assignment")
+def api_finding_assignment(finding_id: str, user: dict = Depends(rbac.require_login)):
+    finding = _visible_finding(finding_id, user)
+    users_by_email = {u["email"]: u for u in auth_users.list_users()}
+    a = assignments_store.get_assignment(finding_id)
+    return {
+        "finding_id": finding_id, "team": finding.get("team"),
+        "assignment": _assignment_view(a, users_by_email),
+        "ownership_state": ownership_analytics.ownership_state(finding, a),
+        "history": assignments_store.assignment_history(finding_id),
+    }
+
+
+class AssignBody(BaseModel):
+    assignee_email: str | None = None
+    team: str | None = None
+    notes: str | None = None
+
+
+def _resolve_assignment_target(body, user):
+    """Validates who/where a caller wants to assign to and applies the access rules:
+    an admin may assign anyone to any team; a team member only within their own team;
+    a user with no team only to themselves. A bare assignee inherits their own team
+    (the ITSM default - the work stays with the assignee's group)."""
+    is_admin = user.get("role") == "admin"
+    assignee = (body.assignee_email or "").strip().lower() or None
+    target = None
+    if assignee:
+        target = auth_users.find_user(assignee)
+        if not target:
+            raise HTTPException(status_code=400, detail=f"No user account {assignee!r}")
+    team = None
+    if (body.team or "").strip():
+        team = _canonical_team(body.team)
+        if not team:
+            raise HTTPException(status_code=400, detail=f"No team named {body.team.strip()!r} - create it first")
+    elif target:
+        team = target.get("team")
+    if not is_admin:
+        my_team = user.get("team")
+        if my_team:
+            if team and team != my_team:
+                raise HTTPException(status_code=403, detail="You can only assign within your own team")
+            if assignee and assignee != user["email"].lower() and (target or {}).get("team") != my_team:
+                raise HTTPException(status_code=403, detail="That person is not on your team")
+            team = team or my_team
+        elif assignee != user["email"].lower() or body.team:
+            raise HTTPException(status_code=403, detail="Without a team you can only assign a finding to yourself")
+    return assignee, team
+
+
+@app.post("/api/findings/{finding_id}/assign")
+def api_assign_finding(finding_id: str, body: AssignBody, user: dict = Depends(rbac.require_login)):
+    _visible_finding(finding_id, user)
+    assignee, team = _resolve_assignment_target(body, user)
+    try:
+        record = assignments_store.assign(finding_id, user["email"], assignee_email=assignee, team=team, notes=body.notes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _assignment_view(record, {u["email"]: u for u in auth_users.list_users()})
+
+
+class AssignmentStatusBody(BaseModel):
+    status: str
+    notes: str | None = None
+
+
+def _can_update_status(user, assignment):
+    if user.get("role") == "admin":
+        return True
+    email = user["email"].lower()
+    if assignment.get("assignee_email") == email:
+        return True
+    team = assignment.get("assigned_team")
+    if not assignment.get("assignee_email") and team and user.get("team") == team:
+        return True
+    record = next((t for t in assignments_store.load_teams() if t["name"] == team), None)
+    return bool(record and record.get("manager_email") == email)
+
+
+@app.post("/api/findings/{finding_id}/assignment/status")
+def api_set_assignment_status(finding_id: str, body: AssignmentStatusBody, user: dict = Depends(rbac.require_login)):
+    _visible_finding(finding_id, user)
+    current = assignments_store.get_assignment(finding_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="That finding isn't assigned yet")
+    if not _can_update_status(user, current):
+        raise HTTPException(status_code=403, detail="Only the assignee, their team's manager, or an admin can change this")
+    try:
+        record = assignments_store.set_status(finding_id, body.status, user["email"], notes=body.notes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _assignment_view(record, {u["email"]: u for u in auth_users.list_users()})
+
+
+@app.delete("/api/findings/{finding_id}/assignment")
+def api_unassign_finding(finding_id: str, user: dict = Depends(rbac.require_admin)):
+    try:
+        assignments_store.unassign(finding_id, user["email"])
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    return {"unassigned": finding_id}
+
+
+class BulkAssignBody(BaseModel):
+    finding_ids: list[str]
+    assignee_email: str | None = None
+    team: str | None = None
+    notes: str | None = None
+
+
+MAX_BULK_ASSIGN = 2000
+
+
+@app.post("/api/assignments/bulk")
+def api_bulk_assign(body: BulkAssignBody, user: dict = Depends(rbac.require_admin)):
+    if not body.finding_ids:
+        raise HTTPException(status_code=400, detail="Select at least one finding")
+    if len(body.finding_ids) > MAX_BULK_ASSIGN:
+        raise HTTPException(status_code=400, detail=f"At most {MAX_BULK_ASSIGN} findings per request")
+    assignee, team = _resolve_assignment_target(body, user)
+    known = {f["id"] for f in dashboard_data.load_live_queue()}
+    unknown = [fid for fid in body.finding_ids if fid not in known]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown finding id(s): {', '.join(unknown[:5])}")
+    try:
+        n = assignments_store.bulk_assign(body.finding_ids, user["email"], assignee_email=assignee,
+                                          team=team, notes=body.notes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"assigned": n}
+
+
+class AutoAssignBody(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/api/assignments/auto-assign")
+def api_auto_assign(body: AutoAssignBody, user: dict = Depends(rbac.require_admin)):
+    """The assignment rule: route every still-unassigned finding to the team that owns
+    its asset. Preview by default (counts only); `confirm: true` applies it. Never
+    overwrites an existing assignment."""
+    findings = _annotate_finding_teams(dashboard_data.load_live_queue())
+    return assignments_store.auto_assign_from_assets(findings, user["email"], dry_run=not body.confirm)
+
+
+@app.get("/api/analytics/ownership")
+def api_ownership_analytics(user: dict = Depends(rbac.require_login)):
+    findings = _scope_to_team(
+        _annotate_finding_teams(dashboard_data.load_live_queue(), with_assignment=True), user)
+    visible_ids = {f["id"] for f in findings}
+    assignments = [a for a in assignments_store.load_assignments() if a["finding_id"] in visible_ids]
+    users = auth_users.list_users()
+    teams = _team_catalog()
+    if user.get("role") != "admin" and user.get("team"):
+        users = [u for u in users if u.get("team") == user["team"]]
+        teams = [t for t in teams if t["name"] == user["team"]]
+    return _fast_json(ownership_analytics.ownership_analytics(findings, assignments, users, teams))
 
 
 @app.get("/api/reports/generate")

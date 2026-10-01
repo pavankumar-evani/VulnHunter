@@ -52,6 +52,12 @@ export const NAV = [
     { path: "/remediation-approvals", label: "Remediation Approvals", icon: "exception",
       tip: "Human-in-the-loop approve/reject for normal/emergency-change-type findings - AD-group-validated when Active Directory is configured." },
   ] },
+  { group: "Ownership & Assignment", items: [
+    { path: "/assignments", label: "Assignments", icon: "ownership",
+      tip: "The work queue: findings assigned to you, routed to your team, or still waiting for an owner - assign, track status, and hand off, like an ITSM ticket queue." },
+    { path: "/ownership", label: "Ownership Analytics", icon: "reports",
+      tip: "Who and which team carries how much of the backlog - open, critical, breaching SLA, unowned - with ageing and workload balance." },
+  ] },
   { group: "Risk Management", items: [
     { path: "/ml-insights", label: "ML Insights", icon: "ml",
       tip: "Real, live-trained scikit-learn models (IsolationForest anomaly detection, KMeans risk clustering) - unsupervised, advisory, and never a replacement for the deterministic policy/priority engines." },
@@ -87,6 +93,8 @@ export const NAV = [
       tip: "Cadence, ITIL 4 change type, maintenance windows, and PAM backend per remediation domain - the real config driving the Remediation Queue's approval/auto-remediate treatment." },
     { path: "/asset-policy", label: "Asset Policy", icon: "rules",
       tip: "Bulk, rule-based asset owner/team/environment/facing/remediation-schedule editing - match a group of real assets and set fields on all of them in one action." },
+    { path: "/admin/people", label: "Users & Teams", icon: "users",
+      tip: "Admin-only: user accounts and roles, team records and managers, who is on which team, each person's live workload, and the auto-routing rule." },
     { path: "/admin", label: "Admin Settings", icon: "rules",
       tip: "Admin-only: which real Claude Code model to use, per-user daily token limits (enforced server-side), real usage/cost by user, and read-only system health." },
   ] },
@@ -150,8 +158,7 @@ export function renderSidebar(currentPath, currentSearch = "") {
       ${icon("chevronDown", 14)}
     </button>
     <div class="sidebar-footer">
-      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/dashboard/README.md"
-         target="_blank" rel="noopener">Scope &amp; limitations ↗</a>
+      <a href="/faq" data-link>Scope &amp; limitations</a>
     </div>`;
 
   wireSidebarScroll();

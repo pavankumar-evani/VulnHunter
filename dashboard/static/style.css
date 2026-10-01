@@ -1967,3 +1967,69 @@ select.searchable-select-native {
   text-decoration: none;
 }
 .exception-tag:hover { text-decoration: underline; }
+
+/* ---- Ownership & assignment (Assignments, Ownership Analytics, Users & Teams) ---- */
+.tabbar { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin: 6px 0 14px; }
+.tabbar .tab {
+  background: none; border: none; border-bottom: 2px solid transparent; padding: 9px 14px 8px;
+  font: inherit; font-weight: 600; color: var(--text-muted); cursor: pointer; margin-bottom: -1px;
+}
+.tabbar .tab:hover { color: var(--text); }
+.tabbar .tab.active { color: var(--brand-accent); border-bottom-color: var(--brand-accent); }
+.tab-count {
+  display: inline-block; min-width: 1.6em; text-align: center; margin-left: 4px; padding: 0 6px;
+  border-radius: 999px; background: var(--bg); border: 1px solid var(--border);
+  font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+}
+.tab.active .tab-count { background: var(--brand-accent); border-color: var(--brand-accent); color: #fff; }
+
+.bulk-bar {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 10px 14px; margin: 0 0 10px;
+  background: var(--info-bg); color: var(--info-text); border-radius: 10px;
+}
+.bulk-bar[hidden] { display: none; }
+.bulk-bar label { display: flex; flex-direction: column; font-size: 0.78rem; gap: 3px; }
+
+.inline-check { flex-direction: row !important; align-items: center; gap: 6px !important; }
+.assign-table td { vertical-align: top; }
+.assign-finding-cell { max-width: 340px; }
+.assign-finding-title { color: var(--text-muted); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assign-sub { font-size: 0.75rem; }
+.secondary-button.compact { padding: 3px 10px; font-size: 0.8rem; }
+.danger-link { color: var(--danger) !important; }
+.row-actions { white-space: nowrap; }
+.assign-form { display: flex; flex-direction: column; gap: 12px; min-width: min(460px, 80vw); }
+.assign-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+.assign-form-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.status-pill {
+  display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700;
+  background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);
+}
+.status-open { background: var(--info-bg); color: var(--info-text); border-color: transparent; }
+.status-in_progress { background: var(--success-bg); color: var(--success); border-color: transparent; }
+.status-blocked { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.status-resolved { background: var(--bg); color: var(--text-muted); }
+.status-unassigned { border-style: dashed; }
+.status-select { border-radius: 999px; padding: 2px 8px; font-size: 0.78rem; font-weight: 700; }
+
+.stack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--bg); min-width: 120px; }
+.stack-seg { display: block; height: 100%; }
+.stack-empty { border: 1px dashed var(--border); }
+.seg-assigned { background: var(--brand-accent); }
+.seg-team { background: #e0a100; }
+.seg-unowned { background: var(--danger); }
+.stack-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; }
+.stack-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.own-coverage .stack { height: 18px; border-radius: 9px; }
+.own-cell { min-width: 170px; }
+.own-pct { display: block; font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
+.ageing-table .own-cell { width: 60%; }
+.kpi-sub { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
+.load-track { height: 5px; background: var(--bg); border-radius: 3px; margin-top: 4px; min-width: 80px; }
+.load-fill { height: 100%; background: var(--brand-accent); border-radius: 3px; }
+
+.ownership-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 14px 0; background: var(--surface); }
+.ownership-panel h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.ownership-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.8rem; color: var(--text-muted); }
+.ownership-history li { padding: 3px 0; border-top: 1px dashed var(--border); }
