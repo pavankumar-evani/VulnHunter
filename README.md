@@ -1,6 +1,5 @@
 # Quanta 🔍🛡️
 
-[![CI](https://github.com/pavankumar-evani/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/pavankumar-evani/VulnHunter/actions/workflows/ci.yml)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-597%2F597%20passing-brightgreen.svg)](TEST_CASES.md)
 

@@ -9,8 +9,8 @@ see [docs/enterprise-suite/hub.html](enterprise-suite/hub.html).
 ## 1. Clone the repo
 
 ```bash
-git clone https://github.com/pavankumar-evani/VulnHunter.git
-cd Quanta
+git clone <your-Quanta-repository-URL>
+cd <repository-directory>
 git checkout feature/remediation-engine
 ```
 

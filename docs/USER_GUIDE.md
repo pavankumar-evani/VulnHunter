@@ -23,7 +23,7 @@ as your working directory (subagents are project-scoped — see
 [KNOWLEDGE_TRANSFER.md §12](../KNOWLEDGE_TRANSFER.md#12-troubleshooting--things-that-tripped-us-up)).
 
 ```bash
-cd Quanta
+cd <repository-directory>
 claude
 ```
 

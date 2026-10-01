@@ -193,11 +193,9 @@
   <!-- ============ 2. Getting the code ============ -->
   <section class="doc-section" id="sec-2">
     <h1 class="section-h1">2. Getting the code</h1>
-    <p>The canonical repository lives on GitHub:</p>
-    <pre class="codeblock"><code>https://github.com/pavankumar-evani/VulnHunter</code></pre>
-    <p>Clone it and check out the trunk branch, which is master:</p>
-    <pre class="codeblock"><code>git clone https://github.com/pavankumar-evani/VulnHunter.git
-cd Quanta</code></pre>
+    <p>Quanta is delivered as a source repository to your organization. Clone it from the location your Quanta representative provided and check out the trunk branch, which is master:</p>
+    <pre class="codeblock"><code>git clone <your-Quanta-repository-URL>
+cd <repository-directory></code></pre>
 
     <h2 class="section-h2" id="sec-2-1">2.1 Working across multiple sessions in parallel</h2>
     <p>This repository is regularly worked on by more than one Claude Code session at once, each in its own git worktree &mdash; a second working directory attached to the same repository, on its own branch, without needing a second clone:</p>
@@ -395,7 +393,7 @@ data table.</code></pre>
   <!-- ============ Appendix A ============ -->
   <section class="doc-section appendix" id="appendix-a">
     <h1 class="section-h1">Appendix A: Command reference</h1>
-    <pre class="codeblock"><code>git clone https://github.com/pavankumar-evani/VulnHunter.git
+    <pre class="codeblock"><code>git clone <your-Quanta-repository-URL>
 pip install -r dashboard/requirements.txt
 python dashboard/app.py                 # https://127.0.0.1:5050
 python -m unittest discover -s tests -p "test_*.py"

@@ -48,7 +48,7 @@ export async function render(container) {
       as events, it does not read anything back. Re-sending the same finding on every
       pipeline run is expected (HEC events are an append-only stream, not a ticket
       system - there is deliberately no dedup here). See
-      <a href="https://github.com/pavankumar-evani/VulnHunter/blob/master/remediation/connectors/README.md" target="_blank" rel="noopener">remediation/connectors/README.md</a>.
+      <span class="doc-ref">remediation/connectors/README.md</span>.
     </div>
 
     <form class="run-form" id="splunk-form">
