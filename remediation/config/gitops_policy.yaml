@@ -1,0 +1,65 @@
+# How Quanta proposes a change to a customer's repository, so that it follows the development process you already have rather than inventing one.
+#
+# Read by remediation/gitops/policy.py. Quanta never merges, never writes to a default or protected branch and never opens a pull request without an
+# administrator's confirmation (the Fix pull requests page shows a dry run first). Everything below shapes what that pull request looks like.
+#
+# Per-repository changes go under `overrides`: the first entry whose `match` (a glob on the repository path, such as acme/legacy-*) fits is merged over
+# the defaults, section by section.
+
+branch:
+  # {id} is the proposal number, {kind} is deps or code, {slug} comes from the package or finding title.
+  template: "quanta/{kind}-{id}-{slug}"
+  # Quanta refuses to use any of these as the branch it commits to (glob patterns). The default branch is always refused as well.
+  protected: [main, master, develop, development, trunk, "release/*", "hotfix/*", "prod*", "production"]
+
+commit:
+  # conventional: "fix(deps): upgrade log4j-core to 2.17.1"; plain: "Upgrade log4j-core to 2.17.1"
+  style: conventional
+  # Add a Signed-off-by line (the developer certificate of origin) naming the approving administrator.
+  sign_off: false
+
+pull_request:
+  draft: false                 # open as a draft; set true if your CI should finish before a human looks
+  labels: [security, dependencies]
+  reviewers: []                # GitHub logins to request; ignored for GitLab (use CODEOWNERS or approval rules there)
+  # Appended to every description so reviewers know exactly what was and was not checked.
+  provenance: "Proposed by Quanta from scan evidence after an administrator approved it. Quanta did not build the project or run its tests."
+  # When the repository has a lock file, Quanta cannot regenerate it (it never runs a package manager), so the pull request is opened as a draft.
+  draft_when_lockfile_present: true
+
+approval:
+  require_before_open: true         # a proposal must be approved on the Fix pull requests page before it can be opened
+  require_distinct_approver: false  # true: the administrator who approves must not be the one who created the proposal
+
+files:
+  max_files: 10
+  max_bytes_per_file: 500000
+  # Quanta will not put a change to any of these in a pull request, whatever the fix says (pipeline definitions, ownership, keys and secrets).
+  denied: [".github/**", ".gitlab-ci.yml", ".gitlab/**", "**/Jenkinsfile", "**/CODEOWNERS", "**/*.pem", "**/*.key", "**/.env", "**/.env.*", "**/*.p12", "**/*.pfx"]
+
+code_fix:
+  # finding-file-only: a code fix may change only the file the finding points at. same-directory also allows files beside it (tests, helpers).
+  scope: finding-file-only
+
+# The steps the pull request body lists, so a reviewer sees the process. Edit the wording to match yours.
+process:
+  steps:
+    - {id: branch, text: "Quanta creates a branch of its own and commits to it. It never touches the default branch."}
+    - {id: review, text: "A developer reviews the diff. Code-owner and required-reviewer rules on the repository still apply."}
+    - {id: tests, text: "The repository's own pipeline runs the tests. Quanta did not run them."}
+    - {id: approve, text: "The approvals your branch protection requires are given by people."}
+    - {id: merge, text: "A person merges, following your merge policy. Quanta never merges."}
+    - {id: verify, text: "The next scan confirms the finding is gone. Quanta marks it verified only then."}
+
+# Commands a reviewer can run to check an upgrade, by ecosystem. {package} and {version} are filled in.
+verify_commands:
+  maven: "mvn -U dependency:tree -Dincludes={package} && mvn test"
+  npm: "npm ls {package} && npm test"
+  pypi: "pip install -r requirements.txt && pip show {package} && pytest"
+  golang: "go mod tidy && go list -m {package} && go test ./..."
+
+overrides: []
+# - match: "acme/legacy-*"
+#   pull_request: {draft: true, labels: [security], reviewers: [security-champions]}
+#   branch: {template: "sec/{kind}-{id}-{slug}"}
+#   approval: {require_distinct_approver: true}

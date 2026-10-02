@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
+import appsec_api  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
 import reports  # noqa: E402
@@ -65,7 +66,8 @@ from remediation import capabilities as capabilities_mod  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
 from remediation.enrichment import network_reachability as network_reach  # noqa: E402
-from remediation.devsecops import controls as dso_controls, factory as dso_factory  # noqa: E402
+from remediation.devsecops import controls as dso_controls, factory as dso_factory, gates as dso_gates  # noqa: E402
+from remediation.appsec import store as appsec_store  # noqa: E402
 from remediation.enrichment import sbom as sbom_mod, zero_day_watch as zero_day  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
@@ -246,7 +248,7 @@ async def _security_headers(request: Request, call_next):
 # can safely require) a real session, so they're not exempted here.
 # Routes for machine callers. They are exempt from the browser-login gate ONLY because each one
 # requires a valid API key with the right scope (require_api_key below); nothing else is exempt.
-_API_KEY_PATH_PREFIXES = ("/api/ingest/", "/api/inbound/", "/api/export/")
+_API_KEY_PATH_PREFIXES = ("/api/ingest/", "/api/inbound/", "/api/export/", "/api/gate/")
 _AUTH_FLOW_PATHS = frozenset({
     "/api/auth/login", "/api/auth/logout", "/api/auth/me",
     "/api/auth/oidc/config", "/api/auth/oidc/login", "/api/auth/oidc/callback",
@@ -5135,16 +5137,22 @@ def _devsecops_inputs():
     return dso_controls.scan_runs(), dso_controls.states(), dashboard_data.load_live_queue(), len(tm_store.list_models())
 
 
+def _devsecops_extras():
+    """What Quanta itself holds that some controls are evidenced by: stored SBOMs and release-gate evaluations, by lower-case application name."""
+    sboms = {k.strip().lower(): v for k, v in appsec_store.sbom_summaries().items()}
+    return {"sboms": sboms, "gate_runs": dso_gates.last_by_application()}
+
+
 @app.get("/api/devsecops/overview")
 def api_devsecops_overview(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
     runs, rec, findings, tms = _devsecops_inputs()
-    return dso_controls.overview(runs, rec, findings, tms)
+    return dso_controls.overview(runs, rec, findings, tms, extras=_devsecops_extras(), lib=dso_controls.full_library())
 
 
 @app.get("/api/devsecops/repos")
 def api_devsecops_repo(asset: str, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
     runs, rec, findings, tms = _devsecops_inputs()
-    return dso_controls.repo_report(asset, dso_controls.library(), runs, rec, findings, tms)
+    return dso_controls.repo_report(asset, dso_controls.full_library(), runs, rec, findings, tms, extras=_devsecops_extras())
 
 
 @app.post("/api/devsecops/state")
@@ -5170,7 +5178,7 @@ def api_devsecops_clear_state(asset: str, control_id: str, user: dict = Depends(
 def api_devsecops_policy(body: PolicyTextBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
     if len(body.text) > 200_000:
         raise HTTPException(status_code=413, detail="The policy text is too large")
-    return dso_controls.map_policy(body.text)
+    return dso_controls.map_policy(body.text, dso_controls.full_library())
 
 
 @app.get("/api/devsecops/factory")
@@ -5204,6 +5212,10 @@ def api_devsecops_factory_brief(finding_id: str, user: dict = Depends(rbac.requi
     if not f or not dso_factory.is_code(f):
         raise HTTPException(status_code=404, detail="No such code-level finding")
     return PlainTextResponse(dso_factory.brief(f), media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="fix-{finding_id}.md"'})
+
+
+app.include_router(appsec_api.build_router(require_api_key=require_api_key, scope_findings=lambda rows, user: _scope_to_team(_annotate_finding_teams(rows), user),
+                                           read_upload=_read_upload, enrich_in_background=_enrich_in_background))
 
 
 @app.get("/api/zero-day-watch")

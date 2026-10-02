@@ -1,0 +1,175 @@
+# The secure design assistant's questions and rules.
+#
+# Read by remediation/devsecops/design.py. A team answers a short questionnaire about a system it is about to build or change; every rule whose condition
+# matches the answers contributes a security requirement, the pipeline controls from the DevSecOps library that enforce it, and the STRIDE threat prompts to
+# discuss. The result is a starting list for a design review, not a threat model and not a compliance statement: it asks the questions a reviewer would ask.
+#
+# Rule fields:
+#   when      all: [..]  and/or  any: [..]  of  "question=value" (a yes/no question's value is yes or no; a choice question's value is one of its options)
+#   priority  must (always needed given the answers) or should (good practice at this exposure)
+#   controls  ids from remediation/devsecops/library.yaml (a test checks every id exists)
+#   asvs      the OWASP Application Security Verification Standard 4.0 chapter the requirement draws on
+#   stride    S spoofing, T tampering, R repudiation, I information disclosure, D denial of service, E elevation of privilege
+
+questions:
+  - {id: internet_facing, label: "Is it reachable from the internet?", type: yesno}
+  - {id: personal_data, label: "Does it store or process personal data?", type: yesno}
+  - {id: payment_data, label: "Does it handle payment card data?", type: yesno}
+  - {id: authentication, label: "How do users or callers authenticate?", type: choice, options: [none, sso, local-passwords, api-keys]}
+  - {id: multi_tenant, label: "Does it serve more than one customer or business unit from the same deployment?", type: yesno}
+  - {id: exposes_api, label: "Does it expose an API to other systems or a browser?", type: yesno}
+  - {id: file_upload, label: "Can users upload files?", type: yesno}
+  - {id: user_content, label: "Does it display content that users or other systems supplied?", type: yesno}
+  - {id: third_party_calls, label: "Does it call external services or fetch URLs on a user's behalf?", type: yesno}
+  - {id: runtime_secrets, label: "Does it need secrets (keys, tokens, passwords) at run time?", type: yesno}
+  - {id: containers, label: "Is it deployed as a container image?", type: yesno}
+  - {id: uses_llm, label: "Does it send data to, or act on the output of, a language model?", type: yesno}
+  - {id: admin_interface, label: "Does it have an administrative interface?", type: yesno}
+  - {id: open_source, label: "Does it use open-source libraries?", type: yesno}
+  - {id: queues, label: "Does it process messages or jobs from a queue or webhook?", type: yesno}
+
+rules:
+  - id: threat-model
+    when: {any: ["internet_facing=yes", "personal_data=yes", "payment_data=yes", "multi_tenant=yes"]}
+    priority: must
+    requirement: Review the design with a threat model before building, and keep it current when data flows change.
+    why: A flaw in the design is the most expensive kind to fix later and no scanner finds it.
+    controls: [security-requirements, design-review]
+    asvs: V1 Architecture
+    stride: [S, T, R, I, D, E]
+  - id: authenticate-everything
+    when: {any: ["authentication=local-passwords", "authentication=api-keys", "internet_facing=yes"]}
+    priority: must
+    requirement: Authenticate every request that is not meant to be public, on the server, with one shared mechanism rather than checks scattered through handlers.
+    why: Missing or inconsistent authentication is the most common route to someone else's data.
+    controls: [sast, dast]
+    asvs: V2 Authentication
+    stride: [S, E]
+  - id: prefer-sso
+    when: {all: ["authentication=local-passwords"]}
+    priority: should
+    requirement: Prefer federated sign-in (SSO) with multi-factor authentication to storing passwords. If passwords stay, hash them with a slow, salted algorithm and rate-limit attempts.
+    why: Every stored password is a liability you must defend.
+    controls: [sast]
+    asvs: V2 Authentication
+    stride: [S, I]
+  - id: key-management
+    when: {all: ["authentication=api-keys"]}
+    priority: must
+    requirement: Issue API keys with scopes and an expiry, store only a hash, show the key once and support revocation.
+    why: A long-lived, all-powerful key is a password nobody rotates.
+    controls: [secret-rotation, secret-scan-commit]
+    asvs: V2 Authentication
+    stride: [S, E]
+  - id: authorise-every-object
+    when: {any: ["multi_tenant=yes", "exposes_api=yes", "personal_data=yes"]}
+    priority: must
+    requirement: Check authorisation on the server for every object and action, using the caller's identity (never an identifier the client supplies), and test tenant isolation explicitly.
+    why: Broken object-level authorisation is the leading API flaw and a cross-tenant leak is a breach.
+    controls: [sast, dast, coverage-gate]
+    asvs: V4 Access Control
+    stride: [E, I]
+  - id: validate-input
+    when: {any: ["exposes_api=yes", "user_content=yes", "queues=yes", "file_upload=yes"]}
+    priority: must
+    requirement: Validate all input against an allow-list at the boundary, use parameterised queries, and encode output for the context it is written to.
+    why: Injection and cross-site scripting remain common and are prevented by construction, not by scanning.
+    controls: [sast, dast, untrusted-input]
+    asvs: V5 Validation, Sanitization and Encoding
+    stride: [T, I, E]
+  - id: safe-uploads
+    when: {all: ["file_upload=yes"]}
+    priority: must
+    requirement: Accept only the file types you need, check content rather than the name, store uploads outside the web root with generated names, limit size, and scan them.
+    why: An upload is attacker-controlled data written to your disk.
+    controls: [sast, dast]
+    asvs: V12 Files and Resources
+    stride: [T, D, E]
+  - id: outbound-requests
+    when: {all: ["third_party_calls=yes"]}
+    priority: must
+    requirement: Restrict where the service may connect (an allow-list of hosts, no internal or metadata addresses), set timeouts and do not follow redirects blindly.
+    why: A server that fetches a URL for a user can be made to fetch your internal network.
+    controls: [sast, dast]
+    asvs: V13 API and Web Service
+    stride: [I, E, D]
+  - id: protect-data
+    when: {any: ["personal_data=yes", "payment_data=yes"]}
+    priority: must
+    requirement: Classify the data, encrypt it in transit and at rest, keep it out of logs and URLs, and define how long it is kept and how it is deleted.
+    why: The cheapest data to protect is data you do not hold or log.
+    controls: [secret-scan-commit, runtime-monitoring]
+    asvs: V8 Data Protection
+    stride: [I]
+  - id: payment-scope
+    when: {all: ["payment_data=yes"]}
+    priority: must
+    requirement: Keep card data out of your systems where you can (use the payment provider's hosted fields or tokens) and treat what remains as a separate, tightly controlled zone.
+    why: Every system that touches card data is in scope for the card industry's rules.
+    controls: [design-review, protected-environments]
+    asvs: V8 Data Protection
+    stride: [I, T]
+  - id: secret-handling
+    when: {all: ["runtime_secrets=yes"]}
+    priority: must
+    requirement: Fetch secrets from a secret manager or the platform at run time, never from the repository or the image, and rotate them on a schedule and after any exposure.
+    why: A secret in history has to be rotated whatever you do next.
+    controls: [secret-scan-commit, secret-scan-ci, no-secrets-in-pipeline, secret-rotation]
+    asvs: V6 Stored Cryptography
+    stride: [I, E]
+  - id: dependency-hygiene
+    when: {all: ["open_source=yes"]}
+    priority: must
+    requirement: Pin dependencies with a lock file, produce an SBOM for each release, scan for known vulnerabilities on every change and have a rule for how fast fixes are applied.
+    why: Most of the vulnerabilities in a typical application come from the libraries it uses.
+    controls: [sca, lockfiles, sbom, vulnerability-sla]
+    asvs: V14 Configuration
+    stride: [T, E]
+  - id: container-hardening
+    when: {all: ["containers=yes"]}
+    priority: must
+    requirement: Build from a minimal, pinned base image, run as a non-root user with a read-only file system where possible, and scan the image on every build.
+    why: A container inherits every flaw in its base image and runs with whatever privileges you give it.
+    controls: [container-scan, iac-scan, artifact-provenance]
+    asvs: V14 Configuration
+    stride: [E, T]
+  - id: llm-boundaries
+    when: {all: ["uses_llm=yes"]}
+    priority: must
+    requirement: Treat model output as untrusted input, keep secrets and unrelated personal data out of prompts, limit the actions a model can trigger and require a person to approve the ones with side effects.
+    why: A prompt can be written by an attacker, and a model that can act inherits the privileges of the account it runs as.
+    controls: [security-requirements, design-review, runtime-monitoring]
+    asvs: V5 Validation, Sanitization and Encoding
+    stride: [T, I, E]
+  - id: admin-hardening
+    when: {all: ["admin_interface=yes"]}
+    priority: must
+    requirement: Put the administrative interface behind stronger authentication (multi-factor), network restriction and a separate authorisation role, and log every administrative action.
+    why: The admin interface is the highest-value target in the application.
+    controls: [protected-environments, runtime-monitoring]
+    asvs: V4 Access Control
+    stride: [S, E, R]
+  - id: logging-and-detection
+    when: {any: ["internet_facing=yes", "personal_data=yes", "admin_interface=yes"]}
+    priority: should
+    requirement: Log authentication, access-control failures and administrative actions with enough context to investigate, protect the logs from tampering and alert on the events that matter.
+    why: You cannot respond to what you cannot see.
+    controls: [runtime-monitoring]
+    asvs: V7 Error Handling and Logging
+    stride: [R, I]
+  - id: review-and-gate
+    when: {any: ["internet_facing=yes", "personal_data=yes", "payment_data=yes"]}
+    priority: should
+    requirement: Require reviewed pull requests with code-owner approval on the default branch and a release gate that blocks known-exploited and critical findings.
+    why: A control that is not enforced by the pipeline is a hope.
+    controls: [branch-protection, codeowners, vulnerability-gate]
+    asvs: V10 Malicious Code
+    stride: [T]
+  - id: abuse-limits
+    when: {any: ["internet_facing=yes", "exposes_api=yes"]}
+    priority: should
+    requirement: Rate-limit by caller, bound request sizes and expensive operations, and decide how the service degrades under load.
+    why: Without limits one client, or one attacker, can take the service away from everyone.
+    controls: [dast]
+    asvs: V11 Business Logic
+    stride: [D]

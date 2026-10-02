@@ -2058,3 +2058,69 @@ select.searchable-select-native {
 
 /* Plain links inside page content use the accent colour; the browser default dark blue is unreadable on the dark theme. */
 #app p a:not([class]), #app td a:not([class]), #app li a:not([class]), #app .callout a:not([class]) { color: var(--brand-accent); }
+
+/* --- Application security: dependency graph, applications, pull requests, gates, design assistant --- */
+/* The graph keeps its own dark navy palette so it reads the same in either colour scheme. */
+.dg { --dg-paper: #0a0e1a; --dg-surface: #10172a; --dg-surface-2: #151d35; --dg-line: #263153; --dg-ink: #eef1fb; --dg-muted: #97a2c2; --dg-accent: #6d97f7;
+  font-family: "Chakra Petch", sans-serif; background: var(--dg-paper); color: var(--dg-ink); border: 1px solid var(--dg-line); border-radius: 12px; padding: 12px; margin: 12px 0; }
+.dg-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.dg-bar input[type=search] { background: var(--dg-surface); color: var(--dg-ink); border: 1px solid var(--dg-line); border-radius: 6px; padding: 6px 10px; font-family: inherit; min-width: 160px; }
+.dg-bar .secondary-button { background: var(--dg-surface-2); color: var(--dg-ink); border: 1px solid var(--dg-line); border-radius: 6px; padding: 5px 12px; cursor: pointer; font-family: inherit; }
+.dg-bar .secondary-button:hover { border-color: var(--dg-accent); color: var(--dg-accent); }
+.dg-spacer { flex: 1; }
+.dg-check { display: inline-flex; gap: 6px; align-items: center; color: var(--dg-muted); font-size: 0.85rem; }
+.dg-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; }
+.dg-stage { height: 520px; overflow: hidden; background: var(--dg-surface); border: 1px solid var(--dg-line); border-radius: 8px; cursor: grab; touch-action: none; }
+.dg-stage.dg-grab { cursor: grabbing; }
+.dg-svg { width: 100%; height: 100%; display: block; }
+.dg-panel { background: var(--dg-surface); border: 1px solid var(--dg-line); border-radius: 8px; padding: 12px 14px; max-height: 520px; overflow: auto; font-size: 0.85rem; color: var(--dg-ink); }
+.dg-panel h3 { margin: 0 0 4px; font-size: 1rem; word-break: break-word; }
+.dg-panel h4 { margin: 12px 0 4px; font-size: 0.85rem; color: var(--dg-muted); text-transform: uppercase; letter-spacing: .04em; }
+.dg-panel .muted { color: var(--dg-muted); }
+.dg-panel code { background: var(--dg-surface-2); color: var(--dg-ink); word-break: break-all; }
+.dg-panel .link-button { color: var(--dg-accent); }
+.dg-dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 8px 0 0; }
+.dg-dl dt { color: var(--dg-muted); } .dg-dl dd { margin: 0; }
+.dg-findings { list-style: none; margin: 0; padding: 0; } .dg-findings li { padding: 6px 0; border-top: 1px solid var(--dg-line); }
+.dg-path { word-break: break-word; }
+.dg-edge { fill: none; stroke: #3a4a78; stroke-width: 1.4; } .dg-edge-extra { stroke-dasharray: 4 4; opacity: .6; }
+.dg-focus .dg-edge { opacity: .25; } .dg-focus .dg-node { opacity: .45; }
+.dg-focus .dg-edge.dg-on { opacity: 1; stroke: var(--dg-accent); stroke-width: 2.2; } .dg-focus .dg-node.dg-on { opacity: 1; }
+.dg-box { fill: var(--dg-surface-2); stroke: var(--dg-line); stroke-width: 1.2; }
+.dg-node { cursor: pointer; outline: none; } .dg-node:hover .dg-box, .dg-node:focus .dg-box { stroke: var(--dg-accent); stroke-width: 2; }
+.dg-selected .dg-box { stroke: #fff; stroke-width: 2.4; }
+.dg-hit .dg-box { stroke: #fff; stroke-dasharray: 4 3; stroke-width: 2.2; }
+.dg-root .dg-box { fill: #1b2a5c; stroke: var(--dg-accent); stroke-width: 2; }
+.dg-direct-bar { fill: var(--dg-accent); }
+.dg-name { font: 600 12px "Chakra Petch", sans-serif; fill: var(--dg-ink); } .dg-ver { font: 400 10.5px "Chakra Petch", sans-serif; fill: var(--dg-muted); }
+.dg-crit circle { fill: #0a0e1a; stroke: var(--dg-line); } .dg-crit text { font: 700 9px "Chakra Petch", sans-serif; fill: var(--dg-muted); }
+.dg-crit-critical circle { stroke: #f06a6a; } .dg-crit-critical text { fill: #f06a6a; } .dg-crit-high circle { stroke: #f0a35c; } .dg-crit-high text { fill: #f0a35c; }
+.dg-lane { cursor: pointer; outline: none; } .dg-lane-box { fill: var(--dg-surface-2); stroke: var(--dg-line); stroke-width: 1.2; }
+.dg-lane:hover .dg-lane-box, .dg-lane:focus .dg-lane-box { stroke: var(--dg-accent); } .dg-deny-box { stroke: #f06a6a; }
+.dg-lane-kind { font: 600 11px "Chakra Petch", sans-serif; fill: var(--dg-ink); } .dg-lane-name { font: 400 10.5px "Chakra Petch", sans-serif; fill: var(--dg-muted); }
+.dg-lane-action { font: 700 10px "Chakra Petch", sans-serif; text-transform: uppercase; } .dg-allow { fill: #3fd0b6; } .dg-deny { fill: #f06a6a; }
+.dg-lane-line { stroke: #4a5c92; stroke-width: 1.6; } .dg-deny-line { stroke: #f06a6a; stroke-dasharray: 5 4; } .dg-arrowhead { fill: #4a5c92; }
+.dg-note { font: 400 11px "Chakra Petch", sans-serif; fill: var(--dg-muted); }
+.dg-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 0.78rem; color: var(--dg-muted); }
+.dg-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; } .dg-legend i.dg-plain { background: var(--dg-surface-2); border: 1px solid var(--dg-line); }
+.dg-legend b { color: var(--dg-accent); }
+.dg-foot { color: var(--dg-muted); font-size: 0.8rem; margin: 6px 0 0; }
+@media (max-width: 900px) { .dg-main { grid-template-columns: 1fr; } .dg-stage { height: 380px; } }
+
+.score-bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--brand-accent); vertical-align: middle; margin-right: 6px; }
+.tier-P1 { color: #f06a6a; font-weight: 700; } .tier-P2 { color: #f0a35c; font-weight: 700; } .tier-P3 { color: #e8cf6a; font-weight: 600; } .tier-P4 { color: var(--text-muted); }
+.diff-view { background: #0a0e1a; color: #eef1fb; border: 1px solid #263153; border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: 0.78rem; line-height: 1.45; white-space: pre; }
+.diff-add { color: #3fd0b6; } .diff-del { color: #f06a6a; } .diff-hunk { color: #6d97f7; }
+.step-list { counter-reset: step; list-style: none; padding: 0; margin: 8px 0; }
+.step-list li { counter-increment: step; padding: 6px 0 6px 34px; position: relative; }
+.step-list li::before { content: counter(step); position: absolute; left: 0; top: 5px; width: 24px; height: 24px; border-radius: 50%; border: 1px solid #6d97f7; color: #6d97f7; text-align: center; line-height: 22px; font-size: 0.8rem; }
+.decision-pass { color: #3fd0b6; font-weight: 700; } .decision-warn { color: #e8cf6a; font-weight: 700; } .decision-fail { color: #f06a6a; font-weight: 700; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; margin: 10px 0; }
+.form-grid label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--text-muted); }
+.form-grid input, .form-grid select, .form-grid textarea { width: 100%; }
+.inline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.btn-primary { background: var(--brand-accent); color: #fff; border: none; padding: 9px 16px; border-radius: 6px; font-family: inherit; font-size: 0.9rem; cursor: pointer; }
+.btn-primary:hover { filter: brightness(1.12); } .btn-primary:disabled { opacity: .5; cursor: default; }
+.run-form .btn-primary { background: var(--brand-accent); }
+.form-grid input, .form-grid select, .form-grid textarea, .run-form input:not([type]), .modal-body form input:not([type=checkbox]):not([type=radio]), .modal-body form select, .modal-body form textarea {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; background: var(--surface); color: var(--text); font-family: inherit; }

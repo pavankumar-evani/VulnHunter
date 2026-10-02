@@ -96,6 +96,23 @@ today (see docs/enterprise-suite/rbac-governance.html's "AI & security guardrail
 section), so this doesn't apply to them yet — it would if either gained a dashboard
 route with a user-supplied base URL.
 
+## Source control and package advisories (GitHub, GitLab, OSV)
+
+**`git_host_connector.py`** (GitHub and GitLab, stored as `tool` connections `github` / `gitlab`
+on the Connections page) is the only code in Quanta that talks to a Git host. It reads
+dependency files, creates a branch of its own, commits to that branch and opens a pull request
+(merge request on GitLab), and reads the request's state back. It never merges, refuses the
+default branch, and does not retry writes. It is called only from the Fix Pull Requests workflow
+(`remediation/gitops/`), after admin approval and an explicit confirm.
+
+**`osv_connector.py`** turns an application's SBOM into findings via the public OSV API. An admin
+confirms each check, and only package URLs are sent.
+
+All three were built against the services' public documentation and unit-tested against
+hand-rolled fakes; **none has been exercised against a live GitHub or GitLab account or the live
+OSV service.** Run a dry run and a trial repository first. To add another Git host, see
+`docs/enterprise-suite/developer-guide.html` section 12.
+
 ## Manual/threat-intel source
 
 There is deliberately no "connector" for the third source (manual threat intel) — by
