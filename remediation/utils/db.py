@@ -16,6 +16,7 @@ Tests inject a separate `engine=` (typically `create_engine("sqlite:///:memory:"
 instead of a file path, mirroring the exact same "isolate storage per test" intent the
 old `path=None` parameter served on the JSON-backed stores.
 """
+import os
 from pathlib import Path
 
 from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table, Text, create_engine
@@ -38,8 +39,17 @@ def get_engine():
     (`create_engine("sqlite:///:memory:")`) rather than calling this."""
     global _default_engine
     if _default_engine is None:
-        _default_engine = create_engine(f"sqlite:///{DEFAULT_DB_PATH}")
+        _default_engine = create_engine(database_url())
     return _default_engine
+
+
+def database_url():
+    """The SQLAlchemy URL for the shared database. Defaults to the local SQLite file;
+    set QUANTA_DATABASE_URL (e.g. postgresql+psycopg2://user:pass@host/quanta) to run the
+    same stores on PostgreSQL - the move SQLAlchemy Core was chosen for. The advisory
+    file lock still serialises writers on ONE host only; a multi-replica deployment needs
+    row-level locking or a single writer (see docs/DEPLOYMENT_ARCHITECTURE.md)."""
+    return os.environ.get("QUANTA_DATABASE_URL", "").strip() or f"sqlite:///{DEFAULT_DB_PATH}"
 
 
 metadata = MetaData()

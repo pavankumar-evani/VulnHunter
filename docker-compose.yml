@@ -1,0 +1,41 @@
+# Reference single-host deployment: the dashboard plus PostgreSQL. Put a TLS-terminating
+# reverse proxy in front of `quanta` (it serves plain HTTP). Secrets come from the
+# environment / an .env file, never from this file. See docs/DEPLOYMENT_ARCHITECTURE.md.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quanta
+      POSTGRES_USER: quanta
+      POSTGRES_PASSWORD: ${QUANTA_DB_PASSWORD:?set QUANTA_DB_PASSWORD}
+    volumes:
+      - quanta-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quanta -d quanta"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  quanta:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      QUANTA_DATABASE_URL: postgresql+psycopg2://quanta:${QUANTA_DB_PASSWORD}@db:5432/quanta
+      QUANTA_SESSION_SECRET: ${QUANTA_SESSION_SECRET:?set QUANTA_SESSION_SECRET}
+      QUANTA_PRODUCTION: "true"
+      QUANTA_REQUIRE_LOGIN_FOR_READS: "true"
+      QUANTA_SUPPORT_EMAIL: ${QUANTA_SUPPORT_EMAIL:-}
+    ports:
+      - "127.0.0.1:5050:5050"
+    volumes:
+      - quanta-output:/app/remediation/output
+      - quanta-live-data:/app/remediation/live-data
+
+volumes:
+  quanta-db:
+  quanta-output:
+  quanta-live-data:

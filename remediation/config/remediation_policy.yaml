@@ -65,12 +65,34 @@
 kev_emergency_override:
   enabled: true
 
+# Staged rollout rings. A fix is applied to a small canary first, then a pilot, then
+# everything else, with a soak period between rings during which the next ring waits and
+# a failed health check stops the rollout. Each domain below names a profile with
+# `rollout:`; a KEV-listed (emergency) finding uses `emergency` regardless. Generated
+# playbooks take a `rollout_ring` variable (canary | pilot | broad) so the scope of any
+# one run is explicit - Quanta still never executes anything; whoever runs the playbook
+# honors the rings. `percent` is the cumulative share of affected assets after that ring.
+rollout_profiles:
+  staged:
+    - {ring: canary, percent: 5,   soak_hours: 24}
+    - {ring: pilot,  percent: 25,  soak_hours: 48}
+    - {ring: broad,  percent: 100, soak_hours: 0}
+  fast:
+    - {ring: canary, percent: 10,  soak_hours: 4}
+    - {ring: broad,  percent: 100, soak_hours: 0}
+  emergency:
+    - {ring: canary, percent: 2,   soak_hours: 2}
+    - {ring: broad,  percent: 100, soak_hours: 0}
+  immediate:
+    - {ring: broad,  percent: 100, soak_hours: 0}
+
 policies:
   # End-User Devices (SCCM/MDM-managed laptops/desktops/mobiles) - matches the literal
   # example given: weekly patch-and-restart cycle pushed via SCCM using a Windows Group
   # Policy-managed maintenance window, pre-approved so it doesn't wait on a human click
   # every week.
   endpoint:
+    rollout: "staged"
     change_type: "standard"
     cadence: "weekly"
     maintenance_window: {day_of_week: "tuesday", start_time: "02:00", end_time: "04:00", timezone: "UTC"}
@@ -86,6 +108,7 @@ policies:
   # slower cadence, requires approval, scheduled + communicated downtime, a named AD
   # approval group, and a real PAM backend referenced in the generated playbook.
   os:
+    rollout: "staged"
     change_type: "normal"
     cadence: "monthly"
     maintenance_window: {day_of_week: "saturday", start_time: "23:00", end_time: "03:00", timezone: "UTC"}
@@ -102,6 +125,7 @@ policies:
   # gate, since a dev environment breaking is a much lower-stakes event than a
   # production one.
   dev:
+    rollout: "immediate"
     change_type: "standard"
     cadence: "weekly"
     maintenance_window: {day_of_week: "daily", start_time: "01:00", end_time: "05:00", timezone: "UTC"}

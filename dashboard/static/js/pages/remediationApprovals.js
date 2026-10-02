@@ -69,6 +69,20 @@ function stagingCellHtml(a) {
   return `<span class="muted">—</span>`;
 }
 
+const VERIFY_LABEL = { verified: "Verified (no longer reported)", "still-present": "Still present after fix",
+  "awaiting-rescan": "Awaiting rescan", "not-triggered": "-" };
+
+function safetyCellHtml(a) {
+  const lint = a.playbook_lint;
+  const lintHtml = !lint ? `<span class="muted">No playbook</span>`
+    : lint.passed ? `<span class="badge badge-outline" data-tooltip="Passed the deterministic safety lint">Lint passed${lint.warnings ? ` (${lint.warnings} warning${lint.warnings > 1 ? "s" : ""})` : ""}</span>`
+    : `<span class="badge badge-critical" data-tooltip="Cannot be approved until the playbook is regenerated">Lint failed (${lint.errors})</span>`;
+  const v = a.verification;
+  const vHtml = v && v.state !== "not-triggered"
+    ? `<div class="muted" data-tooltip="${escapeHtml(v.detail)}">${escapeHtml(VERIFY_LABEL[v.state] || v.state)}</div>` : "";
+  return lintHtml + vHtml;
+}
+
 function rollbackPlanCellHtml(a) {
   if (!a.rollback_plan) return `<span class="muted" data-tooltip="No playbook generated for this finding yet">Not yet available</span>`;
   return `<span data-tooltip="${escapeHtml(a.rollback_plan)}">${escapeHtml(a.rollback_plan.split("\n")[0].slice(0, 60))}${a.rollback_plan.length > 60 ? "…" : ""}</span>`;
@@ -96,6 +110,7 @@ function approvalRow(a) {
       <td class="wrap-cell">${decisionCell}</td>
       <td>${stagingCellHtml(a)}</td>
       <td>${rollbackPlanCellHtml(a)}</td>
+      <td>${safetyCellHtml(a)}</td>
       <td>
         <button type="button" class="link-button" data-communication="${escapeHtml(a.id)}">Communication</button>
         ${status === "pending" ? `
@@ -137,7 +152,7 @@ export async function render(container) {
   const needsApprovalGroupLabels = [...new Set(needsApprovalAll.map((f) => f.groupLabel))].sort();
   const approvalsGroupLabels = [...new Set(approvalsAll.map((a) => a.groupLabel))].sort();
   const NEEDS_APPROVAL_COLSPAN = 8;
-  const APPROVALS_COLSPAN = 9;
+  const APPROVALS_COLSPAN = 10;
 
   let needsApprovalPage = 1;
   let needsApprovalGroupFilter = "all";
@@ -231,7 +246,7 @@ export async function render(container) {
         <thead>
           <tr>
             <th>ID</th><th>Finding</th><th>Requested By</th><th>Scheduled Window</th>
-            <th>Status</th><th>Decision</th><th>Staging Validation</th><th>Rollback Plan</th><th></th>
+            <th>Status</th><th>Decision</th><th>Staging Validation</th><th>Rollback Plan</th><th>Safety &amp; Outcome</th><th></th>
           </tr>
         </thead>
         <tbody id="approvals-body"></tbody>

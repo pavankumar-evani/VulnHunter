@@ -32,6 +32,13 @@ DEFAULT_RULES_PATH = Path(__file__).resolve().parent / "remediation_policy.yaml"
 _DAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
+DEFAULT_ROLLOUT_PROFILES = {
+    "staged": [{"ring": "canary", "percent": 5, "soak_hours": 24}, {"ring": "pilot", "percent": 25, "soak_hours": 48},
+               {"ring": "broad", "percent": 100, "soak_hours": 0}],
+    "emergency": [{"ring": "canary", "percent": 2, "soak_hours": 2}, {"ring": "broad", "percent": 100, "soak_hours": 0}],
+}
+
+
 def load_rules(path=DEFAULT_RULES_PATH):
     path = Path(path)
     with path.open(encoding="utf-8") as f:
@@ -99,6 +106,17 @@ def policy_for_finding(finding, rules=None, environment=None, asset_remediation_
         policy["change_type"] = "emergency"
         policy["auto_remediate"] = False
         policy["emergency_override"] = True
+
+    # Resolve the staged-rollout rings (rollout_profiles in the YAML). An emergency change
+    # always uses the emergency profile; otherwise the domain's own `rollout:` profile, and
+    # "staged" when a domain names none. Unknown profile names fall back to staged rather
+    # than crashing the queue page.
+    profiles = rules.get("rollout_profiles") or DEFAULT_ROLLOUT_PROFILES
+    name = "emergency" if policy["emergency_override"] else (policy.get("rollout") or "staged")
+    if name not in profiles:
+        name = "staged"
+    policy["rollout_profile"] = name
+    policy["rollout_rings"] = [dict(r) for r in (profiles.get(name) or DEFAULT_ROLLOUT_PROFILES["staged"])]
 
     return policy
 

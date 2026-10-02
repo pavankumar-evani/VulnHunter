@@ -38,6 +38,20 @@ infra prerequisite, not something this playbook sets up). Common patterns:
   playbook stating: the finding ID(s) addressed, the risk tier from the plan, and a
   one-line rollback instruction copied from the plan.
 
+## Rollout & safety requirements
+
+- Staged rollout: make the playbook take a `rollout_ring` variable
+  (`rollout_ring: "{{ rollout_ring | default('canary') }}"`, one of canary | pilot | broad,
+  per the finding's policy `rollout_rings` in `remediation/config/remediation_policy.yaml`)
+  and scope the play to that ring's slice of the affected hosts, so no single run can touch
+  every host. Add a post-change verification task (confirm the fixed version/setting is in
+  place) and, where a ring has a soak period, a comment telling the operator not to advance
+  to the next ring until the soak elapses and health checks pass. Never write a literal
+  credential: reference the vault/lookup the policy's `pam_backend` names. The generated
+  file is checked by a deterministic safety lint (`remediation/validation/playbook_lint.py`)
+  and an approval is refused while it fails, so the header must include `# Finding:`,
+  `# Risk tier:` and a real `# Rollback:` line.
+
 ## Rules
 
 - One playbook file per finding (or a small logical group of directly-related findings on

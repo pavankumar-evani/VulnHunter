@@ -411,3 +411,35 @@ class RealRulesFileIsValid(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RolloutRings(unittest.TestCase):
+    def test_every_policy_carries_resolved_rings_ending_at_100_percent(self):
+        policy = policy_for_finding(finding(infra_category="endpoint"), BASE_RULES)
+        self.assertEqual(policy["rollout_profile"], "staged")
+        self.assertEqual([r["ring"] for r in policy["rollout_rings"]], ["canary", "pilot", "broad"])
+        self.assertEqual(policy["rollout_rings"][-1]["percent"], 100)
+
+    def test_kev_emergency_uses_the_emergency_profile(self):
+        policy = policy_for_finding({**finding(infra_category="endpoint"), "kev": {"listed": True}}, BASE_RULES)
+        self.assertTrue(policy["emergency_override"])
+        self.assertEqual(policy["rollout_profile"], "emergency")
+        self.assertEqual(policy["rollout_rings"][0]["percent"], 2)
+
+    def test_named_and_unknown_profiles(self):
+        rules = {**BASE_RULES, "rollout_profiles": {"staged": [{"ring": "broad", "percent": 100, "soak_hours": 0}],
+                                                      "fast": [{"ring": "canary", "percent": 10, "soak_hours": 4},
+                                                               {"ring": "broad", "percent": 100, "soak_hours": 0}]}}
+        rules["policies"] = {k: dict(v) for k, v in BASE_RULES["policies"].items()}
+        rules["policies"]["endpoint"]["rollout"] = "fast"
+        self.assertEqual(policy_for_finding(finding(infra_category="endpoint"), rules)["rollout_profile"], "fast")
+        rules["policies"]["endpoint"]["rollout"] = "does-not-exist"
+        self.assertEqual(policy_for_finding(finding(infra_category="endpoint"), rules)["rollout_profile"], "staged")
+
+    def test_the_real_policy_file_defines_valid_profiles(self):
+        rules = load_rules(DEFAULT_RULES_PATH)
+        for name, rings in rules["rollout_profiles"].items():
+            self.assertEqual(rings[-1]["percent"], 100, name)
+            self.assertEqual([r["percent"] for r in rings], sorted(r["percent"] for r in rings), name)
+        for domain, pol in rules["policies"].items():
+            self.assertIn(pol.get("rollout", "staged"), rules["rollout_profiles"], domain)

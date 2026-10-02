@@ -1,0 +1,11 @@
+.git
+.github
+__pycache__
+*.pyc
+*.db
+remediation/*.db
+deliverables
+scripts/doc-pdf-pipeline/_build
+dashboard/certs
+.env
+*.pdf

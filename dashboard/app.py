@@ -42,6 +42,8 @@ from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
 from remediation.support import store as support_store  # noqa: E402
+from remediation.validation import playbook_lint  # noqa: E402
+from remediation.verification import closed_loop  # noqa: E402
 from remediation.audit import ai_usage_log  # noqa: E402
 from remediation.config import ai_governance  # noqa: E402
 from remediation.connectors.active_directory_connector import ActiveDirectoryConnector  # noqa: E402
@@ -355,7 +357,7 @@ def api_playbook_detail(filename: str):
     playbook = playbooks.get(filename)
     if not playbook:
         raise HTTPException(status_code=404, detail="Playbook not found")
-    return playbook
+    return {**playbook, "lint": playbook_lint.lint_playbook(playbook["content"])}
 
 
 def _scope_to_team(rows, user, team_field="team"):
@@ -556,15 +558,52 @@ def api_list_remediation_approvals(user: dict = Depends(rbac.get_current_user)):
     # finding yet - stays honest rather than fabricating a procedure.
     approvals = remediation_approvals_store.list_approvals_with_status()
     playbooks_by_finding = {p["finding_id"]: p for p in dashboard_data.load_playbooks() if p["finding_id"]}
+    verification = {v["approval_id"]: v for v in closed_loop.verify_all(approvals, dashboard_data.load_remediation_findings())["results"]}
     for a in approvals:
         playbook = playbooks_by_finding.get(a["finding_id"])
         a["rollback_plan"] = playbook["rollback_plan"] if playbook else None
+        if playbook:
+            lint = playbook_lint.lint_playbook(playbook["content"])
+            a["playbook_lint"] = {"passed": lint["passed"], "errors": len(lint["errors"]), "warnings": len(lint["warnings"])}
+        else:
+            a["playbook_lint"] = None
+        a["verification"] = verification.get(a["id"])
     if user is not None and user.get("role") != "admin":
         team_by_finding = _finding_team_by_id(dashboard_data.load_live_queue())
         for a in approvals:
             a["team"] = team_by_finding.get(a["finding_id"])
         approvals = _scope_to_team(approvals, user)
     return {"approvals": approvals}
+
+
+@app.get("/api/remediation-verification")
+def api_remediation_verification(user: dict = Depends(rbac.get_current_user)):  # noqa: ARG001
+    """Closed-loop outcome of every triggered remediation (remediation/verification/closed_loop.py)."""
+    return closed_loop.verify_all(remediation_approvals_store.list_approvals_with_status(),
+                                  dashboard_data.load_remediation_findings())
+
+
+@app.get("/api/remediation-metrics")
+def api_remediation_metrics(user: dict = Depends(rbac.get_current_user)):  # noqa: ARG001
+    approvals = remediation_approvals_store.list_approvals_with_status()
+    verification = closed_loop.verify_all(approvals, dashboard_data.load_remediation_findings())
+    return {**closed_loop.outcome_metrics(approvals, verification["results"]), "verification": verification["summary"]}
+
+
+@app.get("/api/remediation-approvals/{approval_id}/evidence")
+def api_remediation_evidence(approval_id: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Audit-ready evidence pack for one remediation: finding, approval trail, reviewed
+    artifact + its lint result, and the closed-loop outcome."""
+    approval = next((a for a in remediation_approvals_store.list_approvals_with_status() if a["id"] == approval_id), None)
+    if not approval:
+        raise HTTPException(status_code=404, detail=f"No approval request with id {approval_id!r}")
+    findings = dashboard_data.load_remediation_findings()
+    finding = next((f for f in findings if f.get("id") == approval["finding_id"]), None)
+    playbook = next((p for p in dashboard_data.load_playbooks() if p["finding_id"] == approval["finding_id"]), None)
+    return closed_loop.evidence_pack(
+        approval, finding, playbook["content"] if playbook else None,
+        playbook_lint.lint_playbook(playbook["content"]) if playbook else None,
+        closed_loop.verify_all([approval], findings)["results"][0])
 
 
 class RemediationApprovalRequestBody(BaseModel):
@@ -607,6 +646,15 @@ def api_approve_remediation(approval_id: str, body: RemediationApprovalDecisionB
             ad_group_validated = ad_directory.is_member_of_group(body.decided_by, required_group)
         except Exception as exc:  # noqa: BLE001 - a real AD failure must not silently look like "validated"
             raise HTTPException(status_code=502, detail=f"AD group lookup failed: {exc}") from exc
+
+    # Hard gate: a generated playbook that fails the deterministic safety lint (no rollback,
+    # literal credentials, targets every host, ...) cannot be approved until it is regenerated.
+    playbook = next((p for p in dashboard_data.load_playbooks() if p["finding_id"] == approval["finding_id"]), None)
+    if playbook:
+        lint = playbook_lint.lint_playbook(playbook["content"])
+        if not lint["passed"]:
+            raise HTTPException(status_code=400, detail="Playbook failed the safety lint and cannot be approved: "
+                                + "; ".join(f"{i['rule']} {i['message']}" for i in lint["errors"]))
 
     try:
         result = remediation_approvals_store.approve(approval_id, body.decided_by, ad_group_validated)
@@ -3189,6 +3237,6 @@ if __name__ == "__main__":
               "reverse proxy that already terminates TLS.")
 
     uvicorn.run(
-        app, host="127.0.0.1", port=5050,
+        app, host=os.environ.get("QUANTA_HOST", "127.0.0.1"), port=int(os.environ.get("QUANTA_PORT", "5050")),
         ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile,
     )
