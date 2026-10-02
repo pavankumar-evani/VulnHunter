@@ -2057,4 +2057,4 @@ select.searchable-select-native {
 .finding-snippet { margin: 6px 0 0; padding: 8px 10px; background: rgba(255,255,255,0.05); border-radius: 4px; white-space: pre-wrap; overflow-x: auto; font-size: 13px; }
 
 /* Plain links inside page content use the accent colour; the browser default dark blue is unreadable on the dark theme. */
-#app p a:not([class]), #app td a:not([class]), #app li a:not([class]) { color: var(--brand-accent); }
+#app p a:not([class]), #app td a:not([class]), #app li a:not([class]), #app .callout a:not([class]) { color: var(--brand-accent); }
