@@ -59,6 +59,7 @@ from remediation.controls import store as controls_store  # noqa: E402
 from remediation.connectors import reputation_connector as hunt_rep, siem_search_connector as sec_search  # noqa: E402
 from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
+from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
 from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
@@ -5003,6 +5004,93 @@ def api_soar_cancel(run_id: int, user: dict = Depends(rbac.require_admin)):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     activity_log.record_activity(user["email"], "soar.run.cancel", str(run_id), {})
     return run
+
+
+# ---------------------------------------------------------------- cyber risk quantification and health
+class ScenarioBody(BaseModel):
+    name: str
+    description: str | None = None
+    asset_scope: str | None = None
+    category: str = "other"
+    tef_min: float
+    tef_likely: float
+    tef_max: float
+    loss_min: float
+    loss_likely: float
+    loss_max: float
+    options: list[dict] = []
+    status: str = "active"
+    owner: str | None = None
+    risk_id: int | None = None
+
+
+def _risk_400(exc):
+    return HTTPException(status_code=404 if isinstance(exc, KeyError) else 400, detail=str(exc.args[0]) if isinstance(exc, KeyError) else str(exc))
+
+
+@app.get("/api/cyber-risk/overview")
+def api_cyber_risk_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    findings = dashboard_data.load_live_queue()
+    pol = risk_store.policy()
+    port = risk_store.portfolio(risk_store.list_all(), findings, pol)
+    h = risk_store.health(grc_evidence.latest(), hunt_detection.latest_assessment(), pol)
+    return {"health": h, "portfolio": port, "categories": risk_store.CATEGORIES}
+
+
+@app.get("/api/cyber-risk/scenarios")
+def api_cyber_risk_scenarios(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"scenarios": risk_store.list_all(), "categories": risk_store.CATEGORIES, "policy": risk_store.policy()}
+
+
+@app.post("/api/cyber-risk/scenarios")
+def api_cyber_risk_add(body: ScenarioBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        s = risk_store.save(body.model_dump(), user["email"])
+    except quant_risk.ScenarioError as exc:
+        raise _risk_400(exc) from exc
+    activity_log.record_activity(user["email"], "cyber-risk.scenario.save", str(s["id"]), {"name": s["name"]})
+    return s
+
+
+@app.put("/api/cyber-risk/scenarios/{scenario_id}")
+def api_cyber_risk_update(scenario_id: int, body: ScenarioBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        s = risk_store.save(body.model_dump(), user["email"], scenario_id=scenario_id)
+    except (quant_risk.ScenarioError, KeyError) as exc:
+        raise _risk_400(exc) from exc
+    activity_log.record_activity(user["email"], "cyber-risk.scenario.save", str(s["id"]), {"name": s["name"]})
+    return s
+
+
+@app.delete("/api/cyber-risk/scenarios/{scenario_id}")
+def api_cyber_risk_delete(scenario_id: int, user: dict = Depends(rbac.require_admin)):
+    if not risk_store.remove(scenario_id):
+        raise HTTPException(status_code=404, detail="No such scenario")
+    activity_log.record_activity(user["email"], "cyber-risk.scenario.delete", str(scenario_id), {})
+    return {"ok": True}
+
+
+@app.get("/api/cyber-risk/scenarios/{scenario_id}/analysis")
+def api_cyber_risk_analysis(scenario_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    s = risk_store.get(scenario_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="No such scenario")
+    pol = risk_store.policy()
+    res = quant_risk.evaluate_options(s, pol.get("trials", 10000), s["id"], pol.get("scenario_tolerance"))
+    return {"scenario": s, **res, "signals": risk_store.signals(s, dashboard_data.load_live_queue()), "currency": pol.get("currency", "USD"),
+            "tolerance": pol.get("scenario_tolerance")}
+
+
+@app.post("/api/cyber-risk/simulate")
+def api_cyber_risk_simulate(body: ScenarioBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """What-if without saving: simulates the numbers as typed."""
+    pol = risk_store.policy()
+    try:
+        data = body.model_dump()
+        data["options"] = risk_store._clean_options(data.get("options"))
+        return quant_risk.evaluate_options(data, pol.get("trials", 10000), 0, pol.get("scenario_tolerance"))
+    except quant_risk.ScenarioError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

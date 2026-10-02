@@ -1,0 +1,32 @@
+# Cyber risk quantification and the cyber health score (remediation/risk/). Every number here is yours to set.
+
+currency: USD
+trials: 10000                    # simulated years per scenario (2,000 to 20,000)
+appetite_annual_loss: 1000000    # the total yearly loss you are willing to carry
+scenario_tolerance: 250000       # the yearly loss you will carry from any one scenario
+
+# How the cyber health score is built: 0-100 per domain, weighted. A test with too little data (na) is left out, not counted as a pass,
+# and a domain with no usable result is left out of the score entirely and listed as not measured.
+# pass = 1, warn = 0.5, fail = 0.
+health_domains:
+  vulnerability:
+    label: Vulnerability management
+    weight: 3
+    tests: [patch-sla, kev-remediation, scan-freshness, exceptions-hygiene, fix-verification]
+  governance:
+    label: Ownership and governance
+    weight: 2
+    tests: [ownership, audit-trail, privileged-access, risk-register]
+  controls:
+    label: Security controls
+    weight: 2
+    tests: [controls-coverage]
+  ai:
+    label: AI governance
+    weight: 1
+    tests: [ai-apps-reviewed, ai-usage-recorded, ai-budgets, ai-approved-models]
+  detection:
+    label: Detection health
+    weight: 2
+    # Share of judged detection rules (not Low Volume) that are High Fidelity or Healthy. Needs rules and closed alerts.
+    from: detection
