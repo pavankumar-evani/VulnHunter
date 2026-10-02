@@ -1,0 +1,457 @@
+<title>SOC, Hunting & Detection Engineering</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  :root {
+    --ink: #0b1220; --paper: #f5f7fb; --surface: #ffffff; --surface-2: #edf1f9;
+    --line: #d7deec; --muted: #5b6478; --accent: #2f6fed; --accent-deep: #1a3f8f;
+    --accent-soft: #e8effe; --signal: #1baf7a; --crit: #991b1b; --high: #9a3412;
+    --med: #92400e; --low: #1e40af;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.12);
+    --sans: "Chakra Petch", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+      --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+      --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+      --med: #fbbf24; --low: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1fb; --paper: #0a0e1a; --surface: #10172a; --surface-2: #151d35;
+    --line: #263153; --muted: #97a2c2; --accent: #6d97f7; --accent-deep: #a9c2fb;
+    --accent-soft: #16204a; --signal: #34d399; --crit: #f87171; --high: #fb923c;
+    --med: #fbbf24; --low: #60a5fa; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.6; }
+  h1, h2, h3, h4 { font-family: var(--sans); text-wrap: balance; letter-spacing: -0.01em; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .suitebar { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--ink); color: var(--paper); font-size: 0.82rem; }
+  :root[data-theme="dark"] .suitebar, :root:not([data-theme="light"]) .suitebar { background: #060a16; }
+  .suitebar .mark { display: flex; align-items: center; gap: 7px; font-weight: 600; color: #fff; text-decoration: none; letter-spacing: 0.01em; }
+  .suitebar .sep { opacity: 0.35; } .suitebar .doclabel { opacity: 0.85; } .suitebar .spacer { flex: 1; }
+  .suitebar a.hub { color: #cdd8ff; text-decoration: none; border: 1px solid rgba(255,255,255,.25); border-radius: 20px; padding: 4px 12px; }
+  .suitebar a.hub:hover { border-color: rgba(255,255,255,.6); }
+  .shell { display: flex; max-width: 1360px; margin: 0 auto; }
+  .toc { width: 250px; flex: 0 0 250px; position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow-y: auto; padding: 32px 18px 40px 24px; }
+  .toc-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px 6px; font-weight: 600; }
+  .toc a { display: block; padding: 6px 8px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 0.87rem; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--ink); background: var(--surface-2); }
+  .toc a.active { color: var(--accent-deep); border-left-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+  main { flex: 1; min-width: 0; padding: 0 40px 80px; max-width: 1020px; }
+  .kicker { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-deep); font-weight: 600; margin: 40px 0 10px; }
+  .hero h1 { font-size: 2.4rem; margin: 0 0 14px; }
+  .hero p.lede { font-size: 1.15rem; color: var(--muted); max-width: 74ch; margin: 0 0 8px; }
+  .hero { padding-top: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  section { margin-top: 50px; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; padding-top: 4px; scroll-margin-top: 20px; }
+  h2 .num { color: var(--accent); font-family: var(--mono); font-size: 0.95rem; margin-right: 10px; }
+  h3 { font-size: 1.05rem; margin: 22px 0 8px; }
+  p { max-width: 74ch; } .section-intro { color: var(--muted); max-width: 74ch; margin-bottom: 18px; }
+
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--line); box-shadow: var(--shadow); margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+
+  .bar-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+  .bar-row .lbl { width: 190px; flex: 0 0 auto; font-size: 0.82rem; }
+  .bar-row .track { flex: 1; background: var(--surface-2); border-radius: 4px; height: 18px; overflow: hidden; }
+  .bar-row .fill { height: 100%; border-radius: 4px; }
+  .bar-row .fill.vh { background: var(--signal); }
+  .bar-row .fill.other { background: var(--muted); opacity: 0.55; }
+  .bar-row .val { width: 90px; flex: 0 0 auto; font-family: var(--mono); font-size: 0.8rem; text-align: right; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin: 20px 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .card h4 { margin: 0 0 6px; font-size: 0.95rem; } .card p { margin: 0; font-size: 0.87rem; color: var(--muted); }
+  .card .n { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: var(--accent-deep); display: block; margin-bottom: 2px; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 16px 0; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); max-width: 82ch; }
+  .callout.info { border-color: var(--accent-soft); background: var(--accent-soft); }
+  .callout.warn { border-color: #f0c869; background: color-mix(in srgb, var(--med) 8%, var(--surface)); }
+  .callout .label { font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 4px; }
+  .callout.info .label { color: var(--accent-deep); } .callout.warn .label { color: var(--med); }
+  .callout p { margin: 0; max-width: none; }
+
+  .howto { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 14px 0; box-shadow: var(--shadow); }
+  .howto summary { font-weight: 600; cursor: pointer; font-size: 0.96rem; list-style: none; display: flex; align-items: center; gap: 8px; }
+  .howto summary::before { content: "▸"; color: var(--accent); font-size: 0.8rem; transition: transform 0.15s; }
+  .howto[open] summary::before { transform: rotate(90deg); }
+  .howto .body { margin-top: 10px; font-size: 0.9rem; color: var(--ink); }
+  .howto .body p { margin: 0 0 8px; max-width: none; }
+  .howto .route { font-family: var(--mono); font-size: 0.78rem; color: var(--accent-deep); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px; margin-left: auto; flex: 0 0 auto; }
+  .howto .steps { margin: 8px 0 0; padding-left: 20px; }
+  .howto .steps li { margin-bottom: 4px; }
+
+  .fieldname { font-family: var(--mono); font-size: 0.82rem; background: var(--surface-2); padding: 1px 6px; border-radius: 5px; }
+  .chartcap { font-size: 0.78rem; color: var(--muted); margin: -4px 0 18px; max-width: 74ch; }
+
+  footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
+  @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } .grid2, .grid3, .grid4 { grid-template-columns: 1fr; } }
+  .docmeta { display:flex; flex-wrap:wrap; gap:8px 34px; padding:12px 24px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:0.78rem; color:var(--muted); }
+  .docmeta b { display:block; font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px; }
+  .docmeta span { color:var(--ink); font-weight:500; }
+  footer.docfoot .legal { color:var(--ink); font-weight:500; margin-bottom:6px; }
+  @media print { .docmeta { break-inside:avoid; } }
+</style>
+
+<div class="suitebar">
+  <a class="mark" href="#" onclick="return false"><svg width="16" height="16" viewBox="0 0 64 64"><path d="M32 4 L56.5 18 L56.5 46 L32 60 L7.5 46 L7.5 18 Z" fill="#5b8bf5"/><circle cx="32" cy="32" r="9" fill="none" stroke="#fff" stroke-width="3"/><path d="M32 22V18M32 42V46M22 32H18M42 32H46" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/></svg>Quanta</a>
+  <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
+  <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
+</div>
+<div class="docmeta"><div><b>Document</b><span>SOC, Threat Hunting &amp; Detection Engineering</span></div><div><b>Audience</b><span>Technical</span></div><div><b>Edition</b><span>October 2026</span></div><div><b>Classification</b><span>Customer confidential</span></div></div>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="toc-title">On this page</div>
+    <a href="#overview">01 · How the pieces fit</a>
+    <a href="#intake">02 · Alert intake and first look</a>
+    <a href="#report">03 · The investigation report, step by step</a>
+    <a href="#cases">04 · Cases, queues and escalation</a>
+    <a href="#metrics">05 · SOC metrics</a>
+    <a href="#logs">06 · Log investigation</a>
+    <a href="#ttp">07 · TTP identification</a>
+    <a href="#intel">08 · Threat intelligence</a>
+    <a href="#hunting">09 · Hunting and hunt reports</a>
+    <a href="#soar">10 · SOAR and guided playbooks</a>
+    <a href="#detection">11 · Detection engineering and use cases</a>
+    <a href="#models">12 · Models used</a>
+    <a href="#limits">13 · Limits and honest status</a>
+    <a href="#api">14 · API reference</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="kicker">Reference · Security operations</div>
+      <h1>SOC, Threat Hunting &amp; Detection Engineering</h1>
+      <p class="lede">How Quanta takes an alert from arrival to a closed case, how every report is generated, which statistical models sit behind the recommendations, and exactly which parts are fixed rules, classical statistics, or an optional language model. Every claim here traces to a module in <code>remediation/hunting/</code>, <code>remediation/soc/</code> or <code>remediation/soar/</code> and a threshold in a YAML file you can read.</p>
+    </div>
+
+    <div class="callout info">
+      <span class="label">The short version</span>
+      <p>Nothing in the investigation, case, hunt or detection tooling is a black box. Verdicts are weighted scores of named signals; reports are assembled from data Quanta holds, never written by a model; the TTP classifier is Naive Bayes you can inspect; the playbook recommender is a similarity-weighted success rate. A language model is used in exactly two optional places (drafting a playbook, refining a detection use case), both off until an administrator confirms a call, and neither output does anything by itself. Quanta never changes your systems: playbooks that act send a signed request to an endpoint you own, after a second person approves.</p>
+    </div>
+
+    <section id="overview">
+      <h2><span class="num">01</span>How the pieces fit</h2>
+      <p class="section-intro">One flow, from a detection in your SIEM to an improved detection. Each stage reads what the previous stage stored; each can be used alone.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Stage</th><th>What happens</th><th>Where</th><th>Method</th></tr></thead>
+        <tbody>
+          <tr><td>Intake</td><td>Alerts arrive by API key or as OCSF Detection Findings; entities (host, user, addresses, domains, hashes) are extracted.</td><td><code>ocsf.py</code>, <code>store.py</code></td><td>Field mapping and regular expressions</td></tr>
+          <tr><td>First look</td><td>Classification, history, indicator lookup (optional), SIEM corroboration (optional), host exposure, a verdict.</td><td><code>soc.py</code></td><td>Weighted signals</td></tr>
+          <tr><td>Report</td><td>History, entities, ATT&amp;CK flow, blast radius, tool action, recommended actions.</td><td><code>report.py</code></td><td>Assembly from stored data</td></tr>
+          <tr><td>Case</td><td>A case with priority, tier queue, service-level clocks, owner, summary notes.</td><td><code>soc/cases.py</code></td><td>ITIL matrix, timestamps</td></tr>
+          <tr><td>Investigation</td><td>Pasted logs analysed; techniques identified.</td><td><code>soc/loganalysis.py</code>, <code>hunting/ttp.py</code></td><td>Statistics; Naive Bayes</td></tr>
+          <tr><td>Response</td><td>A playbook, recommended from past outcomes, run dry first, approved by a second person.</td><td><code>soar/</code></td><td>Similarity-weighted rate; optional drafted playbook</td></tr>
+          <tr><td>Hunt</td><td>Hypotheses from known-exploited vulnerabilities and threat intelligence; leads run read-only; verdicts and a report.</td><td><code>generate.py</code>, <code>intel.py</code>, <code>verdict.py</code></td><td>Rules and counting</td></tr>
+          <tr><td>Improve</td><td>Rule health, coverage gaps, tuning, and proposed new detections with hypotheses and test plans.</td><td><code>detection.py</code>, <code>usecases.py</code></td><td>Arithmetic and pattern counting</td></tr>
+          <tr><td>Measure</td><td>MTTA, MTTR, service-level compliance, backlog, accuracy of recommendations.</td><td><code>soc/metrics.py</code></td><td>Aggregation</td></tr>
+        </tbody></table></div>
+    </section>
+
+    <section id="intake">
+      <h2><span class="num">02</span>Alert intake and the first look</h2>
+      <p class="section-intro">The first look is the work a first-line analyst does on every alert, done the same way every time and written up for them to check. It never closes an alert; when a case opens from it (§04), the alert is marked investigating.</p>
+      <h3>Intake</h3>
+      <p>Alerts come in through <code>POST /api/ingest/alerts</code> (a key with the <code>soc:write</code> scope) or as OCSF Detection Finding events (class 2004) through <code>/api/ingest/alerts/ocsf</code>. An alert is unique by source and external id, so a re-send changes nothing. The OCSF mapping reads <code>finding_info</code> (uid, title, analytic name, attacks), <code>severity_id</code> (1 informational to 5 critical; 6 shown as Critical; unknown becomes Medium), the device, user and endpoint objects, and the reported action taken. It is a subset mapping written from the public schema, not a validator.</p>
+      <h3>The verdict</h3>
+      <p>Signals and weights live in <code>remediation/config/soc_triage.yaml</code>. Each signal that fires adds its weight to a likely-true-positive or likely-false-positive score, and the reasons returned name every signal.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Signal</th><th>Weight</th><th>Points toward</th></tr></thead>
+        <tbody>
+          <tr><td>An indicator flagged by enough reputation engines (endpoint alerts need 20, others 10)</td><td>3</td><td>True positive</td></tr>
+          <tr><td>An open known-exploited vulnerability on the host matches the alert's technique</td><td>2</td><td>True positive</td></tr>
+          <tr><td>An earlier true positive on the same host or from the same rule within 7 days</td><td>2</td><td>True positive</td></tr>
+          <tr><td>The SIEM shows matching events on the host</td><td>1</td><td>True positive</td></tr>
+          <tr><td>Critical severity</td><td>1</td><td>True positive</td></tr>
+          <tr><td>The rule's closed alerts are overwhelmingly false positives (90% of at least 10)</td><td>3</td><td>False positive</td></tr>
+          <tr><td>Every looked-up indicator is known and none flagged</td><td>1</td><td>False positive</td></tr>
+          <tr><td>The same rule on the same host was closed benign or false positive before</td><td>2</td><td>False positive</td></tr>
+        </tbody></table></div>
+      <p>A score of 3 or more on a side gives that verdict; 5 or more is high confidence. Thin or mixed evidence gives <code>escalate-l2</code>, never a guess at closing. A Critical alert is never called a likely false positive automatically. Reputation lookups and SIEM searches happen only when an administrator confirms: the preview lists exactly which public indicators would be sent, and the searches are read-only.</p>
+      <h3>Priority order in the queue</h3>
+      <p>Alerts are ordered by severity base (Critical 100, High 70, Medium 40, Low 15, Informational 5) plus 30 for a known-exploited vulnerability on the host, 20 when a finding on the host carries the alert's technique, 10 for a high exploit-probability finding, and 10 when the host has no owner. The reasons are shown. This orders work; it does not change the alert's severity.</p>
+    </section>
+
+    <section id="report">
+      <h2><span class="num">03</span>The investigation report, step by step</h2>
+      <p class="section-intro">A report is assembled, not written. Each section answers a question an analyst would otherwise answer by hand and says where its answer came from. A section with nothing to say says so, because an empty result is information.</p>
+      <ol class="steps">
+        <li><strong>Verdict and why.</strong> The recommendation and every signal behind it (§02).</li>
+        <li><strong>Incident summary.</strong> What the alert is, on what host, how long ago, and what else Quanta knows about the host: open and known-exploited vulnerabilities and its owner.</li>
+        <li><strong>Historical correlation.</strong> For each host, user and address, how many earlier alerts involve it and how they were closed, plus what a SIEM history search found (when confirmed). The look-back is limited to 90 days by default (<code>max_lookback_days</code>), widened to 365 only with a written justification, and the report says when it was widened.</li>
+        <li><strong>Associated entities.</strong> The host and its owner, the user and whether they hold privileged access (from Access Governance), and the addresses, domains and hashes.</li>
+        <li><strong>ATT&amp;CK mapping.</strong> The technique and tactic from the table in <code>attack_tactics.yaml</code> and what to check next for it.</li>
+        <li><strong>Attack flow.</strong> Alerts on the same host or user in time order, labelled by tactic, so the reader sees where this alert sits in a sequence.</li>
+        <li><strong>Indicators.</strong> Each public indicator with its reputation when looked up. Private and documentation addresses are never sent.</li>
+        <li><strong>Blast radius.</strong> Where else the same indicators appear in stored alerts and in the SIEM, and what is exposed on those hosts.</li>
+        <li><strong>What your tools did.</strong> The action the EDR or firewall reported (blocked, quarantined, allowed) and whether it needs checking. An "allowed" on a likely true positive is called out.</li>
+        <li><strong>Recommended actions.</strong> From the verdict, the signals, the matching runbook and the rule's history, with the playbooks that could carry each action.</li>
+        <li><strong>References and timeline.</strong> The searches that were run with counts, the detection rule, the runbook, and the events in order.</li>
+        <li><strong>Follow-ups.</strong> Questions asked after the first report, answered from the same data and merged in.</li>
+      </ol>
+      <p>The report is available as Markdown and as a self-contained HTML page. Because nothing is generated by a model, the same alert and data always produce the same report.</p>
+    </section>
+
+    <section id="cases">
+      <h2><span class="num">04</span>Cases, queues and escalation</h2>
+      <p class="section-intro">ITIL-style incident handling applied to security alerts. The rules are in <code>remediation/config/soc_ops.yaml</code>, read on every request.</p>
+      <h3>Tiers and queues</h3>
+      <div class="grid3">
+        <div class="card"><span class="n">L1</span><h4>Triage</h4><p>First look at every case. Confirm or dismiss, gather the obvious evidence, escalate what needs depth. May resolve as false positive, benign, duplicate, insufficient data or true positive.</p></div>
+        <div class="card"><span class="n">L2</span><h4>Investigation</h4><p>Deeper investigation, scoping, containment recommendation, hand-off to response. May also accept risk.</p></div>
+        <div class="card"><span class="n">L3</span><h4>Response and hunting</h4><p>Major incidents, malware and forensic analysis, detection fixes, hunts that follow from the case.</p></div>
+      </div>
+      <p>An analyst belongs to one tier and cannot be assigned a case in a higher queue. Assignment suggestions go to the least-loaded analyst of the tier who is under <code>max_open_per_analyst</code>.</p>
+      <h3>Priority: impact times urgency</h3>
+      <p>Impact is single (one host or user), multiple (2 to 5) or widespread (6 or more), raised one step by a person or by a privileged account; weights 1, 2, 3. Urgency comes from the alert's severity: Informational and Low 1, Medium 2, High 3, Critical 4. The product gives the priority by the first threshold met.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Priority</th><th>Score at least</th><th>Acknowledge</th><th>Pick up after escalation</th><th>Resolve</th></tr></thead>
+        <tbody>
+          <tr><td>P1</td><td>9</td><td>15 min</td><td>15 min</td><td>4 h</td></tr>
+          <tr><td>P2</td><td>6</td><td>30 min</td><td>30 min</td><td>8 h</td></tr>
+          <tr><td>P3</td><td>3</td><td>2 h</td><td>2 h</td><td>24 h</td></tr>
+          <tr><td>P4</td><td>0</td><td>8 h</td><td>8 h</td><td>72 h</td></tr>
+        </tbody></table></div>
+      <p>The clocks are derived from timestamps on read, so nothing needs to be kept in sync. A clock is met, running, at risk (past 80% of target) or breached.</p>
+      <h3>Escalation</h3>
+      <ul>
+        <li><strong>Functional.</strong> An analyst escalates to a higher tier and must write a hand-off summary of at least 20 characters: what was found, what was done, what is left. The case moves to that queue, the owner is cleared, and the pickup clock starts. The summary becomes the case summary.</li>
+        <li><strong>Hierarchical.</strong> When a case has been in its tier longer than its resolve target, the periodic sweep moves it up one tier, once per tier, and records an event saying why. A person is never silently overruled: an automatic escalation is an entry in the history like any other.</li>
+        <li><strong>Resolve and close</strong> also need a written summary. Reopening needs a reason and counts toward the reopen rate. Resolving a case closes its alerts with a matching disposition.</li>
+      </ul>
+      <h3>Automatic cases</h3>
+      <p>After an alert is investigated, a case opens in the L1 queue when the verdict is in the configured list (likely true positive or escalate-L2), the severity is Medium or above, the alert has no case yet, and fewer than 30 automatic cases opened in the last hour. The recommendation is stored on the case so its accuracy can be measured later (§05).</p>
+      <h3>Case summary notes</h3>
+      <p>Every case carries a summary. Until someone writes one, Quanta shows a deterministic summary built from the facts on the case: priority, queue, impact, techniques, hosts, account, linked alerts, the recommendation, owner, and escalation and reopen counts. The analyst's own note replaces it on escalate, resolve and close, and both remain visible.</p>
+    </section>
+
+    <section id="metrics">
+      <h2><span class="num">05</span>SOC metrics</h2>
+      <p class="section-intro">Every figure is a count or an average over timestamps already on the cases and alerts. Nothing is estimated, and with no data a figure shows as unavailable, never zero.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Metric</th><th>Definition</th></tr></thead>
+        <tbody>
+          <tr><td>MTTA</td><td>Mean minutes from created to acknowledged, for cases acknowledged in the window.</td></tr>
+          <tr><td>MTTR</td><td>Mean minutes from created to resolved, for cases resolved in the window. The median and 90th percentile are shown too, because a mean hides a long tail.</td></tr>
+          <tr><td>Service-level compliance</td><td>Per clock (acknowledge, pickup, resolve), finished clocks that were met divided by finished clocks; plus open cases currently at risk or breached.</td></tr>
+          <tr><td>Backlog</td><td>Open cases by queue and by priority, unowned open cases, and the age of the oldest.</td></tr>
+          <tr><td>Escalation rate</td><td>Cases that moved up at least once divided by cases opened; the share of those moved automatically.</td></tr>
+          <tr><td>Reopen rate</td><td>Resolved cases that were reopened divided by resolved cases.</td></tr>
+          <tr><td>Resolution mix and false-positive rate</td><td>How resolved cases were classified. False-positive rate counts false positive, benign and duplicate.</td></tr>
+          <tr><td>Recommendation accuracy</td><td>When the first look recommended likely true positive, how often the analyst resolved true positive; likely false positive against false positive, benign or duplicate; escalate-L2 against a case that did reach L2 or above. Only cases with both a recommendation and a resolution count, and the number judged is shown.</td></tr>
+          <tr><td>Automation rate</td><td>Cases opened automatically divided by cases opened.</td></tr>
+          <tr><td>Analyst workload</td><td>Per analyst: open, resolved in the window, mean time to resolve.</td></tr>
+          <tr><td>Daily series</td><td>Opened and resolved per day across the window.</td></tr>
+        </tbody></table></div>
+    </section>
+
+    <section id="logs">
+      <h2><span class="num">06</span>Log investigation</h2>
+      <p class="section-intro">Paste log lines on a case and get structure and anomalies back. Everything is classical statistics on the text given; it runs inside Quanta and nothing is sent anywhere.</p>
+      <p>Each line is read as JSON, as key=value pairs or as plain text, with a leading timestamp when present; at most 20,000 lines are read.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Finding</th><th>How it is found</th></tr></thead>
+        <tbody>
+          <tr><td>Top values</td><td>Most common users, source and destination addresses and processes.</td></tr>
+          <tr><td>Rare values</td><td>A value seen once in a field where other values repeat.</td></tr>
+          <tr><td>Bursts</td><td>Events per minute; a minute is a burst when its z-score ((count - mean) / standard deviation) exceeds 3 and it has at least 10 events.</td></tr>
+          <tr><td>Beaconing</td><td>A source and destination pair with at least 6 events whose gaps are regular: coefficient of variation (standard deviation / mean) below 0.2 and a mean gap of at least 5 seconds.</td></tr>
+          <tr><td>Failures then success</td><td>Five or more failed sign-ins for an account or address followed by a success, the usual shape of a guessed or sprayed password.</td></tr>
+          <tr><td>Indicators</td><td>Addresses, domains, hashes and URLs through the same extractor alert intake uses.</td></tr>
+          <tr><td>Techniques</td><td>The TTP classifier (§07) over the lines that look like attacker activity.</td></tr>
+        </tbody></table></div>
+      <div class="callout warn"><span class="label">Read the results as leads</span><p>A regular interval can be a health check, a burst a deployment, a rare value merely rare. When run from a case, a one-line finding is added to the case history.</p></div>
+    </section>
+
+    <section id="ttp">
+      <h2><span class="num">07</span>TTP identification</h2>
+      <p class="section-intro">From text (an alert, a log excerpt, an analyst's note), which ATT&amp;CK techniques does it describe? A multinomial Naive Bayes classifier, trained by counting on every call, so the same inputs always give the same answer.</p>
+      <h3>Training data</h3>
+      <ol class="steps">
+        <li>The phrase list <code>ttp_lexicon.yaml</code>: short examples written for each technique. Add your own wording; it retrains on the next call.</li>
+        <li>The hunt library: each technique's name and the strings in its detections (process names, command fragments, patterns).</li>
+        <li>Optionally, labelled history: the text of alerts analysts closed as true positive, labelled with the technique the alert carried, so the model learns the wording of this environment.</li>
+      </ol>
+      <h3>How a prediction is made</h3>
+      <ol class="steps">
+        <li>The text is lower-cased and split into tokens (keeping forms such as <code>-enc</code> and <code>/c</code>), a trailing <code>.exe</code> and common endings are dropped, filler words are ignored, and adjacent pairs are added as features.</li>
+        <li>For each technique, add up <code>log P(token | technique)</code> with add-alpha smoothing (alpha 0.1), over the tokens the model knows. Unknown tokens are ignored. A token counts at most three times.</li>
+        <li>Each token is scaled by specificity, <code>ln(classes / classes containing the token) / ln(classes)</code>, so a word present in many techniques counts for little and one present in a single technique counts in full.</li>
+        <li>A softmax turns the scores into probabilities. The answer lists the top techniques with their probability and the tokens that pushed hardest toward each (the log-likelihood ratio against the other techniques), so an analyst sees why.</li>
+        <li>An ATT&amp;CK id written in the text is reported as stated, not inferred.</li>
+      </ol>
+      <p>An answer is confident when the top probability is at least 0.5 and at least two distinct known tokens support it; otherwise it is shown labelled weak. If no token is known the answer is no technique. On the nine test sentences shipped with the tests, the right technique ranks first for each, and unrelated text is not confident.</p>
+      <div class="callout warn"><span class="label">Limits, stated plainly</span><p>It recognises wording it has seen, not behaviour; an attacker who renames tools defeats it; the phrase list covers the techniques in <code>attack_tactics.yaml</code> and nothing else; and probabilities are relative to those techniques only. It is a prompt for an analyst, which is how the interface presents it.</p></div>
+    </section>
+
+    <section id="intel">
+      <h2><span class="num">08</span>Threat intelligence</h2>
+      <p class="section-intro">Turn a report into the facts a hunt needs, and say how much it matters to this environment. Extraction uses explicit patterns, no model.</p>
+      <p>Input is plain text (an advisory, a post, extracted PDF text) or a STIX 2.1 bundle. Extracted: CVE ids, ATT&amp;CK technique ids, indicators (public addresses, domains, hashes, URLs) and threat-actor names. Relevance to this estate is a score out of 100 with reasons:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Points</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td>+40</td><td>A CVE in the report is open on an asset in the estate (+10 more if on CISA's KEV list)</td></tr>
+          <tr><td>+25</td><td>A technique in the report is tagged on the estate's open findings</td></tr>
+          <tr><td>+15</td><td>A technique in the report has hunt queries in the library</td></tr>
+          <tr><td>+10</td><td>The report names an indicator type that can be swept (address, domain, hash)</td></tr>
+        </tbody></table></div>
+      <p>60 or more is high priority, 30 or more medium, else low. A report matching nothing in your estate is low priority, not discarded. The proposed hunt takes its hosts from the assets carrying the report's CVEs, its queries from the library for the report's techniques, and adds one query that sweeps the indicators. Reports are de-duplicated by content hash.</p>
+    </section>
+
+    <section id="hunting">
+      <h2><span class="num">09</span>Hunting and hunt reports</h2>
+      <p class="section-intro">A hunt starts from a hypothesis, runs read-only leads against your SIEM only after an administrator confirms, and ends with a recorded outcome, because "we looked and found nothing" is a result.</p>
+      <h3>Where hunts come from</h3>
+      <ul>
+        <li><strong>Exposure.</strong> A CVE on CISA's KEV list (or with a high EPSS score) that is open on at least one asset becomes one hypothesis: someone may already have exploited it on these assets. The techniques are those tagged on the findings; the queries come from the hunt library.</li>
+        <li><strong>Threat intelligence.</strong> A relevant report (§08).</li>
+        <li><strong>Manual.</strong> An analyst's own hypothesis.</li>
+      </ul>
+      <h3>Lead and hunt verdicts</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Lead (one query)</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>not-run</td><td>Not run or errored, so nothing to say</td></tr>
+          <tr><td>no-hits</td><td>Ran and returned nothing</td></tr>
+          <tr><td>likely-fp</td><td>Returned results the analyst judged benign</td></tr>
+          <tr><td>possible-tp</td><td>Returned results that are suspicious, or not yet assessed. Unassessed hits are never assumed benign</td></tr>
+          <tr><td>confirmed-tp</td><td>Returned results the analyst judged malicious</td></tr>
+        </tbody></table></div>
+      <p>The hunt's overall verdict: <strong>confirmed-compromise</strong> if any lead is confirmed; <strong>multi-hit-correlated</strong> if two or more leads are possible, or the same host, user or address appears in the samples of two or more leads; <strong>low-confidence</strong> if exactly one lead is possible; <strong>no-findings</strong> if every lead that ran is no-hits or likely benign; <strong>incomplete</strong> if nothing has run.</p>
+      <h3>How a hunt report is generated</h3>
+      <ol class="steps">
+        <li>Each lead's recorded result, count, sample and assessment gives the lead verdict above.</li>
+        <li>Entities in the samples (host, user, address fields) are compared across leads to find correlated entities.</li>
+        <li>The overall verdict and an executive summary (what was hunted, how many leads ran, what was found, which entities recur, which enabled detection rules already cover the techniques) are computed.</li>
+        <li>The report is rendered: verdict and headline, executive summary, hypothesis, scope (techniques, hosts), a trial-hit execution summary table (status, hits, affected entities), a section per detection domain, correlated entities, analyst notes and follow-ups.</li>
+        <li>It is served as Markdown or as a self-contained HTML page. Nothing in it is written by a model.</li>
+      </ol>
+      <p>Every lead is a read-only search with the look-back window recorded on it; the report headline states how many leads ran, against which sources and over which windows. Hosts, techniques and the enabled rules that already cover each technique are named, and techniques with no enabled rule are listed as candidates for a new detection (§11).</p>
+    </section>
+
+    <section id="soar">
+      <h2><span class="num">10</span>SOAR and guided playbooks</h2>
+      <p class="section-intro">A playbook is a short list of steps run against an alert. Quanta never acts on your systems itself.</p>
+      <h3>The engine</h3>
+      <ul>
+        <li><strong>Steps:</strong> investigate, enrich indicators, add a note, update an alert status (investigating or similar; never closing it), notify, request approval, response action, each optionally conditional on the investigation.</li>
+        <li><strong>Response actions</strong> (create ticket, enrich asset, isolate host, block address or domain, disable account, revoke sessions, reset credentials, quarantine file) are sent as signed webhook requests (HMAC) to an endpoint you own. An action that changes something always needs a request-approval step ahead of it in the same playbook.</li>
+        <li><strong>Second person.</strong> The person approving must differ from the person who started the run (<code>require_second_person</code>).</li>
+        <li><strong>Dry run first.</strong> A dry run contacts nothing and changes nothing; destructive actions are never sent in one.</li>
+        <li><strong>Limits.</strong> At most 25 steps; at most 20 automatic runs an hour; an automatic start looks only at data inside Quanta.</li>
+      </ul>
+      <h3>Which playbook? The recommender</h3>
+      <p>A small, transparent statistical model, not a neural network. For an alert it looks back over past runs and weighs each by how much its alert resembled this one:</p>
+      <p><code>similarity = 0.35 × same technique + 0.30 × same detection rule + 0.20 × same alert category + 0.15 × same severity</code> (each 0 or 1). Only past alerts with similarity of 0.3 or more count.</p>
+      <p>For each playbook the weighted number of such runs is <code>W</code> and the weighted number that completed is <code>C</code>. The rate is Laplace-smoothed, <code>(C + 0.5) / (W + 1)</code>, and scaled by how much evidence there is, <code>score = rate × (1 − 1 / (1 + W))</code>, so a playbook used once on a near-identical alert does not outrank one used twenty times. Also shown: how often the alert was then closed, and whether the playbook needs a second person. With no usable history it falls back to playbooks whose own trigger matches the alert, and the basis (history, trigger or none) is always reported. A recommendation never runs anything.</p>
+      <h3>AI-drafted playbooks (optional)</h3>
+      <ol class="steps">
+        <li>An administrator asks for a draft and sees the prompt first. It holds only the alert's category, technique, rule and severity, the permitted step types and the permitted actions. Free text from the alert is never included, which closes the prompt-injection route.</li>
+        <li>Only after confirmation is the model called, subject to the daily per-user token cap, and the usage is recorded.</li>
+        <li>The reply is parsed and run through the same validator every playbook goes through. Unknown steps, disallowed actions, a destructive action without an approval before it, and too many steps are rejected with the validator's own message.</li>
+        <li>What comes back is a draft to edit and save yourself. It is never saved or run by the drafting step.</li>
+      </ol>
+    </section>
+
+    <section id="detection">
+      <h2><span class="num">11</span>Detection engineering and use-case generation</h2>
+      <p class="section-intro">How well each rule works, which techniques nothing detects, and what to build next, each with a hypothesis, its evidence, a draft rule and a test plan.</p>
+      <h3>Rule health</h3>
+      <p>Per rule, over the policy window: decided alerts = true positive + benign + false positive. Noise rate = (false positive + benign) / decided. Health tier, first match wins: Low Volume (too few decided to judge), High Fidelity, Low Value, Critical Noise, Noisy, Healthy, each with a recommendation to maintain, tune or disable. A tuning suggestion shows the rule's detection block before and after a filter excluding the hosts behind most of the noise, with the reduction estimated from the data. It is for an engineer to review and test; nothing is pushed to a SIEM.</p>
+      <h3>Where new use cases come from</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Generator</th><th>Pattern recognised</th><th>Hypothesis</th><th>Draft</th></tr></thead>
+        <tbody>
+          <tr><td>Coverage gap</td><td>A technique tagged on open findings, named in intelligence reports or hunted, that no enabled rule claims</td><td>An adversary using it would go unnoticed</td><td>The library's detection as a Sigma rule</td></tr>
+          <tr><td>Hunt promotion</td><td>A hunt lead assessed suspicious or malicious with hits</td><td>What a hunt found once should be detected continuously</td><td>The lead's detection as a Sigma rule</td></tr>
+          <tr><td>Sequence</td><td>A pair of tactics following each other on the same host within a window (24 h) across at least 3 hosts, with at least 50% of those hosts closed true positive</td><td>The pair together is more telling than either alert alone</td><td>A Sigma temporal-ordered correlation</td></tr>
+          <tr><td>Indicator watchlist</td><td>The public indicators of a relevant intelligence report</td><td>Contact with them is worth an alert while the report is current</td><td>A Sigma rule over the indicator lists, with a 90-day review note</td></tr>
+        </tbody></table></div>
+      <p>The score (0 to 100) adds to a base for known-exploited findings, intelligence mentions, hunts and estate size, or, for sequences, for precision and support. The mining is counting, not machine learning: a pattern is proposed when enough distinct hosts show it and enough of them turned out to be real, and the evidence is shown so an engineer can judge it. Thresholds are in <code>detection_policy.yaml</code>.</p>
+      <h3>Lifecycle</h3>
+      <p>Proposed, then accepted (an engineer will build it), implemented (it is live), rejected or deferred. Every decision needs a note. A draft is <strong>never</strong> counted as coverage; coverage counts only enabled rules in the inventory. Optionally a model can add a sharper hypothesis, evasion ideas, false-positive sources and test ideas beside a use case, from counts and ids only, stored as a labelled suggestion that does not change the draft rule.</p>
+    </section>
+
+    <section id="models">
+      <h2><span class="num">12</span>Models used</h2>
+      <p class="section-intro">Every component, what kind of method it is, and whether a language model is involved.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Component</th><th>Method</th><th>Learns from data?</th><th>Language model?</th></tr></thead>
+        <tbody>
+          <tr><td>Alert verdict</td><td>Weighted sum of named signals</td><td>No (reads rule history)</td><td>No</td></tr>
+          <tr><td>Queue order</td><td>Additive score</td><td>No</td><td>No</td></tr>
+          <tr><td>Investigation and hunt reports</td><td>Assembly from stored data</td><td>No</td><td>No</td></tr>
+          <tr><td>Case priority and clocks</td><td>ITIL matrix; timestamps</td><td>No</td><td>No</td></tr>
+          <tr><td>Auto-escalation</td><td>Threshold on elapsed time</td><td>No</td><td>No</td></tr>
+          <tr><td>Bursts</td><td>z-score on per-minute counts</td><td>Per input</td><td>No</td></tr>
+          <tr><td>Beaconing</td><td>Coefficient of variation of gaps</td><td>Per input</td><td>No</td></tr>
+          <tr><td>TTP identification</td><td>Multinomial Naive Bayes with specificity weighting</td><td>Yes: phrase list, hunt library, confirmed alerts</td><td>No</td></tr>
+          <tr><td>Threat-intelligence relevance</td><td>Additive score</td><td>No</td><td>No</td></tr>
+          <tr><td>Playbook recommendation</td><td>Similarity-weighted, Laplace-smoothed success rate</td><td>Yes: past runs</td><td>No</td></tr>
+          <tr><td>Use-case generation</td><td>Gap analysis; pattern counting with support and precision</td><td>Yes: alerts and dispositions</td><td>No</td></tr>
+          <tr><td>Cyber-risk simulation</td><td>PERT and Poisson Monte Carlo</td><td>Per input</td><td>No</td></tr>
+          <tr><td>Playbook drafting</td><td>Prompted language model, validated</td><td>No</td><td>Yes, optional, confirm-gated</td></tr>
+          <tr><td>Use-case refinement</td><td>Prompted language model</td><td>No</td><td>Yes, optional, confirm-gated</td></tr>
+        </tbody></table></div>
+      <p>None of these is deep learning. That is a deliberate choice: each answer can be traced to numbers an analyst can see, and the same input always gives the same output, except the two optional model calls.</p>
+    </section>
+
+    <section id="limits">
+      <h2><span class="num">13</span>Limits and honest status</h2>
+      <ul>
+        <li>The SIEM search, reputation, response and notification connections are built against public documentation and tested against hand-written fakes; none has been run against a live tenant.</li>
+        <li>The OCSF mapping is a subset written from the public schema and has not been run against a live producer.</li>
+        <li>The classifier and statistics recognise wording and patterns, not behaviour; they prompt an analyst and never replace one.</li>
+        <li>Recommendation accuracy and precision figures are only as good as the dispositions analysts record.</li>
+        <li>Sigma drafts are starting points: field names must be matched to your data model and the rule tested on real data before it is switched on.</li>
+        <li>The two optional model calls need the Claude Code command-line tool and spend API usage, which the daily cap bounds.</li>
+        <li>Quanta records and measures the work and drafts artifacts. It does not change your firewalls, accounts, hosts or SIEM.</li>
+      </ul>
+    </section>
+
+    <section id="api">
+      <h2><span class="num">14</span>API reference</h2>
+      <p class="section-intro">All routes below need an administrator login unless a key scope is named.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Route</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>POST /api/ingest/alerts</code>, <code>/api/ingest/alerts/ocsf</code></td><td>Push alerts (key scope <code>soc:write</code>)</td></tr>
+          <tr><td><code>POST /api/soc/alerts/{id}/investigate</code></td><td>First look; opens a case automatically when policy allows</td></tr>
+          <tr><td><code>GET /api/soc/alerts/{id}/recommend-playbook</code></td><td>Playbook suggestions with their basis</td></tr>
+          <tr><td><code>GET/POST /api/soc/cases</code>, <code>GET /api/soc/cases/{id}</code></td><td>List by queue, status, owner or priority; open; read with history, clocks, summary</td></tr>
+          <tr><td><code>POST /api/soc/cases/{id}/{note|assign|acknowledge|pending|escalate|resolve|close|reopen|impact|link-alert|techniques}</code></td><td>Case actions; escalate, resolve and close need a summary</td></tr>
+          <tr><td><code>POST /api/soc/cases/{id}/analyse-logs</code>, <code>POST /api/soc/analyse-logs</code></td><td>Log investigation</td></tr>
+          <tr><td><code>POST /api/soc/ttp</code></td><td>Technique identification</td></tr>
+          <tr><td><code>GET /api/soc/metrics?days=30</code></td><td>SOC metrics</td></tr>
+          <tr><td><code>GET/POST/DELETE /api/soc/analysts</code></td><td>Analysts and their tiers</td></tr>
+          <tr><td><code>GET /api/detections/usecases</code>, <code>POST …/{key}/status</code>, <code>POST …/{key}/ai-refine</code></td><td>Use cases, decisions, optional refinement (confirm-gated)</td></tr>
+          <tr><td><code>POST /api/soar/draft-playbook</code></td><td>Optional drafted playbook (confirm-gated, validated, never saved)</td></tr>
+        </tbody></table></div>
+    </section>
+
+    <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite.</footer>
+  </main>
+</div>
+
+<script>
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links.map((a) => document.querySelector(a.getAttribute('href')));
+  function onScroll() {
+    let idx = 0; const y = window.scrollY + 100;
+    sections.forEach((s, i) => { if (s && s.offsetTop <= y) idx = i; });
+    links.forEach((a, i) => a.classList.toggle('active', i === idx));
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>

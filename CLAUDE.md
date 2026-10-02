@@ -673,6 +673,19 @@ and database URL). Still true: the findings are one whole stored file (tens of t
 not millions), and the chart is checked by `helm lint`/`template`, `scripts/e2e_replicas.py` (real processes), a kind install job (`.github/workflows/helm-kind.yml`, not yet run), static tests (`tests/test_helm_chart.py`), CI
 (`helm lint`/`template`/kubeconform) and unit tests but not yet installed on a live cluster.
 
+## SOC operations, models and use cases
+
+`remediation/soc/` holds the case side of the SOC: `cases.py` (ITIL cases in L1/L2/L3 queues, priority = impact x urgency, service-level clocks derived on read,
+escalation that needs a written hand-off summary, an hourly-style `sweep()` that auto-escalates a case once per tier past its resolve target, `auto_case()` from an
+investigation, a deterministic `summarise()`), `metrics.py` (MTTA/MTTR, SLA compliance, backlog, escalation/reopen/false-positive rates, recommendation accuracy, workload,
+daily series; None rather than zero when there is no data) and `loganalysis.py` (z-score bursts, interval-CV beaconing, fail-then-success, indicators; classical statistics only).
+Policy: `remediation/config/soc_ops.yaml`. Tables `soc_cases`, `soc_case_events`, `soc_case_alerts`, `soc_analysts`, `detection_usecases`. `remediation/hunting/ttp.py` is a
+multinomial Naive Bayes technique classifier (phrase list `ttp_lexicon.yaml` + hunt library + analyst-confirmed alerts); `usecases.py` + `usecase_store.py` generate and track
+detection use cases (coverage gap, hunt promotion, tactic-pair sequence mining, indicator watchlist) as Sigma drafts that are never counted as coverage; `remediation/soar/recommend.py`
+ranks playbooks by similarity-weighted past success; `remediation/soar/ai_draft.py` is the only language-model path (playbook drafts validated by `playbooks.validate`, use-case
+refinement), confirm-gated through `_enforce_ai_usage_limit`/`_run_ai_call_and_record_usage`, never auto-saved. Page `/soc`; routes under `/api/soc/*`, `/api/detections/usecases*`,
+`/api/soar/draft-playbook`. Method and models: `docs/enterprise-suite/soc-operations.html`. None of this is deep learning, and none has run against a live SIEM.
+
 ## Support tickets (ITSM service desk)
 
 The Support page is a real helpdesk, not a link to an external tracker. Tables
