@@ -468,6 +468,97 @@ threat_reviews = Table(
 )
 
 
+# Governance, risk and compliance (remediation/grc/): frameworks and their controls, the risk register, automated control evidence,
+# attestations, and policies with acknowledgements.
+grc_frameworks = Table(
+    "grc_frameworks", metadata,
+    Column("id", String, primary_key=True),
+    Column("name", String, nullable=False),
+    Column("version", String, nullable=True),
+    Column("source", String, nullable=False),
+    Column("control_count", Integer, nullable=False, default=0),
+    Column("imported_at", String, nullable=False),
+)
+
+grc_controls = Table(
+    "grc_controls", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("framework_id", String, nullable=False, index=True),
+    Column("control_id", String, nullable=False),
+    Column("title", String, nullable=False),
+    Column("family", String, nullable=True),
+    Column("statement", Text, nullable=True),
+    UniqueConstraint("framework_id", "control_id", name="uq_grc_control"),
+)
+
+grc_risks = Table(
+    "grc_risks", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("title", String, nullable=False),
+    Column("description", Text, nullable=True),
+    Column("category", String, nullable=True),
+    Column("owner", String, nullable=True),
+    Column("status", String, nullable=False),
+    Column("inherent_likelihood", Integer, nullable=False),
+    Column("inherent_impact", Integer, nullable=False),
+    Column("residual_likelihood", Integer, nullable=True),
+    Column("residual_impact", Integer, nullable=True),
+    Column("treatment", String, nullable=True),
+    Column("treatment_plan", Text, nullable=True),
+    Column("due_date", String, nullable=True),
+    Column("review_date", String, nullable=True),
+    Column("source", String, nullable=False),
+    Column("source_ref", String, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+grc_evidence = Table(
+    "grc_evidence", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("test_id", String, nullable=False, index=True),
+    Column("result", String, nullable=False),
+    Column("metric", Float, nullable=True),
+    Column("threshold", Float, nullable=True),
+    Column("detail", Text, nullable=True),
+    Column("collected_at", String, nullable=False, index=True),
+)
+
+grc_attestations = Table(
+    "grc_attestations", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("framework_id", String, nullable=False, index=True),
+    Column("control_id", String, nullable=False),
+    Column("result", String, nullable=False),
+    Column("statement", Text, nullable=True),
+    Column("attested_by", String, nullable=False),
+    Column("attested_at", String, nullable=False),
+    Column("valid_until", String, nullable=True),
+)
+
+grc_policies = Table(
+    "grc_policies", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("title", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("owner", String, nullable=True),
+    Column("status", String, nullable=False),
+    Column("body", Text, nullable=False),
+    Column("review_date", String, nullable=True),
+    Column("updated_at", String, nullable=False),
+    Column("updated_by", String, nullable=True),
+)
+
+grc_policy_acks = Table(
+    "grc_policy_acks", metadata,
+    Column("policy_id", Integer, primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("user_email", String, primary_key=True),
+    Column("acked_at", String, nullable=False),
+)
+
+
 _SCHEMA_ADVISORY_KEY = 727270001
 
 
@@ -512,6 +603,7 @@ def ensure_schema(engine):
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
+            grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

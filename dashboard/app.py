@@ -54,6 +54,7 @@ from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.controls import store as controls_store  # noqa: E402
+from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
 from remediation.threatmodel import engine as tm_engine, rules as tm_rules, seed as tm_seed, store as tm_store  # noqa: E402
 from remediation.aiusage import analytics as ai_analytics, discovery as ai_discovery, otlp as ai_otlp, store as ai_store  # noqa: E402
 from remediation.enrichment import client_controls  # noqa: E402
@@ -309,6 +310,7 @@ async def _notification_scheduler_loop():
             report_scheduler.check_and_send_due_reports(dashboard_data, reports, email_sender)
             alert_checker.check_and_send_alerts(dashboard_data, email_sender)
             _run_support_sla_escalations()
+            _run_grc_evidence_if_due()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -3414,6 +3416,236 @@ def api_finding_compensating_controls(finding_id: str, user: dict | None = Depen
     """Compensating controls for this finding from the ATT&CK mitigations for the techniques it enables, checked against the
     controls recorded for its asset: which are verified, claimed, absent, or unknown."""
     return _fast_json(client_controls.assess(_visible_finding(finding_id, user)))
+
+
+# --------------------------------------------------------------------------- governance, risk and compliance
+# Framework catalogs (built-in subsets, OSCAL import), the risk register, automated control evidence, attestations and policies
+# (remediation/grc/). Quanta supplies evidence and workflow; it does not certify compliance. Admin only, except that any signed-in user can read the
+# active policies and acknowledge them.
+class RiskBody(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    category: str | None = None
+    owner: str | None = None
+    status: str | None = None
+    inherent_likelihood: int | None = None
+    inherent_impact: int | None = None
+    residual_likelihood: int | None = None
+    residual_impact: int | None = None
+    treatment: str | None = None
+    treatment_plan: str | None = None
+    due_date: str | None = None
+    review_date: str | None = None
+
+
+class SuggestionBody(BaseModel):
+    source: str
+    source_ref: str
+
+
+class AttestBody(BaseModel):
+    result: str
+    statement: str
+    valid_until: str | None = None
+
+
+class PolicyBody(BaseModel):
+    title: str | None = None
+    body: str | None = None
+    owner: str | None = None
+    status: str | None = None
+    review_date: str | None = None
+
+
+def _grc_context():
+    return grc_evidence.Context(dashboard_data.load_live_queue())
+
+
+def _grc_suggestions():
+    analyses = []
+    for m in tm_store.list_models():
+        try:
+            analyses.append(tm_store.analyse(m["id"], dashboard_data.load_live_queue()))
+        except Exception:  # noqa: BLE001 - one unreadable model must not hide the other suggestions
+            continue
+    return grc_risks.suggestions(dashboard_data.load_live_queue(), analyses)
+
+
+def _run_grc_evidence_if_due():
+    """Called by the leader's hourly tick: collects control evidence about once a day so the history builds up without anyone remembering."""
+    latest = grc_evidence.latest()
+    newest = max((r["collected_at"] for r in latest.values()), default="")
+    cutoff = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if newest < cutoff:
+        grc_evidence.run_all(_grc_context())
+
+
+def _grc_400(exc):
+    return HTTPException(status_code=404, detail=str(exc).strip("'\"")) if isinstance(exc, KeyError) else HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/grc/overview")
+def api_grc_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    grc_catalog.ensure_builtin()
+    latest = grc_evidence.latest()
+    counts = {r: sum(1 for t in latest.values() if t["result"] == r) for r in ("pass", "fail", "warn", "na", "error")}
+    fws = []
+    for f in grc_catalog.list_frameworks():
+        rep = grc_report.framework_report(f["id"])
+        fws.append({"id": f["id"], "name": f["name"], "source": f["source"], "total": rep["total"], "evidenced_pct": rep["evidenced_pct"], "counts": rep["counts"]})
+    risks = grc_risks.list_risks()
+    return {"frameworks": fws, "evidence": counts, "evidence_collected_at": max((t["collected_at"] for t in latest.values()), default=None),
+            "risks": grc_risks.summary(risks), "policies_needing_attention": sum(1 for p in grc_policies.list_policies() if p["status"] == "active" and (p["review_overdue"]))}
+
+
+@app.get("/api/grc/frameworks")
+def api_grc_frameworks(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    grc_catalog.ensure_builtin()
+    return {"frameworks": grc_catalog.list_frameworks()}
+
+
+@app.post("/api/grc/frameworks/import")
+async def api_grc_import(request: Request, id: str, name: str = "", user: dict = Depends(rbac.require_admin)):
+    """Upload an OSCAL catalog (NIST publishes SP 800-53 and CSF in this form) as the request body."""
+    try:
+        n = grc_catalog.import_oscal(id, await _read_upload(request), name or None)
+    except (ValueError, grc_catalog.CatalogError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "grc.framework.import", id, {"controls": n})
+    return {"id": id, "controls": n}
+
+
+@app.delete("/api/grc/frameworks/{framework_id}")
+def api_grc_delete_framework(framework_id: str, user: dict = Depends(rbac.require_admin)):
+    if not grc_catalog.delete_framework(framework_id):
+        raise HTTPException(status_code=404, detail="No such framework")
+    activity_log.record_activity(user["email"], "grc.framework.delete", framework_id, {})
+    return {"deleted": True}
+
+
+@app.get("/api/grc/frameworks/{framework_id}/report")
+def api_grc_report(framework_id: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    grc_catalog.ensure_builtin()
+    try:
+        return _fast_json(grc_report.framework_report(framework_id))
+    except KeyError as exc:
+        raise _grc_400(exc) from exc
+
+
+@app.get("/api/grc/frameworks/{framework_id}/oscal")
+def api_grc_oscal(framework_id: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    grc_catalog.ensure_builtin()
+    try:
+        return JSONResponse(grc_report.to_oscal(framework_id), headers={"Content-Disposition": f'attachment; filename="{framework_id}-assessment-results.json"'})
+    except KeyError as exc:
+        raise _grc_400(exc) from exc
+
+
+@app.post("/api/grc/frameworks/{framework_id}/controls/{control_id}/attest")
+def api_grc_attest(framework_id: str, control_id: str, body: AttestBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        grc_report.attest(framework_id, control_id, body.result, body.statement, user["email"], body.valid_until)
+    except (ValueError, KeyError) as exc:
+        raise _grc_400(exc) from exc
+    activity_log.record_activity(user["email"], "grc.attest", f"{framework_id}:{control_id}", {"result": body.result})
+    return {"attested": True}
+
+
+@app.get("/api/grc/evidence")
+def api_grc_evidence(test_id: str = "", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    if test_id:
+        return {"history": grc_evidence.history(test_id)}
+    return {"tests": list(grc_evidence.latest().values()), "available": {k: v[0] for k, v in grc_evidence.TESTS.items()}}
+
+
+@app.post("/api/grc/evidence/run")
+def api_grc_run(user: dict = Depends(rbac.require_admin)):
+    results = grc_evidence.run_all(_grc_context())
+    activity_log.record_activity(user["email"], "grc.evidence.run", None, {"tests": len(results)})
+    return {"results": results}
+
+
+@app.get("/api/grc/risks")
+def api_grc_risks(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    risks = grc_risks.list_risks()
+    return {"risks": risks, "summary": grc_risks.summary(risks), "suggestions": _grc_suggestions()}
+
+
+@app.post("/api/grc/risks")
+def api_grc_add_risk(body: RiskBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = grc_risks.create(body.model_dump(exclude_none=True), user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "grc.risk.create", str(r["id"]), {"title": r["title"]})
+    return r
+
+
+@app.post("/api/grc/risks/from-suggestion")
+def api_grc_from_suggestion(body: SuggestionBody, user: dict = Depends(rbac.require_admin)):
+    s = next((x for x in _grc_suggestions() if x["source"] == body.source and x["source_ref"] == body.source_ref), None)
+    if not s:
+        raise HTTPException(status_code=404, detail="That suggestion is no longer current")
+    r = grc_risks.create({k: s[k] for k in ("title", "description", "category", "inherent_likelihood", "inherent_impact")}, user["email"], source=s["source"], source_ref=s["source_ref"])
+    activity_log.record_activity(user["email"], "grc.risk.create", str(r["id"]), {"title": r["title"], "from": s["source"]})
+    return r
+
+
+@app.put("/api/grc/risks/{risk_id}")
+def api_grc_update_risk(risk_id: int, body: RiskBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = grc_risks.update_risk(risk_id, body.model_dump(exclude_unset=True))
+    except (ValueError, KeyError) as exc:
+        raise _grc_400(exc) from exc
+    activity_log.record_activity(user["email"], "grc.risk.update", str(risk_id), {"status": r["status"]})
+    return r
+
+
+@app.delete("/api/grc/risks/{risk_id}")
+def api_grc_delete_risk(risk_id: int, user: dict = Depends(rbac.require_admin)):
+    if not grc_risks.delete_risk(risk_id):
+        raise HTTPException(status_code=404, detail="No such risk")
+    activity_log.record_activity(user["email"], "grc.risk.delete", str(risk_id), {})
+    return {"deleted": True}
+
+
+@app.get("/api/grc/policies")
+def api_grc_policies(user: dict = Depends(rbac.require_login)):
+    is_admin = user.get("role") == "admin"
+    pols = grc_policies.list_policies(users=auth_users.list_users() if is_admin else None)
+    if not is_admin:
+        pols = [{**p, "acknowledged_by_me": user["email"] in p["acknowledged_by"], "acknowledged_by": []} for p in pols if p["status"] == "active"]
+    return {"policies": pols}
+
+
+@app.post("/api/grc/policies")
+def api_grc_add_policy(body: PolicyBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        p = grc_policies.create(body.title, body.body, body.owner, user["email"], body.status or "draft", body.review_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "grc.policy.create", str(p["id"]), {"title": p["title"]})
+    return p
+
+
+@app.put("/api/grc/policies/{policy_id}")
+def api_grc_update_policy(policy_id: int, body: PolicyBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        p = grc_policies.update_policy(policy_id, user["email"], body.title, body.body, body.owner, body.status, body.review_date)
+    except (ValueError, KeyError) as exc:
+        raise _grc_400(exc) from exc
+    activity_log.record_activity(user["email"], "grc.policy.update", str(policy_id), {"version": p["version"]})
+    return p
+
+
+@app.post("/api/grc/policies/{policy_id}/acknowledge")
+def api_grc_ack(policy_id: int, user: dict = Depends(rbac.require_login)):
+    try:
+        grc_policies.acknowledge(policy_id, user["email"])
+    except (ValueError, KeyError) as exc:
+        raise _grc_400(exc) from exc
+    activity_log.record_activity(user["email"], "grc.policy.ack", str(policy_id), {})
+    return {"acknowledged": True}
 
 
 # --------------------------------------------------------------------------- threat models

@@ -149,6 +149,29 @@ export const api = {
   seedThreatModel: (id, patterns) => request("POST", `/api/threat-models/${id}/seed`, { patterns }),
   reviewThreat: (id, body) => request("POST", `/api/threat-models/${id}/review`, body),
   threatRules: () => request("GET", "/api/threat-models/rules"),
+  grcOverview: () => request("GET", "/api/grc/overview"),
+  grcFrameworks: () => request("GET", "/api/grc/frameworks"),
+  grcReport: (id) => request("GET", `/api/grc/frameworks/${encodeURIComponent(id)}/report`),
+  grcAttest: (fw, control, body) => request("POST", `/api/grc/frameworks/${encodeURIComponent(fw)}/controls/${encodeURIComponent(control)}/attest`, body),
+  grcDeleteFramework: (id) => request("DELETE", `/api/grc/frameworks/${encodeURIComponent(id)}`),
+  grcImportFramework: async (id, name, file) => {
+    const res = await fetch(`/api/grc/frameworks/import?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name || "")}`, { method: "POST", body: file });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
+  grcEvidence: () => request("GET", "/api/grc/evidence"),
+  grcRunEvidence: () => request("POST", "/api/grc/evidence/run", {}),
+  grcRisks: () => request("GET", "/api/grc/risks"),
+  grcAddRisk: (body) => request("POST", "/api/grc/risks", body),
+  grcRiskFromSuggestion: (body) => request("POST", "/api/grc/risks/from-suggestion", body),
+  grcUpdateRisk: (id, body) => request("PUT", `/api/grc/risks/${id}`, body),
+  grcDeleteRisk: (id) => request("DELETE", `/api/grc/risks/${id}`),
+  grcPolicies: () => request("GET", "/api/grc/policies"),
+  grcAddPolicy: (body) => request("POST", "/api/grc/policies", body),
+  grcUpdatePolicy: (id, body) => request("PUT", `/api/grc/policies/${id}`, body),
+  grcAckPolicy: (id) => request("POST", `/api/grc/policies/${id}/acknowledge`, {}),
   findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
   importScannerFile: async (source, reconcile, file) => {
     const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });

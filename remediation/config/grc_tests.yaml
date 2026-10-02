@@ -1,0 +1,29 @@
+# Automated control tests: what Quanta checks about itself and the estate, how strict each check is, and which framework controls the result is
+# evidence for. Edit the thresholds to match your policy; the evidence page shows the threshold beside every result.
+#
+# A result is pass, fail, warn (worth attention but not a failure) or na (not enough data to say). "na" is never counted as a pass.
+thresholds:
+  patch_sla_min_pct: 90          # share of Critical and High findings that are inside their SLA
+  scan_max_age_days: 7           # newest scan data must be no older than this
+  ownership_min_pct: 80          # share of Critical and High findings with an assigned owner or team
+  max_admin_accounts: 5          # more administrator accounts than this is a warning
+  audit_window_days: 30          # the audit log must have events within this window
+  controls_min_pct: 60           # share of the most-affected assets with at least one recorded security control
+  max_active_exceptions: 50      # more active risk exceptions than this is a warning
+
+# test id -> the controls it is evidence for, as framework-id: [control ids]
+mappings:
+  patch-sla:           {nist-800-53-r5: [SI-2, RA-5], nist-csf-2: [PR.PS-02]}
+  kev-remediation:     {nist-800-53-r5: [SI-2, RA-5], nist-csf-2: [PR.PS-02, ID.RA-06]}
+  scan-freshness:      {nist-800-53-r5: [RA-5, CA-7], nist-csf-2: [ID.RA-01]}
+  exceptions-hygiene:  {nist-800-53-r5: [CA-5, RA-7], nist-csf-2: [ID.RA-06]}
+  ownership:           {nist-800-53-r5: [CA-5, PM-9], nist-csf-2: [ID.RA-06]}
+  audit-trail:         {nist-800-53-r5: [AU-2, AU-6, SI-4], nist-csf-2: [PR.PS-04, DE.CM-01]}
+  privileged-access:   {nist-800-53-r5: [AC-2, AC-6], nist-csf-2: [PR.AA-05]}
+  fix-verification:    {nist-800-53-r5: [SI-2, CM-3, CA-2], nist-csf-2: [ID.RA-06]}
+  controls-coverage:   {nist-800-53-r5: [CM-8, SC-7], nist-csf-2: [ID.AM-01]}
+  risk-register:       {nist-800-53-r5: [RA-3, RA-7, PM-9], nist-csf-2: [ID.RA-05, ID.RA-06]}
+  ai-apps-reviewed:    {quanta-ai-governance: [AIG-1]}
+  ai-usage-recorded:   {quanta-ai-governance: [AIG-2]}
+  ai-budgets:          {quanta-ai-governance: [AIG-3]}
+  ai-approved-models:  {quanta-ai-governance: [AIG-4]}

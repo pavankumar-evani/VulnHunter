@@ -1,0 +1,47 @@
+# Built-in control catalogs: the controls Quanta can produce evidence for, so the GRC module works before any catalog is imported.
+#
+# These are SUBSETS. Identifiers and short titles follow the published catalogs (NIST SP 800-53 Rev. 5, NIST Cybersecurity Framework 2.0);
+# the titles are abbreviated and the statements are Quanta's own one-line summaries, not the official text. To work against the whole
+# catalog, import NIST's official OSCAL JSON (GRC page > Frameworks > Import an OSCAL catalog). Licensed standards (ISO/IEC 27001, CIS Controls)
+# are not shipped; import your licensed copy in OSCAL form or add its controls yourself.
+frameworks:
+  - id: nist-800-53-r5
+    name: NIST SP 800-53 Rev. 5 (controls Quanta can evidence)
+    version: "5.1.1"
+    controls:
+      - {id: AC-2, family: Access Control, title: Account Management, statement: "Accounts are created, reviewed and removed under a managed process."}
+      - {id: AC-6, family: Access Control, title: Least Privilege, statement: "People and services have only the access they need; privileged accounts are limited."}
+      - {id: AU-2, family: Audit and Accountability, title: Event Logging, statement: "Security-relevant events are identified and logged."}
+      - {id: AU-6, family: Audit and Accountability, title: "Audit Record Review, Analysis, and Reporting", statement: "Audit records are reviewed and acted on."}
+      - {id: CA-2, family: "Assessment, Authorization, and Monitoring", title: Control Assessments, statement: "Controls are assessed to confirm they work as intended."}
+      - {id: CA-5, family: "Assessment, Authorization, and Monitoring", title: Plan of Action and Milestones, statement: "Weaknesses are tracked with owners and dates until corrected."}
+      - {id: CA-7, family: "Assessment, Authorization, and Monitoring", title: Continuous Monitoring, statement: "Control effectiveness and risk are monitored on an ongoing basis."}
+      - {id: CM-3, family: Configuration Management, title: Configuration Change Control, statement: "Changes are reviewed, approved, tested and recorded."}
+      - {id: CM-8, family: Configuration Management, title: System Component Inventory, statement: "An accurate inventory of system components is maintained."}
+      - {id: PM-9, family: Program Management, title: Risk Management Strategy, statement: "A strategy for managing security risk is developed and followed."}
+      - {id: RA-3, family: Risk Assessment, title: Risk Assessment, statement: "Risk to operations, assets and people is assessed and documented."}
+      - {id: RA-5, family: Risk Assessment, title: Vulnerability Monitoring and Scanning, statement: "Systems are scanned for vulnerabilities and findings are analysed and remediated."}
+      - {id: RA-7, family: Risk Assessment, title: Risk Response, statement: "Findings and assessments are responded to: mitigated, accepted, transferred or avoided."}
+      - {id: SC-7, family: System and Communications Protection, title: Boundary Protection, statement: "Communications at system boundaries are monitored and controlled."}
+      - {id: SI-2, family: System and Information Integrity, title: Flaw Remediation, statement: "Flaws are identified, reported and corrected within defined times."}
+      - {id: SI-4, family: System and Information Integrity, title: System Monitoring, statement: "Systems are monitored to detect attacks and unauthorised activity."}
+  - id: nist-csf-2
+    name: NIST Cybersecurity Framework 2.0 (outcomes Quanta can evidence)
+    version: "2.0"
+    controls:
+      - {id: ID.AM-01, family: Identify, title: "Hardware inventories are maintained", statement: "The organization keeps inventories of the hardware it manages."}
+      - {id: ID.RA-01, family: Identify, title: "Vulnerabilities in assets are identified, validated, and recorded", statement: "Vulnerabilities are found, confirmed and recorded."}
+      - {id: ID.RA-05, family: Identify, title: "Threats, vulnerabilities, likelihoods, and impacts inform risk prioritization", statement: "Risk is understood from threats, vulnerabilities, likelihood and impact."}
+      - {id: ID.RA-06, family: Identify, title: "Risk responses are chosen, prioritized, planned, tracked, and communicated", statement: "Risk responses are decided and followed through."}
+      - {id: PR.AA-05, family: Protect, title: "Access permissions follow least privilege and are reviewed", statement: "Access is defined, enforced and reviewed on least-privilege principles."}
+      - {id: PR.PS-02, family: Protect, title: "Software is maintained, replaced, and removed commensurate with risk", statement: "Software is kept up to date according to risk."}
+      - {id: PR.PS-04, family: Protect, title: "Log records are generated and made available for continuous monitoring", statement: "Logs are generated and available for monitoring."}
+      - {id: DE.CM-01, family: Detect, title: "Networks and network services are monitored", statement: "The network is monitored for adverse events."}
+  - id: quanta-ai-governance
+    name: AI governance (Quanta's own checklist)
+    version: "1"
+    controls:
+      - {id: AIG-1, family: AI governance, title: AI services are reviewed before use, statement: "Every AI application in use has been reviewed and is marked sanctioned or blocked."}
+      - {id: AIG-2, family: AI governance, title: AI usage is monitored and attributed, statement: "AI use is recorded by team and application."}
+      - {id: AIG-3, family: AI governance, title: AI spend is governed, statement: "AI spending has budgets that are monitored."}
+      - {id: AIG-4, family: AI governance, title: Only approved models are used, statement: "Use of models outside the approved list is detected."}
