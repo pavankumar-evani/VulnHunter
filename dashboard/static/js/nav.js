@@ -118,6 +118,8 @@ export const NAV = [
       tip: "Firewall rules from your exports: broad, unused, shadowed and internet-exposed rules, recertification by owner, and access requests checked against the rules. Quanta never changes a firewall." },
     { path: "/ai-security", label: "AI Security", icon: "rules",
       tip: "Admin: your AI systems, what each can do and how it is defended, checked against the OWASP Top 10 for LLM Applications and MCP hygiene; publish the findings to the queue." },
+    { path: "/access-governance", label: "Access Governance", icon: "rules",
+      tip: "Leavers with access, dormant and unowned accounts, separation-of-duties conflicts, and manager access reviews. Quanta records decisions; your identity team removes the access." },
     { path: "/soar", label: "SOAR Playbooks", icon: "rules",
       tip: "Admin: playbooks that investigate, notify and ask your own automation to respond, with a second person approving anything that changes your environment. Dry run first." },
     { path: "/hunting", label: "Hunting & SOC", icon: "rules",

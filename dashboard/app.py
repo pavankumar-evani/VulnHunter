@@ -61,6 +61,7 @@ from remediation.connectors.webhook_connector import ACTIONS as webhook_actions 
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
 from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa: E402
+from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
 from remediation.enrichment import network_reachability as network_reach  # noqa: E402
 from remediation.devsecops import controls as dso_controls, factory as dso_factory  # noqa: E402
@@ -5401,6 +5402,150 @@ def api_ai_security_publish(body: AiPublishBody, background: BackgroundTasks, us
     if result["added"] or result["updated"]:
         _enrich_in_background(background)
     return {"published": len(findings), "rejected": len(errors), **result}
+
+
+# ---------------------------------------------------------------- identity and access governance
+class IamCampaignBody(BaseModel):
+    name: str
+    due_date: str
+    privileged_only: bool = False
+    systems: list[str] = []
+
+
+class IamDecisionBody(BaseModel):
+    decision: str
+    note: str = ""
+
+
+class IamReassignBody(BaseModel):
+    reviewer: str
+
+
+class IamPrecheckBody(BaseModel):
+    user: str
+    system: str
+    entitlement: str
+
+
+@app.post("/api/iam/import")
+async def api_iam_import(request: Request, source: str, format: str = "", user: dict = Depends(rbac.require_admin)):
+    """Entitlements as the request body (CSV or JSON). Replaces what was loaded earlier from the same source."""
+    raw = (await request.body()).decode("utf-8", "replace")
+    if len(raw) > 60_000_000:
+        raise HTTPException(status_code=413, detail="The file is too large (limit 60 MB)")
+    try:
+        out = iam_store.import_entitlements(source, raw, format or None, user["email"])
+    except iam_model.IamFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "iam.import", source, out)
+    return out
+
+
+@app.post("/api/iam/roster")
+async def api_iam_roster(request: Request, user: dict = Depends(rbac.require_admin)):
+    """The HR roster (CSV: user, status, manager, department, end date). Replaces the previous one."""
+    try:
+        out = iam_store.import_roster((await request.body()).decode("utf-8", "replace"))
+    except iam_model.IamFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "iam.roster", None, out)
+    return out
+
+
+@app.delete("/api/iam/data")
+def api_iam_clear(user: dict = Depends(rbac.require_admin)):
+    iam_store.clear()
+    activity_log.record_activity(user["email"], "iam.clear", None, {})
+    return {"ok": True}
+
+
+@app.get("/api/iam/overview")
+def api_iam_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    ents, ros = iam_store.entitlements(), iam_store.roster()
+    f = iam_model.analyse(ents, ros)
+    return {"summary": iam_model.summary(ents, f, ros), "findings": f[:500], "campaigns": [{k: c[k] for k in ("id", "name", "status", "due_date", "total", "decided", "pct", "revoke")} for c in iam_store.list_campaigns()]}
+
+
+@app.post("/api/iam/precheck")
+def api_iam_precheck(body: IamPrecheckBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """Before access is requested: would this entitlement create a separation-of-duties conflict or add privilege?"""
+    return iam_model.precheck(body.user, body.system, body.entitlement, iam_store.entitlements())
+
+
+@app.post("/api/iam/campaigns")
+def api_iam_campaign_add(body: IamCampaignBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        c = iam_store.create_campaign(body.name, {"privileged_only": body.privileged_only, "systems": body.systems}, body.due_date, user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "iam.campaign.create", str(c["id"]), {"items": c["total"]})
+    return c
+
+
+@app.get("/api/iam/campaigns")
+def api_iam_campaigns(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"campaigns": iam_store.list_campaigns()}
+
+
+@app.get("/api/iam/campaigns/{campaign_id}")
+def api_iam_campaign(campaign_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    c = iam_store.get_campaign(campaign_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="No such campaign")
+    return {**c, "items": iam_store.items_for(campaign_id)}
+
+
+@app.get("/api/iam/my-reviews")
+def api_iam_my_reviews(user: dict = Depends(rbac.require_login)):
+    out = []
+    for c in iam_store.list_campaigns():
+        if c["status"] == "open":
+            mine = iam_store.items_for(c["id"], reviewer=user["email"].lower())
+            if mine:
+                out.append({"campaign": {k: c[k] for k in ("id", "name", "due_date")}, "items": mine})
+    return {"reviews": out}
+
+
+@app.post("/api/iam/items/{item_id}/decide")
+def api_iam_decide(item_id: int, body: IamDecisionBody, user: dict = Depends(rbac.require_login)):
+    try:
+        iam_store.decide(item_id, body.decision, user["email"], body.note, is_admin=user.get("role") == "admin")
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such review item") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "iam.review.decide", str(item_id), {"decision": body.decision})
+    return {"ok": True}
+
+
+@app.post("/api/iam/items/{item_id}/reassign")
+def api_iam_reassign(item_id: int, body: IamReassignBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        iam_store.reassign(item_id, body.reviewer)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@app.post("/api/iam/campaigns/{campaign_id}/close")
+def api_iam_close(campaign_id: int, user: dict = Depends(rbac.require_admin)):
+    try:
+        c = iam_store.close_campaign(campaign_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    activity_log.record_activity(user["email"], "iam.campaign.close", str(campaign_id), {"revoke": c["revoke"]})
+    return c
+
+
+@app.get("/api/iam/campaigns/{campaign_id}/revocations")
+def api_iam_revocations(campaign_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    if not iam_store.get_campaign(campaign_id):
+        raise HTTPException(status_code=404, detail="No such campaign")
+    return {"revocations": iam_store.revocations(campaign_id), "note": "These are decisions recorded in Quanta. The identity team removes the access; Quanta changes no account."}
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

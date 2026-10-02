@@ -1,0 +1,24 @@
+# Identity and access governance (remediation/iam/). Everything here is yours to change.
+
+dormant_days: 90          # an active account unused this long is dormant
+never_used_days: 30       # an account that has never been used, and was granted at least this long ago
+max_privileged_systems: 3 # a person with privileged access on more systems than this is flagged
+
+# A role or group counts as privileged if the import says so, or its name contains one of these words.
+privileged_keywords: [admin, administrator, root, owner, superuser, sysadmin, dba, global, full control, domain admins, security admin]
+
+# Account names that look shared or non-human. Without a manager or owner recorded they cannot be reviewed.
+generic_account_patterns: [svc, service, shared, generic, batch, system, admin, test]
+
+# Statuses in the HR roster that mean the person should no longer have access.
+departed_statuses: [terminated, left, resigned, offboarded, inactive, former]
+
+# Separation of duties: a person who holds a role matching any word in `a` AND any word in `b` (on the same system, or any system when `system` is
+# blank) creates a conflict. Words are matched against the entitlement name, case-insensitively. Add your own; these are common ERP / finance examples.
+sod_rules:
+  - {id: SOD01, name: "Create vendors and approve payments", severity: Critical, a: ["vendor master", "create vendor", "vendor maintenance"], b: ["approve payment", "payment approval", "release payment", "payment run"]}
+  - {id: SOD02, name: "Create and approve purchase orders", severity: High, a: ["create po", "purchase order create", "create purchase order", "po entry"], b: ["approve po", "purchase order approve", "approve purchase order", "po approval"]}
+  - {id: SOD03, name: "Enter and approve journal entries", severity: High, a: ["journal entry", "post journal", "gl posting", "create journal"], b: ["approve journal", "journal approval", "journal release"]}
+  - {id: SOD04, name: "Administer users and review the audit log", severity: High, a: ["user admin", "user maintenance", "create user", "security admin"], b: ["audit log", "audit admin", "log review"]}
+  - {id: SOD05, name: "Develop and release to production", severity: High, a: ["developer", "change code", "commit"], b: ["production deploy", "release manager", "prod deploy", "deploy to production"]}
+  - {id: SOD06, name: "Maintain payroll and approve payroll", severity: Critical, a: ["payroll maintain", "payroll master", "maintain payroll"], b: ["payroll approve", "approve payroll", "payroll release"]}

@@ -807,6 +807,55 @@ ai_assets = Table(
     Column("updated_by", String, nullable=True),
 )
 
+iam_entitlements = Table(
+    "iam_entitlements", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("user", String, nullable=False),
+    Column("account", String, nullable=False),
+    Column("system", String, nullable=False),
+    Column("entitlement", String, nullable=False),
+    Column("privileged", Boolean, nullable=False, default=False),
+    Column("last_login", String, nullable=True),
+    Column("status", String, nullable=False),
+    Column("manager", String, nullable=True),
+    Column("department", String, nullable=True),
+    Column("granted_at", String, nullable=True),
+    Column("source", String, nullable=False),
+    Column("imported_at", String, nullable=False),
+)
+
+iam_roster = Table(
+    "iam_roster", metadata,
+    Column("user", String, primary_key=True),
+    Column("status", String, nullable=False),
+    Column("manager", String, nullable=True),
+    Column("department", String, nullable=True),
+    Column("end_date", String, nullable=True),
+)
+
+iam_campaigns = Table(
+    "iam_campaigns", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False),
+    Column("scope_json", Text, nullable=False),
+    Column("due_date", String, nullable=False),
+    Column("status", String, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
+iam_review_items = Table(
+    "iam_review_items", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("campaign_id", Integer, nullable=False),
+    Column("reviewer", String, nullable=False),
+    Column("decision", String, nullable=True),
+    Column("decided_by", String, nullable=True),
+    Column("decided_at", String, nullable=True),
+    Column("note", Text, nullable=True),
+    Column("snapshot_json", Text, nullable=False),
+)
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -828,7 +877,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets,
+            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

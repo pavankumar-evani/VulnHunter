@@ -230,6 +230,31 @@ export const api = {
   aiSecurityDelete: (id) => request("DELETE", `/api/ai-security/assets/${id}`),
   aiSecurityImport: () => request("POST", "/api/ai-security/import-discovered", {}),
   aiSecurityPublish: (body) => request("POST", "/api/ai-security/publish", body),
+  iamOverview: () => request("GET", "/api/iam/overview"),
+  iamPrecheck: (body) => request("POST", "/api/iam/precheck", body),
+  iamCampaigns: () => request("GET", "/api/iam/campaigns"),
+  iamCampaign: (id) => request("GET", `/api/iam/campaigns/${id}`),
+  iamCampaignAdd: (body) => request("POST", "/api/iam/campaigns", body),
+  iamClose: (id) => request("POST", `/api/iam/campaigns/${id}/close`, {}),
+  iamRevocations: (id) => request("GET", `/api/iam/campaigns/${id}/revocations`),
+  iamMyReviews: () => request("GET", "/api/iam/my-reviews"),
+  iamDecide: (id, body) => request("POST", `/api/iam/items/${id}/decide`, body),
+  iamReassign: (id, body) => request("POST", `/api/iam/items/${id}/reassign`, body),
+  iamClear: () => request("DELETE", "/api/iam/data"),
+  iamImport: async (source, text) => {
+    const res = await fetch(`/api/iam/import?source=${encodeURIComponent(source)}`, { method: "POST", body: text });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
+  iamRoster: async (text) => {
+    const res = await fetch("/api/iam/roster", { method: "POST", body: text });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
   detectionsOverview: () => request("GET", "/api/detections/overview"),
   detectionsAssess: () => request("POST", "/api/detections/assess", {}),
   detectionsAddRule: (body) => request("POST", "/api/detections/rules", body),

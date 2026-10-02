@@ -45,6 +45,7 @@ const routes = [
   { pattern: /^\/grc\/?$/, load: () => import("./pages/grc.js") },
   { pattern: /^\/hunting\/?$/, load: () => import("./pages/hunting.js") },
   { pattern: /^\/soar\/?$/, load: () => import("./pages/soar.js") },
+  { pattern: /^\/access-governance\/?$/, load: () => import("./pages/iam.js") },
   { pattern: /^\/ai-security\/?$/, load: () => import("./pages/aiSecurity.js") },
   { pattern: /^\/firewall\/?$/, load: () => import("./pages/firewall.js") },
   { pattern: /^\/zero-day-watch\/?$/, load: () => import("./pages/zeroDay.js") },
