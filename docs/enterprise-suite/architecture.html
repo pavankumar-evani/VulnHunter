@@ -124,6 +124,11 @@
     main { padding: 0 20px 60px; max-width: 100%; }
     .grid2 { grid-template-columns: 1fr; }
   }
+  .docmeta { display:flex; flex-wrap:wrap; gap:8px 34px; padding:12px 24px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:0.78rem; color:var(--muted); }
+  .docmeta b { display:block; font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px; }
+  .docmeta span { color:var(--ink); font-weight:500; }
+  footer.docfoot .legal { color:var(--ink); font-weight:500; margin-bottom:6px; }
+  @media print { .docmeta { break-inside:avoid; } }
 </style>
 
 <div class="suitebar">
@@ -136,6 +141,7 @@
   <span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
+<div class="docmeta"><div><b>Document</b><span>Architecture &amp; Schema Reference</span></div><div><b>Audience</b><span>Technical</span></div><div><b>Edition</b><span>October 2026</span></div><div><b>Classification</b><span>Customer confidential</span></div></div>
 
 <div class="shell">
   <nav class="toc" id="toc">
@@ -358,7 +364,7 @@ flowchart LR
       </div>
     </section>
 
-    <footer class="docfoot">
+    <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>
       Part of the Quanta Enterprise Documentation Suite. Continue to the <a href="https://claude.ai/code/artifact/37848de1-aed0-4e71-b903-0cf2780dc52b" target="_blank" rel="noopener" data-suite-link="engine">Vulnerability Finding Engine</a> or the <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a> document.
     </footer>
   </main>

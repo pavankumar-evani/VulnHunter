@@ -91,6 +91,11 @@
 
   footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
   @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .docmeta { display:flex; flex-wrap:wrap; gap:8px 34px; padding:12px 24px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:0.78rem; color:var(--muted); }
+  .docmeta b { display:block; font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px; }
+  .docmeta span { color:var(--ink); font-weight:500; }
+  footer.docfoot .legal { color:var(--ink); font-weight:500; margin-bottom:6px; }
+  @media print { .docmeta { break-inside:avoid; } }
 </style>
 
 <div class="suitebar">
@@ -98,6 +103,7 @@
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
+<div class="docmeta"><div><b>Document</b><span>The Governed Remediation Thesis</span></div><div><b>Audience</b><span>Enterprise evaluators</span></div><div><b>Edition</b><span>October 2026</span></div><div><b>Classification</b><span>Customer confidential</span></div></div>
 
 <div class="shell">
   <nav class="toc" id="toc">
@@ -266,7 +272,7 @@
       </div>
     </section>
 
-    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b" target="_blank" rel="noopener">Executive Overview &amp; Solution Brief</a> for the concise version of this argument, or <a href="https://claude.ai/code/artifact/6fc9ea41-5cc3-4934-8e2a-236a252b1bd1" target="_blank" rel="noopener">Pricing</a> for the full commercial model.</footer>
+    <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b" target="_blank" rel="noopener">Executive Overview &amp; Solution Brief</a> for the concise version of this argument, or <a href="https://claude.ai/code/artifact/6fc9ea41-5cc3-4934-8e2a-236a252b1bd1" target="_blank" rel="noopener">Pricing</a> for the full commercial model.</footer>
   </main>
 </div>
 

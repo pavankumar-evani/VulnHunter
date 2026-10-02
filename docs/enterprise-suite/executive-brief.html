@@ -107,6 +107,11 @@
     .personas { grid-template-columns: repeat(2, 1fr); }
     .hero-inner h1 { font-size: 2.1rem; }
   }
+  .docmeta { display:flex; flex-wrap:wrap; gap:8px 34px; padding:12px 24px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:0.78rem; color:var(--muted); }
+  .docmeta b { display:block; font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px; }
+  .docmeta span { color:var(--ink); font-weight:500; }
+  footer.docfoot .legal { color:var(--ink); font-weight:500; margin-bottom:6px; }
+  @media print { .docmeta { break-inside:avoid; } }
 </style>
 
 <div class="suitebar">
@@ -114,6 +119,7 @@
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
+<div class="docmeta"><div><b>Document</b><span>Quanta Solution Brief</span></div><div><b>Audience</b><span>Enterprise evaluators</span></div><div><b>Edition</b><span>October 2026</span></div><div><b>Classification</b><span>Customer confidential</span></div></div>
 
 <div class="hero-wrap">
   <svg class="hero-art" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -377,5 +383,5 @@
     </div>
   </section>
 
-  <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. Every claim above is drawn from the current, real codebase — not a target-state roadmap.</footer>
+  <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. Every claim above is drawn from the current, real codebase — not a target-state roadmap.</footer>
 </main>

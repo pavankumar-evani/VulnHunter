@@ -86,6 +86,11 @@
   .card p { margin: 0; font-size: 0.87rem; color: var(--muted); }
   footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
   @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .docmeta { display:flex; flex-wrap:wrap; gap:8px 34px; padding:12px 24px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:0.78rem; color:var(--muted); }
+  .docmeta b { display:block; font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px; }
+  .docmeta span { color:var(--ink); font-weight:500; }
+  footer.docfoot .legal { color:var(--ink); font-weight:500; margin-bottom:6px; }
+  @media print { .docmeta { break-inside:avoid; } }
 </style>
 
 <div class="suitebar">
@@ -98,6 +103,7 @@
   <span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
+<div class="docmeta"><div><b>Document</b><span>Vulnerability Finding Engine</span></div><div><b>Audience</b><span>Technical</span></div><div><b>Edition</b><span>October 2026</span></div><div><b>Classification</b><span>Customer confidential</span></div></div>
 
 <div class="shell">
   <nav class="toc" id="toc">
@@ -292,7 +298,7 @@ sequenceDiagram
       <div class="callout warn"><span class="label">Manually-curated datasets, not live connectors</span><p>Neither <code>security_controls.yaml</code> nor <code>network_topology.yaml</code> is populated by a firewall/EDR-vendor API call — there is no such connector in this repo today. Same disclosed, honest posture as <code>remediation/sample-data/threat_intel.json</code>: real, usable data structures, hand-maintained until (or unless) a live connector is built for them.</p></div>
     </section>
 
-    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c" target="_blank" rel="noopener" data-suite-link="connectors">Connectors &amp; Adaptors Catalog</a> or <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a>.</footer>
+    <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c" target="_blank" rel="noopener" data-suite-link="connectors">Connectors &amp; Adaptors Catalog</a> or <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a>.</footer>
   </main>
 </div>
 

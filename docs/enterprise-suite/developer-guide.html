@@ -74,6 +74,11 @@
   .step p { margin: 0; font-size: 0.87rem; color: var(--muted); }
   footer.docfoot { border-top: 1px solid var(--line); margin-top: 70px; padding: 22px 0 10px; color: var(--muted); font-size: 0.82rem; max-width: 78ch; }
   @media (max-width: 900px) { .toc { display: none; } main { padding: 0 20px 60px; max-width: 100%; } }
+  .docmeta { display:flex; flex-wrap:wrap; gap:8px 34px; padding:12px 24px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:0.78rem; color:var(--muted); }
+  .docmeta b { display:block; font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px; }
+  .docmeta span { color:var(--ink); font-weight:500; }
+  footer.docfoot .legal { color:var(--ink); font-weight:500; margin-bottom:6px; }
+  @media print { .docmeta { break-inside:avoid; } }
 </style>
 
 <div class="suitebar">
@@ -81,6 +86,7 @@
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
+<div class="docmeta"><div><b>Document</b><span>Developer Guide</span></div><div><b>Audience</b><span>Developers</span></div><div><b>Edition</b><span>October 2026</span></div><div><b>Classification</b><span>Customer confidential</span></div></div>
 
 <div class="shell">
   <nav class="toc" id="toc">
@@ -222,7 +228,7 @@ curl -k https://127.0.0.1:5050/api/status</pre></div>
       <p>There is no separate <code>/health</code>, <code>/api/health</code>, or <code>/api/version</code> route — <code>/api/status</code> is the one real health surface, and it already covers version. For a check outside this endpoint: the notification scheduler's own due-check logic is independently callable on demand via <code>POST /api/notification-settings/run-checks-now</code>, useful for confirming that background loop is actually reachable rather than only trusting <code>notification_scheduler_alive</code>.</p>
     </section>
 
-    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7" target="_blank" rel="noopener" data-suite-link="arch">Architecture &amp; Schema Reference</a> for the full data contract this all builds on.</footer>
+    <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7" target="_blank" rel="noopener" data-suite-link="arch">Architecture &amp; Schema Reference</a> for the full data contract this all builds on.</footer>
   </main>
 </div>
 

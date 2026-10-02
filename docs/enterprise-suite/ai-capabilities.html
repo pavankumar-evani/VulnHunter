@@ -103,6 +103,11 @@
     .pipeline-arrow { transform: rotate(90deg); align-self: center; }
     .pipeline-branch { flex-direction: column; }
   }
+  .docmeta { display:flex; flex-wrap:wrap; gap:8px 34px; padding:12px 24px; background:var(--surface-2); border-bottom:1px solid var(--line); font-size:0.78rem; color:var(--muted); }
+  .docmeta b { display:block; font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:2px; }
+  .docmeta span { color:var(--ink); font-weight:500; }
+  footer.docfoot .legal { color:var(--ink); font-weight:500; margin-bottom:6px; }
+  @media print { .docmeta { break-inside:avoid; } }
 </style>
 
 <div class="suitebar">
@@ -110,6 +115,7 @@
   <span class="sep">/</span><span class="doclabel">Enterprise Documentation Suite</span><span class="spacer"></span>
   <a class="hub" href="https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b" id="hub-link" target="_blank" rel="noopener">All documents ↗</a>
 </div>
+<div class="docmeta"><div><b>Document</b><span>AI Capabilities &amp; Guardrails</span></div><div><b>Audience</b><span>Technical</span></div><div><b>Edition</b><span>October 2026</span></div><div><b>Classification</b><span>Customer confidential</span></div></div>
 
 <div class="shell">
   <nav class="toc" id="toc">
@@ -413,7 +419,7 @@ Suggest concrete, specific remediation steps for this finding...</div>
       <p>Because they're not AI — they're transparent, disclosed keyword/pattern-matching heuristics with their exact reasoning shown on hover, not a model of any kind. This document covers only the surfaces that actually call an LLM (AI Assist, AI Trend Analysis) or a real trained model (ML Insights), plus the deterministic search (Ask Quanta) and the Claude Code subagent pipelines. Keeping that line sharp is deliberate — blurring "heuristic" and "AI" is exactly the kind of overclaiming a procurement reviewer is trained to catch.</p>
     </section>
 
-    <footer class="docfoot">Part of the Quanta Enterprise Documentation Suite. For the full OWASP LLM Top 10 2026 mapping and the real access-control model these guardrails sit on top of, see <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener">RBAC, Multi-Tenancy &amp; Governance</a>. For task-oriented, non-AI how-to answers, see the <a href="https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578" target="_blank" rel="noopener">User &amp; Operations Guide</a>.</footer>
+    <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. For the full OWASP LLM Top 10 2026 mapping and the real access-control model these guardrails sit on top of, see <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener">RBAC, Multi-Tenancy &amp; Governance</a>. For task-oriented, non-AI how-to answers, see the <a href="https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578" target="_blank" rel="noopener">User &amp; Operations Guide</a>.</footer>
   </main>
 </div>
 
