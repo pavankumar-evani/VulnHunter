@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,752 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,933 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,752 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,933 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -580,9 +580,29 @@ OpenAI organization usage, stored connections of kind pull/output `ai-usage`), `
 (table `ai_budgets`) and models outside `ai_usage_policy.yaml`'s approved list; `discovery.py` + `ai_domains.yaml` find unreviewed AI
 applications from proxy/DNS exports (table `ai_apps`; record and report only).
 
+**Threat models** (`remediation/threatmodel/`, page `/threat-models`, admin only): a system described as components, data flows and trust zones
+(tables `threat_models`, `threat_reviews`); `rules.py` raises STRIDE threats from explicit rules, computed on read so an edited model never leaves
+stale threats; `engine.py` scores them (likelihood x impact; residual = inherent x (1 - 0.7 x control coverage)) and joins each to live findings
+(ATT&CK technique or CWE overlap) and recorded controls; only people's decisions (accepted, mitigated, not applicable) are stored. `seed.py` builds a
+starting model from the asset inventory.
+
+**Governance, risk and compliance** (`remediation/grc/`, page `/grc`, admin only; policies list and acknowledgement need login only): framework
+catalogs (`catalog.py`: built-in subset catalogs in `builtin.yaml` for NIST 800-53 r5, CSF 2.0 and an AI-governance set, or a full catalog imported as
+OSCAL JSON), a risk register with likelihood x impact grids and suggestions drawn from live findings and threat models (`risks.py`), automated
+control tests (`evidence.py`, thresholds and test-to-control mappings in `remediation/config/grc_tests.yaml`, collected hourly by the leader's
+scheduler tick; too little data gives `na`, never a pass), attestations that sit beside the evidence, and versioned policies with acknowledgements.
+`report.py` gives per-control status and an OSCAL assessment-results export. Quanta supplies evidence and workflow; it does not certify compliance.
+
+**Threat hunting and SOC triage** (`remediation/hunting/`, page `/hunting`, admin only; tables `hunts`, `soc_alerts`): `generate.py` proposes one
+hunt per open CVE that is on the KEV list or has EPSS >= 0.5, with the affected hosts, the ATT&CK techniques Quanta tags and queries from
+`library.yaml` rendered as Splunk SPL by `translate.py` (a small translator for Sigma-style selections, not pySigma). Quanta does not run queries and is
+not a SIEM: the analyst runs them in their own tool and records each result and the hunt's outcome (closing needs one). Alerts arrive at
+`POST /api/ingest/alerts` (key scope `soc:write`); `triage.py` ranks them with vulnerability context and attaches a runbook from `runbooks.yaml`
+(technique, then title keywords, else a generic one). Hunt metrics include ATT&CK coverage of the techniques in the estate's open findings.
+
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
-`read:findings`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
+`read:findings` / `controls:write` / `ai-usage:write` / `soc:write`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
 guards `POST /api/ingest/findings`, `/api/ingest/scanner-csv`, `/api/inbound/ticket-status`,
 `GET /api/export/findings`; only `/api/ingest/`, `/api/inbound/`, `/api/export/` are exempt from the
 login gate, and only because each route checks a key itself. `/api/ingest/generic` needs a key when

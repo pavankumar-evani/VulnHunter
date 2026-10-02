@@ -120,7 +120,9 @@ It does **not** have a risk register, a control catalog, evidence collection, po
 5. **Policy library** with versions, owners and acknowledgement tracking.
 6. **Be explicit about scope.** Quanta supplies evidence and workflow; it does not certify compliance, and the docs must keep saying so.
 
-## 4. Threat hunting and SOC analyst capability (later phase)
+## 4. Threat hunting and SOC analyst capability (built: `remediation/hunting/`)
+
+**Status.** Built as phase 6: hunts proposed from KEV / high-EPSS exposure, a hunt workspace with queries rendered as Splunk SPL (run by the analyst in their own SIEM, results recorded in Quanta), alert intake and triage with vulnerability context, runbooks, and hunt metrics. Not built: running queries through a SIEM search API, OCSF ingest, SOAR execution, or pySigma-based translation to other query languages.
 
 **Boundary first.** Quanta is not a SIEM and should not try to become one. The sensible position is
 *exposure-aware* hunting and triage: it knows which assets carry exploitable, internet-reachable vulnerabilities,

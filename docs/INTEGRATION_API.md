@@ -206,6 +206,19 @@ zero. **Budgets** (organization, team or application; day, week or month; dollar
 projected and state. Unusual days are flagged against the median of the days before (`ai_usage_policy.yaml`), and `allowed_models` lists
 usage of any model outside your approved set. Quanta's own Claude calls are included as source `quanta`.
 
+### Send SIEM or XDR alerts for triage
+
+```bash
+curl -X POST https://quanta.example.com/api/ingest/alerts   -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json"   -d '{"alerts": [{"external_id": "ALERT-1042", "source": "splunk", "title": "Shell spawned by w3wp.exe", "severity": "High",
+       "asset": "WEB-1", "technique": "T1190", "detail": "w3wp.exe started cmd.exe", "occurred_at": "2026-10-02T09:14:00Z"}]}'
+```
+
+Needs a key with `soc:write`. An alert is unique per `source` + `external_id`, so a re-send changes nothing. `technique` is an ATT&CK id and
+`asset` is the host name Quanta knows it by; both are optional but are what lets Quanta add context. Severity is Critical, High, Medium, Low or
+Informational. Quanta ranks the triage queue by the alert's severity plus what it knows about the host (known-exploited vulnerabilities, a
+vulnerability matching the technique, a high exploitation probability, no recorded owner) and lists the reasons. It never changes the alert's own
+severity and never decides that an alert is real. Closing an alert needs a disposition.
+
 ### Report a ticket's state
 
 ```bash
