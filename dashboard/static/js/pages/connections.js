@@ -106,7 +106,7 @@ export async function render(container) {
             <button type="button" class="link-button danger-link" data-del="${c.id}">Delete</button></td></tr>`).join("")
           : `<tr><td colspan="7" class="empty-state">No connections yet.</td></tr>`}</tbody></table></div>
       <h2>Supported sources</h2>
-      <ul>${data.catalog.map((c) => `<li><strong>${escapeHtml(c.label)}</strong> (${escapeHtml(c.category)}) - ${escapeHtml(c.docs || "")} ${escapeHtml(c.note || "")}</li>`).join("")}</ul>
+      <ul>${data.catalog.map((c) => `<li><strong>${escapeHtml(c.label)}</strong> (${escapeHtml(c.category)})${c.docs || c.note ? ` - ${escapeHtml([c.docs, c.note].filter(Boolean).join(" "))}` : ""}</li>`).join("")}</ul>
       <p class="muted">OpenVAS/GVM launches a scan and polls for a long time, so it keeps its own page under Connectors / Adaptors.</p>`;
     container.querySelector("#add-conn").addEventListener("click", () => openEditor(data, null, load));
     container.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openEditor(data, data.connections.find((c) => String(c.id) === b.dataset.edit), load)));
