@@ -10,7 +10,7 @@ twice at once.
 import datetime
 
 from remediation.audit.activity_log import record_activity
-from remediation.connections import crypto, registry, store
+from remediation.connections import crypto, push, registry, store
 from remediation.ingest import merge
 
 
@@ -38,6 +38,14 @@ def run(connection_id, actor="scheduler", engine=None, findings_path=merge.DEFAU
         spec = registry.SPECS[public["type"]]
         # re-check the SSRF guard at run time: an edited config must never bypass it
         registry.split_values(public["type"], values)
+        if spec.get("kind") == "push":
+            r = push.push(spec["system"], spec["make"](values), connection_id, registry.rule_from(values), findings_path, engine, actor)
+            detail = r
+            message = (f"{r['matched']} matching finding(s): {r['sent']} sent, {r['errors']} failed"
+                       + (f"; {r['refreshed']} ticket state(s) updated from {public['label']}" if r["refreshed"] else "") + ".")
+            store.finish_run(connection_id, "ok" if not r["errors"] or r["sent"] else "error", message, r["sent"], engine, now)
+            record_activity(actor, "connection.sync", name, {"ok": True, **r}, engine=engine)
+            return {"ok": True, "message": message, "count": r["sent"], "detail": detail}
         pulled = spec["pull"](values)
         if pulled["kind"] == "findings":
             result = merge.merge(pulled["findings"], public["type"], findings_path, reconcile=pulled.get("reconcile", False))
@@ -69,6 +77,19 @@ def run(connection_id, actor="scheduler", engine=None, findings_path=merge.DEFAU
     store.finish_run(connection_id, "error", message, None, engine, now)
     record_activity(actor, "connection.sync", name, {"ok": False, "error": message[:300]}, engine=engine)
     return {"ok": False, "message": message, "count": None, "detail": {}}
+
+
+def enqueue_due(engine=None, now=None):
+    """The scheduler tick for a multi-replica deployment: queues a sync job for every connection
+    whose interval has elapsed and lets the workers run them. The dedupe key means a connection
+    already queued or running is not queued again, so a slow sync or a double tick is harmless."""
+    from remediation.coordination import jobs, worker
+    out = []
+    for c in store.due(engine, now):
+        out.append({"id": c["id"], "name": c["name"],
+                    "job": jobs.enqueue(worker.KIND_CONNECTION_SYNC, {"connection_id": c["id"], "actor": "scheduler"},
+                                        dedupe_key=f"sync:{c['id']}", engine=engine)})
+    return out
 
 
 def run_due(engine=None, findings_path=merge.DEFAULT_PATH, now=None):

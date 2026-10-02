@@ -11,7 +11,9 @@ flag (fails if the file already exists; succeeds only for whichever caller gets
 there first) rather than fcntl/msvcrt, since those are platform-specific
 (Unix-only / Windows-only respectively) and this app runs on both. This is the same
 dependency-free "lock file" pattern real small tools use for single-machine
-coordination - it is explicitly NOT a distributed lock. It coordinates processes on
+coordination - it is explicitly NOT a distributed lock. For several replicas, set
+QUANTA_LOCK_BACKEND=db and the same calls take a lease row in the shared database instead
+(remediation/coordination/leases.py), which does work across nodes. It coordinates processes on
 ONE machine sharing ONE filesystem, which is this app's actual deployment model (see
 dashboard/README.md's "What this is NOT (yet)" section - even the stores that have
 since moved to a real local SQLite database are still one file on one machine; a real
@@ -20,6 +22,7 @@ transactions instead of this).
 """
 import os
 import time
+from pathlib import Path
 
 DEFAULT_TIMEOUT_SECONDS = 5.0
 _POLL_INTERVAL_SECONDS = 0.02
@@ -35,12 +38,38 @@ class FileLock:
     exception). Raises LockTimeoutError if it can't acquire within `timeout` seconds -
     a real, visible failure rather than hanging a request forever."""
 
-    def __init__(self, path, timeout=DEFAULT_TIMEOUT_SECONDS):
+    def __init__(self, path, timeout=DEFAULT_TIMEOUT_SECONDS, local=False):
         self.lock_path = f"{path}.lock"
         self.timeout = timeout
+        self.local = local  # True: always a file lock (used where a database lease would be circular)
         self._fd = None
+        self._lease = None
+
+    def _use_lease(self):
+        return not self.local and os.environ.get("QUANTA_LOCK_BACKEND", "file").strip().lower() == "db"
+
+    def _lease_name(self):
+        # the same logical lock must get the same name on every replica, whatever the mount path
+        repo = Path(__file__).resolve().parents[2]
+        p = Path(self.lock_path).resolve()
+        try:
+            return "lock:" + p.relative_to(repo).as_posix()
+        except ValueError:
+            return "lock:" + p.name
 
     def acquire(self):
+        if self._use_lease():
+            # QUANTA_LOCK_BACKEND=db: a lease row in the shared database, which works across
+            # nodes where a lock file on a network volume does not (see remediation/coordination).
+            from remediation.coordination import leases
+            holder = leases.new_holder_id()
+            deadline = time.monotonic() + self.timeout
+            while not leases.acquire(self._lease_name(), holder, max(self.timeout * 2, 120.0)):
+                if time.monotonic() >= deadline:
+                    raise LockTimeoutError(f"Could not acquire lock {self._lease_name()!r} within {self.timeout}s - another replica is holding it.")
+                time.sleep(_POLL_INTERVAL_SECONDS)
+            self._lease = holder
+            return
         deadline = time.monotonic() + self.timeout
         while True:
             try:
@@ -80,6 +109,13 @@ class FileLock:
             pass  # already removed/replaced by someone else - fine, just retry
 
     def release(self):
+        if self._lease is not None:
+            from remediation.coordination import leases
+            try:
+                leases.release(self._lease_name(), self._lease)
+            finally:
+                self._lease = None
+            return
         if self._fd is not None:
             os.close(self._fd)
             self._fd = None

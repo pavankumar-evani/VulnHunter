@@ -22,13 +22,48 @@ from remediation.connectors.axonius_connector import AxoniusConnector
 from remediation.connectors.cortex_xsiam_connector import CortexXsiamConnector
 from remediation.connectors.infoblox_connector import InfobloxConnector
 from remediation.connectors.prismacloud_connector import PrismaCloudConnector
+from remediation.connectors.jira_connector import JiraConnector
 from remediation.connectors.qualys_connector import QualysConnector
+from remediation.connectors.servicenow_connector import ServiceNowConnector
+from remediation.connectors.splunk_connector import SplunkConnector
 from remediation.connectors.tenable_connector import TenableConnector
+from remediation.connections import push as push_mod
 from remediation.ingest import scanner_csv
 
 
-def _f(name, label, secret=False, required=True, kind="text", placeholder="", help=""):
-    return {"name": name, "label": label, "secret": secret, "required": required, "type": kind, "placeholder": placeholder, "help": help}
+def _f(name, label, secret=False, required=True, kind="text", placeholder="", help="", options=None):
+    f = {"name": name, "label": label, "secret": secret, "required": required, "type": kind, "placeholder": placeholder, "help": help}
+    if options:
+        f["options"] = options
+    return f
+
+
+def _rule_fields():
+    return [
+        _f("min_severity", "Send findings at or above", required=False, kind="select", options=["Critical", "High", "Medium", "Low"],
+           help="Default High"),
+        _f("kev_only", "Only findings on the CISA KEV list", required=False, kind="checkbox"),
+        _f("min_epss", "Minimum EPSS exploit probability, 0 to 1 (optional)", required=False, placeholder="0.5"),
+        _f("max_per_run", "Most tickets per run", required=False, placeholder="50"),
+    ]
+
+
+def rule_from(values):
+    """The push rule held in a connection's settings."""
+    return {k: values.get(k) for k in ("min_severity", "kev_only", "min_epss", "max_per_run") if values.get(k) not in (None, "")}
+
+
+def _validate_push(values):
+    push_mod.normalise_rule(rule_from(values))
+
+
+_INSTANCE = __import__("re").compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+
+
+def _validate_snow(values):
+    if not _INSTANCE.match(str(values.get("instance", ""))):
+        raise ValueError("instance must be just your ServiceNow instance name, for example 'acme' for acme.service-now.com")
+    _validate_push(values)
 
 
 def _csv_pull(connector, source, reconcile):
@@ -119,9 +154,41 @@ SPECS = {
 }
 
 
+SPECS.update({
+    "servicenow": {
+        "label": "ServiceNow", "category": "Ticketing", "output": "tickets", "kind": "push", "system": "servicenow",
+        "fields": [_f("instance", "Instance name", placeholder="acme  (for acme.service-now.com)"), _f("username", "Integration user"),
+                   _f("password", "Password", secret=True), _f("table", "Table", required=False, placeholder="incident")] + _rule_fields(),
+        "docs": "Create an integration user that can create and read incidents. Quanta sets correlation_id to the finding id, so a re-run never duplicates a ticket, and reads incident state back.",
+        "note": "State comes back by polling on each run; you can also have ServiceNow call Quanta's inbound API on update (see docs/INTEGRATION_API.md).",
+        "validate": _validate_snow,
+        "make": lambda c: ServiceNowConnector(c["instance"], c["username"], c["password"], table=c.get("table") or "incident"),
+        "test": lambda c: ServiceNowConnector(c["instance"], c["username"], c["password"], table=c.get("table") or "incident").find_existing_incident("QUANTA-CONNECTION-TEST"),
+    },
+    "jira": {
+        "label": "Jira Cloud", "category": "Ticketing", "output": "tickets", "kind": "push", "system": "jira",
+        "fields": [_f("base_url", "Site URL", placeholder="https://acme.atlassian.net"), _f("email", "Account email"),
+                   _f("api_token", "API token", secret=True), _f("project_key", "Project key", placeholder="SEC")] + _rule_fields(),
+        "safe_targets": ["base_url"], "validate": _validate_push,
+        "docs": "Atlassian account settings > Security > API tokens. Issues are labelled quanta-<finding id> so a re-run never duplicates one.",
+        "make": lambda c: JiraConnector(c["base_url"], c["email"], c["api_token"], c["project_key"]),
+        "test": lambda c: JiraConnector(c["base_url"], c["email"], c["api_token"], c["project_key"]).find_existing_issue("QUANTA-CONNECTION-TEST"),
+    },
+    "splunk": {
+        "label": "Splunk HEC", "category": "SIEM / logging", "output": "events", "kind": "push", "system": "splunk",
+        "fields": [_f("hec_url", "HEC endpoint URL", placeholder="https://splunk.acme.com:8088/services/collector/event"),
+                   _f("hec_token", "HEC token", secret=True)] + _rule_fields(),
+        "safe_targets": ["hec_url"], "validate": _validate_push,
+        "docs": "Splunk > Settings > Data inputs > HTTP Event Collector. Each finding is sent once as an event (an append-only stream, so no duplicate check).",
+        "make": lambda c: SplunkConnector(c["hec_url"], c["hec_token"]),
+        "test": lambda c: SplunkConnector(c["hec_url"], c["hec_token"]).session.get(c["hec_url"].rsplit("/services/", 1)[0] + "/services/collector/health", timeout=15).raise_for_status(),
+    },
+})
+
+
 def public_catalog():
     """What the UI needs: the types and their fields, never the callables."""
-    return [{"type": t, **{k: v for k, v in s.items() if k in ("label", "category", "output", "fields", "docs", "note")}} for t, s in SPECS.items()]
+    return [{"type": t, **{k: v for k, v in s.items() if k in ("label", "category", "output", "fields", "docs", "note")}, "kind": s.get("kind", "pull")} for t, s in SPECS.items()]
 
 
 def split_values(conn_type, values):
@@ -135,6 +202,8 @@ def split_values(conn_type, values):
         v = values.get(f["name"])
         if f["type"] == "checkbox":
             v = bool(v)
+        elif f["type"] == "select" and v and v not in f.get("options", []):
+            raise ValueError(f"{f['label']} must be one of {', '.join(f['options'])}")
         elif isinstance(v, str):
             v = v.strip()
         if f["required"] and (v is None or v == ""):
@@ -149,4 +218,6 @@ def split_values(conn_type, values):
                 url_safety.assert_safe_target(target)
             except url_safety.UnsafeTargetError as exc:
                 raise ValueError(f"{name}: {exc}") from exc
+    if spec.get("validate"):
+        spec["validate"]({**config, **secrets})
     return config, secrets

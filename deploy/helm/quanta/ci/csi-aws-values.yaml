@@ -1,0 +1,11 @@
+# Scenario: AWS Secrets Manager through the Secrets Store CSI driver and IRSA.
+image:
+  repository: registry.example.com/quanta
+  tag: "1.0.0"
+secrets:
+  mode: csi
+  csi:
+    provider: aws
+    aws: {region: eu-west-1}
+serviceAccount:
+  annotations: {eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/quanta-secrets"}

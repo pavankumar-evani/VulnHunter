@@ -29,11 +29,10 @@ from remediation.support import analytics, escalation, routing, sla, store  # no
 from remediation.utils import db as db_module  # noqa: E402
 
 UTC = datetime.timezone.utc
-NOW = datetime.datetime.now(UTC)
-
-
 def ago(minutes):
-    return NOW - datetime.timedelta(minutes=minutes)
+    # read the clock when called, not at import: the full suite imports every module up front and
+    # can run for minutes before reaching a test, which would age every ticket by that long
+    return datetime.datetime.now(UTC) - datetime.timedelta(minutes=minutes)
 
 
 TEAMS = {"platform engineering": {"name": "Platform Engineering", "manager_email": "boss@t.local"}}

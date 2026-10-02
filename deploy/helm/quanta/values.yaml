@@ -1,0 +1,213 @@
+# Quanta Helm chart values.
+#
+# Nothing secret belongs in this file or in any --set flag. Secrets come from a key vault (see
+# `secrets` below) and reach the pods as read-only files, never as environment variables, a
+# ConfigMap or an image layer.
+
+image:
+  repository: ghcr.io/your-org/quanta        # build with the repo's Dockerfile and push to your registry
+  tag: ""                                    # defaults to the chart's appVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []                         # e.g. [{name: registry-credentials}]
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------------------------------------------------------------------- web tier
+web:
+  replicas: 2
+  port: 5050
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 1Gi}
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  # Trust X-Forwarded-For from the ingress so rate limits and the audit log record real client
+  # IPs. Only turn this on together with networkPolicy.enabled, so that nothing but the ingress
+  # controller can reach the pods and forge the header.
+  trustForwardedHeaders: false
+  # Run the queue worker inside the web pods as well. Leave false when the worker Deployment is on.
+  embeddedWorker: false
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ---------------------------------------------------------------------------- queue workers
+# Workers run connection syncs and ticket pushes. Scale them on their own; a job claimed by a
+# worker that dies is handed to another after the visibility timeout.
+worker:
+  enabled: true
+  replicas: 2
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 1Gi}
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+  jobVisibilitySeconds: 300                  # how long a job may run without a heartbeat before it is given back
+  terminationGracePeriodSeconds: 120         # a worker finishes its current job on SIGTERM; give it time
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ---------------------------------------------------------------------------- application settings (not secret)
+config:
+  production: true                           # refuses to start with demo accounts or a missing session secret
+  logFormat: json
+  bootstrapAdminEmail: ""                    # the first administrator; the password comes from the vault (QUANTA_ADMIN_PASSWORD)
+  supportEmail: ""
+  smtp:
+    host: ""
+    port: "587"
+    fromAddress: ""
+  leaderTtlSeconds: 60                       # a dead scheduler leader is replaced after this long
+  extraEnv: []                               # [{name: X, value: "y"}]; never put secrets here
+
+# ---------------------------------------------------------------------------- database
+# Quanta needs a shared PostgreSQL once there is more than one replica; SQLite is a single-file,
+# single-writer database. Use a managed service (Azure Database for PostgreSQL, Amazon RDS, Cloud
+# SQL) and put the full connection URL in the vault as QUANTA_DATABASE_URL, for example
+#   postgresql+psycopg2://quanta:<password>@host:5432/quanta?sslmode=require
+# The chart does not run a database.
+
+# ---------------------------------------------------------------------------- shared storage
+# The findings system of record and the policy YAML are files that every replica must see, so a
+# ReadWriteMany volume (Azure Files, EFS, Filestore, NFS, CephFS) is required for more than one
+# replica. Locks and the queue do not depend on this volume: they live in the database
+# (coordination.lockBackend). See docs/KUBERNETES.md for what the volume holds and why.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes: [ReadWriteMany]
+  size: 10Gi
+  annotations: {}
+
+coordination:
+  lockBackend: db                            # db: leases in the shared database. file: lock files (single replica only)
+
+# ---------------------------------------------------------------------------- secrets
+# One list drives everything: each name here is read by the app from a file called NAME in
+# /var/run/secrets/quanta (via NAME_FILE) and is pulled from the vault under the name given in
+# `keyMap`. Pick ONE mode.
+secrets:
+  mode: externalSecrets                      # externalSecrets | csi | existingSecret | inline (dev only)
+  mountPath: /var/run/secrets/quanta
+  keys:                                      # required
+    - QUANTA_SESSION_SECRET                  # signs login sessions; any long random string (python cli/quanta_admin.py gen-secret)
+    - QUANTA_ENCRYPTION_KEY                  # Fernet key that encrypts stored connector credentials (gen-key); comma-separate to rotate
+    - QUANTA_DATABASE_URL                    # the PostgreSQL URL, password included
+  optionalKeys: []                           # add any of: QUANTA_ADMIN_PASSWORD, QUANTA_METRICS_TOKEN, SMTP_USERNAME, SMTP_PASSWORD, OIDC_CLIENT_SECRET
+  # The vault entry name for each setting (the vault's own naming rules differ: Azure Key Vault
+  # does not allow underscores). A name not listed here is used as is.
+  keyMap:
+    QUANTA_SESSION_SECRET: quanta-session-secret
+    QUANTA_ENCRYPTION_KEY: quanta-encryption-key
+    QUANTA_DATABASE_URL: quanta-database-url
+    QUANTA_ADMIN_PASSWORD: quanta-admin-password
+    QUANTA_METRICS_TOKEN: quanta-metrics-token
+    SMTP_USERNAME: quanta-smtp-username
+    SMTP_PASSWORD: quanta-smtp-password
+    OIDC_CLIENT_SECRET: quanta-oidc-client-secret
+
+  # --- mode: externalSecrets (recommended) --------------------------------------------------
+  # The External Secrets Operator reads the vault with the cluster's workload identity and keeps
+  # a Kubernetes Secret in sync; the chart mounts it as files. Install the operator first and
+  # create a (Cluster)SecretStore for your vault: https://external-secrets.io
+  externalSecrets:
+    apiVersion: external-secrets.io/v1
+    secretStoreRef:
+      kind: ClusterSecretStore               # or SecretStore
+      name: ""                               # required in this mode
+    refreshInterval: 1h                      # a rotated vault value reaches the pods within this time (+ kubelet sync)
+
+  # --- mode: csi ----------------------------------------------------------------------------
+  # The Secrets Store CSI driver mounts the vault objects straight into the pod as files; the
+  # value never exists as a Kubernetes Secret. Install the driver and your provider first.
+  csi:
+    provider: azure                          # azure | aws | gcp | vault
+    # azure
+    azure:
+      keyvaultName: ""
+      tenantId: ""
+      clientID: ""                           # Microsoft Entra Workload ID: client id of the identity federated to the service account (preferred)
+      userAssignedIdentityID: ""             # alternative: client id of a managed identity on the node pool
+    # aws: objects are looked up by the names in keyMap
+    aws:
+      region: ""
+    # gcp
+    gcp:
+      project: ""
+    # vault (HashiCorp): pass the provider parameters through verbatim
+    parameters: {}                           # extra/overriding provider parameters
+
+  # --- mode: existingSecret -----------------------------------------------------------------
+  # A Secret you manage yourself (sealed-secrets, SOPS, a platform team's controller). It must
+  # contain one key per name in `keys` (+ `optionalKeys`).
+  existingSecret: ""
+
+  # --- mode: inline (development only) -------------------------------------------------------
+  # Puts values into a Secret created from this values file, which means they pass through your
+  # CI, helm release history and shell. The chart refuses it unless you also set allowInline.
+  allowInline: false
+  inline: {}
+
+serviceAccount:
+  create: true
+  name: ""
+  # Cloud workload identity for the vault: the annotation or label that binds this service
+  # account to a managed identity / IAM role, for example
+  #   azure.workload.identity/client-id: "<client id>"          (and pod label azure.workload.identity/use: "true")
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/quanta-secrets
+  #   iam.gke.io/gcp-service-account: quanta@project.iam.gserviceaccount.com
+  annotations: {}
+  podLabels: {}
+
+# ---------------------------------------------------------------------------- network
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}                            # e.g. cert-manager.io/cluster-issuer: letsencrypt
+  host: quanta.example.com
+  tls:
+    enabled: true
+    secretName: quanta-tls                   # created by cert-manager or you
+
+networkPolicy:
+  enabled: false
+  # namespace labels allowed to reach the web pods (your ingress controller's namespace)
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+  # outbound: the database, DNS, the vendor APIs Quanta connects to and the vault. Left open on
+  # port 443/5432/53 by default; tighten with cidr blocks for your environment.
+  egress:
+    allowDns: true
+    ports: [443, 5432, 587]
+
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+# metrics: /metrics is served only when QUANTA_METRICS_TOKEN is set (add it to optionalKeys)
+serviceMonitor:
+  enabled: false                             # requires the Prometheus Operator CRDs and a metrics token Secret
+  interval: 30s
+  tokenSecretName: ""                        # a Secret with key `token` holding the same value as QUANTA_METRICS_TOKEN

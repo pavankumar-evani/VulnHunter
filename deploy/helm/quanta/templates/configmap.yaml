@@ -1,0 +1,13 @@
+{{- /* Non-secret settings, kept as a ConfigMap so a change rolls the pods (see the checksum annotation). */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "quanta.fullname" . }}
+  labels:
+    {{- include "quanta.labels" . | nindent 4 }}
+data:
+  production: {{ .Values.config.production | quote }}
+  lockBackend: {{ .Values.coordination.lockBackend | quote }}
+  logFormat: {{ .Values.config.logFormat | quote }}
+  leaderTtlSeconds: {{ .Values.config.leaderTtlSeconds | quote }}
+  secretKeys: {{ include "quanta.secretKeys" . | quote }}

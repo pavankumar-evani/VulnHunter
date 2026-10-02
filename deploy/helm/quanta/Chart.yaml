@@ -1,0 +1,13 @@
+apiVersion: v2
+name: quanta
+description: Quanta vulnerability management and remediation. A web tier, queue workers and a scheduler leader election that scale out together, with secrets read from a key vault.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0-0"
+keywords:
+  - security
+  - vulnerability-management
+home: https://quanta.example.com
+maintainers:
+  - name: Quanta Development LLC

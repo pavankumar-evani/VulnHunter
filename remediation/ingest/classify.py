@@ -15,7 +15,7 @@ import re
 
 # (asset type, regex over "os + name + plugin/title", remediation_domain or None)
 _RULES = [
-    ("iot-ot-device", r"\b(plc|scada|hmi|rtu|modbus|siemens simatic|rockwell|allen[- ]bradley|schneider electric|ics\b|industrial control)", None),
+    ("iot-ot-device", r"\b(plc|scada|hmi|rtu|modbus|siemens simatic|rockwell|allen[- ]bradley|schneider electric|ics\b|industrial control)", "iot-ot-device"),
     ("printer", r"\b(printer|laserjet|officejet|xerox|ricoh|konica|lexmark|brother mfc|jetdirect)", None),
     ("virtualization-host", r"\b(esxi|vcenter|vmware vsphere|hyper-v|proxmox|xenserver|kvm host)", None),
     ("network-security-device", r"\b(palo alto|pan-os|fortigate|fortios|fortinet|check ?point|cisco asa|firepower|sonicwall|watchguard|juniper srx|f5 big-?ip|barracuda|netscaler)", None),

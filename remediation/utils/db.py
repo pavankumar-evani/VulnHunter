@@ -16,11 +16,12 @@ Tests inject a separate `engine=` (typically `create_engine("sqlite:///:memory:"
 instead of a file path, mirroring the exact same "isolate storage per test" intent the
 old `path=None` parameter served on the JSON-backed stores.
 """
+import contextlib
 import os
 import weakref
 from pathlib import Path
 
-from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table, Text, create_engine
+from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table, Text, create_engine, text
 
 from remediation.utils.file_lock import FileLock
 
@@ -298,6 +299,91 @@ connections = Table(
 )
 
 
+# Keys that external systems use to call INTO Quanta (remediation/apikeys/). Only a SHA-256
+# hash of the key is stored; the key itself is shown once at creation.
+api_keys = Table(
+    "api_keys", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False),
+    Column("prefix", String, nullable=False, index=True),
+    Column("key_hash", String, nullable=False),
+    Column("scopes", Text, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("expires_at", String, nullable=True),
+    Column("last_used_at", String, nullable=True),
+    Column("revoked_at", String, nullable=True),
+)
+
+# Links between a finding and a ticket in an external system (remediation/connections/links.py).
+ticket_links = Table(
+    "ticket_links", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("connection_id", Integer, nullable=True),
+    Column("finding_id", String, nullable=False, index=True),
+    Column("system", String, nullable=False),
+    Column("external_id", String, nullable=True),
+    Column("external_ref", String, nullable=True),
+    Column("state", String, nullable=True),
+    Column("last_error", Text, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+
+# Coordination between replicas (remediation/coordination/): a named lease with an expiry,
+# used for cross-replica locks and for electing the one replica that runs the schedulers.
+leases = Table(
+    "leases", metadata,
+    Column("name", String, primary_key=True),
+    Column("holder", String, nullable=False),
+    Column("expires_at", Float, nullable=False),
+)
+
+# A durable job queue (remediation/coordination/jobs.py). Any replica enqueues; workers claim.
+jobs = Table(
+    "jobs", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", String, nullable=False),
+    Column("payload", Text, nullable=False),
+    Column("status", String, nullable=False, index=True),
+    Column("attempts", Integer, nullable=False, default=0),
+    Column("max_attempts", Integer, nullable=False, default=3),
+    Column("run_after", Float, nullable=False, index=True),
+    Column("locked_by", String, nullable=True),
+    Column("locked_until", Float, nullable=True),
+    Column("dedupe_key", String, nullable=True, index=True),
+    Column("result", Text, nullable=True),
+    Column("error", Text, nullable=True),
+    Column("created_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=False),
+)
+
+
+_SCHEMA_ADVISORY_KEY = 727270001
+
+
+@contextlib.contextmanager
+def _cluster_schema_lock(engine):
+    """On PostgreSQL, a session advisory lock so that several replicas starting at once do not
+    race to create tables or apply a migration (the file lock above only covers one machine).
+    A no-op on SQLite, which has a single process on a single file."""
+    if engine.dialect.name != "postgresql":
+        yield
+        return
+    conn = engine.connect()
+    try:
+        conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _SCHEMA_ADVISORY_KEY})
+        conn.commit()
+        yield
+    finally:
+        try:
+            conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _SCHEMA_ADVISORY_KEY})
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -313,15 +399,16 @@ def ensure_schema(engine):
     against a fresh on-disk DB hit it directly). This lock is scoped to schema
     creation specifically, separate from every store's own lock, since it's the one
     piece every store's first-ever access shares."""
-    with FileLock(_SCHEMA_LOCK_PATH):
+    with FileLock(_SCHEMA_LOCK_PATH, local=True), _cluster_schema_lock(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
-            teams, finding_assignments, support_tickets, support_ticket_comments, connections,
+            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations
-        migrations.apply(engine)
+        with _cluster_schema_lock(engine):
+            migrations.apply(engine)
         _MIGRATED.add(engine)
 
 

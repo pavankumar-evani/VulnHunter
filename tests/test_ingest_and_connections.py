@@ -364,9 +364,12 @@ class ConnectionApiTests(unittest.TestCase):
     def test_sync_endpoint_starts_a_background_run(self):
         self.login("admin@t.local")
         cid = self.client.post("/api/connections", json=self.BODY).json()["id"]
-        with patch.object(sync, "run") as run:
-            r = self.client.post(f"/api/connections/{cid}/sync")
-        self.assertEqual((r.status_code, r.json()), (200, {"started": True}))
+        r = self.client.post(f"/api/connections/{cid}/sync")
+        self.assertEqual((r.status_code, r.json()), (200, {"started": True, "job": 1}))
+        from remediation.coordination import jobs
+        queued = jobs.get(1, self.engine)
+        self.assertEqual((queued["kind"], queued["payload"]["connection_id"], queued["status"]), ("connection.sync", cid, "queued"))
+        self.assertEqual(self.client.post(f"/api/connections/{cid}/sync").json()["job"], 1)  # a second click does not queue a second sync
         self.assertEqual(self.client.post("/api/connections/999/sync").status_code, 404)
 
 

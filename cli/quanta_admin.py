@@ -37,6 +37,10 @@ sys.path[:0] = [str(REPO_ROOT), str(REPO_ROOT / "dashboard")]
 from sqlalchemy import select, text, update  # noqa: E402
 from sqlalchemy.engine import make_url  # noqa: E402
 
+from remediation.utils import secret_files  # noqa: E402
+
+secret_files.load_file_env()
+
 from remediation.connections import crypto  # noqa: E402
 from remediation.utils import db as db_module  # noqa: E402
 from remediation.utils import migrations  # noqa: E402
@@ -305,11 +309,39 @@ def cmd_rotate_keys(_a):
     print(f"Re-encrypted {n} connection(s) under the newest key. You can now remove the old key from QUANTA_ENCRYPTION_KEY.")
 
 
+def cmd_prepare(_a):
+    """First-run work for a deployment with several replicas: create the schema, set sample data
+    aside and create the first admin, exactly once. Every replica's init container runs this; a
+    database lease makes the others wait for the first to finish, and each step is idempotent."""
+    from remediation.coordination import leases
+    with leases.lease_lock("prepare", ttl=600, timeout=900):
+        cmd_init(None)
+        if os.environ.get("QUANTA_PRODUCTION", "").strip().lower() in ("1", "true", "yes") and os.environ.get("QUANTA_KEEP_SAMPLE_DATA") != "true":
+            cmd_clear_sample_data(argparse.Namespace(yes=True))
+        cmd_bootstrap(None)
+    return 0
+
+
+def cmd_worker(_a):
+    from remediation.coordination import worker
+    worker.main()
+    return 0
+
+
+def cmd_jobs(_a):
+    from remediation.coordination import jobs
+    s = jobs.stats()
+    print("Jobs: " + ", ".join(f"{k} {v}" for k, v in s.items()))
+    for j in jobs.recent(10):
+        print(f"  #{j['id']} {j['kind']} {j['status']} attempts={j['attempts']}" + (f"  error: {j['error']}" if j["error"] else ""))
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="quanta-admin", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="command", required=True)
     for name, fn in (("gen-key", cmd_gen_key), ("gen-secret", cmd_gen_secret), ("init", cmd_init), ("bootstrap", cmd_bootstrap), ("list-users", cmd_list_users),
-                     ("check", cmd_check), ("rotate-keys", cmd_rotate_keys)):
+                     ("check", cmd_check), ("rotate-keys", cmd_rotate_keys), ("worker", cmd_worker), ("jobs", cmd_jobs), ("prepare", cmd_prepare)):
         sub.add_parser(name).set_defaults(fn=fn)
     cs = sub.add_parser("clear-sample-data")
     cs.add_argument("--yes", action="store_true")

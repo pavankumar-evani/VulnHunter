@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "quanta.fullname" . }}-test-health
+  labels:
+    {{- include "quanta.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    {{- include "quanta.podSecurityContext" . | nindent 4 }}
+  containers:
+    - name: health
+      image: {{ include "quanta.image" . }}
+      command: ["python", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://{{ include "quanta.fullname" . }}:{{ .Values.service.port }}/readyz', timeout=10); sys.exit(0 if r.status == 200 else 1)"]
+      securityContext:
+        {{- include "quanta.containerSecurityContext" . | nindent 8 }}

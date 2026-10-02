@@ -12,6 +12,9 @@ from . import sessions
 
 SESSION_COOKIE_NAME = "quanta_session"
 
+from remediation.utils import secret_files  # noqa: E402
+
+secret_files.load_file_env()  # a key vault mounted as files supplies QUANTA_SESSION_SECRET_FILE etc.
 _env_secret = os.environ.get("QUANTA_SESSION_SECRET")
 if _env_secret:
     SESSION_SECRET = _env_secret

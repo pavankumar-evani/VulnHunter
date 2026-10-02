@@ -1,0 +1,56 @@
+{{- if .Values.networkPolicy.enabled }}
+# Only the ingress controller may reach the web pods; workers accept no inbound traffic at all.
+# Outbound is limited to DNS and the ports Quanta needs (HTTPS to vendor APIs and the vault,
+# PostgreSQL, SMTP). Narrow `egress` further with CIDR blocks for your environment.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "quanta.fullname" . }}-web
+  labels:
+    {{- include "quanta.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "quanta.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        {{- toYaml .Values.networkPolicy.ingressFrom | nindent 8 }}
+      ports:
+        - port: {{ .Values.web.port }}
+  egress:
+    {{- if .Values.networkPolicy.egress.allowDns }}
+    - ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- end }}
+    - ports:
+        {{- range .Values.networkPolicy.egress.ports }}
+        - port: {{ . }}
+        {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "quanta.fullname" . }}-worker
+  labels:
+    {{- include "quanta.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "quanta.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    {{- if .Values.networkPolicy.egress.allowDns }}
+    - ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- end }}
+    - ports:
+        {{- range .Values.networkPolicy.egress.ports }}
+        - port: {{ . }}
+        {{- end }}
+{{- end }}

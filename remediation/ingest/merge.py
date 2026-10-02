@@ -35,8 +35,8 @@ def _next_number(findings):
     return max(nums, default=0) + 1
 
 
-def load(path=DEFAULT_PATH):
-    path = Path(path)
+def load(path=None):
+    path = Path(path or DEFAULT_PATH)  # resolved at call time so the location can be redirected
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
 
 
@@ -55,9 +55,9 @@ def _atomic_write(path, findings):
             os.unlink(tmp)
 
 
-def merge(new_findings, source, path=DEFAULT_PATH, reconcile=False):
+def merge(new_findings, source, path=None, reconcile=False):
     """Returns {added, updated, removed, total}. Nothing is written when there is no change."""
-    path = Path(path)
+    path = Path(path or DEFAULT_PATH)
     with FileLock(str(path), timeout=60.0):
         existing = load(path)
         index = {key_of(f): i for i, f in enumerate(existing) if f.get("source") == source}

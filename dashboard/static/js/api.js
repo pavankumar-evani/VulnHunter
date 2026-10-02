@@ -112,6 +112,18 @@ export const api = {
   deleteConnection: (id) => request("DELETE", `/api/connections/${id}`),
   testConnectionValues: (body) => request("POST", "/api/connections/test", body),
   syncConnection: (id) => request("POST", `/api/connections/${id}/sync`, {}),
+  apiKeys: () => request("GET", "/api/api-keys"),
+  createApiKey: (body) => request("POST", "/api/api-keys", body),
+  revokeApiKey: (id) => request("DELETE", `/api/api-keys/${id}`),
+  connectionSchema: () => request("GET", "/api/connections/schema"),
+  findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
+  importScannerFile: async (source, reconcile, file) => {
+    const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
   supportAnalytics: () => request("GET", "/api/support/analytics"),
   findingTickets: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/tickets`),
   authMe: () => request("GET", "/api/auth/me"),

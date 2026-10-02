@@ -21,7 +21,7 @@ from pathlib import Path
 
 import uvicorn
 import yaml
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from sqlalchemy import func, select
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -42,10 +42,16 @@ from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
 import observability  # noqa: E402
+from remediation.apikeys import store as apikey_store  # noqa: E402
 from remediation.connections import crypto as conn_crypto  # noqa: E402
+from remediation.connections import links as conn_links  # noqa: E402
+from remediation.ingest import api_findings, merge as findings_merge, scanner_csv  # noqa: E402
 from remediation.connections import registry as conn_registry  # noqa: E402
 from remediation.connections import store as conn_store  # noqa: E402
 from remediation.connections import sync as conn_sync  # noqa: E402
+from remediation.coordination import jobs as job_queue  # noqa: E402
+from remediation.coordination import worker as job_worker  # noqa: E402
+from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.support import analytics as support_analytics  # noqa: E402
 from remediation.support import escalation as support_escalation  # noqa: E402
 from remediation.support import routing as support_routing  # noqa: E402
@@ -216,6 +222,9 @@ async def _security_headers(request: Request, call_next):
 # nobody could ever log in. Deliberately narrow: /api/auth/change-password and
 # /api/directory/status are informational/mutation routes that already require (or
 # can safely require) a real session, so they're not exempted here.
+# Routes for machine callers. They are exempt from the browser-login gate ONLY because each one
+# requires a valid API key with the right scope (require_api_key below); nothing else is exempt.
+_API_KEY_PATH_PREFIXES = ("/api/ingest/", "/api/inbound/", "/api/export/")
 _AUTH_FLOW_PATHS = frozenset({
     "/api/auth/login", "/api/auth/logout", "/api/auth/me",
     "/api/auth/oidc/config", "/api/auth/oidc/login", "/api/auth/oidc/callback",
@@ -249,6 +258,7 @@ async def _require_login_for_api_reads(request: Request, call_next):
     requires a real, stable QUANTA_SESSION_SECRET, checked at startup."""
     if (_require_login_for_reads_enabled() and request.url.path.startswith("/api/")
             and request.url.path not in _AUTH_FLOW_PATHS
+            and not request.url.path.startswith(_API_KEY_PATH_PREFIXES)  # these routes check an API key themselves
             and rbac.get_current_user(request) is None):
         return JSONResponse({"detail": "Login required"}, status_code=401)
     return await call_next(request)
@@ -267,9 +277,26 @@ async def _require_login_for_api_reads(request: Request, call_next):
 _NOTIFICATION_CHECK_INTERVAL_SECONDS = int(os.environ.get("NOTIFICATION_CHECK_INTERVAL_SECONDS", "3600"))
 
 
+# Every replica runs these loops but only the one holding the scheduler lease acts (see
+# remediation/coordination/leader.py), so a report is sent once however many replicas run.
+_leader = Leader()
+_LEADER_CHECK_SECONDS = float(os.environ.get("QUANTA_LEADER_CHECK_SECONDS", "15"))
+_leader_task = None
+_worker_thread = None
+_worker_stop = None
+
+
+async def _leader_loop():
+    while True:
+        await asyncio.to_thread(_leader.check)
+        await asyncio.sleep(_LEADER_CHECK_SECONDS)
+
+
 async def _notification_scheduler_loop():
     while True:
         await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
+        if not _leader.is_leader:
+            continue
         try:
             report_scheduler.check_and_send_due_reports(dashboard_data, reports, email_sender)
             alert_checker.check_and_send_alerts(dashboard_data, email_sender)
@@ -318,8 +345,11 @@ async def _connection_scheduler_loop():
     thread so a slow source never blocks requests; results are stored on the connection."""
     while True:
         await asyncio.sleep(_CONNECTION_CHECK_SECONDS)
+        if not _leader.is_leader:
+            continue
         try:
-            await asyncio.to_thread(conn_sync.run_due)
+            # queue the due syncs; a worker (this process's embedded one, or the worker Deployment) runs them
+            await asyncio.to_thread(conn_sync.enqueue_due)
         except Exception:  # noqa: BLE001 - a bad tick must never kill the loop
             import traceback
             traceback.print_exc()
@@ -327,9 +357,25 @@ async def _connection_scheduler_loop():
 
 @app.on_event("startup")
 async def _start_notification_scheduler():
-    global _scheduler_task, _connection_task
+    global _scheduler_task, _connection_task, _leader_task, _worker_thread, _worker_stop
+    await asyncio.to_thread(_leader.check)
+    _leader_task = asyncio.create_task(_leader_loop())
     _scheduler_task = asyncio.create_task(_notification_scheduler_loop())
     _connection_task = asyncio.create_task(_connection_scheduler_loop())
+    if os.environ.get("QUANTA_EMBEDDED_WORKER", "true").strip().lower() not in ("0", "false", "no"):
+        # Single-container default: run the queue worker inside this process. In Kubernetes the
+        # chart turns this off and runs the worker as its own Deployment.
+        import threading
+        _worker_stop = threading.Event()
+        _worker_thread = threading.Thread(target=job_worker.run_forever, args=(_worker_stop,), daemon=True, name="embedded-worker")
+        _worker_thread.start()
+
+
+@app.on_event("shutdown")
+async def _stop_background():
+    _leader.step_down()
+    if _worker_stop is not None:
+        _worker_stop.set()
 
 
 # ---------------------------------------------------------------------------
@@ -2275,10 +2321,229 @@ def metrics(request: Request):
         "quanta_support_tickets_sla_breached": ("Open support tickets past their SLA", sum(1 for t in tickets if t["sla"]["breached"])),
         "quanta_connections_total": ("Configured connections", len(conns)),
         "quanta_connections_failing": ("Connections whose last sync failed", sum(1 for c in conns if c["last_status"] == "error")),
+        "quanta_scheduler_leader": ("1 if this replica currently holds the scheduler lease", 1 if _leader.is_leader else 0),
+        "quanta_jobs_queued": ("Jobs waiting in the queue", job_queue.stats().get("queued", 0)),
+        "quanta_jobs_dead": ("Jobs that exhausted their retries", job_queue.stats().get("dead", 0)),
         "quanta_scheduler_alive": ("1 if the notification scheduler task is running", 1 if (_scheduler_task is not None and not _scheduler_task.done()) else 0),
     }
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(observability.metrics_text(gauges), media_type="text/plain; version=0.0.4")
+
+
+
+# --------------------------------------------------------------------------- integration API
+# How other systems call INTO Quanta: scanners, SOAR playbooks, CI jobs and ticketing systems
+# authenticate with a Quanta API key (Authorization: Bearer qk_..., or X-API-Key). Keys are
+# issued by an admin, carry scopes, can expire and be revoked, and are stored only as a hash.
+# See docs/INTEGRATION_API.md.
+
+_API_KEY_RATE_LIMITER = rate_limit.RateLimiter(int(os.environ.get("QUANTA_API_KEY_RATE_MAX", "600")), 60)
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+def _api_key_token(request):
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return request.headers.get("x-api-key", "").strip()
+
+
+def require_api_key(scope):
+    def dependency(request: Request):
+        rec = apikey_store.verify(_api_key_token(request), scope)
+        if not rec:
+            raise HTTPException(status_code=401, detail="A valid API key with the required scope is needed",
+                                headers={"WWW-Authenticate": "Bearer"})
+        if not _API_KEY_RATE_LIMITER.allow(f"key:{rec['id']}"):
+            raise HTTPException(status_code=429, detail="Rate limit exceeded for this API key",
+                                headers={"Retry-After": str(_API_KEY_RATE_LIMITER.retry_after_seconds(f"key:{rec['id']}"))})
+        return rec
+    return dependency
+
+
+class ApiKeyBody(BaseModel):
+    name: str
+    scopes: list[str]
+    expires_days: int | None = None
+
+
+@app.get("/api/api-keys")
+def api_list_api_keys(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"keys": apikey_store.list_keys(), "scopes": list(apikey_store.SCOPES)}
+
+
+@app.post("/api/api-keys")
+def api_create_api_key(body: ApiKeyBody, user: dict = Depends(rbac.require_admin)):
+    """Creates a key. The response contains the full key exactly once; it cannot be shown again."""
+    try:
+        record, token = apikey_store.create(body.name, body.scopes, user["email"], body.expires_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"key": token, "record": record, "warning": "Copy this key now. It is not stored and cannot be shown again."}
+
+
+@app.delete("/api/api-keys/{key_id}")
+def api_revoke_api_key(key_id: int, user: dict = Depends(rbac.require_admin)):
+    try:
+        return {"revoked": apikey_store.revoke(key_id, user["email"])}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such key") from exc
+
+
+def _enrich_in_background(background):
+    def run():
+        try:
+            from remediation.enrichment import kev_epss
+            kev_epss.enrich_file(findings_merge.DEFAULT_PATH)
+        except Exception:  # noqa: BLE001 - enrichment is best effort
+            pass
+    background.add_task(run)
+
+
+class IngestFindingsBody(BaseModel):
+    source: str
+    findings: list[dict]  # checked one by one, so a bad record is reported by index instead of rejecting the batch
+    reconcile: bool = False
+    enrich: bool = True
+
+
+@app.post("/api/ingest/findings")
+def api_ingest_findings(body: IngestFindingsBody, background: BackgroundTasks, key: dict = Depends(require_api_key("ingest:write"))):
+    """Push findings into the queue. A finding's identity is source + asset + source_ref (or title)
+    + CVE, so re-sending updates it instead of adding a duplicate. `reconcile: true` declares this
+    request a COMPLETE export for `source`: that source's findings missing from it are removed
+    (this is how fixed vulnerabilities leave the queue). Bad records are reported by index and do
+    not reject the rest."""
+    try:
+        api_findings.check_source(body.source)
+        findings, errors = api_findings.normalise_batch(body.findings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if body.reconcile and errors:
+        raise HTTPException(status_code=400, detail={"message": "reconcile needs every record to be valid; nothing was changed", "errors": errors[:20]})
+    result = findings_merge.merge(findings, body.source, reconcile=body.reconcile)
+    activity_log.record_activity(f"apikey:{key['name']}", "ingest.findings", body.source,
+                                 {"received": len(body.findings), "rejected": len(errors), **result})
+    if body.enrich and (result["added"] or result["updated"]):
+        _enrich_in_background(background)
+    return {"source": body.source, "received": len(body.findings), "rejected": len(errors), "errors": errors[:50], **result}
+
+
+async def _read_upload(request: Request):
+    body = await request.body()
+    if len(body) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (50 MB maximum)")
+    return body
+
+
+def _ingest_csv_bytes(data, source, reconcile, actor):
+    import tempfile
+    try:
+        api_findings.check_source(source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    fd, tmp = tempfile.mkstemp(suffix=".csv")
+    os.close(fd)
+    try:
+        Path(tmp).write_bytes(data)
+        try:
+            findings, skipped = scanner_csv.parse_csv(tmp, source)
+        except (UnicodeDecodeError, KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"Could not read this as a scanner CSV export: {exc}") from exc
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+    if not findings and not skipped:
+        raise HTTPException(status_code=400, detail="The file has no rows. Expected a Tenable-style CSV with a header row (Plugin ID, CVE, Risk, Host, Name, ...).")
+    result = findings_merge.merge(findings, source, reconcile=reconcile)
+    activity_log.record_activity(actor, "ingest.csv", source, {"rows": len(findings), "skipped": skipped, **result})
+    return {"source": source, "parsed": len(findings), "skipped": skipped, **result}
+
+
+@app.post("/api/ingest/scanner-csv")
+async def api_ingest_scanner_csv(request: Request, background: BackgroundTasks, source: str = "scanner", reconcile: bool = False,
+                                 key: dict = Depends(require_api_key("ingest:write"))):
+    """Upload a scanner export as the raw request body (curl --data-binary @export.csv). Same
+    Tenable-style column set the connectors flatten into. `source` names where it came from."""
+    out = _ingest_csv_bytes(await _read_upload(request), source, reconcile, f"apikey:{key['name']}")
+    if out["added"] or out["updated"]:
+        _enrich_in_background(background)
+    return out
+
+
+@app.post("/api/connections/import-file")
+async def api_import_file(request: Request, background: BackgroundTasks, source: str = "import", reconcile: bool = False,
+                          user: dict = Depends(rbac.require_admin)):
+    """The same import for a signed-in admin (the Connections page's file upload), for sources
+    that cannot be reached by API: export a CSV from the scanner and drop it in."""
+    out = _ingest_csv_bytes(await _read_upload(request), source, reconcile, user["email"])
+    if out["added"] or out["updated"]:
+        _enrich_in_background(background)
+    return out
+
+
+class TicketStatusBody(BaseModel):
+    finding_id: str
+    system: str = "servicenow"
+    state: str
+    external_ref: str | None = None
+
+
+@app.post("/api/inbound/ticket-status")
+def api_inbound_ticket_status(body: TicketStatusBody, key: dict = Depends(require_api_key("tickets:update"))):
+    """For a ticketing system to report a ticket's state change: ServiceNow (incident state 1-8,
+    or a word), Jira (status category or name) or any system sending open / in_progress /
+    blocked / resolved. The finding records the ticket and, when it has an assignment, mirrors
+    the status. A resolved ticket marks the assignment resolved; the next scan confirms it."""
+    if body.system not in ("servicenow", "jira", "other"):
+        raise HTTPException(status_code=400, detail="system must be servicenow, jira or other")
+    if not any(f["id"] == body.finding_id for f in findings_merge.load()):
+        raise HTTPException(status_code=404, detail="No such finding")
+    try:
+        return conn_links.report_state(body.finding_id, body.system, body.state, f"apikey:{key['name']}", external_ref=body.external_ref)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/export/findings")
+def api_export_findings(source: str | None = None, severity: str | None = None, kev: bool | None = None, limit: int = 1000,
+                        offset: int = 0, key: dict = Depends(require_api_key("read:findings"))):  # noqa: ARG001
+    """Read-only findings export for BI tools and data pipelines, paged and filterable."""
+    limit = max(1, min(limit, 5000))
+    rows = findings_merge.load()
+    if source:
+        rows = [f for f in rows if f.get("source") == source]
+    if severity:
+        rows = [f for f in rows if (f.get("severity") or "").lower() == severity.lower()]
+    if kev is not None:
+        rows = [f for f in rows if bool((f.get("kev") or {}).get("listed")) == kev]
+    return {"total": len(rows), "offset": offset, "limit": limit, "findings": rows[offset:offset + limit]}
+
+
+@app.get("/api/findings/{finding_id}/links")
+def api_finding_links(finding_id: str, user: dict = Depends(rbac.require_login)):
+    _visible_finding(finding_id, user)
+    return {"links": conn_links.for_finding(finding_id)}
+
+
+@app.get("/api/connections/schema")
+def api_connection_schema(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Machine-readable description of every connection type, as JSON Schema, so an integrator or
+    an infrastructure-as-code tool knows exactly what to supply."""
+    out = {}
+    for item in conn_registry.public_catalog():
+        props, required = {}, []
+        for f in item["fields"]:
+            p = {"type": "boolean" if f["type"] == "checkbox" else "string", "title": f["label"], "writeOnly": bool(f["secret"])}
+            if f.get("options"):
+                p["enum"] = f["options"]
+            if f.get("placeholder"):
+                p["examples"] = [f["placeholder"]]
+            props[f["name"]] = p
+            if f["required"]:
+                required.append(f["name"])
+        out[item["type"]] = {"title": item["label"], "category": item["category"], "kind": item["kind"], "provides": item["output"],
+                             "schema": {"type": "object", "properties": props, "required": required, "additionalProperties": False}}
+    return {"types": out}
 
 
 # --------------------------------------------------------------------------- connections
@@ -2384,11 +2649,17 @@ def api_test_connection(body: ConnectionTestBody, user: dict = Depends(rbac.requ
 def api_sync_connection(connection_id: int, user: dict = Depends(rbac.require_admin)):
     """Starts a sync in the background and returns at once; poll GET /api/connections for the
     outcome (status, message, count are stored on the connection)."""
-    import threading
     if not conn_store.get_public(connection_id):
         raise HTTPException(status_code=404, detail="Connection not found")
-    threading.Thread(target=conn_sync.run, args=(connection_id, user["email"]), daemon=True).start()
-    return {"started": True}
+    job_id = job_queue.enqueue(job_worker.KIND_CONNECTION_SYNC, {"connection_id": connection_id, "actor": user["email"]},
+                               dedupe_key=f"sync:{connection_id}")
+    return {"started": True, "job": job_id}
+
+
+@app.get("/api/admin/jobs")
+def api_jobs(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Queue depth and the most recent jobs, for operators."""
+    return {"stats": job_queue.stats(), "recent": job_queue.recent(50), "leader": _leader.is_leader}
 
 
 # --------------------------------------------------------------------------- support
@@ -3225,7 +3496,7 @@ class GenericIngestBody(BaseModel):
 
 
 @app.post("/api/ingest/generic")
-def api_ingest_generic(body: GenericIngestBody):
+def api_ingest_generic(body: GenericIngestBody, request: Request):
     """The vendor-agnostic 'bring your own XDR/EDR/SIEM' webhook receiver - see
     remediation/connectors/generic_connector.py's module docstring for why this is a
     generic validated-payload adapter rather than N bespoke vendor connectors.
@@ -3243,6 +3514,9 @@ def api_ingest_generic(body: GenericIngestBody):
     there's no cap on how often it's called or how much data it can accumulate - a
     real deployment needs request throttling/a size cap alongside the auth mentioned
     above, not implemented here either."""
+    if os.environ.get("QUANTA_PRODUCTION", "").strip().lower() in ("1", "true", "yes"):
+        # in a production deployment this webhook is no longer open: it needs an ingest:write API key
+        require_api_key("ingest:write")(request)
     # Locked for the full read-existing/assign-ids/write cycle: two concurrent
     # ingests could otherwise both compute the same "next" FIND-N id from the same
     # stale read and collide - see live_data_store.with_lock()'s own docstring.
@@ -3597,4 +3871,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app, host=os.environ.get("QUANTA_HOST", "127.0.0.1"), port=int(os.environ.get("QUANTA_PORT", "5050")),
         ssl_keyfile=ssl_keyfile, ssl_certfile=ssl_certfile,
+        # behind a trusted proxy/ingress, honour X-Forwarded-For so rate limits and the audit log see real client IPs
+        forwarded_allow_ips=os.environ.get("QUANTA_FORWARDED_ALLOW_IPS", "127.0.0.1"),
     )

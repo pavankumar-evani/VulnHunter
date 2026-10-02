@@ -1,0 +1,41 @@
+name: Helm chart
+
+on:
+  push:
+    paths: ["deploy/helm/**", ".github/workflows/helm.yml"]
+  pull_request:
+    paths: ["deploy/helm/**", ".github/workflows/helm.yml"]
+
+jobs:
+  lint-and-render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint every scenario
+        run: |
+          for f in deploy/helm/quanta/ci/*.yaml; do
+            echo "== lint $f"
+            helm lint deploy/helm/quanta -f "$f"
+          done
+      - name: Render every scenario and validate the manifests
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          for f in deploy/helm/quanta/ci/*.yaml; do
+            echo "== template $f"
+            helm template quanta deploy/helm/quanta -f "$f" \
+              | ./kubeconform -strict -summary -ignore-missing-schemas
+          done
+      - name: Unsafe configurations must be refused
+        run: |
+          set -u
+          expect_fail() { if helm template quanta deploy/helm/quanta "$@" >/dev/null 2>&1; then echo "expected failure: $*"; exit 1; fi; }
+          expect_fail --set image.repository=x --set secrets.mode=inline
+          expect_fail --set image.repository=x --set secrets.externalSecrets.secretStoreRef.name=
+          expect_fail --set image.repository=x --set secrets.mode=existingSecret --set secrets.existingSecret=s --set persistence.enabled=false
+          expect_fail --set image.repository=x --set secrets.mode=existingSecret --set secrets.existingSecret=s --set coordination.lockBackend=file
+      - name: No secret value appears in any rendered manifest
+        run: |
+          helm template quanta deploy/helm/quanta -f deploy/helm/quanta/ci/externalsecrets-values.yaml > rendered.yaml
+          ! grep -E "kind: Secret$" rendered.yaml
+          ! grep -E "name: QUANTA_(SESSION_SECRET|ENCRYPTION_KEY|DATABASE_URL)$" rendered.yaml

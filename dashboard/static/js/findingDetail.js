@@ -109,6 +109,8 @@ export function openFindingDetail(f) {
       <p class="filter-count">Loading — who owns this and what state it is in…</p>
     </div>
 
+    <div id="ticket-links-body"></div>
+
     <h3>Compensating control coverage</h3>
     <div id="control-coverage-body">
       <p class="filter-count">Loading — checking real firewall/EDR coverage data…</p>
@@ -140,9 +142,30 @@ export function openFindingDetail(f) {
   });
 
   loadOwnership(f, modalBody);
+  loadTicketLinks(f.id, modalBody);
   loadSimilarFindings(f.id, modalBody);
   loadControlCoverage(f.id, modalBody);
   loadNetworkPath(asset.name, modalBody);
+}
+
+// Tickets in ServiceNow / Jira (or events sent to Splunk) that were opened for this finding by a
+// push connection, with their current state as last read back. Shown only when there are any,
+// and only to a signed-in viewer.
+async function loadTicketLinks(findingId, modalBody) {
+  const el = modalBody.querySelector("#ticket-links-body");
+  if (!el) return;
+  let links = [];
+  try {
+    links = (await api.findingLinks(findingId)).links || [];
+  } catch {
+    return; // not signed in, or none: this section simply stays hidden
+  }
+  if (!links.length || !modalBody.querySelector("#ticket-links-body")) return;
+  const label = { open: "Open", in_progress: "In progress", blocked: "Blocked", resolved: "Resolved" };
+  el.innerHTML = `<h3>External tickets</h3>
+    <ul>${links.map((l) => `<li><strong>${escapeHtml(l.external_ref || "Not created yet")}</strong>
+      (${escapeHtml(l.system)}) ${l.state ? `<span class="badge badge-outline">${escapeHtml(label[l.state] || l.state)}</span>` : ""}
+      ${l.last_error ? `<span class="muted">Last error: ${escapeHtml(l.last_error)}</span>` : ""}</li>`).join("")}</ul>`;
 }
 
 // Who owns this finding, which team it is routed to, and its work-state - plus the

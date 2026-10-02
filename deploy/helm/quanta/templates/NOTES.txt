@@ -1,0 +1,27 @@
+Quanta {{ .Chart.AppVersion }} is installed as release "{{ .Release.Name }}".
+
+  Web workers:   {{ .Values.web.replicas }} replica(s)   Queue workers: {{ if .Values.worker.enabled }}{{ .Values.worker.replicas }} replica(s){{ else }}off{{ end }}
+  Secrets from:  {{ .Values.secrets.mode }}{{ if eq .Values.secrets.mode "csi" }} ({{ .Values.secrets.csi.provider }}){{ end }}
+
+{{- if .Values.ingress.enabled }}
+
+Open https://{{ .Values.ingress.host }} and sign in as {{ default "the administrator you created" .Values.config.bootstrapAdminEmail }}.
+{{- else }}
+
+Reach it from your machine with:
+  kubectl port-forward svc/{{ include "quanta.fullname" . }} 8080:{{ .Values.service.port }}
+and open http://localhost:8080
+{{- end }}
+
+Check the rollout:
+  kubectl rollout status deploy/{{ include "quanta.fullname" . }}-web
+{{- if .Values.worker.enabled }}
+  kubectl rollout status deploy/{{ include "quanta.fullname" . }}-worker
+  kubectl exec deploy/{{ include "quanta.fullname" . }}-worker -- python cli/quanta_admin.py jobs     # queue depth and recent jobs
+{{- end }}
+
+Rotate a secret: change it in the key vault. With externalSecrets it reaches the pods within
+{{ .Values.secrets.externalSecrets.refreshInterval }}; then restart to pick it up:
+  kubectl rollout restart deploy/{{ include "quanta.fullname" . }}-web deploy/{{ include "quanta.fullname" . }}-worker
+
+Full guide: docs/KUBERNETES.md
