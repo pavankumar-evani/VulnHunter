@@ -118,6 +118,16 @@ export const api = {
   connectionSchema: () => request("GET", "/api/connections/schema"),
   findingGuidance: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/guidance`),
   guidanceLookup: (params) => request("GET", `/api/guidance?${new URLSearchParams(params)}`),
+  controls: (asset) => request("GET", `/api/controls${asset ? `?asset=${encodeURIComponent(asset)}` : ""}`),
+  addControl: (body) => request("POST", "/api/controls", body),
+  deleteControl: (id) => request("DELETE", `/api/controls/${id}`),
+  importControls: async (file) => {
+    const res = await fetch("/api/controls/import", { method: "POST", body: file });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
   findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
   importScannerFile: async (source, reconcile, file) => {
     const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });

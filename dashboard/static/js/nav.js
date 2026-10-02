@@ -106,6 +106,8 @@ export const NAV = [
   { group: "Connectors / Adaptors", items: [
     { path: "/connections", label: "Connections", icon: "adaptor",
       tip: "Admin: store your scanner and asset-source credentials (encrypted) and schedule automatic syncs." },
+    { path: "/controls", label: "Security Controls", icon: "rules",
+      tip: "Which firewalls, EDR, WAF and other controls protect which assets - what makes compensating-control advice specific to you." },
     { path: "/adaptors", label: "Connectors / Adaptors", icon: "adaptor",
       tip: "Every external system Quanta talks to (or has researched), in one place - pick a connector from the dropdown." },
   ] },

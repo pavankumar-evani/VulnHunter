@@ -372,6 +372,23 @@ file_snapshots = Table(
 )
 
 
+# The client's security controls, per asset or asset pattern (remediation/controls/store.py). `state` is "verified"
+# when a connector observed it and "claimed" when a person recorded it.
+asset_controls = Table(
+    "asset_controls", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("asset_name", String, nullable=False, index=True),
+    Column("control_class", String, nullable=False),
+    Column("name", String, nullable=False),
+    Column("state", String, nullable=False),
+    Column("source", String, nullable=False),
+    Column("detail", Text, nullable=True),
+    Column("last_seen", String, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
+
 _SCHEMA_ADVISORY_KEY = 727270001
 
 
@@ -415,7 +432,7 @@ def ensure_schema(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
-            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots,
+            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

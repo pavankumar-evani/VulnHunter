@@ -7,6 +7,7 @@ const KEY_SCOPES = [
   ["ingest:write", "Send findings and scanner files in"],
   ["tickets:update", "Report ticket status changes"],
   ["read:findings", "Read findings out (reports, BI)"],
+  ["controls:write", "Report security controls an EDR or firewall observes"],
 ];
 
 const SCHEDULES = [[0, "Manual only"], [15, "Every 15 minutes"], [60, "Hourly"], [360, "Every 6 hours"], [1440, "Daily"], [10080, "Weekly"]];

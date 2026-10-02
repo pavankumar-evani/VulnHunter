@@ -158,6 +158,23 @@ Cobertura XML, JaCoCo XML or lcov. Only files whose path suggests security-relev
 cryptography, validation, payments, uploads, parsers) and that fall below the threshold become findings; the response also gives
 the overall percentage. The path match is a heuristic on file names.
 
+### Report the security controls you observe
+
+An EDR, firewall or cloud-posture integration can tell Quanta which controls protect which assets, which is what makes
+compensating-control advice specific to your environment (see *Security Controls* in the app).
+
+```bash
+curl -X POST https://quanta.example.com/api/ingest/controls   -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json"   -d '{"source": "falcon", "controls": [
+        {"asset_name": "WEB-*", "control_class": "edr", "name": "CrowdStrike Falcon, prevention on"},
+        {"asset_name": "WIN-DC01", "control_class": "network-filtering", "name": "Perimeter firewall, deny by default"}]}'
+```
+
+Needs a key with `controls:write`. `control_class` is one of `patching`, `vuln-scanning`, `exploit-protection`, `network-segmentation`,
+`network-filtering`, `access-restriction`, `least-privilege`, `sandboxing`, `edr`, `app-control`, `disable-feature`, `mfa`,
+`password-policy`, `audit-logging`, `encryption`, `os-hardening`, `web-filtering`, `secure-development`, `threat-intel`,
+`user-training` (`GET /api/controls` lists them with labels). `asset_name` may be a pattern such as `WEB-*`. Reported controls are
+stored as **verified**; ones typed in or imported as CSV on the Controls page are **claimed**. Sending the same one again refreshes it.
+
 ### Report a ticket's state
 
 ```bash

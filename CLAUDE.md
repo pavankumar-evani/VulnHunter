@@ -565,6 +565,13 @@ GitHub Actions / GitLab CI / Jenkinsfiles against OWASP CI/CD risks (`quanta-adm
 turns Cobertura/JaCoCo/lcov reports into findings for security-relevant files only (`POST /api/ingest/coverage`). The new scan
 types are `container`, `cicd` and `coverage`; an explicit `scan_type` on a finding wins over inference.
 
+**Client-specific compensating controls**: `remediation/enrichment/attack_mitigations.yaml` holds the MITRE ATT&CK mitigations for every
+technique Quanta tags (read from attack.mitre.org; T1600 has none and the result says so) plus CWE-to-technique and indicative NIST
+800-53 mappings; `remediation/controls/store.py` is the controls inventory (table `asset_controls`, verified vs claimed, glob asset
+patterns, CSV import, `POST /api/ingest/controls` with a `controls:write` key, the Controls page); `client_controls.assess()` checks a
+finding's applicable mitigations against the asset's recorded controls (verified / claimed / absent / unknown) and is shown in the
+guidance (`/api/findings/{id}/compensating-controls`). With nothing recorded for an asset it says unknown rather than guessing.
+
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
 `read:findings`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`

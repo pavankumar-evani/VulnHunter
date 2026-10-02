@@ -190,6 +190,11 @@ def build(finding, kb=None, client_controls=True):
         "automation": _automation(finding, scan_type), "scan_type": scan_type,
         "client_controls": None,
     }
+    try:
+        from remediation.enrichment import client_controls as _cc
+        out["client_assessment"] = _cc.assess(finding) if finding.get("asset") else _cc.assess(finding, inventory=[])
+    except Exception:  # noqa: BLE001 - guidance must never fail because the optional controls data is unreadable
+        out["client_assessment"] = None
     if client_controls and finding.get("asset"):
         try:
             from remediation.enrichment import control_coverage

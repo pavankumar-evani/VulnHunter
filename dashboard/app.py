@@ -53,6 +53,8 @@ from remediation.coordination import jobs as job_queue  # noqa: E402
 from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
+from remediation.controls import store as controls_store  # noqa: E402
+from remediation.enrichment import client_controls  # noqa: E402
 from remediation.utils import file_sync, secret_files  # noqa: E402
 from remediation.support import analytics as support_analytics  # noqa: E402
 from remediation.support import escalation as support_escalation  # noqa: E402
@@ -3346,6 +3348,70 @@ def api_finding_guidance(finding_id: str, user: dict | None = Depends(rbac.get_c
     what Quanta knows about this finding (package and fixed version, OS, KEV, SLA, the client's own
     controls). See remediation/guidance/engine.py."""
     return _fast_json(guidance_engine.build(_visible_finding(finding_id, user)))
+
+
+# --------------------------------------------------------------------------- security controls inventory
+# Which controls protect which assets (remediation/controls/store.py). Compensating-control advice is only as specific as this.
+class ControlBody(BaseModel):
+    asset_name: str
+    control_class: str
+    name: str
+    state: str = "claimed"
+    detail: str | None = None
+
+
+class ControlsPushBody(BaseModel):
+    source: str = "connector"
+    controls: list[dict]
+
+
+@app.get("/api/controls")
+def api_controls(asset: str = "", user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    return {"controls": controls_store.list_controls(asset or None), "classes": controls_store.control_classes()}
+
+
+@app.post("/api/controls")
+def api_add_control(body: ControlBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        return controls_store.upsert(body.asset_name, body.control_class, body.name, body.state, "manual", user["email"], detail=body.detail)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/controls/{control_id}")
+def api_delete_control(control_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    if not controls_store.delete_control(control_id):
+        raise HTTPException(status_code=404, detail="No such control")
+    return {"deleted": True}
+
+
+@app.post("/api/controls/import")
+async def api_import_controls(request: Request, user: dict = Depends(rbac.require_admin)):
+    """CSV with asset_name, control_class, name, state (optional), detail (optional)."""
+    done, errors = controls_store.import_csv((await _read_upload(request)).decode("utf-8", "replace"), user["email"])
+    activity_log.record_activity(user["email"], "controls.import", None, {"imported": done, "rejected": len(errors)})
+    return {"imported": done, "errors": errors[:50]}
+
+
+@app.post("/api/ingest/controls")
+def api_ingest_controls(body: ControlsPushBody, key: dict = Depends(require_api_key("controls:write"))):
+    """For an EDR, firewall or cloud-posture integration to report the controls it OBSERVES (recorded as verified)."""
+    done, errors = 0, []
+    for i, c in enumerate(body.controls[:5000]):
+        try:
+            controls_store.upsert(c.get("asset_name"), c.get("control_class"), c.get("name"), "verified", body.source, f"apikey:{key['name']}", detail=c.get("detail"))
+            done += 1
+        except (ValueError, AttributeError) as exc:
+            errors.append({"index": i, "error": str(exc)})
+    activity_log.record_activity(f"apikey:{key['name']}", "controls.push", body.source, {"recorded": done, "rejected": len(errors)})
+    return {"recorded": done, "rejected": len(errors), "errors": errors[:50]}
+
+
+@app.get("/api/findings/{finding_id}/compensating-controls")
+def api_finding_compensating_controls(finding_id: str, user: dict | None = Depends(rbac.get_current_user)):
+    """Compensating controls for this finding from the ATT&CK mitigations for the techniques it enables, checked against the
+    controls recorded for its asset: which are verified, claimed, absent, or unknown."""
+    return _fast_json(client_controls.assess(_visible_finding(finding_id, user)))
 
 
 @app.get("/api/guidance")

@@ -1,0 +1,101 @@
+# MITRE ATT&CK mitigations for the techniques Quanta tags, and what each one means as a control you can check for.
+#
+# `techniques` lists the mitigation IDs MITRE publishes on each technique's page (attack.mitre.org/techniques/<id>/),
+# read on 2026-10-02. T1600 (Weaken Encryption) lists none: MITRE says it "cannot be easily mitigated with preventive
+# controls", so Quanta offers no compensating control for it and says so rather than inventing one.
+# `mitigations` gives each ID a plain-language control class (the vocabulary the controls inventory uses), a practical
+# action, and the NIST SP 800-53 control families it most directly supports. The 800-53 identifiers are an indicative
+# mapping made for this file (MITRE's Center for Threat-Informed Defense publishes the authoritative one in its Mappings
+# Explorer); verify them before quoting them to an auditor.
+#
+# Edit freely: add techniques, adjust the actions to your environment's wording. Read live.
+
+control_classes:
+  patching: Patch management
+  vuln-scanning: Vulnerability scanning
+  exploit-protection: WAF, IPS or exploit protection
+  network-segmentation: Network segmentation
+  network-filtering: Firewall and traffic filtering
+  access-restriction: Restricted network exposure
+  least-privilege: Least privilege and account management
+  sandboxing: Isolation and sandboxing
+  edr: Endpoint protection (antivirus / EDR)
+  app-control: Application control and execution prevention
+  disable-feature: Unused services and features disabled
+  mfa: Multi-factor authentication
+  password-policy: Password policy
+  audit-logging: Audit and logging
+  encryption: Encryption of sensitive data
+  os-hardening: Operating system hardening
+  web-filtering: Web and script content filtering
+  secure-development: Secure development practices
+  threat-intel: Threat intelligence
+  user-training: User and developer training
+
+techniques:
+  T1190: [M1048, M1050, M1037, M1035, M1030, M1026, M1051, M1016]
+  T1059: [M1049, M1047, M1040, M1045, M1042, M1038, M1033, M1026, M1021]
+  T1210: [M1048, M1042, M1050, M1030, M1026, M1019, M1051, M1016]
+  T1068: [M1048, M1038, M1050, M1019, M1051]
+  T1552: [M1015, M1047, M1041, M1037, M1035, M1028, M1027, M1026, M1022, M1051, M1017]
+  T1556: [M1047, M1032, M1028, M1027, M1026, M1025, M1022, M1024, M1018]
+  T1021: [M1047, M1042, M1035, M1032, M1027, M1018]
+  T1499: [M1037]
+  T1600: []
+  T1548: [M1047, M1038, M1028, M1026, M1022, M1051, M1052, M1018]
+  T1195: [M1013, M1046, M1033, M1051, M1018, M1016]
+
+# CWE ids that reach the same attack techniques (so a code or web finding with no ATT&CK wording still gets controls).
+cwe_to_technique:
+  CWE-89: T1190
+  CWE-79: T1190
+  CWE-78: T1059
+  CWE-77: T1059
+  CWE-94: T1059
+  CWE-95: T1059
+  CWE-22: T1190
+  CWE-918: T1190
+  CWE-611: T1190
+  CWE-502: T1190
+  CWE-434: T1190
+  CWE-798: T1552
+  CWE-259: T1552
+  CWE-321: T1552
+  CWE-256: T1552
+  CWE-312: T1552
+  CWE-532: T1552
+  CWE-287: T1556
+  CWE-306: T1556
+  CWE-307: T1556
+
+mitigations:
+  M1013: {name: Application Developer Guidance, class: secure-development, nist: [SA-11, SA-15], action: "Lock dependencies to reviewed versions, take them from an internal repository, and review new ones before use."}
+  M1015: {name: Active Directory Configuration, class: os-hardening, nist: [CM-6, AC-6], action: "Remove vulnerable Group Policy preferences and harden directory settings against credential exposure."}
+  M1016: {name: Vulnerability Scanning, class: vuln-scanning, nist: [RA-5], action: "Scan this asset on a schedule and track every finding to closure."}
+  M1017: {name: User Training, class: user-training, nist: [AT-2, AT-3], action: "Train developers and administrators not to keep credentials in files, scripts or configuration."}
+  M1018: {name: User Account Management, class: least-privilege, nist: [AC-2, AC-6], action: "Limit who can use the service or remote access, remove standing admin rights, and review accounts regularly."}
+  M1019: {name: Threat Intelligence Program, class: threat-intel, nist: [PM-16, RA-10], action: "Track which exploits target your estate (CISA KEV, vendor advisories) and act on them first."}
+  M1021: {name: Restrict Web-Based Content, class: web-filtering, nist: [SC-18, SI-3], action: "Block or filter active script content from untrusted sites."}
+  M1022: {name: Restrict File and Directory Permissions, class: os-hardening, nist: [AC-3, AC-6], action: "Limit read and write access to sensitive files and directories to the accounts that need them."}
+  M1024: {name: Restrict Registry Permissions, class: os-hardening, nist: [AC-3, CM-6], action: "Prevent changes to authentication-related registry keys by unauthorised accounts."}
+  M1025: {name: Privileged Process Integrity, class: os-hardening, nist: [SI-7, SC-39], action: "Enable protected-process features so authentication processes cannot be tampered with."}
+  M1026: {name: Privileged Account Management, class: least-privilege, nist: [AC-6, AC-2], action: "Run the service under a dedicated low-privilege account; use just-in-time or just-enough administration for people."}
+  M1027: {name: Password Policies, class: password-policy, nist: [IA-5], action: "Enforce long, unique passwords; do not reuse local admin passwords; keep credentials out of files."}
+  M1028: {name: Operating System Configuration, class: os-hardening, nist: [CM-6, CM-7], action: "Apply a hardening baseline (for example CIS) to the operating system and review it for drift."}
+  M1030: {name: Network Segmentation, class: network-segmentation, nist: [SC-7, AC-4], action: "Place the asset in its own zone (DMZ or VLAN) with filtered paths to internal networks."}
+  M1032: {name: Multi-factor Authentication, class: mfa, nist: [IA-2], action: "Require multi-factor authentication for remote and administrative logons."}
+  M1033: {name: Limit Software Installation, class: app-control, nist: [CM-7, CM-11], action: "Allow software only from approved internal repositories and prevent users installing their own."}
+  M1035: {name: Limit Access to Resource Over Network, class: access-restriction, nist: [AC-17, SC-7], action: "Do not expose the service beyond the networks that need it; allow named sources or a VPN only."}
+  M1037: {name: Filter Network Traffic, class: network-filtering, nist: [SC-7, AC-4], action: "Deny by default; allow only the ports and sources required, inbound and outbound; add upstream DoS protection for public services."}
+  M1038: {name: Execution Prevention, class: app-control, nist: [CM-7, SI-7], action: "Use application allow-listing or execution control so only approved programs and scripts run."}
+  M1040: {name: Behavior Prevention on Endpoint, class: edr, nist: [SI-3, SI-4], action: "Turn endpoint behaviour-blocking rules on (for example attack surface reduction) rather than detect-only."}
+  M1041: {name: Encrypt Sensitive Information, class: encryption, nist: [SC-28, SC-12], action: "Encrypt keys and secrets at rest and keep them in a vault or hardware module, not on the host."}
+  M1042: {name: Disable or Remove Feature or Program, class: disable-feature, nist: [CM-7], action: "Turn off services, interpreters and features the asset does not need."}
+  M1045: {name: Code Signing, class: app-control, nist: [SI-7, CM-14], action: "Run only signed scripts and binaries where feasible."}
+  M1046: {name: Boot Integrity, class: os-hardening, nist: [SI-7, SC-51], action: "Use secure boot and verify the integrity of the operating system and boot components."}
+  M1047: {name: Audit, class: audit-logging, nist: [AU-6, CA-7], action: "Enable logging for this asset, send it to your SIEM, and review or alert on suspicious activity."}
+  M1048: {name: Application Isolation and Sandboxing, class: sandboxing, nist: [SC-39, SC-44], action: "Run the service in a container or sandbox with a read-only filesystem, no extra capabilities and only the network access it needs."}
+  M1049: {name: Antivirus/Antimalware, class: edr, nist: [SI-3], action: "Run endpoint protection with automatic quarantine on the asset."}
+  M1050: {name: Exploit Protection, class: exploit-protection, nist: [SI-16, SC-7], action: "Put a web application firewall or intrusion-prevention in front of the service, with a virtual-patch rule for this flaw, or enable the host's exploit-protection features."}
+  M1051: {name: Update Software, class: patching, nist: [SI-2], action: "Apply the vendor fix through your patch process.", compensating: false}
+  M1052: {name: User Account Control, class: os-hardening, nist: [AC-6, CM-6], action: "Set user account control to its highest enforcement level."}

@@ -21,6 +21,31 @@ export function guidanceHtml(g) {
     ${ctl ? `<div class="callout"><strong>Your existing controls</strong><p>These cover about ${ctl.existing_coverage_pct}% of this exposure (residual risk about ${ctl.residual_risk_pct}%).
       ${ctl.recommended_controls && ctl.recommended_controls.length ? "To close the gap:" : ""}</p>${list(ctl.recommended_controls)}</div>`
       : (g.client_controls_note ? `<p class="muted">${escapeHtml(g.client_controls_note)}</p>` : "")}
+    ${assessmentHtml(g.client_assessment, list)}
     <p class="muted"><strong>What Quanta can do:</strong> ${escapeHtml(auto.note || "")}</p>
     ${refs ? `<h4>References</h4><ul class="guidance-list">${refs}</ul>` : ""}`;
+}
+
+const STATUS = {
+  verified: ["In place (verified)", "badge-auto_approvable"], claimed: ["In place (recorded, not verified)", "badge-outline"],
+  absent: ["Not in place", "badge-critical"], unknown: ["Not known for this asset", "badge-outline"],
+};
+
+// The compensating controls for this finding's attack techniques (MITRE ATT&CK mitigations), checked against the controls
+// recorded for its asset.
+function assessmentHtml(a, list) {
+  if (!a) return "";
+  const techs = (a.techniques || []).map((t) => `${escapeHtml(t.technique_id)}${t.technique_name ? ` ${escapeHtml(t.technique_name)}` : ""}`).join(", ");
+  const rows = (a.compensating || []).map((m) => {
+    const [label, cls] = STATUS[m.status] || STATUS.unknown;
+    return `<tr><td><strong>${escapeHtml(m.name)}</strong><br><span class="muted">${escapeHtml(m.id)} &middot; ${escapeHtml(m.class_label)}${m.nist && m.nist.length ? ` &middot; NIST ${escapeHtml(m.nist.join(", "))}` : ""}</span></td>
+      <td>${escapeHtml(m.action)}${m.evidence && m.evidence.length ? `<br><span class="muted">Recorded: ${m.evidence.map((e) => escapeHtml(e.name)).join("; ")}</span>` : ""}</td>
+      <td><span class="badge ${cls}">${escapeHtml(label)}</span></td></tr>`;
+  }).join("");
+  return `<h4>Compensating controls for your environment</h4>
+    ${techs ? `<p class="muted">Techniques this flaw enables: ${techs}. Mitigations are the ones MITRE ATT&amp;CK lists for them.</p>` : ""}
+    ${a.coverage_pct !== null && a.coverage_pct !== undefined ? `<p>About <strong>${a.coverage_pct}%</strong> of the applicable mitigations are in place on this asset (indicative: verified counts 1, recorded 0.5). ${a.gaps && a.gaps.length ? `Biggest gaps: ${a.gaps.slice(0, 3).map((m) => escapeHtml(m.name)).join(", ")}.` : ""}</p>` : ""}
+    ${a.note ? `<p class="muted">${escapeHtml(a.note)}</p>` : ""}
+    ${rows ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Mitigation</th><th>What to put in place</th><th>On this asset</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+    <p class="muted">${escapeHtml(a.disclaimer || "")}</p>`;
 }
