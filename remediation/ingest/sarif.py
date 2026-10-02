@@ -52,6 +52,24 @@ class SarifError(ValueError):
     pass
 
 
+def summarize(data, scan_type=None):
+    """The runs in a SARIF file as [{tool, scan_type, results}], including a run with no results (a clean scan). Raises SarifError for a non-SARIF file."""
+    doc = data
+    if isinstance(doc, (str, bytes)):
+        try:
+            doc = json.loads(doc)
+        except ValueError as exc:
+            raise SarifError(f"Not valid JSON: {exc}") from exc
+    if not isinstance(doc, dict) or not isinstance(doc.get("runs"), list):
+        raise SarifError("This is not a SARIF file: it has no 'runs' list.")
+    out = []
+    for run in doc["runs"]:
+        tool = (((run.get("tool") or {}).get("driver")) or {}).get("name")
+        if tool:
+            out.append({"tool": tool, "scan_type": scan_type or infer_scan_type(tool), "results": len(run.get("results") or [])})
+    return out
+
+
 def infer_scan_type(tool_name):
     name = (tool_name or "").lower()
     for needles, scan_type in TOOL_SCAN_TYPES:

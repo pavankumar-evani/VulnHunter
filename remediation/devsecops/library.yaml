@@ -1,0 +1,268 @@
+# DevSecOps control library: the controls a secure delivery pipeline is expected to have, how to put each in place, and how Quanta can tell.
+#
+# evidence:
+#   scan_type: a scan of this kind has been uploaded for the repository (a clean scan counts: Quanta records that the scan ran)
+#   clean_of:  a pipeline check ran for the repository and found none of these rules; a finding for one of them means the control is failing
+#   quanta:    something Quanta itself holds (for example a threat model)
+#   (none)     Quanta cannot see this control; record it yourself with the state and a note
+# The snippets are starting points, not drop-in files: pin every action to a full commit SHA you have reviewed (the version tags shown only
+# say which release to look up) and check each tool's current documentation.
+# owasp_cicd is the OWASP Top 10 CI/CD Security Risks id; ssdf is the NIST SP 800-218 Secure Software Development Framework practice.
+
+- id: security-requirements
+  stage: design
+  title: Security requirements are written down for each feature
+  why: Requirements that nobody wrote cannot be reviewed or tested, so gaps are found in production.
+  how: Add a short security section to each design or ticket template (data handled, who can do what, what must be logged) and review it before work starts.
+  ssdf: [PO.1, PW.1]
+  keywords: [security requirement, requirements, abuse case, user story]
+- id: design-review
+  stage: design
+  title: Designs are threat-modelled before they are built
+  why: Design flaws are the most expensive to fix later and no scanner finds them.
+  how: Describe the system as components and data flows and review the STRIDE threats. Quanta's Threat Models page does this against your live findings and controls.
+  evidence: {quanta: threat-models}
+  ssdf: [PW.1]
+  keywords: [threat model, design review, architecture review, secure design]
+- id: branch-protection
+  stage: code
+  title: Protected branches with required reviews
+  why: Without it one compromised or careless account can change what ships.
+  how: Protect the default and release branches, require at least one approving review from someone other than the author, require status checks, and disallow force pushes.
+  owasp_cicd: [CICD-SEC-1]
+  ssdf: [PS.1, PW.7]
+  keywords: [peer review, code review, pull request, branch protection, four-eyes, two-person, approval before merge]
+- id: codeowners
+  stage: code
+  title: Code owners review sensitive paths
+  why: Authentication, cryptography and pipeline files need review by people who understand them.
+  how: Add a CODEOWNERS file naming a team for security-relevant directories and the pipeline definitions, and require code-owner review on protected branches.
+  owasp_cicd: [CICD-SEC-1]
+  keywords: [code owner, codeowners, ownership of code, sensitive code review]
+- id: signed-commits
+  stage: code
+  title: Commits are signed
+  why: Signatures tie a change to a key its author controls.
+  how: Require signed commits on protected branches (GPG, SSH or Sigstore gitsign) and keep signing keys on hardware where possible.
+  ssdf: [PS.1]
+  keywords: [signed commit, commit signing, gpg, verified commit]
+- id: secret-scan-commit
+  stage: code
+  title: Secrets are blocked before they are committed
+  why: A secret in history is a secret to be rotated, whatever you do next.
+  how: Run a secret scanner as a pre-commit hook and enable push protection on the repository host.
+  snippets:
+    pre-commit: |
+      repos:
+        - repo: https://github.com/gitleaks/gitleaks
+          rev: v8.18.4   # check for the current release, pin to a commit
+          hooks:
+            - id: gitleaks
+  owasp_cicd: [CICD-SEC-6]
+  ssdf: [PW.5]
+  keywords: [secret scanning, hardcoded secret, credential in code, push protection, pre-commit]
+- id: secret-scan-ci
+  stage: build
+  title: Secret scanning runs in the pipeline
+  why: Hooks can be skipped; the pipeline cannot.
+  how: Run a secret scanner on every pull request and on the full history on a schedule, and upload the results to Quanta.
+  snippets:
+    github-actions: |
+      - uses: gitleaks/gitleaks-action@v2   # pin to a commit SHA
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  evidence: {scan_type: secrets}
+  owasp_cicd: [CICD-SEC-6]
+  ssdf: [PW.5]
+  keywords: [secret scan, secrets detection, credentials scanning]
+- id: sast
+  stage: code
+  title: Static analysis runs on every pull request
+  why: Injection, unsafe deserialization and similar flaws are cheapest to fix before merge.
+  how: Run a static analysis tool on each pull request, fail the check on high-severity results, and upload the SARIF output to Quanta.
+  snippets:
+    github-actions: |
+      - uses: github/codeql-action/init@v3      # pin to a commit SHA
+        with: { languages: python }
+      - uses: github/codeql-action/analyze@v3   # pin to a commit SHA
+    gitlab-ci: |
+      semgrep:
+        image: semgrep/semgrep   # pin to a digest
+        script: semgrep ci --sarif --output semgrep.sarif
+  evidence: {scan_type: sast}
+  ssdf: [PW.7, PW.8]
+  keywords: [static analysis, sast, static application security testing, code scanning, source code analysis]
+- id: sca
+  stage: code
+  title: Dependencies are scanned for known vulnerabilities
+  why: Most code in an application is someone else's; its flaws are yours.
+  how: Scan dependencies on every pull request and nightly, block merges that add a known-exploited or critical vulnerability, and keep an inventory (SBOM).
+  snippets:
+    github-actions: |
+      - uses: actions/dependency-review-action@v4   # pin to a commit SHA
+        with: { fail-on-severity: high }
+  evidence: {scan_type: sca}
+  ssdf: [PW.4, RV.1]
+  keywords: [dependency scanning, software composition, sca, third-party component, open source vulnerabilit, vulnerable librar]
+- id: iac-scan
+  stage: code
+  title: Infrastructure as code is scanned
+  why: A public bucket or an open security group is a vulnerability you wrote down.
+  how: Scan Terraform, CloudFormation, Kubernetes and Helm files for misconfiguration on every pull request.
+  snippets:
+    github-actions: |
+      - uses: bridgecrewio/checkov-action@v12   # pin to a commit SHA
+        with: { output_format: sarif }
+  evidence: {scan_type: iac}
+  ssdf: [PW.7]
+  keywords: [infrastructure as code, iac, terraform, misconfiguration, cloud configuration scanning]
+- id: pin-pipeline-dependencies
+  stage: build
+  title: Pipeline actions and images are pinned
+  why: A tag can be moved by whoever controls it, and your pipeline then runs their code with your secrets.
+  how: Pin every third-party action to a full commit SHA and every image to a digest, and update them with a reviewed bot.
+  evidence: {clean_of: [GHA001, GL001]}
+  owasp_cicd: [CICD-SEC-3]
+  ssdf: [PS.1, PW.4]
+  keywords: [pinned, pin version, third-party action, supply chain of the pipeline, immutable reference]
+- id: least-privilege-ci-token
+  stage: build
+  title: CI tokens have the least privilege they need
+  why: A default read-write token turns any compromised step into a repository takeover.
+  how: Set the workflow-level permissions to read-only and grant extra scopes per job. Prefer short-lived OIDC credentials to stored cloud keys.
+  snippets:
+    github-actions: |
+      permissions:
+        contents: read
+  evidence: {clean_of: [GHA004]}
+  owasp_cicd: [CICD-SEC-5]
+  keywords: [least privilege, token permission, ci credential, oidc, short-lived credential]
+- id: untrusted-input
+  stage: build
+  title: Untrusted input never reaches a script or a privileged workflow
+  why: A pull request title or branch name that becomes part of a shell command is code execution.
+  how: Pass event data through environment variables, never expand it into a script, and never run a pull request's code from a privileged trigger.
+  evidence: {clean_of: [GHA002, GHA003, GHA009, JK001]}
+  owasp_cicd: [CICD-SEC-4]
+  keywords: [injection in pipeline, untrusted input, pull request from fork, script injection]
+- id: no-secrets-in-pipeline
+  stage: build
+  title: No credential is written into a pipeline file or its logs
+  why: Pipeline files and logs are read by far more people than the secret store is.
+  how: Keep secrets in the platform's secret store, pass them as environment variables to the one step that needs them, and never echo them.
+  evidence: {clean_of: [GHA005, GHA006, GL003, JK002]}
+  owasp_cicd: [CICD-SEC-6]
+  keywords: [secrets in pipeline, secrets in logs, credential hygiene in ci]
+- id: verified-downloads
+  stage: build
+  title: Downloads in the build are verified
+  why: Piping a script into a shell trusts whatever the server sends today.
+  how: Download to a file, check a pinned checksum or signature, then run it, or use a reviewed package.
+  evidence: {clean_of: [GHA008, GL002, JK003]}
+  owasp_cicd: [CICD-SEC-3]
+  keywords: [verified download, checksum, signature verification, curl pipe]
+- id: isolated-runners
+  stage: build
+  title: Build runners are isolated and short-lived
+  why: A shared, long-lived runner carries one job's secrets into the next.
+  how: Use ephemeral runners, keep self-hosted runners away from untrusted pull requests, and separate runners for release jobs.
+  evidence: {clean_of: [GHA007]}
+  owasp_cicd: [CICD-SEC-7]
+  keywords: [runner, build agent, ephemeral, isolated build]
+- id: lockfiles
+  stage: build
+  title: Dependencies are locked to exact versions with hashes
+  why: A floating version is a different build tomorrow.
+  how: Commit lockfiles, install with the frozen or locked option, and verify package hashes where the ecosystem supports it.
+  ssdf: [PW.4]
+  keywords: [lockfile, lock file, pinned dependenc, reproducible build, exact version]
+- id: sbom
+  stage: build
+  title: An SBOM is produced for every release
+  why: When the next library flaw lands you need to know in minutes which releases contain it.
+  how: Generate a CycloneDX or SPDX SBOM in the build, store it with the artifact and upload it to Quanta.
+  snippets:
+    github-actions: |
+      - uses: anchore/sbom-action@v0   # pin to a commit SHA
+        with: { format: cyclonedx-json }
+  ssdf: [PS.3]
+  keywords: [sbom, software bill of materials, bill of materials, component inventory]
+- id: container-scan
+  stage: build
+  title: Container images are scanned and built from minimal bases
+  why: The base image is most of the attack surface you ship.
+  how: Scan every image before it is pushed, build from a minimal pinned base, run as a non-root user, and upload the results to Quanta.
+  snippets:
+    github-actions: |
+      - uses: aquasecurity/trivy-action@master   # pin to a commit SHA, not master
+        with: { image-ref: "myapp:${{ github.sha }}", format: sarif, output: trivy.sarif }
+  evidence: {scan_type: container}
+  ssdf: [PW.4, PW.7]
+  keywords: [container image, docker image, base image, image scanning, container security]
+- id: dast
+  stage: test
+  title: The running application is tested from the outside
+  why: "Some flaws only show in a running system: headers, authentication flow, exposed endpoints."
+  how: Run a baseline dynamic scan against a staging deployment on each release and upload the results.
+  snippets:
+    github-actions: |
+      - uses: zaproxy/action-baseline@v0.12.0   # pin to a commit SHA
+        with: { target: "https://staging.example.com" }
+  evidence: {scan_type: dast}
+  ssdf: [PW.8]
+  keywords: [dynamic analysis, dast, penetration test, runtime testing, vulnerability scan of running application]
+- id: coverage-gate
+  stage: test
+  title: Security-relevant code has tests
+  why: Untested authentication or validation code is where regressions hide.
+  how: Report test coverage in the pipeline and fail when security-relevant files fall below your threshold. Upload the report to Quanta.
+  evidence: {scan_type: coverage}
+  ssdf: [PW.8]
+  keywords: [test coverage, unit test, code coverage, security test]
+- id: vulnerability-gate
+  stage: release
+  title: Releases are blocked by known-exploited and critical findings
+  why: A gate turns a policy into something that happens.
+  how: Fail the release job when the artifact has a critical vulnerability or one on CISA's KEV list that has no approved exception.
+  ssdf: [PW.7, RV.1]
+  keywords: [release gate, quality gate, block release, fail the build, vulnerability threshold]
+- id: protected-environments
+  stage: release
+  title: Production deployments need approval and use protected credentials
+  why: The deploy job is the most powerful thing the pipeline does.
+  how: Deploy through protected environments with required reviewers, deployment-only credentials and a record of who approved.
+  owasp_cicd: [CICD-SEC-1, CICD-SEC-2]
+  keywords: [deployment approval, production deployment, change approval, protected environment, release approval]
+- id: artifact-provenance
+  stage: release
+  title: Artifacts are signed and carry provenance
+  why: Consumers can only trust what they can verify came from your build.
+  how: Sign release artifacts and images (for example with Sigstore cosign) and publish build provenance; verify both before deploy.
+  snippets:
+    github-actions: |
+      - uses: actions/attest-build-provenance@v1   # pin to a commit SHA
+        with: { subject-path: dist/* }
+  owasp_cicd: [CICD-SEC-9]
+  ssdf: [PS.2, PS.3]
+  keywords: [artifact signing, provenance, slsa, signed artifact, attestation, cosign]
+- id: vulnerability-sla
+  stage: operate
+  title: Vulnerabilities are fixed within a stated time
+  why: A finding with no deadline is a finding that waits.
+  how: Set deadlines by severity and track them. Quanta's queue measures patch SLA compliance and the GRC evidence page reports it.
+  ssdf: [RV.1, RV.2]
+  keywords: [remediation sla, patch within, fix within, vulnerability deadline, time to remediate]
+- id: secret-rotation
+  stage: operate
+  title: Secrets are rotated, and rotated at once when exposed
+  why: A leaked secret that stays valid is still a leak.
+  how: Keep secrets in a vault with short lifetimes where possible, rotate on a schedule, and rotate immediately when a scanner finds one.
+  owasp_cicd: [CICD-SEC-6]
+  keywords: [rotate, rotation, key management, secret management, vault]
+- id: runtime-monitoring
+  stage: operate
+  title: Production is monitored and incidents feed back into the pipeline
+  why: What production teaches you should change what you build.
+  how: Send application and platform logs to your SIEM, alert on abuse of your own endpoints, and add a regression test or rule after each incident.
+  ssdf: [RV.1, RV.3]
+  keywords: [monitoring, logging, incident response, lessons learned, detection]

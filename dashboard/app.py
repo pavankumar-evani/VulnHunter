@@ -60,6 +60,8 @@ from remediation.connectors import reputation_connector as hunt_rep, siem_search
 from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
+from remediation.devsecops import controls as dso_controls, factory as dso_factory  # noqa: E402
+from remediation.enrichment import sbom as sbom_mod, zero_day_watch as zero_day  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
 from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
@@ -2529,10 +2531,17 @@ def _ingest_sarif_bytes(data, source, scan_type, asset, reconcile, actor):
     try:
         api_findings.check_source(source)
         findings, skipped = sarif_ingest.parse(data, source, scan_type=scan_type or None, asset=asset or None)
+        runs = sarif_ingest.summarize(data, scan_type=scan_type or None)
     except (ValueError, sarif_ingest.SarifError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not findings and not any(skipped.values()):
-        raise HTTPException(status_code=400, detail="The SARIF file has no results.")
+    if not runs:
+        raise HTTPException(status_code=400, detail="The SARIF file names no tool, so it cannot be a scan result.")
+    for r in runs:  # a clean scan is still evidence that the scan runs
+        dso_controls.record_scan_run(asset or None, r["scan_type"], r["tool"], source, r["results"], actor)
+    if not findings:
+        activity_log.record_activity(actor, "ingest.sarif", source, {"parsed": 0, "clean_scan": True, **skipped})
+        return {"source": source, "parsed": 0, "clean_scan": True, "added": 0, "updated": 0, "removed": 0, "skipped": skipped,
+                **({"reconcile_note": "A clean scan was recorded; existing findings from this source were not removed. Send reconcile=true with a complete result set to remove fixed ones."} if reconcile else {})}
     return _merge_scanner_findings(findings, source, reconcile, actor, "ingest.sarif", {"skipped": skipped})
 
 
@@ -2559,6 +2568,7 @@ async def api_ingest_coverage(request: Request, source: str = "coverage", asset:
         findings, summary = coverage_ingest.analyse(data.decode("utf-8", "replace"), fmt or None, threshold, source, asset or None)
     except (ValueError, coverage_ingest.CoverageError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    dso_controls.record_scan_run(asset or None, "coverage", "coverage report", source, len(findings), f"apikey:{key['name']}")
     return _merge_scanner_findings(findings, source, reconcile, f"apikey:{key['name']}", "ingest.coverage", {"coverage": summary})
 
 
@@ -5091,6 +5101,120 @@ def api_cyber_risk_simulate(body: ScenarioBody, user: dict = Depends(rbac.requir
         return quant_risk.evaluate_options(data, pol.get("trials", 10000), 0, pol.get("scenario_tolerance"))
     except quant_risk.ScenarioError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------- DevSecOps control library, remediation queue, zero-day watch
+class ControlStateBody(BaseModel):
+    asset: str
+    control_id: str
+    state: str
+    note: str = ""
+
+
+class PolicyTextBody(BaseModel):
+    text: str
+
+
+class FactoryQueueBody(BaseModel):
+    finding_ids: list[str]
+
+
+class FactoryUpdateBody(BaseModel):
+    state: str | None = None
+    assignee: str | None = None
+    pr_url: str | None = None
+    notes: str | None = None
+
+
+def _devsecops_inputs():
+    return dso_controls.scan_runs(), dso_controls.states(), dashboard_data.load_live_queue(), len(tm_store.list_models())
+
+
+@app.get("/api/devsecops/overview")
+def api_devsecops_overview(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    runs, rec, findings, tms = _devsecops_inputs()
+    return dso_controls.overview(runs, rec, findings, tms)
+
+
+@app.get("/api/devsecops/repos")
+def api_devsecops_repo(asset: str, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    runs, rec, findings, tms = _devsecops_inputs()
+    return dso_controls.repo_report(asset, dso_controls.library(), runs, rec, findings, tms)
+
+
+@app.post("/api/devsecops/state")
+def api_devsecops_set_state(body: ControlStateBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        dso_controls.set_state(body.asset, body.control_id, body.state, body.note, user["email"])
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such control") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "devsecops.state", f"{body.asset}:{body.control_id}", {"state": body.state})
+    return {"ok": True}
+
+
+@app.delete("/api/devsecops/state")
+def api_devsecops_clear_state(asset: str, control_id: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    if not dso_controls.clear_state(asset, control_id):
+        raise HTTPException(status_code=404, detail="Nothing was recorded for that control")
+    return {"ok": True}
+
+
+@app.post("/api/devsecops/policy-check")
+def api_devsecops_policy(body: PolicyTextBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    if len(body.text) > 200_000:
+        raise HTTPException(status_code=413, detail="The policy text is too large")
+    return dso_controls.map_policy(body.text)
+
+
+@app.get("/api/devsecops/factory")
+def api_devsecops_factory(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    f = dashboard_data.load_live_queue()
+    return {"items": dso_factory.items(f), "candidates": dso_factory.candidates(f), "summary": dso_factory.summary(f), "states": dso_factory.STATES}
+
+
+@app.post("/api/devsecops/factory/queue")
+def api_devsecops_factory_queue(body: FactoryQueueBody, user: dict = Depends(rbac.require_admin)):
+    out = dso_factory.queue(body.finding_ids, dashboard_data.load_live_queue(), user["email"])
+    activity_log.record_activity(user["email"], "devsecops.factory.queue", None, {"queued": len(out["queued"]), "skipped": len(out["skipped"])})
+    return out
+
+
+@app.put("/api/devsecops/factory/{finding_id}")
+def api_devsecops_factory_update(finding_id: str, body: FactoryUpdateBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        row = dso_factory.update_item(finding_id, body.model_dump(exclude_unset=True))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "devsecops.factory.update", finding_id, {"state": row["state"]})
+    return row
+
+
+@app.get("/api/devsecops/factory/{finding_id}/brief")
+def api_devsecops_factory_brief(finding_id: str, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    f = next((x for x in dashboard_data.load_live_queue() if x["id"] == finding_id), None)
+    if not f or not dso_factory.is_code(f):
+        raise HTTPException(status_code=404, detail="No such code-level finding")
+    return PlainTextResponse(dso_factory.brief(f), media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="fix-{finding_id}.md"'})
+
+
+@app.get("/api/zero-day-watch")
+def api_zero_day_watch(days: int = 30, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    days = max(1, min(int(days), 365))
+    try:
+        catalog = zero_day.fetch_catalog()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"The CISA catalog could not be fetched ({type(exc).__name__}). Try again when this server can reach cisa.gov.") from exc
+    comps = []
+    try:
+        sb = sbom_mod.load_sbom()
+        comps = [sbom_mod.component_info(c) for c in sbom_mod._all_components(sb)] if sb else []
+    except Exception:  # noqa: BLE001 - the SBOM is optional
+        comps = []
+    return zero_day.watch(catalog, dashboard_data.load_live_queue(), comps, days)
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
