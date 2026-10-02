@@ -150,7 +150,7 @@ jobs:
           curl -s https://example.com/install.sh | bash
           echo ${{ secrets.DEPLOY_TOKEN }}
       - env:
-          AWS_KEY: AKIAABCDEFGHIJKLMNOP
+          AWS_KEY: AKIAFAKEABCDEFGHIJKL
         run: ./deploy.sh
 """
 WORKFLOW_GOOD = """\
@@ -179,7 +179,7 @@ class PipelineChecksTests(unittest.TestCase):
             self.assertIn(rule, found, rule)
         self.assertEqual(found["GHA002"]["severity"], "Critical")
         self.assertEqual(found["GHA006"]["severity"], "Critical")
-        self.assertNotIn("AKIAABCDEFGHIJKLMNOP", json.dumps(found["GHA006"]))  # the credential is never copied into the finding
+        self.assertNotIn("AKIAFAKEABCDEFGHIJKL", json.dumps(found["GHA006"]))  # the credential is never copied into the finding
 
     def test_first_party_actions_are_low_third_party_medium_and_pinned_ones_ignored(self):
         findings = [f for f in cicd.scan_file(".github/workflows/x.yml", WORKFLOW_BAD) if f["rule_id"] == "GHA001"]
