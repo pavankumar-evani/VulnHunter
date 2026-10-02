@@ -181,7 +181,7 @@ flowchart LR
     API <-->|read/write| Files
     API -->|"subprocess: claude -p /remediate ..."| Agents
     Agents -->|read/write| Files
-    API -->|"per-request credentials, never stored"| Ext
+    API -->|"credentials per request, or encrypted at rest if stored"| Ext
     API -->|"free, no-auth"| Feeds
       </pre>
 

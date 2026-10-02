@@ -7,6 +7,11 @@ which pieces are ready today versus which still need real-world engineering. See
 connector does and its verification status; this doc is the operational checklist for
 actually flipping one on.
 
+> **Update:** the **Connections** page (see [PRODUCTION_GUIDE.md](PRODUCTION_GUIDE.md) and
+> [CONNECTOR_ONBOARDING.md](CONNECTOR_ONBOARDING.md)) now stores credentials encrypted, pulls on a
+> schedule, and merges findings straight into the queue with no agent session. The per-connector
+> pages below still work for one-off pulls and still keep nothing.
+
 ## The honest starting point
 
 Every real finding shown in this dashboard today comes from a bundled sample dataset
@@ -24,7 +29,7 @@ Two genuinely different situations, by connector:
   Splunk (push - findings out), and Tenable, Qualys, OpenVAS/GVM, Prisma Cloud, Cortex
   XSIAM, Infoblox, Axonius, Active Directory (pull - data in). Every one of these takes real
   credentials fresh on every request, typed into that connector's own page under
-  **Connectors / Adaptors** - never stored server-side, by design (see the "Credential
+  **Connectors / Adaptors** - kept by nothing on those pages, by design (the Connections page is the opt-in way to store them encrypted) (see the "Credential
   storage" note each connector's connection-settings panel already shows).
 - **Needs a script or Python session run outside the dashboard**: CrowdStrike Falcon
   only, for now. It pulls data rather than pushing it, and has no dashboard form yet -

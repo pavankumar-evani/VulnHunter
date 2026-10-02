@@ -68,7 +68,7 @@ tenant configuration (`TenableConnector.to_csv_row()` is the place to adjust if 
 real **Test Connection** button (`GET /session` - the lightest authenticated call
 Tenable's API has) and a **Fetch Live Data** button (the full export workflow above,
 writing to `remediation/live-data/tenable_export.csv`). Both take an access key + secret
-key fresh on every request, never stored server-side. Fetch is confirm-gated and
+key fresh on every request on that connector's own page, which stores nothing (the Connections page can store them encrypted for scheduled syncs). Fetch is confirm-gated and
 admin-only (`rbac.require_admin`) since it's a real, potentially multi-minute call
 against production Tenable infrastructure. Bringing the fetched file into this
 dashboard's own pages still needs the agent-driven `/remediate <file>` step described

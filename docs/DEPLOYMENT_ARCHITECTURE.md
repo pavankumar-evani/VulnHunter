@@ -36,14 +36,14 @@ and audit stay inside their boundary.
 
 | Capability | Today | Target |
 |---|---|---|
-| Container image + compose | `Dockerfile`, `docker-compose.yml` (app + PostgreSQL), non-root, healthcheck | Helm chart / Kubernetes manifests |
+| Container image + compose | `Dockerfile`, `docker-compose.yml` (app, PostgreSQL, Caddy TLS), non-root, `/healthz` check, entrypoint that migrates and bootstraps the first admin | Helm chart / Kubernetes manifests |
 | PostgreSQL | Supported through `QUANTA_DATABASE_URL`; schema created on first run | Managed HA PostgreSQL with automated failover |
 | Multi-replica app | **Not yet.** The advisory file lock serialises writers on one host | Row-level locking / job queue so replicas can share one database |
 | Background work | In-process scheduler, one node | Queue + worker pool (a message broker) for scans, exports and long pipeline runs |
 | Object storage | Local volumes (`remediation/output`, `live-data`) | S3-compatible bucket (S3, GCS, Azure Blob, MinIO) with versioning and retention |
-| Secrets / KMS | Environment variables | Secrets manager injection + KMS-encrypted volumes |
+| Secrets / KMS | Environment variables; connector credentials encrypted at rest (Fernet) with a key held outside the database | Secrets manager injection + KMS-managed keys |
 | Encryption in transit | Local HTTPS built in; proxy TLS recommended | TLS 1.3 at ingress, mTLS to the database |
-| Observability | `/api/status`, activity log | Metrics, structured logs and alerts exported to the customer's stack |
+| Observability | `/healthz`, `/readyz`, token-guarded `/metrics`, JSON logs with request ids, activity log | Metrics, structured logs and alerts exported to the customer's stack |
 
 ## 4. Sizing guide
 

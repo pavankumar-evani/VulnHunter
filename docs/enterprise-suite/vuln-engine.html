@@ -154,7 +154,7 @@
       <ul>
         <li><code>test_connection()</code> — the cheapest real authenticated call the vendor's API offers, wired to a dashboard "Test Connection" button with <em>no confirmation gate</em>.</li>
         <li>A fetch/scan action — gated behind an explicit confirm checkbox, since it's a real, potentially slow call against a real production system.</li>
-        <li>Credentials are <strong>per-request, never stored server-side</strong> — every connector page asks for them fresh.</li>
+        <li>Credentials are asked for fresh on each connector's own page and kept by nothing there. The Connections page can store them <strong>encrypted at rest</strong> for scheduled syncs, only when <code>QUANTA_ENCRYPTION_KEY</code> is set, and never returns them.</li>
         <li>A disclosed verification status: built against the vendor's public API documentation, unit-tested against mocked HTTP/LDAP/GMP responses shaped like that documentation — and honestly labeled when it has (KEV/EPSS) or hasn't yet (every vendor connector) been exercised against a real live account.</li>
       </ul>
     </section>
