@@ -583,6 +583,50 @@ def _cluster_schema_lock(engine):
             conn.close()
 
 
+hunts = Table(
+    "hunts", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("title", String, nullable=False),
+    Column("hypothesis", Text, nullable=False),
+    Column("source", String, nullable=False),  # generated | manual
+    Column("source_ref", String, nullable=True),  # e.g. the CVE a generated hunt came from; unique per source when set
+    Column("status", String, nullable=False),  # proposed | active | closed
+    Column("outcome", String, nullable=True),  # confirmed | not-found | needs-data
+    Column("techniques_json", Text, nullable=False),
+    Column("assets_json", Text, nullable=False),
+    Column("data_sources_json", Text, nullable=False),
+    Column("queries_json", Text, nullable=False),
+    Column("notes", Text, nullable=True),
+    Column("follow_ups", Text, nullable=True),
+    Column("detection_created", Integer, nullable=False, default=0),
+    Column("owner", String, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    Column("closed_at", String, nullable=True),
+    UniqueConstraint("source", "source_ref", name="uq_hunts_source_ref"),
+)
+
+soc_alerts = Table(
+    "soc_alerts", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("source", String, nullable=False),
+    Column("external_id", String, nullable=False),
+    Column("title", String, nullable=False),
+    Column("severity", String, nullable=False),
+    Column("asset", String, nullable=True),
+    Column("technique", String, nullable=True),
+    Column("detail", Text, nullable=True),
+    Column("status", String, nullable=False),  # new | investigating | closed
+    Column("disposition", String, nullable=True),  # true-positive | benign | false-positive | needs-data
+    Column("assignee", String, nullable=True),
+    Column("notes", Text, nullable=True),
+    Column("occurred_at", String, nullable=True),
+    Column("received_at", String, nullable=False),
+    Column("closed_at", String, nullable=True),
+    UniqueConstraint("source", "external_id", name="uq_soc_alert_source_ext"),
+)
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -604,6 +648,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
+            hunts, soc_alerts,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

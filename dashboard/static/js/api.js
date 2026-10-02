@@ -172,6 +172,15 @@ export const api = {
   grcAddPolicy: (body) => request("POST", "/api/grc/policies", body),
   grcUpdatePolicy: (id, body) => request("PUT", `/api/grc/policies/${id}`, body),
   grcAckPolicy: (id) => request("POST", `/api/grc/policies/${id}/acknowledge`, {}),
+  huntingOverview: () => request("GET", "/api/hunting/overview"),
+  huntingProposals: () => request("GET", "/api/hunting/proposals"),
+  huntingAccept: (body) => request("POST", "/api/hunting/proposals/accept", body),
+  huntingList: () => request("GET", "/api/hunting/hunts"),
+  huntingCreate: (body) => request("POST", "/api/hunting/hunts", body),
+  huntingUpdate: (id, body) => request("PUT", `/api/hunting/hunts/${id}`, body),
+  socAlerts: () => request("GET", "/api/soc/alerts"),
+  socAlert: (id) => request("GET", `/api/soc/alerts/${id}`),
+  socUpdateAlert: (id, body) => request("PUT", `/api/soc/alerts/${id}`, body),
   findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
   importScannerFile: async (source, reconcile, file) => {
     const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });

@@ -30,7 +30,7 @@ from sqlalchemy import insert, select, update
 from remediation.audit.activity_log import record_activity
 from remediation.utils import db as db_module
 
-SCOPES = ("ingest:write", "tickets:update", "read:findings", "controls:write", "ai-usage:write")
+SCOPES = ("ingest:write", "tickets:update", "read:findings", "controls:write", "ai-usage:write", "soc:write")
 _FORMAT = re.compile(r"^qk_([0-9a-f]{8})_([A-Za-z0-9_-]{43})$")
 LAST_USED_RESOLUTION_SECONDS = 60
 

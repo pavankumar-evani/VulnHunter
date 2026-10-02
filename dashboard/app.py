@@ -54,6 +54,7 @@ from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.controls import store as controls_store  # noqa: E402
+from remediation.hunting import generate as hunt_generate, store as hunt_store, triage as hunt_triage  # noqa: E402
 from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
 from remediation.threatmodel import engine as tm_engine, rules as tm_rules, seed as tm_seed, store as tm_store  # noqa: E402
 from remediation.aiusage import analytics as ai_analytics, discovery as ai_discovery, otlp as ai_otlp, store as ai_store  # noqa: E402
@@ -4387,6 +4388,165 @@ def playbook_page(filename: str):  # noqa: ARG001 - filename is read client-side
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+# ---------------------------------------------------------------- threat hunting and SOC triage
+class HuntBody(BaseModel):
+    title: str | None = None
+    hypothesis: str | None = None
+    techniques: list[dict] | None = None
+    assets: list[str] | None = None
+    data_sources: list[str] | None = None
+    queries: list[dict] | None = None
+    notes: str | None = None
+    follow_ups: str | None = None
+    owner: str | None = None
+    status: str | None = None
+    outcome: str | None = None
+    detection_created: bool | None = None
+
+
+class HuntProposalBody(BaseModel):
+    source_ref: str
+
+
+class AlertBody(BaseModel):
+    source: str = "api"
+    external_id: str
+    title: str
+    severity: str = "Medium"
+    asset: str | None = None
+    technique: str | None = None
+    detail: str | None = None
+    occurred_at: str | None = None
+
+
+class AlertsPushBody(BaseModel):
+    alerts: list[AlertBody]
+
+
+class AlertUpdateBody(BaseModel):
+    status: str | None = None
+    disposition: str | None = None
+    assignee: str | None = None
+    notes: str | None = None
+
+
+def _hunt_400(exc):
+    return HTTPException(status_code=404 if isinstance(exc, KeyError) else 400, detail=str(exc.args[0]) if isinstance(exc, KeyError) else str(exc))
+
+
+def _owner_map():
+    from remediation.inventory import asset_inventory
+    return {name.lower(): (o.get("owner") or o.get("team")) for name, o in asset_inventory.load_ownership().items() if o.get("owner") or o.get("team")}
+
+
+def _hunt_proposals():
+    return hunt_generate.propose(dashboard_data.load_live_queue(), hunt_store.existing_refs())
+
+
+@app.get("/api/hunting/overview")
+def api_hunting_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    findings = dashboard_data.load_live_queue()
+    hunts, alerts = hunt_store.list_hunts(), hunt_store.list_alerts()
+    m = hunt_triage.metrics(hunts, alerts, findings, hunt_generate.library())
+    return {"metrics": m, "proposals": len(hunt_generate.propose(findings, hunt_store.existing_refs()))}
+
+
+@app.get("/api/hunting/proposals")
+def api_hunting_proposals(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"proposals": _hunt_proposals()[:100], "note": "A proposed hunt means the exposure makes it worth looking, not that anything happened."}
+
+
+@app.post("/api/hunting/proposals/accept")
+def api_hunting_accept(body: HuntProposalBody, user: dict = Depends(rbac.require_admin)):
+    p = next((x for x in _hunt_proposals() if x["source_ref"] == body.source_ref), None)
+    if not p:
+        raise HTTPException(status_code=404, detail="No such proposal (it may already be a hunt)")
+    try:
+        h = hunt_store.create_hunt(p, user["email"])
+    except ValueError as exc:
+        raise _hunt_400(exc) from exc
+    activity_log.record_activity(user["email"], "hunt.create", str(h["id"]), {"title": h["title"], "source": "generated"})
+    return h
+
+
+@app.get("/api/hunting/hunts")
+def api_hunting_list(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"hunts": hunt_store.list_hunts()}
+
+
+@app.post("/api/hunting/hunts")
+def api_hunting_create(body: HuntBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        h = hunt_store.create_hunt(body.model_dump(exclude_none=True) | {"source": "manual"}, user["email"])
+    except ValueError as exc:
+        raise _hunt_400(exc) from exc
+    activity_log.record_activity(user["email"], "hunt.create", str(h["id"]), {"title": h["title"], "source": "manual"})
+    return h
+
+
+@app.get("/api/hunting/hunts/{hunt_id}")
+def api_hunting_get(hunt_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    h = hunt_store.get_hunt(hunt_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="No such hunt")
+    return h
+
+
+@app.put("/api/hunting/hunts/{hunt_id}")
+def api_hunting_update(hunt_id: int, body: HuntBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        h = hunt_store.update_hunt(hunt_id, body.model_dump(exclude_unset=True))
+    except (ValueError, KeyError) as exc:
+        raise _hunt_400(exc) from exc
+    activity_log.record_activity(user["email"], "hunt.update", str(hunt_id), {"status": h["status"], "outcome": h["outcome"]})
+    return h
+
+
+@app.post("/api/ingest/alerts")
+def api_ingest_alerts(body: AlertsPushBody, key: dict = Depends(require_api_key("soc:write"))):
+    """Alerts from a SIEM, XDR or SOAR: {external_id, title, severity, asset, technique (ATT&CK id), detail, occurred_at}. A repeat is ignored."""
+    created, repeats, errors = 0, 0, []
+    for i, a in enumerate(body.alerts[:2000]):
+        try:
+            _, new = hunt_store.receive_alert(a.model_dump() | {"source": a.source if a.source != "api" else f"apikey:{key['name']}"})
+            created += new
+            repeats += not new
+        except ValueError as exc:
+            errors.append({"index": i, "error": str(exc)})
+    activity_log.record_activity(f"apikey:{key['name']}", "soc.alerts.push", None, {"created": created, "repeats": repeats, "rejected": len(errors)})
+    return {"created": created, "already_known": repeats, "rejected": len(errors), "errors": errors[:50]}
+
+
+@app.get("/api/soc/alerts")
+def api_soc_alerts(status: str | None = None, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    findings, owners, books = dashboard_data.load_live_queue(), _owner_map(), hunt_triage.runbooks()
+    rows = hunt_store.list_alerts(status=status)
+    for a in rows:
+        e = hunt_triage.enrich(a, findings, owners, books)
+        a["context"] = {k: e[k] for k in ("priority", "reasons", "owner", "open_findings", "kev_findings")}
+    rows.sort(key=lambda a: (a["status"] == "closed", -a["context"]["priority"]))
+    return {"alerts": rows}
+
+
+@app.get("/api/soc/alerts/{alert_id}")
+def api_soc_alert(alert_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    a = hunt_store.get_alert(alert_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="No such alert")
+    a["context"] = hunt_triage.enrich(a, dashboard_data.load_live_queue(), _owner_map())
+    return a
+
+
+@app.put("/api/soc/alerts/{alert_id}")
+def api_soc_alert_update(alert_id: int, body: AlertUpdateBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        a = hunt_store.update_alert(alert_id, body.model_dump(exclude_unset=True))
+    except (ValueError, KeyError) as exc:
+        raise _hunt_400(exc) from exc
+    activity_log.record_activity(user["email"], "soc.alert.update", str(alert_id), {"status": a["status"], "disposition": a["disposition"]})
+    return a
+
+
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
 def spa_fallback(full_path: str):
     """Anything not matched above (a stale bookmark, a typo'd URL) still gets the SPA
@@ -4427,6 +4587,7 @@ def _ensure_dev_tls_cert(certs_dir):
         return None, None
     print(f"Generated a new local self-signed HTTPS cert at {certs_dir} (one-time - every future run reuses it).")
     return str(keyfile), str(certfile)
+
 
 
 if __name__ == "__main__":
