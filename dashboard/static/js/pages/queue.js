@@ -153,7 +153,7 @@ function rowHtml(f) {
   return `
     <tr data-finding-id="${escapeHtml(f.id)}">
       <td data-col="priority"><span class="badge badge-priority-${(f.priority || "").toLowerCase()}">${escapeHtml(f.priority)}</span></td>
-      <td data-col="id"><button type="button" class="link-button finding-id-link" data-finding-id="${escapeHtml(f.id)}">${escapeHtml(f.id)}</button></td>
+      <td data-col="id"><button type="button" class="link-button finding-id-link" data-finding-id="${escapeHtml(f.id)}">${escapeHtml(f.id)}</button>${f.open_tickets ? ` <a href="/support" data-link class="badge badge-outline" data-tooltip="${f.open_tickets} open support ticket(s) linked to this finding">&#9993; ${f.open_tickets}</a>` : ""}</td>
       <td data-col="asset">${escapeHtml(f.asset && f.asset.name)}</td>
       <td data-col="asset_type" class="asset-type-cell">${escapeHtml(f.asset && f.asset.type)}</td>
       <td data-col="cloud_provider" class="asset-type-cell">${f.cloud_provider ? escapeHtml(f.cloud_provider) : `<span class="muted">—</span>`}</td>

@@ -258,6 +258,9 @@ support_tickets = Table(
     Column("resolution_due_at", String, nullable=True),
     Column("paused_at", String, nullable=True),         # set while waiting on the requester
     Column("reopen_count", Integer, nullable=True),
+    Column("csat_score", Integer, nullable=True),       # 1..5, from the requester after resolution
+    Column("csat_comment", Text, nullable=True),
+    Column("csat_at", String, nullable=True),
 )
 
 support_ticket_comments = Table(

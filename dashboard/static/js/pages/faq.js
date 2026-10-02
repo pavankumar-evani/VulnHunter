@@ -272,7 +272,8 @@ const FAQS = [
     "members work it and administrators see everything. Each priority has response and resolution " +
     "targets with at-risk and breached states, and the clock pauses while a ticket waits on the " +
     "requester. Analytics cover SLA compliance, first response, time to resolve, reopen rate, backlog " +
-    "age and workload by team. A ticket can link to a finding."],
+    "age and workload by team, plus satisfaction ratings. A ticket can link to a finding. SLA breaches alert " +
+    "the assignee, team manager and admins once per level."],
   ["How do I request a new feature, or report a bug?",
     "Open a ticket from the Support page (type: feature request or bug). It is stored in " +
     "this deployment's own database and triaged by your administrators, who can assign it, " +

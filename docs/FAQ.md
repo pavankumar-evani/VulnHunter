@@ -663,7 +663,10 @@ members work that queue, administrators see all of it. Each priority has respons
 resolution targets with at-risk and breached states, and the resolution clock pauses while
 a ticket waits on the requester. The Analytics tab shows SLA compliance, first-response
 time, mean time to resolve, reopen rate, backlog age and workload by team and assignee. A
-ticket can link to a finding. Policy lives in `remediation/config/support_sla.yaml` and
+ticket can link to a finding, and the findings queue badges findings that have open tickets.
+Breaches alert the assignee, team manager and admins once per level (email only if SMTP is
+configured); requesters can rate a resolved ticket 1 to 5 and the Analytics tab reports
+satisfaction. Policy lives in `remediation/config/support_sla.yaml` and
 `support_routing.yaml`. See [SUPPORT.md](SUPPORT.md).
 
 ### What if I find a bug or need help?

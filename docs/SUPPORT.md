@@ -94,6 +94,18 @@ The Support page is a small ITSM service desk (ITIL-style), stored in your own d
   member** (an agent) sees and works the queue routed to their team: reply, internal
   notes, status, assignee, resolution. Only an **administrator** changes priority or team,
   sees every team, and can escalate to the vendor. Other users' tickets return 404.
+- **SLA escalation:** when a running clock reaches *at risk* the assignee (else the team
+  manager) is alerted; when it *breaches*, the assignee, the team manager and every
+  administrator are. Each ticket alerts once per level, every alert is recorded in the
+  activity log, and email is sent only when an SMTP relay is configured (otherwise the alert
+  is still recorded and the ticket shows who would be told). The hourly scheduler raises
+  them automatically; an admin can preview and raise them on demand with *Run SLA
+  escalations*.
+- **Satisfaction (CSAT):** once a ticket is resolved the requester can rate it 1 to 5 with an
+  optional comment, once. Analytics report the average, how many rated, the response rate and
+  the share rating 4 or 5.
+- **Findings link back:** a finding with open tickets shows a badge in the queue, and the
+  finding's detail lists its linked tickets.
 - **Status:** open, in progress, waiting on requester, resolved, closed. A requester's reply
   on a ticket waiting on them resumes it. Reopening a resolved ticket is counted.
 - **Analytics:** SLA compliance, average first response, mean time to resolve, reopen rate,

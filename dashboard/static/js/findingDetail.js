@@ -192,6 +192,11 @@ async function loadOwnership(f, modalBody) {
     <p style="margin:10px 0 0"><button type="button" class="secondary-button" id="ownership-assign">${a ? "Reassign" : "Assign"}</button>
       <a class="secondary-button" href="/support?finding_id=${encodeURIComponent(f.id)}" data-link id="ownership-ticket">Raise a ticket</a></p>
     ${history ? `<ul class="ownership-history">${history}</ul>` : ""}`;
+  api.findingTickets(f.id).then(({ tickets }) => {
+    if (!tickets.length) return;
+    const rows = tickets.map((t) => `<li>${escapeHtml(t.ref)} - ${escapeHtml(t.subject)} (${escapeHtml(t.priority || "-")}, ${escapeHtml(t.status)}${t.sla && t.sla.breached ? ", SLA breached" : ""})</li>`).join("");
+    el.insertAdjacentHTML("beforeend", `<h4 style="margin:12px 0 4px">Linked support tickets</h4><ul class="ownership-history">${rows}</ul>`);
+  }).catch(() => {});
   el.querySelector("#ownership-assign").addEventListener("click", () => {
     openAssignModal({ findingId: f.id, title: f.title, onSaved: () => openFindingDetail(f) });
   });

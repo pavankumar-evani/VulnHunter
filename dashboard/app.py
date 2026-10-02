@@ -42,6 +42,7 @@ from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
 from remediation.support import analytics as support_analytics  # noqa: E402
+from remediation.support import escalation as support_escalation  # noqa: E402
 from remediation.support import routing as support_routing  # noqa: E402
 from remediation.support import sla as support_sla  # noqa: E402
 from remediation.support import store as support_store  # noqa: E402
@@ -263,6 +264,7 @@ async def _notification_scheduler_loop():
         try:
             report_scheduler.check_and_send_due_reports(dashboard_data, reports, email_sender)
             alert_checker.check_and_send_alerts(dashboard_data, email_sender)
+            _run_support_sla_escalations()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -442,6 +444,13 @@ def _finding_team_by_id(queue_findings, team_by_asset_name=None):
 def api_queue(user: dict = Depends(rbac.get_current_user)):
     scored = _scope_to_team(
         _annotate_finding_teams(dashboard_data.load_live_queue(), with_assignment=user is not None), user)
+    if user is not None:
+        counts = {}
+        for t in support_store.list_tickets(status="open_all", limit=5000):
+            if t.get("finding_id"):
+                counts[t["finding_id"]] = counts.get(t["finding_id"], 0) + 1
+        if counts:  # copy, never mutate: the scored findings may be a shared cached list
+            scored = [{**f, "open_tickets": counts[f["id"]]} if f["id"] in counts else f for f in scored]
     return _fast_json({"findings": scored, "sla": dashboard_data.sla_summary(scored)})
 
 
@@ -2231,7 +2240,12 @@ def _ticket_or_404(ref_value, user):
 
 def _ticket_detail(ticket, role):
     staff = role in ("admin", "agent")
-    return {**ticket, "role": role, "comments": support_store.list_comments(ticket["id"], include_internal=staff)}
+    out = {**ticket, "role": role, "comments": support_store.list_comments(ticket["id"], include_internal=staff)}
+    if staff:
+        teams_by_name = {t["name"].lower(): t for t in _team_catalog()}
+        out["escalation"] = support_escalation.escalation_view(
+            ticket, teams_by_name.get((ticket.get("team") or "").lower()), auth_users.list_users())
+    return out
 
 
 def _visible_tickets(user, **filters):
@@ -2344,6 +2358,46 @@ def api_update_ticket(ref: str, body: TicketUpdateBody, user: dict = Depends(rba
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _ticket_detail(updated, role)
+
+
+class TicketCsatBody(BaseModel):
+    score: int
+    comment: str | None = None
+
+
+@app.post("/api/support/tickets/{ref}/csat")
+def api_rate_ticket(ref: str, body: TicketCsatBody, user: dict = Depends(rbac.require_login)):
+    ticket, role = _ticket_or_404(ref, user)
+    try:
+        updated = support_store.rate_ticket(ticket["id"], user["email"], body.score, body.comment)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _ticket_detail(updated, role)
+
+
+class SlaEscalationRunBody(BaseModel):
+    confirm: bool = False
+
+
+def _sla_escalation_inputs():
+    tickets = support_store.list_tickets(status="open_all", limit=5000)
+    return tickets, {t["name"].lower(): t for t in _team_catalog()}, auth_users.list_users()
+
+
+@app.post("/api/support/escalations/run")
+def api_run_sla_escalations(body: SlaEscalationRunBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Preview (default) or raise the pending SLA alerts: one per ticket per level, to the
+    assignee / team manager / admins, emailed only if SMTP is configured."""
+    tickets, teams_by_name, users = _sla_escalation_inputs()
+    alerts = support_escalation.run(tickets, teams_by_name, users, email_sender, send=body.confirm)
+    return {"preview_only": not body.confirm, "alerts": alerts, "smtp_configured": email_sender.is_configured()}
+
+
+def _run_support_sla_escalations():
+    tickets, teams_by_name, users = _sla_escalation_inputs()
+    return support_escalation.run(tickets, teams_by_name, users, email_sender, send=True)
 
 
 @app.post("/api/support/tickets/{ref}/escalate")

@@ -88,6 +88,7 @@ export async function render(container) {
     return;
   }
 
+  window.__quantaMe = me;
   let tab = new URLSearchParams(location.search).get("tab") === "analytics" ? "analytics" : "queue";
   let filters = { status: "", team: "", breached: "", mine: false };
 
@@ -148,6 +149,7 @@ export async function render(container) {
           <label>Status <select id="f-status"><option value="">All</option><option value="open_all"${filters.status === "open_all" ? " selected" : ""}>Open work</option>${opts(Object.entries(STATUS_LABEL), filters.status)}</select></label>
           ${data.is_admin ? `<label>Team <select id="f-team"><option value="">All</option>${(data.teams || []).map((t) => `<option${t === filters.team ? " selected" : ""}>${escapeHtml(t)}</option>`).join("")}</select></label>` : ""}
           <label><input type="checkbox" id="f-breached"${filters.breached ? " checked" : ""}> SLA breached only</label>
+          ${data.is_admin ? `<button type="button" class="secondary-button" id="run-escalations">Run SLA escalations</button>` : ""}
           ${staff ? `<label><input type="checkbox" id="f-mine"${filters.mine ? " checked" : ""}> Only tickets I opened</label>` : ""}
         </div>
         <div class="table-scroll"><table class="data-table">
@@ -159,6 +161,18 @@ export async function render(container) {
       bind("#f-team", (e) => { filters.team = e.target.value; refresh(); });
       bind("#f-breached", (e) => { filters.breached = e.target.checked; refresh(); });
       bind("#f-mine", (e) => { filters.mine = e.target.checked; refresh(); });
+      const runEsc = body.querySelector("#run-escalations");
+      if (runEsc) runEsc.addEventListener("click", async () => {
+        try {
+          const p = await api.runSlaEscalations(false);
+          if (!p.alerts.length) { flash("No new SLA alerts to raise.", "info"); return; }
+          const lines = p.alerts.map((x) => `${x.ref} (${x.level}) -> ${x.recipients.join(", ") || "nobody"}`).join("\n");
+          if (!window.confirm(`Raise ${p.alerts.length} SLA alert(s)?${p.smtp_configured ? "" : " (SMTP not configured: recorded in-app only)"}\n\n${lines}`)) return;
+          await api.runSlaEscalations(true);
+          flash(`${p.alerts.length} SLA alert(s) raised.`, "success");
+          refresh();
+        } catch (err) { flash(err.message, "error"); }
+      });
       body.querySelectorAll("[data-ticket]").forEach((a) => a.addEventListener("click", (e) => {
         e.preventDefault();
         showTicket(a.dataset.ticket, data, refresh);
@@ -183,6 +197,7 @@ async function renderAnalytics(body) {
       ${kpi("SLA compliance", num(a.sla_compliance_pct, "%"))}${kpi("Avg first response", num(a.first_response_avg_minutes, " min"))}
       ${kpi("Mean time to resolve", num(a.mttr_hours, " h"))}${kpi("Reopen rate", num(a.reopen_rate_pct, "%"))}
       ${kpi("Open", t.open)}${kpi("Breached now", t.breached_open, t.breached_open ? "kpi-bad" : "")}
+      ${kpi("Satisfaction", a.csat.average === null ? "-" : `${a.csat.average} / 5`)}${kpi("Rated", `${a.csat.responses}`)}
       ${kpi("Linked to findings", t.linked_to_findings)}${kpi("Resolved", t.resolved)}</div>
     <div class="chart-row">
       <div class="chart-block"><h3>Open tickets by team</h3>${teamBars.length ? barChartSvg(teamBars, { width: 420, height: 210 }) : `<p class="muted">No open tickets.</p>`}</div>
@@ -198,6 +213,18 @@ async function renderAnalytics(body) {
     <h3>Open work by assignee</h3>
     <div class="table-scroll"><table class="data-table"><thead><tr><th>Assignee</th><th>Open</th><th>Breached</th><th>At risk</th></tr></thead><tbody>
       ${a.by_assignee.map((r) => `<tr><td>${escapeHtml(r.name)}</td><td>${r.open}</td><td>${r.breached}</td><td>${r.at_risk}</td></tr>`).join("") || `<tr><td colspan="4" class="empty-state">No open tickets.</td></tr>`}</tbody></table></div>`;
+}
+
+function csatHtml(t) {
+  if (t.csat_score) {
+    return `<div class="callout"><strong>Satisfaction:</strong> ${"&#9733;".repeat(t.csat_score)}${"&#9734;".repeat(5 - t.csat_score)} (${t.csat_score}/5)${t.csat_comment ? ` - ${escapeHtml(t.csat_comment)}` : ""}</div>`;
+  }
+  if (t.role !== "requester" && t.role !== "admin" && t.role !== "agent") return "";
+  const isRequester = t.requester_email && window.__quantaMe && window.__quantaMe.email === t.requester_email;
+  if (!isRequester || !(t.status === "resolved" || t.status === "closed")) return "";
+  return `<div class="callout"><strong>How did we do?</strong> Rate this resolution:
+    <span class="csat-buttons">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="secondary-button" data-score="${n}">${n}</button>`).join(" ")}</span>
+    <input id="csat-comment" maxlength="1000" placeholder="Optional comment" style="margin-top:8px;width:100%"></div>`;
 }
 
 async function showTicket(ref, listData, refresh) {
@@ -218,6 +245,9 @@ async function showTicket(ref, listData, refresh) {
       ${t.finding_id ? `<p>Related finding: <strong>${escapeHtml(t.finding_id)}</strong></p>` : ""}
       <p>${escapeHtml(t.description).replaceAll("\n", "<br>")}</p>
       ${t.resolution ? `<div class="callout"><strong>Resolution:</strong> ${escapeHtml(t.resolution)}</div>` : ""}
+      ${t.escalation ? `<div class="callout callout-warn"><strong>SLA ${t.escalation.level === "breached" ? "breached" : "at risk"}.</strong>
+        ${t.escalation.notify.length ? `Alerts go to ${t.escalation.notify.map(escapeHtml).join(", ")}.` : "No assignee or team manager is set, so nobody is being alerted."}</div>` : ""}
+      ${csatHtml(t)}
       <h3>Conversation</h3>${comments}
       <form id="comment-form" style="margin-top:10px">
         <textarea name="body" rows="3" maxlength="8000" required placeholder="Write a reply"></textarea>
@@ -236,6 +266,13 @@ async function showTicket(ref, listData, refresh) {
           ${isAdmin && listData.escalation_configured ? `<button class="secondary-button" type="button" id="escalate">Escalate to vendor by email</button>` : ""}</div>
       </form>` : ""}`;
 
+    body.querySelectorAll("[data-score]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        draw(await api.rateSupportTicket(t.ref, { score: Number(b.dataset.score), comment: (body.querySelector("#csat-comment") || {}).value || null }));
+        flash("Thanks for the feedback.", "success");
+        refresh();
+      } catch (err) { flash(err.message, "error"); }
+    }));
     body.querySelector("#comment-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);

@@ -251,3 +251,25 @@ def summary(tickets=None, engine=None):
             "urgent_open": sum(1 for t in open_t if t["severity"] == "urgent"),
             "breached_open": sum(1 for t in open_t if t["sla"]["breached"]),
             "at_risk_open": sum(1 for t in open_t if t["sla"]["at_risk"] and not t["sla"]["breached"])}
+
+
+def rate_ticket(ticket_id, rater_email, score, comment=None, engine=None, now=None):
+    """The requester's satisfaction rating (1-5) on a resolved or closed ticket. Once only."""
+    engine = _engine(engine)
+    ticket = get_ticket(ticket_id, engine)
+    if not ticket:
+        raise KeyError(f"No ticket {ref(ticket_id)}")
+    if ticket["requester_email"] != rater_email.lower():
+        raise PermissionError("Only the requester can rate a ticket")
+    if ticket["status"] not in ("resolved", "closed"):
+        raise ValueError("A ticket can be rated once it is resolved")
+    if ticket.get("csat_score"):
+        raise ValueError("This ticket has already been rated")
+    if not isinstance(score, int) or isinstance(score, bool) or not 1 <= score <= 5:
+        raise ValueError("score must be a whole number from 1 to 5")
+    comment = _text(comment, "Comment", 1000, required=False) or None
+    tbl = db_module.support_tickets
+    with engine.begin() as conn:
+        conn.execute(update(tbl).where(tbl.c.id == int(ticket_id)).values(csat_score=score, csat_comment=comment, csat_at=_now(now)))
+    record_activity(rater_email, "support.ticket.csat", ref(ticket_id), {"score": score}, engine=engine)
+    return get_ticket(ticket_id, engine)

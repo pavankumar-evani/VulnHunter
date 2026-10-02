@@ -43,8 +43,17 @@ def _team_row(name, rows, as_of):
         "breached": sum(1 for t in open_t if t["sla"]["breached"]),
         "at_risk": sum(1 for t in open_t if t["sla"]["at_risk"] and not t["sla"]["breached"]),
         "avg_resolution_hours": _avg([_hours(t["created_at"], t["resolved_at"]) for t in done]),
+        "csat_avg": _avg([t["csat_score"] for t in rows if t.get("csat_score")], 2),
         "sla_compliance_pct": _pct(sum(1 for t in done if t["sla"]["resolution"]["state"] == "met"), len(done)),
     }
+
+
+def _csat(tickets):
+    rated = [t for t in tickets if t.get("csat_score")]
+    resolved = [t for t in tickets if t.get("resolved_at")]
+    return {"average": _avg([t["csat_score"] for t in rated], 2), "responses": len(rated),
+            "response_rate_pct": _pct(len(rated), len(resolved)),
+            "satisfied_pct": _pct(sum(1 for t in rated if t["csat_score"] >= 4), len(rated))}
 
 
 def compute(tickets, as_of=None, days=14):
@@ -90,6 +99,7 @@ def compute(tickets, as_of=None, days=14):
         "first_response_avg_minutes": _avg([(_hours(t["created_at"], t["first_response_at"]) or 0) * 60 for t in responded], 0),
         "mttr_hours": _avg([_hours(t["created_at"], t["resolved_at"]) for t in done]),
         "sla_compliance_pct": _pct(met, len(finished_clocks)),
+        "csat": _csat(tickets),
         "reopen_rate_pct": _pct(sum(1 for t in done if t.get("reopen_count")), len(done)) if done else None,
         "ageing": ageing,
         "by_priority": by_priority,

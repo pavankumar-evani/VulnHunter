@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,603 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,619 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -545,7 +545,8 @@ new columns via `_add_missing_columns`), logic in `remediation/support/`: `store
 (create/comment/triage, pause, reopen), `sla.py` (priority = impact x urgency, response and
 resolution clocks derived on read), `routing.py` (rules in `remediation/config/
 support_routing.yaml`, only to teams that exist), `analytics.py` (SLA compliance, first
-response, MTTR, reopen rate, ageing, by team/assignee, trend). Policy:
+response, MTTR, reopen rate, ageing, by team/assignee, trend). `escalation.py` (one alert per ticket per level, via the activity log; hourly scheduler tick
+and `POST /api/support/escalations/run`), CSAT (`rate_ticket`, `POST .../csat`). Policy:
 `remediation/config/support_sla.yaml`. Routes `/api/support/tickets*`, `/api/support/analytics`,
 `/api/support/policy`, `/api/findings/{id}/tickets`. Three roles per ticket: requester (own
 ticket, public replies), agent (a member of the routed team: works the queue, no priority/team
