@@ -583,7 +583,7 @@ copy with table `file_snapshots` (versioned, tombstones, database wins on confli
 `dashboard/app.py` syncs around requests, `merge.py` syncs under its lease), so no shared volume is
 needed. `secret_files.reload_changed()` re-reads rotated secret files live (all but the session secret
 and database URL). Still true: the findings are one whole stored file (tens of thousands of findings,
-not millions), and the chart is checked by static tests (`tests/test_helm_chart.py`), CI
+not millions), and the chart is checked by `helm lint`/`template`, `scripts/e2e_replicas.py` (real processes), a kind install job (`.github/workflows/helm-kind.yml`, not yet run), static tests (`tests/test_helm_chart.py`), CI
 (`helm lint`/`template`/kubeconform) and unit tests but not yet installed on a live cluster.
 
 ## Support tickets (ITSM service desk)

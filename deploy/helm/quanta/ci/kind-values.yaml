@@ -1,0 +1,23 @@
+# Used by .github/workflows/helm-kind.yml: a real install into a throwaway kind cluster. The vault is
+# the External Secrets Operator's fake provider, so the secret path (vault -> ExternalSecret ->
+# Secret -> mounted files -> app) is the same one a real vault uses.
+image:
+  repository: quanta
+  tag: ci
+  pullPolicy: Never
+config:
+  bootstrapAdminEmail: admin@ci.example.com
+  leaderTtlSeconds: 20
+secrets:
+  mode: externalSecrets
+  optionalKeys: [QUANTA_ADMIN_PASSWORD]
+  externalSecrets:
+    refreshInterval: 1m
+    secretStoreRef: {kind: ClusterSecretStore, name: fake-vault}
+web:
+  replicas: 2
+  resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 768Mi}}
+worker:
+  replicas: 2
+  resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 768Mi}}
+podDisruptionBudget: {enabled: false}

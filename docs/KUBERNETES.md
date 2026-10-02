@@ -129,6 +129,24 @@ policy files once and refuses more than one replica without it.
 * Scrape `/metrics` with a `ServiceMonitor` (`serviceMonitor.enabled`); the endpoint needs
   `QUANTA_METRICS_TOKEN` in `optionalKeys`.
 
+## How this was verified
+
+* **Helm itself**: `helm lint` and `helm template` (Helm 4.3.0) pass on all six scenarios in
+  `deploy/helm/quanta/ci/`, and the four unsafe configurations are refused with a clear message.
+* **Static tests**: `tests/test_helm_chart.py` (undefined values, missing helpers, unsafe defaults, secrets only
+  as mounted files).
+* **Real processes**: `python scripts/e2e_replicas.py` starts two web processes and a worker on separate copies of
+  the app sharing one database, and checks first-run setup happens once, a finding pushed to one copy appears on
+  the other with no shared files, ids stay unique, exactly one scheduler leader with failover, and the worker
+  runs and retries a job. It passes.
+* **Real cluster**: `.github/workflows/helm-kind.yml` installs the chart into a throwaway `kind` cluster with
+  PostgreSQL and the External Secrets Operator (fake provider as the vault) and runs `scripts/e2e_cluster.py`
+  against the running pods: secrets are files and not environment values, data is served by the other pod,
+  one leader and a new one after the leader pod is deleted, workers reach the queue, and the data survives
+  replacing every web pod. This job has not yet run; its first run is the first cluster install.
+
+See `docs/SCALING_LIMITS.md` for what the remaining limits mean and how to work past them.
+
 ## Honest limits
 
 * The chart is verified in CI by `helm lint`, `helm template` and `kubeconform` against each scenario in

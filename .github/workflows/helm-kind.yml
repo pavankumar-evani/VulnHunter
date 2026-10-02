@@ -1,0 +1,114 @@
+name: Helm chart on a real cluster
+
+# Installs the chart into a throwaway kind (Kubernetes in Docker) cluster and checks it behaves like a
+# multi-replica deployment: secrets arrive as files from a vault, replicas share data through the
+# database, one scheduler leader with failover, workers reach the queue, data survives replacing pods.
+# The vault is the External Secrets Operator's fake provider, so the whole secret path is exercised.
+
+on:
+  push:
+    paths: ["deploy/**", "Dockerfile", "remediation/coordination/**", "remediation/utils/file_sync.py", "remediation/utils/secret_files.py",
+            "scripts/e2e_cluster.py", ".github/workflows/helm-kind.yml"]
+  pull_request:
+    paths: ["deploy/**", "Dockerfile", "remediation/coordination/**", "remediation/utils/file_sync.py", "remediation/utils/secret_files.py",
+            "scripts/e2e_cluster.py", ".github/workflows/helm-kind.yml"]
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: quanta-ci
+
+      - name: Build the image and load it into the cluster
+        run: |
+          docker build -t quanta:ci .
+          kind load docker-image quanta:ci --name quanta-ci
+
+      - name: Generate the secrets that will live in the "vault"
+        run: |
+          {
+            echo "SESSION_SECRET=$(openssl rand -hex 32)"
+            echo "ENCRYPTION_KEY=$(docker run --rm quanta:ci python cli/quanta_admin.py gen-key)"
+            echo "ADMIN_PASSWORD=$(openssl rand -hex 16)"
+            echo "DB_PASSWORD=$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+
+      - name: PostgreSQL
+        run: |
+          kubectl create namespace quanta
+          cat <<EOF | kubectl -n quanta apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata: {name: postgres}
+          spec:
+            replicas: 1
+            selector: {matchLabels: {app: postgres}}
+            template:
+              metadata: {labels: {app: postgres}}
+              spec:
+                containers:
+                  - name: postgres
+                    image: postgres:16
+                    env:
+                      - {name: POSTGRES_DB, value: quanta}
+                      - {name: POSTGRES_USER, value: quanta}
+                      - {name: POSTGRES_PASSWORD, value: "${DB_PASSWORD}"}
+                    ports: [{containerPort: 5432}]
+                    readinessProbe: {exec: {command: ["pg_isready", "-U", "quanta", "-d", "quanta"]}, periodSeconds: 3}
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata: {name: postgres}
+          spec:
+            selector: {app: postgres}
+            ports: [{port: 5432}]
+          EOF
+          kubectl -n quanta rollout status deploy/postgres --timeout=180s
+
+      - name: External Secrets Operator and a fake vault
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm install external-secrets external-secrets/external-secrets -n external-secrets --create-namespace --set installCRDs=true --wait --timeout 5m
+          cat <<EOF | kubectl apply -f -
+          apiVersion: external-secrets.io/v1
+          kind: ClusterSecretStore
+          metadata: {name: fake-vault}
+          spec:
+            provider:
+              fake:
+                data:
+                  - {key: quanta-session-secret, value: "${SESSION_SECRET}"}
+                  - {key: quanta-encryption-key, value: "${ENCRYPTION_KEY}"}
+                  - {key: quanta-database-url, value: "postgresql+psycopg2://quanta:${DB_PASSWORD}@postgres.quanta.svc:5432/quanta"}
+                  - {key: quanta-admin-password, value: "${ADMIN_PASSWORD}"}
+          EOF
+          sleep 5
+
+      - name: Install the chart
+        run: |
+          helm install quanta deploy/helm/quanta -n quanta -f deploy/helm/quanta/ci/kind-values.yaml --wait --timeout 10m ||
+            { kubectl -n quanta get pods -o wide; kubectl -n quanta describe externalsecret; kubectl -n quanta logs -l app.kubernetes.io/component=web --all-containers --tail=80 || true; exit 1; }
+          kubectl -n quanta get pods -o wide
+
+      - name: helm test
+        run: helm test quanta -n quanta --timeout 3m
+
+      - name: Replica, leader, queue and survival checks
+        run: |
+          pip install requests
+          python scripts/e2e_cluster.py --namespace quanta --release quanta \
+            --admin-email admin@ci.example.com --admin-password "$ADMIN_PASSWORD"
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n quanta get all,externalsecret,pvc -o wide || true
+          kubectl -n quanta describe pods | tail -120 || true
+          kubectl -n quanta logs -l app.kubernetes.io/component=web --all-containers --tail=120 || true
+          kubectl -n quanta logs -l app.kubernetes.io/component=worker --all-containers --tail=120 || true
