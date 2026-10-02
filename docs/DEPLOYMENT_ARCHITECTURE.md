@@ -36,12 +36,12 @@ and audit stay inside their boundary.
 
 | Capability | Today | Target |
 |---|---|---|
-| Container image + compose | `Dockerfile`, `docker-compose.yml` (app, PostgreSQL, Caddy TLS), non-root, `/healthz` check, entrypoint that migrates and bootstraps the first admin | Helm chart / Kubernetes manifests |
+| Container image + compose + Helm | `Dockerfile`, `docker-compose.yml` (app, PostgreSQL, Caddy TLS), and a Helm chart (`deploy/helm/quanta`, see `docs/KUBERNETES.md`) with web, worker and scheduler-leader tiers, non-root pods, network policy, autoscaling | Chart exercised on a live cluster against a real vault |
 | PostgreSQL | Supported through `QUANTA_DATABASE_URL`; schema created on first run | Managed HA PostgreSQL with automated failover |
-| Multi-replica app | **Not yet.** The advisory file lock serialises writers on one host | Row-level locking / job queue so replicas can share one database |
-| Background work | In-process scheduler, one node | Queue + worker pool (a message broker) for scans, exports and long pipeline runs |
+| Multi-replica app | **Yes, with PostgreSQL and a ReadWriteMany volume.** Locks are database leases (`QUANTA_LOCK_BACKEND=db`), schema creation takes a PostgreSQL advisory lock, one replica at a time is the scheduler leader | Move the findings file into the database so the shared volume is no longer needed |
+| Background work | A durable database job queue (`SKIP LOCKED` claims, heartbeats, retries with backoff, dead-letter state) with independently scaled workers; the scheduler runs under a leader lease | A message broker only if throughput outgrows a database queue |
 | Object storage | Local volumes (`remediation/output`, `live-data`) | S3-compatible bucket (S3, GCS, Azure Blob, MinIO) with versioning and retention |
-| Secrets / KMS | Environment variables; connector credentials encrypted at rest (Fernet) with a key held outside the database | Secrets manager injection + KMS-managed keys |
+| Secrets / KMS | Secrets are read from files mounted from a key vault (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault) through External Secrets or the Secrets Store CSI driver; connector credentials encrypted at rest (Fernet) with a key held outside the database | KMS-managed envelope keys and automatic rotation without a restart |
 | Encryption in transit | Local HTTPS built in; proxy TLS recommended | TLS 1.3 at ingress, mTLS to the database |
 | Observability | `/healthz`, `/readyz`, token-guarded `/metrics`, JSON logs with request ids, activity log | Metrics, structured logs and alerts exported to the customer's stack |
 
@@ -81,7 +81,8 @@ are scanner exports and report generation, not interactive use.
 - **Backups:** the database and the output/live-data volumes. Test restores; an untested
   backup is not a backup.
 - **Upgrades:** build a new image, run the test suite in CI, roll one instance at a time.
-  Single-replica today, so plan a short maintenance window.
+  On Kubernetes, rolling updates keep the service up (see `docs/KUBERNETES.md`); a single
+  container still needs a short maintenance window.
 - **Monitoring:** alert on `/api/status` going `degraded`, scheduler not alive, and a
   threat-intel feed older than your policy allows.
 - **Support:** tickets are in-app and stay in your database; optional email escalation to
@@ -89,8 +90,10 @@ are scanner exports and report generation, not interactive use.
 
 ## 7. Honest limits
 
-Single-node writers, in-process scheduling, and environment-variable secrets are the three
-gaps between this and a fully highly-available deployment. Each is listed above with its
+The findings file and policy YAML still live on a shared ReadWriteMany volume, secrets are
+read at startup (a rotated value needs a rolling restart), and the Helm chart has been verified by
+lint, rendering and unit tests but not yet on a live cluster. Those are the gaps between this and a
+fully highly-available deployment. Each is listed above with its
 target. Nothing in this document is a certification or a guarantee of regulatory
 compliance; deploying into an environment that is already certified inherits that
 environment's controls, it does not confer them.

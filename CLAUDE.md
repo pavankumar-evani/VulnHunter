@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,668 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,732 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,603 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,732 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -544,8 +544,11 @@ scanner CSV into Findings with explicit rules (`classify.py`, `scanner_csv.py`) 
 into `normalized-findings.json` atomically (`merge.py`: stable ids, last-seen refresh, optional
 reconcile for complete exports, `.bak` copy). `remediation/connections/` stores connector
 credentials encrypted (`crypto.py`, Fernet, key in `QUANTA_ENCRYPTION_KEY`, rotation supported),
-lists the 7 syncable pull connectors (`registry.py`), and runs/schedules syncs (`sync.py`,
-`store.py`; table `connections`; scheduler loop in `dashboard/app.py`). Admin routes
+lists the 7 syncable pull connectors and 3 push connectors (ServiceNow, Jira, Splunk) in
+`registry.py`, and runs/schedules syncs (`sync.py`, `store.py`; table `connections`). Push
+connections carry a rule (`min_severity`, `kev_only`, `min_epss`, `max_per_run`) in `push.py`,
+keep finding-to-ticket links and map external ticket state back onto assignments in `links.py`
+(table `ticket_links`). Admin routes
 `/api/connections*` and the Connections page. Schema changes to existing tables use recorded
 migrations (`remediation/utils/migrations.py`). `cli/quanta_admin.py` is the operator tool
 (gen-key, init, bootstrap, create-admin, check, backup, restore, rotate-keys, migrate).
@@ -553,9 +556,31 @@ migrations (`remediation/utils/migrations.py`). `cli/quanta_admin.py` is the ope
 anonymous reads by default. `/healthz`, `/readyz`, `/metrics` (token), JSON logs and request ids
 are in `dashboard/observability.py`. Deployment: `Dockerfile`, `docker-compose.yml` (app,
 PostgreSQL, Caddy TLS), `.env.production.example`, `deploy/`. See `docs/PRODUCTION_GUIDE.md` and
-`docs/CONNECTOR_ONBOARDING.md`. Still true: one application instance (file-lock writers,
-in-process scheduler), AI fixers need the Claude Code CLI, and no connector has been run against
-a live vendor tenant.
+`docs/CONNECTOR_ONBOARDING.md`. Still true: AI fixers need the Claude Code CLI, and no connector
+has been run against a live vendor tenant.
+
+**Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
+(`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
+`read:findings`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
+guards `POST /api/ingest/findings`, `/api/ingest/scanner-csv`, `/api/inbound/ticket-status`,
+`GET /api/export/findings`; only `/api/ingest/`, `/api/inbound/`, `/api/export/` are exempt from the
+login gate, and only because each route checks a key itself. `/api/ingest/generic` needs a key when
+`QUANTA_PRODUCTION` is on. `GET /api/connections/schema` describes every connection type as JSON
+Schema. Validation of pushed findings is `remediation/ingest/api_findings.py`.
+
+**Running several replicas** (`docs/KUBERNETES.md`, Helm chart `deploy/helm/quanta`):
+`remediation/coordination/` has database leases (`leases.py`; `QUANTA_LOCK_BACKEND=db` makes
+`FileLock` use them), scheduler leader election (`leader.py`), a durable job queue with
+`SKIP LOCKED` claims, heartbeats and retries (`jobs.py`, tables `leases` and `jobs`), and the worker
+(`worker.py`, `quanta-admin worker`; the web process runs one embedded unless
+`QUANTA_EMBEDDED_WORKER=false`). Scheduled and manual syncs are queued, not run in a thread.
+`quanta-admin prepare` does first-run setup once per release under a lease; PostgreSQL schema
+creation takes an advisory lock. Secrets can come from files (`remediation/utils/secret_files.py`:
+`QUANTA_SESSION_SECRET_FILE` etc.) so a key vault mounted by External Secrets or the Secrets Store
+CSI driver never appears as an environment variable. Still true: the findings file and policy YAML
+are shared files on a ReadWriteMany volume, a rotated secret needs a rolling restart, and the chart
+is checked by CI (`helm lint`/`template`/kubeconform) and unit tests but not yet installed on a
+live cluster.
 
 ## Support tickets (ITSM service desk)
 

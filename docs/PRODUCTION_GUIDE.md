@@ -99,8 +99,11 @@ Back up on a schedule (a nightly cron calling `backup`) and test a restore befor
 
 ## Known limits (honest list)
 
-* One application instance: writers are serialised by a file lock and scheduling is in-process.
-  Run one replica; scale the host, not the count. A queue and row-level locking are planned.
+* Several replicas are supported on Kubernetes (`docs/KUBERNETES.md`): PostgreSQL, a ReadWriteMany volume
+  for the findings and policy files, database-lease locks, a leader-elected scheduler and a job queue
+  with workers. On a single host, `docker compose` still runs one instance, which is the simplest option
+  for a small deployment. Secrets can be supplied as files (`QUANTA_SESSION_SECRET_FILE` and friends) so a
+  key vault can mount them.
 * Connectors are built to each vendor's public API and tested against simulated responses. Your
   first sync of each source is the live validation; report what differs.
 * OpenVAS/GVM keeps its own start/status/import page rather than a scheduled sync.
