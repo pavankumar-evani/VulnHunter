@@ -71,6 +71,7 @@
   .chip.push { background: color-mix(in srgb, var(--high) 15%, transparent); color: var(--high); }
   .chip.scan { background: color-mix(in srgb, #4a3aa7 15%, transparent); color: #4a3aa7; }
   :root:not([data-theme="light"]) .chip.scan, :root[data-theme="dark"] .chip.scan { background: rgba(160,140,255,.18); color: #b7a8ff; }
+  pre { background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 14px 18px; overflow-x: auto; font-size: 0.8rem; line-height: 1.5; max-width: 82ch; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 20px 0; }
   .catcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
   .catcard h4 { margin: 0 0 4px; font-size: 0.88rem; }
@@ -101,6 +102,8 @@
     <a href="#limits">05 · Rate limits &amp; constraints</a>
     <a href="#reference">06 · Reference catalog</a>
     <a href="#credentials">07 · Credential handling</a>
+    <a href="#inbound">08 · Outbound &amp; inbound</a>
+    <a href="#wiring">09 · Per vendor</a>
   </nav>
 
   <main>
@@ -143,7 +146,7 @@
 
       <h3>A fourth path: findings pushed in, not pulled out</h3>
       <p><code>remediation/connectors/generic_connector.py</code> is a different shape from every connector above — the receiving side of a webhook, for any SIEM/XDR/EDR/SOAR tool that already supports posting a custom outbound webhook. Quanta never calls out; the outside tool calls <code>POST /api/ingest/generic</code> with a JSON body validated against a minimal required shape (<code>title</code>, <code>severity</code>, <code>asset_name</code>, <code>asset_type</code>) and normalized into the same Finding schema every other source uses. One real, generic, testable adapter instead of another bespoke vendor connector nobody has real API access to verify.</p>
-      <div class="callout warn"><span class="label">Deliberately unauthenticated today</span><p>Unlike every connector above, this route is not gated behind <code>rbac.require_admin</code> or any session — a machine-to-machine webhook receiver, not something a logged-in browser session submits. That also means there is no cap on call frequency or on how large the resulting <code>remediation/live-data/generic-ingested.json</code> can grow. A real deployment needs a webhook-specific API key or HMAC signature, plus request throttling, in front of this route — a disclosed, real gap, not implemented here (see §05 below).</p></div>
+      <div class="callout warn"><span class="label">Unauthenticated unless production mode is on</span><p>Unlike every connector above, this route is not gated behind <code>rbac.require_admin</code> or any browser session — a machine-to-machine webhook receiver. With <code>QUANTA_PRODUCTION=true</code> it now requires a Quanta API key with the <code>ingest:write</code> scope (see §08); in a default, non-production run it still accepts anonymous posts, throttled per IP (see §05). Its output file is not capped in total size over time, a disclosed follow-up. New integrations should use the keyed <code>POST /api/ingest/findings</code> endpoint in §08 instead, which updates in place and reports bad records individually.</p></div>
     </section>
 
     <section id="push">
@@ -159,6 +162,34 @@
           </tbody>
         </table>
       </div>
+
+      <h3>Stored push connections: rules, idempotency and state read-back</h3>
+      <p>Besides the one-off page above, an admin can store a ServiceNow, Jira Cloud or Splunk connection on the Connections page and let it run on a schedule. Each carries a <strong>rule</strong> that decides which findings become tickets:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Meaning</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td><code>min_severity</code></td><td>Send findings at or above this severity</td><td>High</td></tr>
+            <tr><td><code>kev_only</code></td><td>Only findings on the CISA KEV list</td><td>off</td></tr>
+            <tr><td><code>min_epss</code></td><td>Only findings with at least this exploit probability (0 to 1)</td><td>none</td></tr>
+            <tr><td><code>max_per_run</code></td><td>Most tickets per run, so a first sync cannot flood the service desk</td><td>50</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Each run picks matching findings not yet pushed through that connection, most urgent first (KEV, then EPSS, then severity). ServiceNow incidents are keyed on <code>correlation_id</code>, Jira issues on a <code>quanta-&lt;finding id&gt;</code> label, and Splunk receives each finding once, so a re-run never duplicates. One failing finding does not stop the batch; its error is kept on its link and retried next run.</p>
+      <p>Quanta keeps a link between each finding and its ticket and, on every run, reads the current state of the open ones back and maps it to its four work states:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Quanta state</th><th>ServiceNow <code>state</code></th><th>Jira status category</th></tr></thead>
+          <tbody>
+            <tr><td>open</td><td>1 (new)</td><td><code>new</code></td></tr>
+            <tr><td>in progress</td><td>2</td><td><code>indeterminate</code></td></tr>
+            <tr><td>blocked</td><td>3, 4, 5 (on hold / awaiting)</td><td>(custom workflow dependent)</td></tr>
+            <tr><td>resolved</td><td>6, 7, 8 (resolved / closed / cancelled)</td><td><code>done</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>If the finding has an assignment, its work status follows. A resolved ticket marks the assignment resolved; it never closes the finding, because the next scan decides whether the vulnerability is really gone. The finding's detail view lists its tickets and their state.</p>
     </section>
 
     <section id="connect">
@@ -186,7 +217,7 @@
         <li><strong>Push connectors</strong> (ServiceNow, Jira, Splunk) run in reverse: an Incident/Issue/Event is only created after you check the confirm box and submit — the preview above it is always free and makes zero network calls.</li>
       </ul>
       <div class="callout warn"><span class="label">Two connectors with no admin walkthrough today</span><p>CrowdStrike Falcon is CLI-driven with a reference page only (<code>/xdr</code>) — no dashboard form yet. Armis is CLI-ingestion only. Both are real, working connector classes; neither has the Test Connection/Fetch UI described above.</p></div>
-      <div class="callout info"><span class="label">Credentials: UI-entered, not environment variables — for every connector above</span><p>Some other parts of this app do read credentials from environment variables (SMTP, OIDC SSO, and the Active Directory <em>group-membership check</em> used by Remediation Approvals) — but none of the connector pages above work that way. Every one asks for real credentials fresh, in the browser, on every action. Don't confuse the Active Directory <em>connector</em> here (asset discovery, UI-entered LDAP bind credentials, its own <code>/active-directory</code> page) with that separately-configured, env-var-based AD group-validation check used elsewhere for approvals — genuinely different code paths against the same kind of directory.</p></div>
+      <div class="callout info"><span class="label">Credentials: UI-entered, not environment variables — for every connector above</span><p>Some other parts of this app do read credentials from environment variables (SMTP, OIDC SSO, and the Active Directory <em>group-membership check</em> used by Remediation Approvals) — but none of the connector pages above work that way. Every one asks for real credentials fresh, in the browser, on every action (unless an admin stores the connection on the Connections page, §07). Don't confuse the Active Directory <em>connector</em> here (asset discovery, UI-entered LDAP bind credentials, its own <code>/active-directory</code> page) with that separately-configured, env-var-based AD group-validation check used elsewhere for approvals — genuinely different code paths against the same kind of directory.</p></div>
     </section>
 
     <section id="limits">
@@ -208,7 +239,7 @@
 
       <h3>Quanta's own side — honestly incomplete, not silently assumed complete</h3>
       <div class="callout warn"><span class="label">No client-side retry/backoff in any vendor connector, and no explicit request timeout either</span><p>Only the CISA KEV/EPSS threat-intel client retries a dropped connection or timeout, with exponential backoff, up to 3 times — and that module is the only place in this codebase that sets an explicit HTTP timeout on its calls at all. None of the 13 named-vendor connectors in <code>remediation/connectors/</code> do either: a transient network blip during a Tenable export or an Armis page fetch fails the whole action rather than self-healing, and a slow/hung vendor endpoint has nothing forcing it to give up. A real production deployment calling any of these connectors on a schedule should add the same retry-with-timeout pattern already proven in the threat-intel client, not assume it's already there.</p></div>
-      <div class="callout info"><span class="label">Fixed: inbound rate-limiting now covers every connector route</span><p>This closes the gap the RBAC, Multi-Tenancy &amp; Governance document's AI &amp; security guardrails section also tracks: a real in-process, per-IP sliding-window rate limiter (<code>dashboard/rate_limit.py</code>) now sits in front of every <code>/api/*</code> route, including every connector's test/fetch/send route, with a stricter dedicated limit on the generic-ingestion webhook (<code>POST /api/ingest/generic</code>, §02 above) specifically — still the sharpest edge, since it takes no session or API key at all. This bounds call <em>frequency</em>; it does not cap how much data accumulates in total over time, which stays a real, disclosed follow-up. Single-node scope, disclosed plainly: each node counts independently, so a future multi-node deployment needs a shared store (e.g. Redis) instead.</p></div>
+      <div class="callout info"><span class="label">Fixed: inbound rate-limiting now covers every connector route</span><p>This closes the gap the RBAC, Multi-Tenancy &amp; Governance document's AI &amp; security guardrails section also tracks: a real in-process, per-IP sliding-window rate limiter (<code>dashboard/rate_limit.py</code>) now sits in front of every <code>/api/*</code> route, including every connector's test/fetch/send route, with a stricter dedicated limit on the generic-ingestion webhook (<code>POST /api/ingest/generic</code>, §02 above) specifically — the sharpest edge outside production mode, where it takes no session or API key. Inbound API keys (§08) are additionally limited per key. This bounds call <em>frequency</em>; it does not cap how much data accumulates in total over time, which stays a real, disclosed follow-up. Single-node scope, disclosed plainly: each node counts independently, so a future multi-node deployment needs a shared store (e.g. Redis) instead.</p></div>
     </section>
 
     <section id="reference">
@@ -231,7 +262,83 @@
 
     <section id="credentials">
       <h2><span class="num">07</span>Credential handling — the one rule that never changes</h2>
-      <div class="callout warn"><span class="label">Two modes, and which keeps nothing</span><p><strong>Each connector's own page</strong> asks for credentials fresh on every action and persists nothing. <strong>The Connections page</strong> (admin only) is an explicit, opt-in alternative for scheduled syncs: credentials are encrypted at rest (Fernet) with <code>QUANTA_ENCRYPTION_KEY</code>, a key that lives outside the database. Without that key nothing is stored and the page says so. A stored credential is never returned by any API, a blank secret on edit keeps the stored one, backups never contain the key, and every run is audited. Supported for scheduled sync: Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius and Active Directory. OpenVAS/GVM keeps its own start/status/import flow.</p></div>
+      <div class="callout warn"><span class="label">Two modes, and which keeps nothing</span><p><strong>Each connector's own page</strong> asks for credentials fresh on every action and persists nothing. <strong>The Connections page</strong> (admin only) is an explicit, opt-in alternative for scheduled syncs: credentials are encrypted at rest (Fernet) with <code>QUANTA_ENCRYPTION_KEY</code>, a key that lives outside the database. Without that key nothing is stored and the page says so. A stored credential is never returned by any API, a blank secret on edit keeps the stored one, backups never contain the key, and every run is audited. Supported for scheduled sync: Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius and Active Directory. OpenVAS/GVM keeps its own start/status/import flow. Stored push connections: ServiceNow, Jira Cloud and Splunk HEC (§03).</p></div>
+      <div class="callout info"><span class="label">Where the encryption key itself lives</span><p>In a Kubernetes or vault-backed deployment, <code>QUANTA_ENCRYPTION_KEY</code> and the other secrets are supplied as mounted files through the <code>NAME_FILE</code> convention (for example <code>QUANTA_ENCRYPTION_KEY_FILE</code>), never as environment variables. A key vault (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager or HashiCorp Vault) feeds those files through External Secrets or the Secrets Store CSI driver. The Helm chart's <code>secrets.mode</code> is <code>externalSecrets</code>, <code>csi</code>, <code>existingSecret</code> or <code>inline</code>; <code>inline</code> is development only and refused unless <code>secrets.allowInline</code> is set. An explicit environment variable still wins over a file; a <code>_FILE</code> pointing at a missing or empty file stops the pod rather than starting with a random secret.</p></div>
+    </section>
+
+    <section id="inbound">
+      <h2><span class="num">08</span>Two directions: outbound and inbound</h2>
+      <p class="section-intro">Everything above is <strong>outbound</strong>: Quanta calls a tool, using the vendor's own key. <strong>Inbound</strong> is the reverse: a tool, pipeline or person calls Quanta, using a Quanta-issued API key. A third path, <strong>file import</strong>, covers a source that cannot be reached by API. Machine-readable descriptions: <code>GET /openapi.json</code> (every route) and <code>GET /api/connections/schema</code> (every connection type as JSON Schema, admin only).</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Direction</th><th>Whose credential</th><th>Use it for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Outbound</strong></td><td>The vendor's key, stored encrypted on the Connections page</td><td>Scheduled pulls (Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory); tickets in ServiceNow and Jira; events to Splunk</td></tr>
+            <tr><td><strong>Inbound</strong></td><td>A Quanta API key with only the scope it needs</td><td>A scanner or SOAR playbook pushing findings, a CI job uploading an export, ServiceNow reporting a ticket change, a BI tool reading findings</td></tr>
+            <tr><td><strong>File</strong></td><td>A signed-in admin, or an API key</td><td>Export a CSV and import it (<em>Import a scanner file</em> on the Connections page)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>API keys</h3>
+      <p>Admin, Connections, <em>Create an API key</em>: pick a name, the access it needs and an expiry. The key (<code>qk_…</code>) is shown once and Quanta keeps only a hash. Send it as <code>Authorization: Bearer qk_…</code> or <code>X-API-Key: qk_…</code>. Revoke it at any time and it stops working immediately. Each key is rate limited (<code>QUANTA_API_KEY_RATE_MAX</code>, 600 a minute by default) and its use is recorded in the activity log.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Scope</th><th>Allows</th></tr></thead>
+          <tbody>
+            <tr><td><code>ingest:write</code></td><td><code>POST /api/ingest/findings</code>, <code>POST /api/ingest/scanner-csv</code>, and (in production) <code>POST /api/ingest/generic</code></td></tr>
+            <tr><td><code>tickets:update</code></td><td><code>POST /api/inbound/ticket-status</code></td></tr>
+            <tr><td><code>read:findings</code></td><td><code>GET /api/export/findings</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Only <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> accept a key in place of a browser login, and each checks the key itself. Every other route still requires a signed-in user when <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> is on.</p>
+
+      <h3>Push findings</h3>
+      <pre><code>curl -X POST https://quanta.example.com/api/ingest/findings \
+  -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "source": "my-scanner",
+    "reconcile": false,
+    "findings": [{
+      "title": "OpenSSL heap overflow",
+      "severity": "High",
+      "asset": {"name": "web01", "ip": "10.0.0.5", "os": "Ubuntu 22.04"},
+      "cve": "CVE-2024-1234", "cvss": 8.1,
+      "source_ref": "scan-77-plugin-5120",
+      "recommended_fix": "Upgrade openssl to 3.0.13"
+    }]
+  }'</code></pre>
+      <p>Required: <code>title</code>, <code>severity</code> (Critical, High, Medium or Low; Moderate is accepted) and <code>asset.name</code>. Anything Quanta can work out (asset type, remediation domain, dates, KEV and EPSS) it does; unknown extra fields are ignored. A finding is identified by <code>source</code> + asset + <code>source_ref</code> (the title if omitted) + CVE, so sending it again updates it. Records are checked one at a time: a bad record is reported by index in <code>errors</code> and does not reject the rest. <code>reconcile: true</code> declares the request the <strong>complete</strong> current export for that <code>source</code>, so its findings missing from it are removed; a reconcile containing any invalid record is refused whole, so a partial export can never delete data. At most 5,000 findings per request.</p>
+
+      <h3>Upload a scanner export</h3>
+      <pre><code>curl -X POST "https://quanta.example.com/api/ingest/scanner-csv?source=tenable-export&amp;reconcile=true" \
+  -H "Authorization: Bearer $QUANTA_KEY" --data-binary @export.csv</code></pre>
+      <p>The body is the raw CSV in the Tenable column layout (<code>Plugin ID, CVE, Risk, CVSS v3.0 Base Score, Host, IP Address, FQDN, OS, Name, Synopsis, Solution, Port, Protocol, First Discovered, Last Observed</code>); Qualys and other scanners can export or be transformed to it.</p>
+
+      <h3>Report a ticket's state</h3>
+      <pre><code>curl -X POST https://quanta.example.com/api/inbound/ticket-status \
+  -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json" \
+  -d '{"finding_id": "FIND-42", "system": "servicenow", "state": "2", "external_ref": "INC0012345"}'</code></pre>
+      <p><code>system</code> is <code>servicenow</code>, <code>jira</code> or <code>other</code>. <code>state</code> is a ServiceNow number or word, a Jira status category or name, or one of <code>open</code>, <code>in_progress</code>, <code>blocked</code>, <code>resolved</code>. This is the push alternative to Quanta's own read-back polling in §03.</p>
+
+      <h3>Read findings out</h3>
+      <pre><code>curl "https://quanta.example.com/api/export/findings?severity=critical&amp;kev=true&amp;limit=1000&amp;offset=0" \
+  -H "Authorization: Bearer $QUANTA_KEY"</code></pre>
+      <p>Filters: <code>source</code>, <code>severity</code>, <code>kev</code>. Paged with <code>limit</code> (at most 5,000) and <code>offset</code>.</p>
+    </section>
+
+    <section id="wiring">
+      <h2><span class="num">09</span>Per vendor, end to end</h2>
+      <ul>
+        <li><strong>ServiceNow.</strong> Create an integration user that can create and read incidents. Add a ServiceNow connection (instance name such as <code>acme</code> for <code>acme.service-now.com</code>, user, password, rule). Optionally add a business rule on <code>incident</code> that POSTs state changes to <code>/api/inbound/ticket-status</code> with a <code>tickets:update</code> key, using the finding id Quanta put in the incident's <code>correlation_id</code>.</li>
+        <li><strong>Jira.</strong> Create an API token for a service account with create and browse rights in the project. Add a Jira connection (site URL, email, token, project key, rule). Issues carry the label <code>quanta-&lt;finding id&gt;</code>; state comes back by status category.</li>
+        <li><strong>Splunk.</strong> Create an HTTP Event Collector token and add a Splunk connection with a rule. It is an append-only stream, so each finding is sent once.</li>
+        <li><strong>Tenable and Qualys.</strong> Add the connection for a scheduled pull, or, if policy keeps scanner credentials out of other systems, have the scanner's own export job upload to <code>/api/ingest/scanner-csv</code> with an <code>ingest:write</code> key.</li>
+        <li><strong>Prisma Cloud and Cortex XSIAM.</strong> Add the connection; findings arrive already in Quanta's schema.</li>
+        <li><strong>Anything else</strong> (a SOAR playbook, an EDR, a custom collector). Post to <code>/api/ingest/findings</code>.</li>
+      </ul>
+      <div class="callout warn"><span class="label">Verification status</span><p>Every connector is built against the vendor's public API and tested against simulated responses; none has been exercised against a live vendor account. Your first sync of each source is the live validation, and the disclosure on each connection's page says so.</p></div>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener" data-suite-link="rbac">RBAC, Multi-Tenancy &amp; Governance</a> or <a href="https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4" target="_blank" rel="noopener" data-suite-link="developer">Developer Guide</a>.</footer>

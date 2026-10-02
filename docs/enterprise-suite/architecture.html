@@ -154,6 +154,7 @@
     <a href="#security">06 · Security architecture</a>
     <a href="#frontend">07 · Frontend architecture</a>
     <a href="#constraints">08 · Honest current-state limits</a>
+    <a href="#scaling">09 · Scaling &amp; replicas</a>
   </nav>
 
   <main>
@@ -166,13 +167,13 @@
 
     <section id="overview">
       <h2><span class="num">01</span>System overview</h2>
-      <p class="section-intro">Quanta is a single deployable web application: a FastAPI backend serving both a JSON API and a hand-rolled vanilla-JS single-page app, backed by a real local SQLite database for its record stores and flat files for pipeline output/policy, with an optional layer of Claude Code subagents doing the judgment-heavy work (classification, playbook drafting) that a deterministic script can't.</p>
+      <p class="section-intro">Quanta is a single deployable web application: a FastAPI backend serving both a JSON API and a hand-rolled vanilla-JS single-page app, backed by a real database (local SQLite by default, PostgreSQL for a multi-replica deployment) for its record stores and flat files for pipeline output/policy, with an optional layer of Claude Code subagents doing the judgment-heavy work (classification, playbook drafting) that a deterministic script can't.</p>
 
       <pre class="mermaid">
 flowchart LR
     Browser["Browser<br/>SPA (vanilla JS, no build step)"]
     API["FastAPI app<br/>dashboard/app.py"]
-    Files["Storage<br/>SQLite (record stores) +<br/>JSON/YAML files under remediation/"]
+    Files["Storage<br/>SQLite or PostgreSQL (record stores) +<br/>JSON/YAML files under remediation/"]
     Agents["Claude Code subagents<br/>.claude/agents/*.md"]
     Ext["External sources<br/>Tenable · Qualys · OpenVAS · Prisma Cloud ·<br/>Cortex XSIAM · Infoblox · Axonius · Active Directory"]
     Feeds["Public threat-intel feeds<br/>CISA KEV · FIRST.org EPSS · NVD"]
@@ -187,8 +188,8 @@ flowchart LR
 
       <div class="grid2">
         <div class="card">
-          <h4>No separate services to stand up</h4>
-          <p>One Python process (<code>uvicorn</code>) serves the API, the SPA shell, and every static asset. There is no message queue, cache layer, or microservice boundary to operate.</p>
+          <h4>No separate services required to start</h4>
+          <p>One Python process (<code>uvicorn</code>) serves the API, the SPA shell, and every static asset, and runs an embedded queue worker and the scheduler. There is no external message broker or cache layer: the job queue is a database table (see §9). For a multi-replica deployment the same image runs as a web tier, dedicated workers and a leader-elected scheduler (§9).</p>
         </div>
         <div class="card">
           <h4>Two different "engines," one process</h4>
@@ -217,7 +218,7 @@ flowchart LR
 
     <section id="storage">
       <h2><span class="num">03</span>Data &amp; storage model</h2>
-      <p class="section-intro">Pipeline output and admin-editable policy stay as files; the record stores that see real read-modify-write traffic — approvals, exceptions, audit/AI-usage logs, asset ownership, user accounts — now live in a real local SQLite database, accessed through SQLAlchemy Core so a future move to Postgres for multi-tenancy is a connection-string change, not a rewrite.</p>
+      <p class="section-intro">Pipeline output and admin-editable policy stay as files; the record stores that see real read-modify-write traffic — approvals, exceptions, audit/AI-usage logs, asset ownership, user accounts — live in a real database accessed through SQLAlchemy Core: local SQLite by default, PostgreSQL (a <code>QUANTA_DATABASE_URL</code> connection string) for a multi-replica deployment.</p>
 
       <div class="table-wrap">
         <table>
@@ -226,7 +227,7 @@ flowchart LR
             <tr><td class="mono">remediation/output/normalized-findings.json</td><td>Every finding, in the one common schema (§4) — the system of record.</td></tr>
             <tr><td class="mono">REMEDIATION_PLAN.md</td><td>A point-in-time snapshot: risk tier, action type, rollback plan per finding, written by the <code>remediation-planner</code> subagent.</td></tr>
             <tr><td class="mono">remediation/output/*.yml</td><td>Generated Ansible playbooks, one per remediable finding.</td></tr>
-            <tr><td class="mono">remediation/quanta.db</td><td>Shared local SQLite database (gitignored) — approvals, exceptions, activity/AI-usage logs, asset ownership, user accounts, notification-scheduler dedup state, and pending live-data adapter output all live here now, one table each.</td></tr>
+            <tr><td class="mono">remediation/quanta.db</td><td>Shared local SQLite database (gitignored; PostgreSQL when <code>QUANTA_DATABASE_URL</code> is set) — approvals, exceptions, activity/AI-usage logs, asset ownership, user accounts, notification-scheduler dedup state, pending live-data adapter output, and the coordination tables <code>leases</code> and <code>jobs</code> (§9), one table each.</td></tr>
             <tr><td class="mono">remediation/config/*.yaml</td><td>Every admin-editable policy: priority weights, SLA windows, remediation policy per asset domain, risk-scoring weights, exposure-score weights.</td></tr>
             <tr><td class="mono">remediation/live-data/*</td><td>Raw CSV/XML exports written by a CVE-scoped connector's Fetch action (Tenable/Qualys/OpenVAS) before ingestion via <code>/remediate</code>.</td></tr>
           </tbody>
@@ -234,10 +235,10 @@ flowchart LR
       </div>
 
       <h3>Why a real database for the record stores, files for the rest</h3>
-      <p>Pipeline output (findings, the plan, generated playbooks) and admin policy stay as files — human-readable, diffable in git, inspectable without a DB client, a deliberate fit for artifacts whose whole point is being <em>reviewable</em>. The record stores above moved to SQLite specifically because each one is genuinely mutated by concurrent requests (an approval decision, an exception revoke, a login), and a flat-file read-modify-write cycle under real concurrency can silently drop a write. <code>remediation/utils/file_lock.py</code> (a real cross-platform advisory file lock with a timeout, not a placeholder) still guards each store's own multi-statement critical section — SQLite's own locking gives atomicity for a single statement, but a caller whose critical section spans more than one (compute-next-id-then-insert) still needs its own mutual exclusion. The honest cost that remains: no historical trend storage yet (every chart is a live snapshot, not a time series) and single-node deployment only — this is a real SQLite file on one machine, not a distributed database. This is the top item on Quanta's own roadmap (§8).</p>
+      <p>Pipeline output (findings, the plan, generated playbooks) and admin policy stay as files — human-readable, diffable in git, inspectable without a DB client, a deliberate fit for artifacts whose whole point is being <em>reviewable</em>. The record stores above moved to SQLite specifically because each one is genuinely mutated by concurrent requests (an approval decision, an exception revoke, a login), and a flat-file read-modify-write cycle under real concurrency can silently drop a write. <code>remediation/utils/file_lock.py</code> (a real cross-platform advisory file lock with a timeout, not a placeholder) still guards each store's own multi-statement critical section on a single node (with <code>QUANTA_LOCK_BACKEND=db</code> the same <code>FileLock</code> API is backed by database leases so it holds across replicas) — SQLite's own locking gives atomicity for a single statement, but a caller whose critical section spans more than one (compute-next-id-then-insert) still needs its own mutual exclusion. The honest cost that remains: no historical trend storage yet (every chart is a live snapshot, not a time series), and the findings JSON and policy YAML remain files on disk, kept in step across replicas through the database (<code>QUANTA_FILES_BACKEND=db</code>, §9), so a multi-replica deployment needs PostgreSQL but no shared volume. This is the top item on Quanta's own roadmap (§8).</p>
 
       <h3>Data handling &amp; residency (SaaS target design)</h3>
-      <p>Everything in this subsection is a <strong>target design for a possible future hosted "Quanta Cloud" tier</strong> — proposed, not built. Stated plainly first: the current reality, per the storage-model table above and <code>dashboard/README.md</code>, is that Quanta persists its record stores in a real local SQLite database and everything else in flat JSON/YAML files, all on whatever single host runs it, with no encryption-at-rest layer of its own — it inherits whatever the host filesystem/disk provides. For today's single-host deployment model, that's the correct place for this control to live: enable your OS's or cloud provider's disk-level encryption (BitLocker, LUKS, or your cloud disk/volume's default encryption-at-rest option) under the host this app runs on, and every file Quanta writes — the SQLite database included — inherits it transparently, with no code change and no key-management story this app would need to invent. The app layer already avoids the one thing that would need its own encryption regardless of disk-level coverage: passwords are one-way PBKDF2-HMAC-SHA256 hashes (see "Authentication &amp; sessions" below), never stored in any recoverable form. Transit encryption has two real paths today, not zero: local/dev HTTPS is built in (uvicorn's native TLS, opt-in per run via the <code>SSL_KEYFILE</code>/<code>SSL_CERTFILE</code> env vars — see <code>dashboard/README.md</code>), and a real deployment should still terminate TLS at a reverse proxy with a CA-issued certificate in front of it (the same doc's nginx/Let's Encrypt example) rather than running a self-signed cert in production. None of the AES-256/CMK/key-rotation controls below exist yet; they are what a hosted, multi-tenant offering would need to build on top of the disk-level encryption that's already the right answer for a self-hosted deployment today.</p>
+      <p>Everything in this subsection is a <strong>target design for a possible future hosted "Quanta Cloud" tier</strong> — proposed, not built. Stated plainly first: the current reality, per the storage-model table above and <code>dashboard/README.md</code>, is that Quanta persists its record stores in a real database (local SQLite, or PostgreSQL for a multi-replica deployment) and everything else in flat JSON/YAML files, on whatever host or shared volume runs it, with no encryption-at-rest layer of its own for those stores (connector credentials saved in Connections are separately Fernet-encrypted, key in <code>QUANTA_ENCRYPTION_KEY</code>) — it inherits whatever the host filesystem/disk provides. For today's single-host deployment model, that's the correct place for this control to live: enable your OS's or cloud provider's disk-level encryption (BitLocker, LUKS, or your cloud disk/volume's default encryption-at-rest option) under the host this app runs on, and every file Quanta writes — the SQLite database included — inherits it transparently, with no code change and no key-management story this app would need to invent. The app layer already avoids the one thing that would need its own encryption regardless of disk-level coverage: passwords are one-way PBKDF2-HMAC-SHA256 hashes (see "Authentication &amp; sessions" below), never stored in any recoverable form. Transit encryption has two real paths today, not zero: local/dev HTTPS is built in (uvicorn's native TLS, opt-in per run via the <code>SSL_KEYFILE</code>/<code>SSL_CERTFILE</code> env vars — see <code>dashboard/README.md</code>), and a real deployment should still terminate TLS at a reverse proxy with a CA-issued certificate in front of it (the same doc's nginx/Let's Encrypt example) rather than running a self-signed cert in production. None of the AES-256/CMK/key-rotation controls below exist yet; they are what a hosted, multi-tenant offering would need to build on top of the disk-level encryption that's already the right answer for a self-hosted deployment today.</p>
 
       <div class="callout info"><span class="label">Framing: 2026 SOC 2 best-practice guidance for SaaS data handling</span><p>The controls below track common 2026 SOC 2 best-practice guidance for a multi-tenant SaaS platform — encryption at rest and in transit, documented key rotation, data-residency commitments, and tested backup/DR — rather than a specific numbered control framework Quanta has been audited against.</p></div>
 
@@ -320,13 +321,16 @@ flowchart LR
       <h2><span class="num">06</span>Security architecture</h2>
 
       <h3>Authentication &amp; sessions</h3>
-      <p>Local email/password accounts, hashed with PBKDF2-HMAC-SHA256. Sessions are a signed cookie (<code>quanta_session</code>) verified against <code>QUANTA_SESSION_SECRET</code>. Optional OIDC/SSO support exists and is exposed on the login page only when a real provider's <code>OIDC_ISSUER</code>/<code>OIDC_CLIENT_ID</code>/<code>OIDC_CLIENT_SECRET</code> are configured — otherwise the button is simply absent, not stubbed.</p>
+      <p>Local email/password accounts, hashed with PBKDF2-HMAC-SHA256. Sessions are a signed cookie (<code>quanta_session</code>) verified against <code>QUANTA_SESSION_SECRET</code>. Machine callers use Quanta-issued API keys (<code>qk_&lt;prefix&gt;_&lt;secret&gt;</code>, only a SHA-256 hash stored, scopes <code>ingest:write</code> / <code>tickets:update</code> / <code>read:findings</code>, expiry, revocation, per-key rate limit) on the <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> routes — the only paths exempt from the login gate. Optional OIDC/SSO support exists and is exposed on the login page only when a real provider's <code>OIDC_ISSUER</code>/<code>OIDC_CLIENT_ID</code>/<code>OIDC_CLIENT_SECRET</code> are configured — otherwise the button is simply absent, not stubbed.</p>
 
       <h3>Roles &amp; team scoping — the real model, not an idealized one</h3>
       <p>This is intentionally simple: one boolean, <strong>admin</strong> or not. Every mutation route requires at minimum a logged-in session; most require <code>role == "admin"</code> outright. A second, independent axis — <strong>team</strong> — narrows which findings and approvals a non-admin user's own queries return, enforced server-side per request. There is no granular permission matrix (no separate "analyst," "approver," "read-only" roles) — see the RBAC, Multi-Tenancy &amp; Governance document for what this means in practice and its honestly-disclosed limits.</p>
 
       <h3>The execution boundary — the single most important design decision</h3>
       <div class="callout warn"><span class="label">Verbatim, because it is load-bearing</span><p>"Nothing in this repository ever executes against real infrastructure automatically — by construction, not by policy." The subagents that draft Ansible playbooks are given <code>Read, Write</code> tool access only in their own frontmatter — no <code>Bash</code>, no network tool, no credentials. They cannot reach a host even if a prompt somehow told one to. Every generated playbook is a reviewable artifact for a human, or your own change-managed automation platform, to run.</p></div>
+
+      <h3>Secrets from a key vault</h3>
+      <p>Each sensitive setting (<code>QUANTA_SESSION_SECRET</code>, <code>QUANTA_ENCRYPTION_KEY</code>, <code>QUANTA_DATABASE_URL</code>, <code>QUANTA_METRICS_TOKEN</code>, <code>QUANTA_ADMIN_PASSWORD</code>, <code>SMTP_USERNAME</code>, <code>SMTP_PASSWORD</code>, <code>OIDC_CLIENT_SECRET</code>) can be supplied as <code>NAME_FILE</code>, a path to a file (<code>remediation/utils/secret_files.py</code>). A vault (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault) mounted through the External Secrets Operator or the Secrets Store CSI driver then reaches the pod as a read-only file, never an environment variable. A rotated value is re-read live for the encryption key, metrics token, SMTP and admin-password settings; the session secret and the database URL are read once at startup and need a rolling restart.</p>
 
       <h3>Response security headers</h3>
       <div class="table-wrap">
@@ -357,11 +361,30 @@ flowchart LR
       <h2><span class="num">08</span>Honest current-state limits</h2>
       <p class="section-intro">Every enterprise reference in this suite says plainly where the product is today versus where a production rollout would need to invest further. Reused consistently across all eight documents:</p>
       <div class="grid2">
-        <div class="card"><h4>Single-tenant, single-node</h4><p>A real local SQLite database now backs the record stores, but it's one file on one machine with no per-tenant data boundary. The MSSP "tenant switcher" in the UI is an illustrative client-side filter over one shared dataset — not real per-tenant isolation. See the RBAC/Governance document.</p></div>
+        <div class="card"><h4>Single-tenant, shared file store</h4><p>A real database (SQLite, or PostgreSQL for multiple replicas, see §9) backs the record stores, but findings and policy are still shared files and there is no per-tenant data boundary. The MSSP "tenant switcher" in the UI is an illustrative client-side filter over one shared dataset — not real per-tenant isolation. See the RBAC/Governance document.</p></div>
         <div class="card"><h4>Reads are public by default</h4><p>Every GET route is open unless <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> is explicitly set — a deliberate MVP default, not a bug, but one to close before a real rollout.</p></div>
-        <div class="card"><h4>Synchronous pipeline execution</h4><p>A pipeline run blocks the request that started it. A production deployment needs a real job queue behind long-running operations (scans, large-tenant exports).</p></div>
+        <div class="card"><h4>Pipeline runs still synchronous</h4><p>Connection syncs run through the durable job queue (§9), but a pipeline run from the Run page still blocks the request that started it. Queue delivery is at-least-once, so handlers must be idempotent.</p></div>
         <div class="card"><h4>No historical trend storage</h4><p>Every chart is a live, current-moment snapshot — there is no daily-snapshot table yet, so "trend over time" views are honestly absent rather than faked.</p></div>
       </div>
+    </section>
+
+    <section id="scaling">
+      <h2><span class="num">09</span>Scaling &amp; multi-replica deployment</h2>
+      <p class="section-intro">Quanta runs as one process by default and as several replicas when deployed with the Helm chart at <code>deploy/helm/quanta</code> (<code>docs/KUBERNETES.md</code>): a web tier, queue workers, and a scheduler under leader election. The coordination code lives in <code>remediation/coordination/</code> and uses the database, not an external broker.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Piece</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">leases.py</td><td>Database lease locks (table <code>leases</code>). <code>QUANTA_LOCK_BACKEND=db</code> makes <code>FileLock</code> use them, so read-modify-write critical sections hold across replicas.</td></tr>
+            <tr><td class="mono">leader.py</td><td>Scheduler leader election; only the leader runs the report/alert/sync schedulers. Lease lifetime set by <code>QUANTA_LEADER_TTL_SECONDS</code>.</td></tr>
+            <tr><td class="mono">jobs.py</td><td>Durable job queue (table <code>jobs</code>): <code>SELECT ... FOR UPDATE SKIP LOCKED</code> on PostgreSQL, heartbeats, visibility timeout, retry with backoff, dead after 3 attempts, dedupe keys. Delivery is at-least-once.</td></tr>
+            <tr><td class="mono">utils/file_sync.py</td><td>Reconciles each replica's local findings, playbook, plan and policy files with table <code>file_snapshots</code> (<code>QUANTA_FILES_BACKEND=db</code>): versioned pulls and pushes, tombstones for deletions, the database wins on conflict, the first replica seeds the image defaults. Replaces the shared volume.</td></tr>
+            <tr><td class="mono">worker.py</td><td>The queue worker: <code>python cli/quanta_admin.py worker</code>. The web process runs an embedded one unless <code>QUANTA_EMBEDDED_WORKER=false</code>. Scheduled and manual connection syncs are queued jobs, not threads.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>quanta-admin prepare</code> does first-run setup once per release under a lease, and PostgreSQL schema creation/migrations take an advisory lock, so several replicas can start together safely. Operators can inspect the queue with <code>quanta-admin jobs</code> or <code>GET /api/admin/jobs</code>; <code>/metrics</code> exposes <code>quanta_jobs_queued</code>, <code>quanta_jobs_dead</code> and <code>quanta_scheduler_leader</code>.</p>
+      <div class="callout warn"><span class="label">Stated plainly</span><p>The chart is verified by CI (<code>helm lint</code>, <code>helm template</code>, kubeconform) and unit tests but has not yet been installed on a live cluster. Findings and policy files are reconciled through the database by default (when two replicas change the same file at once the database copy wins, and the findings are stored as one whole file, which suits tens of thousands of findings rather than millions); a ReadWriteMany volume is optional. No connector has been exercised against a live vendor tenant.</p></div>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>

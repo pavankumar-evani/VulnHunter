@@ -590,6 +590,47 @@ group-membership check if one is configured, without ever writing to the directo
 Remediation** is a real, confirm-gated call that spends actual API usage to generate that
 finding's playbook — unchecked, it's a free preview of what would run.
 
+### How do I connect a scanner?
+
+On `/connections` (admin only): add a connection, choose the source (Tenable, Qualys, Prisma
+Cloud, Cortex XSIAM, Infoblox, Axonius or Active Directory), enter its credentials, use Test
+connection, then set a schedule or click Sync now. Credentials are stored encrypted and never
+shown again. Each sync is queued as a job a worker runs, merges into the findings queue (a
+re-run updates rather than duplicates) and is logged; a second click on Sync now does not queue
+a second sync. If your policy keeps scanner credentials out of other systems, have the scanner
+push to Quanta with an API key instead. See [INTEGRATION_API.md](INTEGRATION_API.md).
+
+### How do I open ServiceNow or Jira tickets automatically for urgent findings?
+
+Add a ServiceNow, Jira Cloud or Splunk connection on `/connections` (these are "push"
+connections) and set its rule: send findings at or above a severity, only those on the CISA KEV
+list, a minimum EPSS, and the most tickets per run, so a first sync cannot flood the service
+desk. Each run opens a ticket for matching findings not yet sent, most urgent first, and a
+re-run never creates a duplicate. Ticket state is read back on each sync.
+
+### How do I create an API key for a scanner, SOAR playbook or CI job?
+
+On `/connections`, in "Send data to Quanta", click Create an API key. Give it a name, tick only
+the access it needs (send findings in, report ticket status, read findings out) and choose an
+expiry (never, 30, 90 or 365 days). The key is shown once, so copy it right away; Quanta keeps
+only a hash. Send it as `Authorization: Bearer <key>`. The key table lists your keys and
+Revoke stops one working immediately. Endpoints are in [INTEGRATION_API.md](INTEGRATION_API.md).
+
+### How do I import a scanner CSV?
+
+On `/connections`, use "Import a scanner file": choose a CSV in the Tenable column layout, enter
+a source name and upload. Tick "this is the complete export" only when the file is everything
+that scanner currently reports; it then removes that source's findings missing from the file,
+which is how fixed vulnerabilities leave the queue.
+
+### How do I see which ticket belongs to a finding?
+
+Open the finding (click its ID anywhere). The "External tickets" section lists tickets a push
+connection opened for it: reference, system, state (Open, In progress, Blocked or Resolved) and
+the last error if sending failed. State flows back on each sync and updates the finding's
+assignment status. A resolved ticket marks the assignment resolved but does not close the
+finding; the next scan decides that.
+
 ### How do I set up scheduled reports or team alerts?
 
 Two related pages. `/reports` generates an on-demand snapshot (pick a period, view or

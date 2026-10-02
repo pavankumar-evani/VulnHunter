@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,732 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,752 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,732 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,752 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -577,10 +577,14 @@ Schema. Validation of pushed findings is `remediation/ingest/api_findings.py`.
 `quanta-admin prepare` does first-run setup once per release under a lease; PostgreSQL schema
 creation takes an advisory lock. Secrets can come from files (`remediation/utils/secret_files.py`:
 `QUANTA_SESSION_SECRET_FILE` etc.) so a key vault mounted by External Secrets or the Secrets Store
-CSI driver never appears as an environment variable. Still true: the findings file and policy YAML
-are shared files on a ReadWriteMany volume, a rotated secret needs a rolling restart, and the chart
-is checked by CI (`helm lint`/`template`/kubeconform) and unit tests but not yet installed on a
-live cluster.
+CSI driver never appears as an environment variable. `QUANTA_FILES_BACKEND=db` (the chart default) makes the database the source of truth for the findings
+file, playbooks, plan and policy YAML: `remediation/utils/file_sync.py` reconciles each replica's local
+copy with table `file_snapshots` (versioned, tombstones, database wins on conflict; middleware in
+`dashboard/app.py` syncs around requests, `merge.py` syncs under its lease), so no shared volume is
+needed. `secret_files.reload_changed()` re-reads rotated secret files live (all but the session secret
+and database URL). Still true: the findings are one whole stored file (tens of thousands of findings,
+not millions), and the chart is checked by static tests (`tests/test_helm_chart.py`), CI
+(`helm lint`/`template`/kubeconform) and unit tests but not yet installed on a live cluster.
 
 ## Support tickets (ITSM service desk)
 

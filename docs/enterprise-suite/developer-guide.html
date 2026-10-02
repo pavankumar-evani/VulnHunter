@@ -99,6 +99,8 @@
     <a href="#cli">06 · CLI usage</a>
     <a href="#extension">07 · Extension points</a>
     <a href="#health">08 · Health checks &amp; monitoring</a>
+    <a href="#queue">09 · Queue jobs &amp; the worker</a>
+    <a href="#pushapi">10 · Push connections &amp; API keys</a>
   </nav>
 
   <main>
@@ -119,7 +121,11 @@
           <tr><td class="mono">remediation/schema/</td><td>The normalized Finding schema documentation — the single source of truth for field names</td></tr>
           <tr><td class="mono">remediation/output/, live-data/</td><td>Generated artifacts and raw connector exports (gitignored where noted)</td></tr>
           <tr><td class="mono">.claude/agents/*.md</td><td>Every subagent's prompt + tool-access frontmatter — the actual enforcement point of the safety model</td></tr>
-          <tr><td class="mono">cli/quanta.py</td><td>Headless pipeline runner — the same entry point the dashboard's <code>/run</code> page calls</td></tr>
+          <tr><td class="mono">remediation/coordination/</td><td>Multi-replica coordination: <code>leases.py</code> (DB lease locks), <code>leader.py</code> (scheduler leader election), <code>jobs.py</code> (durable job queue), <code>worker.py</code> (queue worker)</td></tr>
+          <tr><td class="mono">remediation/connections/</td><td>Stored connections: encrypted credentials (<code>crypto.py</code>), <code>registry.py</code>, <code>sync.py</code>/<code>store.py</code>, push connections (<code>push.py</code>) and finding-to-ticket links (<code>links.py</code>)</td></tr>
+          <tr><td class="mono">remediation/ingest/, apikeys/</td><td>Deterministic ingest (<code>scanner_csv.py</code>, <code>api_findings.py</code> for pushed findings, <code>merge.py</code>) and Quanta-issued API keys (<code>apikeys/store.py</code>)</td></tr>
+          <tr><td class="mono">deploy/helm/quanta, docker-compose.yml</td><td>Helm chart for a multi-replica Kubernetes deployment (<code>docs/KUBERNETES.md</code>) and the single-host compose stack</td></tr>
+          <tr><td class="mono">cli/quanta.py, cli/quanta_admin.py</td><td>Headless pipeline runner (the same entry point the dashboard's <code>/run</code> page calls) and the operator tool (<code>prepare</code>, <code>worker</code>, <code>jobs</code>, <code>check</code>, <code>backup</code>, <code>rotate-keys</code>, <code>migrate</code>, ...)</td></tr>
           <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group — see §5</td></tr>
         </tbody>
       </table></div>
@@ -174,7 +180,7 @@
     <section id="testing">
       <h2><span class="num">05</span>Testing conventions</h2>
       <ul>
-        <li><strong>Python:</strong> <code>python -m unittest discover -s tests -p "test_*.py"</code> — one file per module/route group, hand-rolled fakes over vendor mock libraries.</li>
+        <li><strong>Python:</strong> <code>python -m unittest discover -s tests -p "test_*.py"</code> — 1,752 tests today, all passing; one file per module/route group, hand-rolled fakes over vendor mock libraries.</li>
         <li><strong>JS:</strong> <code>node --check &lt;file&gt;</code> catches syntax errors only — a passing check is necessary, never sufficient. Frontend behavior is verified live in a running browser, not assumed from source reading.</li>
         <li><strong>CI:</strong> GitHub Actions runs the full Python suite on every push. A clean local pass can still mask an environment-specific failure (see the CLI's own dry-run-ordering bug, fixed after reproducing it in a simulated clean environment) — reproduce, don't assume.</li>
       </ul>
@@ -198,6 +204,9 @@ python cli/quanta.py /remediate --generate --max-budget-usd 5.00</pre></div>
           <tr><td>A new data source</td><td class="mono">remediation/connectors/ + §3 above</td></tr>
           <tr><td>A new remediable asset type</td><td class="mono">A new remediation-fixer-* subagent, Read/Write only</td></tr>
           <tr><td>A new scoring rule</td><td class="mono">remediation/config/priority_rules.yaml (no code change needed)</td></tr>
+          <tr><td>A new queue job type</td><td class="mono">remediation/coordination/jobs.py + worker.py (§9)</td></tr>
+          <tr><td>A new push connection (ticketing/SIEM)</td><td class="mono">remediation/connections/push.py + registry.py (§10)</td></tr>
+          <tr><td>A new API-key-guarded inbound route</td><td class="mono">remediation/apikeys/store.py + dashboard/app.py (§10)</td></tr>
           <tr><td>A new dashboard page</td><td class="mono">dashboard/static/js/pages/ + app.js router entry</td></tr>
           <tr><td>A new finding taxonomy</td><td class="mono">remediation/enrichment/ + normalized-finding-schema.md</td></tr>
         </tbody>
@@ -220,12 +229,37 @@ curl -k https://127.0.0.1:5050/api/status</pre></div>
           <tr><td class="mono">quanta_scan_findings / remediation_findings / remediation_playbooks</td><td>Live counts re-read from disk at request time, never cached.</td></tr>
           <tr><td class="mono">smtp_configured / session_secret_configured</td><td>Whether the corresponding environment variables are actually set — never fabricated as "configured."</td></tr>
           <tr><td class="mono">threat_intel</td><td>Freshness of the KEV/EPSS enrichment data on disk, with its own <code>available</code> flag and error string if that check itself failed.</td></tr>
-          <tr><td class="mono">notification_scheduler_alive</td><td>Whether the in-process background scheduler task (report/alert checks) is still running.</td></tr>
-          <tr><td class="mono">data_stores</td><td>Per-store <code>exists</code> / <code>last_modified</code> / <code>record_count</code> for four of the tables in the gitignored local SQLite database (exceptions, remediation approvals, activity log, AI usage log) — a corrupt/unreadable table reports its own error string instead of taking down the whole check.</td></tr>
+          <tr><td class="mono">notification_scheduler_alive</td><td>Whether the background scheduler task (report/alert checks) is still running in this process. With several replicas only the elected leader runs it; <code>quanta_scheduler_leader</code> in <code>/metrics</code> shows which.</td></tr>
+          <tr><td class="mono">data_stores</td><td>Per-store <code>exists</code> / <code>last_modified</code> / <code>record_count</code> for four of the tables in the database (the gitignored local SQLite file by default, PostgreSQL when <code>QUANTA_DATABASE_URL</code> is set) (exceptions, remediation approvals, activity log, AI usage log) — a corrupt/unreadable table reports its own error string instead of taking down the whole check.</td></tr>
         </tbody>
       </table></div>
       <div class="callout info"><span class="label">Auth is conditional, not absent</span><p><code>/api/status</code> is open with no session by default, same as every other read route in this MVP. If a deployment sets <code>QUANTA_REQUIRE_LOGIN_FOR_READS=true</code>, this route is <strong>not</strong> in the small allow-list of routes the login flow itself needs (<code>/api/auth/*</code>) — so it starts requiring a valid session too. Account for that in your uptime monitor's own auth if that flag is on.</p></div>
-      <p>There is no separate <code>/health</code>, <code>/api/health</code>, or <code>/api/version</code> route — <code>/api/status</code> is the one real health surface, and it already covers version. For a check outside this endpoint: the notification scheduler's own due-check logic is independently callable on demand via <code>POST /api/notification-settings/run-checks-now</code>, useful for confirming that background loop is actually reachable rather than only trusting <code>notification_scheduler_alive</code>.</p>
+      <p>Orchestrators use the separate probes <code>/healthz</code> (liveness), <code>/readyz</code> (readiness) and <code>/metrics</code> (token-protected, includes <code>quanta_jobs_queued</code>, <code>quanta_jobs_dead</code> and <code>quanta_scheduler_leader</code>), defined in <code>dashboard/observability.py</code>; <code>/api/status</code> remains the human-facing status surface and already covers version. For a check outside this endpoint: the notification scheduler's own due-check logic is independently callable on demand via <code>POST /api/notification-settings/run-checks-now</code>, useful for confirming that background loop is actually reachable rather than only trusting <code>notification_scheduler_alive</code>.</p>
+    </section>
+
+    <section id="queue">
+      <h2><span class="num">09</span>Queue jobs &amp; running the worker</h2>
+      <p class="section-intro">Scheduled and manual connection syncs are rows in the <code>jobs</code> table, not threads. A worker claims a job (<code>SELECT ... FOR UPDATE SKIP LOCKED</code> on PostgreSQL), heartbeats while it runs, and the job is re-offered after the visibility timeout if the worker dies. Failures retry with backoff and a job is marked dead after 3 attempts.</p>
+      <div class="codeblock"><pre><span class="c"># Dedicated worker (the web process also runs an embedded one unless QUANTA_EMBEDDED_WORKER=false)</span>
+python cli/quanta_admin.py worker
+
+<span class="c"># Inspect the queue (also GET /api/admin/jobs)</span>
+python cli/quanta_admin.py jobs
+
+<span class="c"># First-run setup, once per release, under a lease</span>
+python cli/quanta_admin.py prepare</pre></div>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><div><h4>Write an idempotent handler</h4><p>Delivery is at-least-once, so a handler must be safe to run twice. Register it by job type in <code>remediation/coordination/worker.py</code>.</p></div></div>
+        <div class="step"><div class="n">2</div><div><h4>Enqueue with a dedupe key</h4><p>Call the enqueue function in <code>jobs.py</code> with a dedupe key so two replicas (or a double click) do not queue the same work twice.</p></div></div>
+        <div class="step"><div class="n">3</div><div><h4>Test against SQLite</h4><p>The queue logic runs on SQLite in the test suite; the <code>SKIP LOCKED</code> claim path is PostgreSQL only and is covered by unit tests, not yet by a live multi-replica run.</p></div></div>
+      </div>
+      <p>Set <code>QUANTA_LOCK_BACKEND=db</code> when running more than one replica so <code>FileLock</code> uses database leases, and <code>QUANTA_LEADER_TTL_SECONDS</code> to tune scheduler failover.</p>
+    </section>
+
+    <section id="pushapi">
+      <h2><span class="num">10</span>Push connections &amp; API-key-guarded routes</h2>
+      <p><strong>Push connections.</strong> ServiceNow, Jira and Splunk are stored in Connections like pull sources, each with a rule (<code>min_severity</code>, <code>kev_only</code>, <code>min_epss</code>, <code>max_per_run</code>). To add one, implement it in <code>remediation/connections/push.py</code>, register it in <code>registry.py</code>, and keep ticket creation idempotent through the finding-to-ticket links in <code>links.py</code> (table <code>ticket_links</code>). Ticket state is read back and mirrored onto the finding's assignment (ServiceNow state 1..8, Jira status category).</p>
+      <p><strong>API-key-guarded routes.</strong> Inbound machine routes (<code>POST /api/ingest/findings</code>, <code>POST /api/ingest/scanner-csv</code>, <code>POST /api/inbound/ticket-status</code>, <code>GET /api/export/findings</code>) use Quanta-issued keys from <code>remediation/apikeys/store.py</code>: <code>qk_&lt;prefix&gt;_&lt;secret&gt;</code>, SHA-256 hash only, scopes <code>ingest:write</code> / <code>tickets:update</code> / <code>read:findings</code>, expiry, revocation, rate limit <code>QUANTA_API_KEY_RATE_MAX</code>. Only paths under <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> are exempt from the login gate, so a new key-guarded route must live under one of those prefixes and check its required scope. Pushed findings are validated by <code>remediation/ingest/api_findings.py</code> (identity = source + asset + source_ref + CVE; reconcile only for complete exports). <code>GET /api/connections/schema</code> returns a JSON Schema for every connection type. See <code>docs/INTEGRATION_API.md</code>.</p>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7" target="_blank" rel="noopener" data-suite-link="arch">Architecture &amp; Schema Reference</a> for the full data contract this all builds on.</footer>

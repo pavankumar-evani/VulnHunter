@@ -9,7 +9,8 @@ with every secret read from a key vault.
                        │  (read with the cluster's cloud identity; nothing secret is in the chart)
  ingress ─▶ web × N ───┤
                        ├──▶ PostgreSQL  ◀── worker × M      database holds records, leases and the job queue
-                       └──▶ shared volume (ReadWriteMany)    findings file + policy YAML
+                            each pod keeps a local copy of the findings and policy files,
+                            reconciled with the database (no shared volume needed)
 ```
 
 ## Install
@@ -23,7 +24,7 @@ Start from one of the files in `deploy/helm/quanta/ci/` (they are also what CI r
 `csi-aws-values.yaml`, `existing-secret-values.yaml`.
 
 Before installing you need: a container image built from the repo's `Dockerfile` in your registry; a
-PostgreSQL database (managed is best); a ReadWriteMany storage class; and your key vault set up as below.
+PostgreSQL database (managed is best); and your key vault set up as below.
 
 ## Secrets: kept in a key vault, never in the chart
 
@@ -65,9 +66,15 @@ EKS IRSA (`eks.amazonaws.com/role-arn`), or GKE Workload Identity (`iam.gke.io/g
 Those go in `serviceAccount.annotations` and `serviceAccount.podLabels`. The identity needs read access to
 only these entries.
 
-**Rotation.** Quanta reads secrets once at startup, so after a vault value changes, restart the pods:
-`kubectl rollout restart deploy/quanta-web deploy/quanta-worker`. To rotate the encryption key without
-downtime, put the new key first and the old one second (`new,old`), restart, run
+**Rotation.** Quanta re-reads a changed secret file every 15 seconds (web pods) or each poll (workers), so a
+rotated vault value reaches the running app without a restart for `QUANTA_ENCRYPTION_KEY`,
+`QUANTA_METRICS_TOKEN`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `QUANTA_ADMIN_PASSWORD`. How fast the file
+itself changes depends on the mode: External Secrets updates the Secret every `refreshInterval` and the
+kubelet re-projects it within about a minute; the CSI driver only rotates if its secret-rotation reconciler
+is enabled. An unreadable or empty file keeps the old value. Two settings are read once at startup and need a
+rolling restart (`kubectl rollout restart deploy/quanta-web deploy/quanta-worker`): `QUANTA_SESSION_SECRET`
+(and rotating it signs everyone out) and `QUANTA_DATABASE_URL`. To rotate the encryption key, put the new
+key first and the old one second (`new,old`), wait for it to be picked up, run
 `python cli/quanta_admin.py rotate-keys`, then remove the old key.
 
 ## How several copies stay correct
@@ -78,24 +85,37 @@ downtime, put the new key first and the old one second (`new,old`), restart, run
 | Locks around read-modify-write | `QUANTA_LOCK_BACKEND=db`: the same `FileLock` calls now take a lease row in the database (name, owner, expiry). It works across nodes, which a lock file on a network volume does not guarantee. A holder that crashes just stops renewing and the lease expires. |
 | Scheduled work | Every web pod runs the schedulers but only the holder of the `scheduler` lease acts. If it dies, another pod takes over after `config.leaderTtlSeconds` (60 by default). |
 | Connection syncs and ticket pushes | The leader (or a person pressing **Sync now**) puts a job in a database queue. Workers claim jobs with `SELECT … FOR UPDATE SKIP LOCKED` on PostgreSQL, so no two take the same one. A worker heartbeats while it works; if it dies the job returns to the queue after the visibility timeout, and after 3 failed attempts it is kept as `dead` for inspection. A connection already queued or running is not queued again. |
+| Findings and policy files | `QUANTA_FILES_BACKEND=db` (the chart's default): the database is the source of truth and each pod reconciles its local copy with it (see below). |
 | Rolling updates | Workers finish the job they are running on SIGTERM (`worker.terminationGracePeriodSeconds`). Web pods use `maxUnavailable: 0`. |
 
 Inspect the queue with `kubectl exec deploy/quanta-worker -- python cli/quanta_admin.py jobs`, the
 `/api/admin/jobs` endpoint, or the `quanta_jobs_queued` and `quanta_jobs_dead` metrics.
 
-## What the shared volume is for, and what it is not
+## Findings and policy files: in the database, not on a shared volume
 
-Two things are still plain files that every copy must see: the **findings system of record**
-(`remediation/output/normalized-findings.json`, with generated playbooks) and the **policy YAML**
-(`remediation/config/`). The chart mounts one ReadWriteMany volume for them (`persistence`), seeds the
-policy files from the image once, and refuses to render more than one replica without it. Locks and the
-queue do **not** depend on the volume, only on the database.
+The findings system of record (`remediation/output/normalized-findings.json`), generated playbooks,
+`REMEDIATION_PLAN.md` and the admin-edited policy (`remediation/config/*.yaml`) are files that dozens of
+modules read directly. With `files.backend: db` (the default) each pod keeps a local copy and
+`remediation/utils/file_sync.py` reconciles it with a `file_snapshots` table:
 
-Be aware of the trade-off: the findings file is read and rewritten whole under a lease, and the dashboard
-caches it by modification time. That is comfortable up to tens of thousands of findings and a handful of
-replicas; it is not a substitute for moving the findings into the database, which is the next step for a very
-large estate. Use a storage class with proper atomic rename and mtime semantics (Azure Files premium, EFS,
-Filestore, CephFS); avoid a plain NFS export with aggressive client caching.
+* a change made only in the database is pulled; a change made only locally is pushed; if both changed, the
+  database copy wins and the conflict is logged and counted;
+* the first replica to start seeds the database with the defaults in the image (including the policy YAML);
+  a replica that starts later takes the cluster's state, and a sample file the cluster has since removed is
+  not resurrected from its image;
+* a pass is one query plus a stat of the tracked files, throttled to every 3 seconds
+  (`files.syncSeconds`); the findings merge runs it under its lease before and after writing, so two replicas
+  merging in turn never lose data or reuse an id;
+* a deletion is propagated as a tombstone.
+
+No shared volume is needed, so any storage class works and pods reschedule freely. The trade-offs, plainly:
+a file is stored whole, so two admins saving the same policy file at the same moment resolve to whichever the
+database saw first; the findings file is one row, which suits tens of thousands of findings, not millions; and
+`remediation/live-data/` (raw scanner exports) is not synced because it is transient.
+
+Prefer a shared volume anyway (for example so the files are visible on a share)? Set
+`files.backend: volume` and `persistence.enabled: true` with a ReadWriteMany class; the chart then seeds the
+policy files once and refuses more than one replica without it.
 
 ## Network and hardening
 
@@ -115,6 +135,8 @@ Filestore, CephFS); avoid a plain NFS export with aggressive client caching.
   `deploy/helm/quanta/ci/` (`.github/workflows/helm.yml`), and the coordination logic (leases, leader
   election, queue, workers, secret files) is unit-tested. It has **not** yet been installed on a live cluster
   against a real vault; treat the first install as the validation and report what differs.
+* The database file backend resolves simultaneous edits of the same file by "database wins"; it is not a
+  collaborative editor.
 * The queue gives at-least-once delivery, so a job handler must tolerate running twice. Connection syncs do:
   each run is claimed atomically and merging is idempotent.
 * Leader election is as strict as the lease ttl allows. For a few seconds around a leader failure two pods may

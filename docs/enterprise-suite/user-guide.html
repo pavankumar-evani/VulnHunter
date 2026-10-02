@@ -98,9 +98,10 @@
     <a href="#admin">02 · Administration &amp; RBAC</a>
     <a href="#assets">03 · Managing assets</a>
     <a href="#workflow">04 · Exceptions &amp; approvals</a>
-    <a href="#reporting">05 · Reports &amp; alerts</a>
-    <a href="#ai">06 · AI, search &amp; analytics</a>
-    <a href="#help">07 · Getting help</a>
+    <a href="#integrations">05 · Connecting your tools</a>
+    <a href="#reporting">06 · Reports &amp; alerts</a>
+    <a href="#ai">07 · AI, search &amp; analytics</a>
+    <a href="#help">08 · Getting help</a>
   </nav>
 
   <main>
@@ -114,7 +115,7 @@
       <input type="text" id="hs-input" placeholder="Search this guide — e.g. &quot;change password&quot;, &quot;EOL status&quot;, &quot;approve remediation&quot;" />
       <button id="hs-btn">Search</button>
     </div>
-    <p class="helpsearch-note">This searches the guide on this page. Inside the running app, <strong>Ask Quanta</strong> (<code>/ask</code>) searches this same content live, deterministically — see §06.</p>
+    <p class="helpsearch-note">This searches the guide on this page. Inside the running app, <strong>Ask Quanta</strong> (<code>/ask</code>) searches this same content live, deterministically — see §07.</p>
 
     <section id="account">
       <h2><span class="num">01</span>Your account</h2>
@@ -209,8 +210,37 @@
       </details>
     </section>
 
+    <section id="integrations">
+      <h2><span class="num">05</span>Connecting your tools</h2>
+
+      <details class="howto">
+        <summary>How do I connect a scanner?<span class="route">/connections</span></summary>
+        <div class="body"><p>Admin only. Add a connection, choose the source (Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius or Active Directory), enter its credentials, use Test connection, then set a schedule or click Sync now. Credentials are stored encrypted and never shown again. Each sync is queued as a job a worker runs, merges into the findings queue (a re-run updates rather than duplicates) and is recorded in the activity log; a second click on Sync now does not queue a second sync. If your policy keeps scanner credentials out of other systems, have the scanner push to Quanta with an API key instead (see below).</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I open ServiceNow or Jira tickets automatically for urgent findings?<span class="route">/connections</span></summary>
+        <div class="body"><p>Add a ServiceNow, Jira Cloud or Splunk connection (these are "push" connections) and set its rule: send findings at or above a severity, only those on the CISA KEV list, a minimum EPSS, and the most tickets per run (so a first sync cannot flood the service desk). Each run opens a ticket for matching findings not yet sent, most urgent first, and never creates a duplicate on a re-run. Ticket state is read back each sync.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I create an API key for a scanner, SOAR playbook or CI job?<span class="route">/connections</span></summary>
+        <div class="body"><p>In the "Send data to Quanta" section, click Create an API key. Give it a name, tick only the access it needs (send findings in, report ticket status, read findings out) and choose an expiry (never, 30, 90 or 365 days). The key is shown once, so copy it immediately; Quanta keeps only a hash. Use it as <code>Authorization: Bearer &lt;key&gt;</code>. The key table lists your keys, and Revoke stops one working immediately. See docs/INTEGRATION_API.md for the endpoints.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I import a scanner CSV?<span class="route">/connections</span></summary>
+        <div class="body"><p>Use "Import a scanner file" in the "Send data to Quanta" section: choose a CSV in the Tenable column layout, enter a source name, and upload. Tick "this is the complete export" only when the file is everything that scanner currently reports; it then removes that source's findings missing from the file, which is how fixed vulnerabilities leave the queue.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I see which ticket belongs to a finding?<span class="route">/queue</span></summary>
+        <div class="body"><p>Open the finding (click its ID anywhere). The "External tickets" section lists tickets a push connection opened for it: reference, system, state (Open, In progress, Blocked or Resolved) and the last error if sending failed. State flows back on each sync and updates the finding's assignment status. A resolved ticket marks the assignment resolved but does not close the finding; the next scan decides that.</p></div>
+      </details>
+    </section>
+
     <section id="reporting">
-      <h2><span class="num">05</span>Reports &amp; alerts</h2>
+      <h2><span class="num">06</span>Reports &amp; alerts</h2>
 
       <details class="howto">
         <summary>How do I generate or schedule a report?<span class="route">/reports</span></summary>
@@ -224,7 +254,7 @@
     </section>
 
     <section id="ai">
-      <h2><span class="num">06</span>AI, search &amp; analytics</h2>
+      <h2><span class="num">07</span>AI, search &amp; analytics</h2>
       <div class="callout info"><span class="label">There is no chatbot anywhere in this app</span><p>Two real, distinct AI-adjacent features exist — neither is a persistent conversational chat interface, and neither pretends to be.</p></div>
 
       <details class="howto">
@@ -244,7 +274,7 @@
     </section>
 
     <section id="help">
-      <h2><span class="num">07</span>Getting help</h2>
+      <h2><span class="num">08</span>Getting help</h2>
 
       <details class="howto">
         <summary>How do I request a new feature?<span class="route">/support</span></summary>

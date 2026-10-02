@@ -99,8 +99,8 @@ Back up on a schedule (a nightly cron calling `backup`) and test a restore befor
 
 ## Known limits (honest list)
 
-* Several replicas are supported on Kubernetes (`docs/KUBERNETES.md`): PostgreSQL, a ReadWriteMany volume
-  for the findings and policy files, database-lease locks, a leader-elected scheduler and a job queue
+* Several replicas are supported on Kubernetes (`docs/KUBERNETES.md`): PostgreSQL (the findings and policy
+  files are reconciled through it, so no shared volume), database-lease locks, a leader-elected scheduler and a job queue
   with workers. On a single host, `docker compose` still runs one instance, which is the simplest option
   for a small deployment. Secrets can be supplied as files (`QUANTA_SESSION_SECRET_FILE` and friends) so a
   key vault can mount them.

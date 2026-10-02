@@ -38,7 +38,7 @@ and audit stay inside their boundary.
 |---|---|---|
 | Container image + compose + Helm | `Dockerfile`, `docker-compose.yml` (app, PostgreSQL, Caddy TLS), and a Helm chart (`deploy/helm/quanta`, see `docs/KUBERNETES.md`) with web, worker and scheduler-leader tiers, non-root pods, network policy, autoscaling | Chart exercised on a live cluster against a real vault |
 | PostgreSQL | Supported through `QUANTA_DATABASE_URL`; schema created on first run | Managed HA PostgreSQL with automated failover |
-| Multi-replica app | **Yes, with PostgreSQL and a ReadWriteMany volume.** Locks are database leases (`QUANTA_LOCK_BACKEND=db`), schema creation takes a PostgreSQL advisory lock, one replica at a time is the scheduler leader | Move the findings file into the database so the shared volume is no longer needed |
+| Multi-replica app | **Yes, with PostgreSQL.** Locks are database leases (`QUANTA_LOCK_BACKEND=db`), the findings and policy files are reconciled through the database (`QUANTA_FILES_BACKEND=db`, no shared volume), schema creation takes a PostgreSQL advisory lock, one replica at a time is the scheduler leader | A normalised findings table instead of one stored file, for very large estates |
 | Background work | A durable database job queue (`SKIP LOCKED` claims, heartbeats, retries with backoff, dead-letter state) with independently scaled workers; the scheduler runs under a leader lease | A message broker only if throughput outgrows a database queue |
 | Object storage | Local volumes (`remediation/output`, `live-data`) | S3-compatible bucket (S3, GCS, Azure Blob, MinIO) with versioning and retention |
 | Secrets / KMS | Secrets are read from files mounted from a key vault (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault) through External Secrets or the Secrets Store CSI driver; connector credentials encrypted at rest (Fernet) with a key held outside the database | KMS-managed envelope keys and automatic rotation without a restart |
@@ -90,9 +90,10 @@ are scanner exports and report generation, not interactive use.
 
 ## 7. Honest limits
 
-The findings file and policy YAML still live on a shared ReadWriteMany volume, secrets are
-read at startup (a rotated value needs a rolling restart), and the Helm chart has been verified by
-lint, rendering and unit tests but not yet on a live cluster. Those are the gaps between this and a
+The findings are stored as one whole file per save (fine for tens of thousands of findings, not
+millions), the session secret and database URL are read at startup (rotating them needs a rolling
+restart; the other secrets reload live), and the Helm chart has been verified by static checks, CI
+rendering and unit tests but not yet on a live cluster. Those are the gaps between this and a
 fully highly-available deployment. Each is listed above with its
 target. Nothing in this document is a certification or a guarantee of regulatory
 compliance; deploying into an environment that is already certified inherits that
