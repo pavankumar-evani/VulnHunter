@@ -537,10 +537,10 @@ page; role and team here are the whole model.
 
 ### How do I request a new feature?
 
-There's no in-app request form — file a GitHub issue using the **Feature request**
-template (`.github/ISSUE_TEMPLATE/feature_request.md`), which walks through the safety-
-model checklist (e.g., any new remediation-fixer subagent must stay Read/Write-only)
-before the request is scoped. See [SUPPORT.md](SUPPORT.md).
+Open a ticket from the **Support** page (`/support`), type *A feature request*. Tickets
+live in this deployment's own database (`support_tickets`), are triaged by admins, and are
+never sent to a public tracker. See [SUPPORT.md](SUPPORT.md). Any new remediation-fixer
+subagent must stay Read/Write-only — that rule is part of how requests are scoped.
 
 ### How do I change an asset's owner, team, IP/MAC, or environment?
 
@@ -658,9 +658,9 @@ sourcing.
 
 ### What if I find a bug or need help?
 
-See [SUPPORT.md](SUPPORT.md) — the short version: open a GitHub issue on this repo for
-bugs/features, use the private contact in [SECURITY.md](../SECURITY.md) for security
-issues, and check [KNOWLEDGE_TRANSFER.md §12](../KNOWLEDGE_TRANSFER.md#12-troubleshooting--things-that-tripped-us-up)
+See [SUPPORT.md](SUPPORT.md) — the short version: open a ticket from the in-app Support
+page for bugs and features, use the private contact in [SECURITY.md](../SECURITY.md) for
+security issues, and check [KNOWLEDGE_TRANSFER.md §12](../KNOWLEDGE_TRANSFER.md#12-troubleshooting--things-that-tripped-us-up)
 first for known environment gotchas (Docker unavailability, GitHub secret-scanning
 false-positives on fake demo credentials, etc.) before filing something that's already
 documented.

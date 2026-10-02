@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,523 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,540 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,523 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,540 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -523,6 +523,16 @@ assign up to 2,000, status, auto-route from asset ownership, history) and `analy
 `/api/admin/teams*`. Pages: `/assignments`, `/ownership`, `/admin/people`. States:
 assigned / team_only / unowned; work status open / in_progress / blocked / resolved.
 An assignment's team overrides the asset's team. Ownership routes require login.
+
+## Support tickets
+
+The Support page is a real helpdesk, not a link to an external tracker. Tables
+`support_tickets` / `support_ticket_comments` (`remediation/utils/db.py`), logic in
+`remediation/support/store.py`, routes `/api/support/tickets*` (login required; a
+requester sees only their own tickets and non-internal comments, other tickets are 404;
+triage and escalation are admin-only). Optional vendor escalation is an admin-confirmed
+email (`QUANTA_SUPPORT_EMAIL` + SMTP), public content only. Tickets deliberately never go
+to a public issue tracker: they can describe the customer's environment.
 
 ## Naming
 

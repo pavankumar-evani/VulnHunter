@@ -28,8 +28,9 @@ Most questions and "is this broken" moments are already answered:
 
 ## Reporting a bug
 
-Open a GitHub issue on this repository using the **Bug report** template
-(`.github/ISSUE_TEMPLATE/bug_report.md`). Include:
+Open a ticket from the in-app **Support** page (`/support`, sign-in required), type
+*Something isn't working*. Tickets are stored in your deployment's own database, visible
+only to you and your administrators, and never sent to a public tracker. Include:
 
 - **Which pipeline** — `/vulnhunt`, `/remediate`, or both.
 - **Which component** — e.g. `vuln-scanner`, `remediation-planner`,
@@ -48,10 +49,9 @@ Open a GitHub issue on this repository using the **Bug report** template
   caught but wasn't, that's worth a new test case alongside the report (see
   [TEST_CASES.md](../TEST_CASES.md) for the existing pattern).
 
-For a new asset class, data source, or capability request, use the **Feature request**
-template (`.github/ISSUE_TEMPLATE/feature_request.md`) instead — it walks through the
-safety-model checklist (e.g. any new `remediation-fixer-*` subagent must stay
-`Read`/`Write`-only, per
+For a new asset class, data source, or capability request, open a ticket of type
+*A feature request* instead. Scoping applies the safety-model checklist (e.g. any new
+`remediation-fixer-*` subagent must stay `Read`/`Write`-only, per
 [KNOWLEDGE_TRANSFER.md §4.3](../KNOWLEDGE_TRANSFER.md#43-the-safety-model-the-single-most-important-design-decision))
 before a change is scoped.
 
@@ -71,3 +71,18 @@ reports against Quanta itself.
 - [USER_GUIDE.md](USER_GUIDE.md) — how the product is meant to be used day-to-day.
 - [KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md) and [README.md](../README.md) — full
   architecture and troubleshooting log.
+
+## How tickets work
+
+- **Open:** any signed-in user, from `/support`. Fields: type (bug, question, feature,
+  access, other), severity (low to urgent), subject, description.
+- **Visibility:** a requester sees only their own tickets and the replies addressed to
+  them. Administrators see the whole queue, can assign a ticket, change status and
+  severity, record a resolution, and add internal notes the requester never sees.
+- **Status:** open, in progress, waiting on requester, resolved, closed. A requester's
+  reply on a ticket waiting on them puts it back in progress.
+- **Escalation to the vendor (optional):** set `QUANTA_SUPPORT_EMAIL` and the SMTP
+  variables, and an admin can send a ticket (public content only, never internal notes)
+  to the vendor's support desk by email. It previews first and sends only on explicit
+  confirmation. Without these settings nothing ever leaves the deployment.
+- **Audit:** every create, reply and triage change is written to the activity log.
