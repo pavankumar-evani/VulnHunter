@@ -679,6 +679,36 @@ detection_assessments = Table(
     Column("result_json", Text, nullable=False),
 )
 
+soar_playbooks = Table(
+    "soar_playbooks", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("description", Text, nullable=True),
+    Column("trigger_json", Text, nullable=False),
+    Column("steps_json", Text, nullable=False),
+    Column("enabled", Integer, nullable=False, default=1),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    Column("updated_by", String, nullable=True),
+)
+
+soar_runs = Table(
+    "soar_runs", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("playbook_id", Integer, nullable=False),
+    Column("playbook_name", String, nullable=False),
+    Column("alert_id", Integer, nullable=True),
+    Column("status", String, nullable=False),  # running | waiting-approval | completed | failed | rejected | cancelled
+    Column("dry_run", Integer, nullable=False),
+    Column("started_by", String, nullable=False),
+    Column("started_at", String, nullable=False),
+    Column("finished_at", String, nullable=True),
+    Column("next_step", Integer, nullable=False, default=0),
+    Column("context_json", Text, nullable=False),
+    Column("log_json", Text, nullable=False),
+)
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -700,7 +730,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments,
+            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

@@ -108,6 +108,8 @@ export const NAV = [
       tip: "Admin: store your scanner and asset-source credentials (encrypted) and schedule automatic syncs." },
     { path: "/grc", label: "Risk & Compliance", icon: "rules",
       tip: "Admin: control framework coverage with automated evidence, the risk register, attestations and policies. Evidence and workflow; not a certification." },
+    { path: "/soar", label: "SOAR Playbooks", icon: "rules",
+      tip: "Admin: playbooks that investigate, notify and ask your own automation to respond, with a second person approving anything that changes your environment. Dry run first." },
     { path: "/hunting", label: "Hunting & SOC", icon: "rules",
       tip: "Admin: hunts proposed from known-exploited vulnerabilities in your estate, a hunt workspace, and alert triage with vulnerability context and runbooks. Not a SIEM." },
     { path: "/threat-models", label: "Threat Models", icon: "rules",

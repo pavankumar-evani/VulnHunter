@@ -44,6 +44,7 @@ const routes = [
   { pattern: /^\/threat-models\/?$/, load: () => import("./pages/threatModels.js") },
   { pattern: /^\/grc\/?$/, load: () => import("./pages/grc.js") },
   { pattern: /^\/hunting\/?$/, load: () => import("./pages/hunting.js") },
+  { pattern: /^\/soar\/?$/, load: () => import("./pages/soar.js") },
   { pattern: /^\/run\/?$/, load: () => import("./pages/run.js") },
   { pattern: /^\/ai-assist\/?$/, load: () => import("./pages/aiAssist.js") },
   { pattern: /^\/ask\/?$/, load: () => import("./pages/askQuanta.js") },

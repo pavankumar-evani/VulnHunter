@@ -29,6 +29,7 @@ from remediation.connectors.reputation_connector import ReputationConnector
 from remediation.connectors.servicenow_connector import ServiceNowConnector
 from remediation.connectors.siem_search_connector import SplunkSearchConnector
 from remediation.connectors.splunk_connector import SplunkConnector
+from remediation.connectors.webhook_connector import NotifyWebhook, ResponseWebhook
 from remediation.connectors.tenable_connector import TenableConnector
 from remediation.connections import push as push_mod
 from remediation.ingest import scanner_csv
@@ -252,6 +253,34 @@ SPECS.update({
                 "The public key is rate limited.",
         "note": "Not synced on a schedule. Used on demand when an alert is investigated.",
         "build": lambda c: ReputationConnector(c["api_key"]), "test": lambda c: ReputationConnector(c["api_key"]).test_connection(),
+    },
+})
+
+
+def _response_webhook(c):
+    allowed = [a.strip() for a in str(c.get("allowed_actions") or "").split(",") if a.strip()]
+    return ResponseWebhook(c["url"], c["signing_secret"], allowed_actions=allowed or None)
+
+
+SPECS.update({
+    "response-webhook": {
+        "label": "Response endpoint (SOAR, EDR or firewall automation)", "category": "Response", "output": "response", "kind": "tool",
+        "fields": [_f("url", "Endpoint URL", placeholder="https://soar.acme.com/hooks/quanta"), _f("signing_secret", "Signing secret", secret=True),
+                   _f("allowed_actions", "Allowed actions (comma separated, blank for all the policy allows)", required=False,
+                      placeholder="create-ticket, isolate-host, block-ip")],
+        "safe_targets": ["url"],
+        "docs": "A URL you own. Quanta never acts on your systems itself: a playbook step sends a signed request (HMAC-SHA256 over timestamp.body in X-Quanta-Signature) and your "
+                "automation decides. Verify the signature and the timestamp before acting. Actions that change something need an approval step in the playbook.",
+        "note": "Not synced on a schedule. Used by SOAR playbooks. Testing sends a harmless enrich-asset request.",
+        "build": _response_webhook, "test": lambda c: _response_webhook(c).test_connection(),
+    },
+    "notify-webhook": {
+        "label": "Notification webhook (Slack, Teams)", "category": "Response", "output": "notifications", "kind": "tool",
+        "fields": [_f("url", "Incoming webhook URL", secret=True)],
+        "safe_targets": ["url"],
+        "docs": "A Slack or Microsoft Teams incoming webhook. A playbook's notify step posts a short text message to it.",
+        "note": "Not synced on a schedule. Used by SOAR playbooks. Testing posts a short test message.",
+        "build": lambda c: NotifyWebhook(c["url"]), "test": lambda c: NotifyWebhook(c["url"]).test_connection(),
     },
 })
 

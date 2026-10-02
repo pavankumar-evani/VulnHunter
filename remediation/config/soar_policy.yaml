@@ -1,0 +1,28 @@
+# Guardrails for SOAR playbooks (remediation/soar/). These are limits on what a playbook may do, not defaults a playbook can override.
+
+# The person who approves a response step must be someone other than the person who started the run.
+require_second_person: true
+
+# Longest playbook, in steps.
+max_steps: 25
+
+# A playbook marked "run automatically" starts on matching alerts as they arrive. At most this many automatic runs start per hour;
+# further matching alerts wait for a person.
+auto_runs_per_hour: 20
+
+# Response actions a playbook may use at all. An action that changes something in your environment (marked destructive in
+# remediation/connectors/webhook_connector.py) always needs an approval step ahead of it in the same playbook, and is never sent in a dry run.
+allowed_response_actions:
+  - create-ticket
+  - enrich-asset
+  - isolate-host
+  - block-ip
+  - block-domain
+  - disable-account
+  - revoke-sessions
+  - reset-credentials
+  - quarantine-file
+
+# Status values a playbook may set on an alert. It can never close one: closing needs a person's disposition.
+alert_statuses_playbooks_may_set:
+  - investigating

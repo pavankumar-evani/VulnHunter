@@ -57,6 +57,8 @@ from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.controls import store as controls_store  # noqa: E402
 from remediation.connectors import reputation_connector as hunt_rep, siem_search_connector as sec_search  # noqa: E402
+from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
+from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
 from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
@@ -4528,8 +4530,10 @@ def api_ingest_alerts(body: AlertsPushBody, key: dict = Depends(require_api_key(
     created, repeats, errors = 0, 0, []
     for i, a in enumerate(body.alerts[:2000]):
         try:
-            _, new = hunt_store.receive_alert(a.model_dump() | {"source": a.source if a.source != "api" else f"apikey:{key['name']}"})
+            row, new = hunt_store.receive_alert(a.model_dump() | {"source": a.source if a.source != "api" else f"apikey:{key['name']}"})
             created += new
+            if new:
+                _soar_auto(row)
             repeats += not new
         except ValueError as exc:
             errors.append({"index": i, "error": str(exc)})
@@ -4723,8 +4727,10 @@ async def api_ingest_alerts_ocsf(request: Request, key: dict = Depends(require_a
     for i, ev in enumerate(events[:2000]):
         try:
             a = hunt_ocsf.map_detection_finding(ev)
-            _, new = hunt_store.receive_alert({**a, "source": f"apikey:{key['name']}"})
+            row, new = hunt_store.receive_alert({**a, "source": f"apikey:{key['name']}"})
             created += new
+            if new:
+                _soar_auto(row)
             repeats += not new
         except ValueError as exc:
             errors.append({"index": i, "error": str(exc)})
@@ -4850,6 +4856,153 @@ def api_detections_report(rule: str | None = None, format: str = "md", user: dic
     if format == "html":
         return HTMLResponse(hunt_detection.to_html(md, title), headers={"Content-Disposition": f'attachment; filename="{fname}.html"'})
     return PlainTextResponse(md, media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="{fname}.md"'})
+
+
+# ---------------------------------------------------------------- SOAR playbooks
+class PlaybookBody(BaseModel):
+    name: str
+    description: str | None = None
+    trigger: dict | None = None
+    steps: list[dict]
+    enabled: bool = True
+
+
+class PlaybookRunBody(BaseModel):
+    alert_id: int
+    dry_run: bool = True
+    confirm: bool = False
+
+
+class RunDecisionBody(BaseModel):
+    reason: str = ""
+
+
+def _soar_providers():
+    """What a real playbook run can reach, from the connections an administrator stored. Anything not configured is simply absent."""
+    def conn(kind):
+        try:
+            c, _ = hunt_service.connector(kind)
+            return c
+        except Exception:  # noqa: BLE001
+            return None
+    rep, spl = conn("reputation"), conn("splunk-search")
+    email = (lambda to, subject, body: email_sender.send_email(to, subject, body)) if email_sender.is_configured() else None
+    return soar_engine.Providers(lookup=rep.lookup if rep else None, siem_run=(lambda q, earliest: spl.search(q, earliest=earliest, max_rows=10)) if spl else None,
+                                 notify_webhook=conn("notify-webhook"), send_email=email, response=conn("response-webhook"), findings=dashboard_data.load_live_queue(),
+                                 owners=_owner_map(), save_investigation=lambda inv, md: hunt_service.save_investigation(inv, md, "playbook"))
+
+
+def _soar_auto(alert_row):
+    try:
+        soar_engine.auto_run(alert_row, _soar_providers)
+    except Exception:  # noqa: BLE001 - an automation failure must never lose the alert
+        logging.getLogger("quanta.soar").exception("automatic playbook run failed")
+
+
+@app.get("/api/soar/playbooks")
+def api_soar_playbooks(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    pol = soar_playbooks.policy()
+    return {"playbooks": soar_playbooks.list_all(), "templates": soar_playbooks.templates(), "step_types": soar_playbooks.STEP_TYPES,
+            "actions": {k: {"label": v[0], "destructive": v[1], "allowed": k in (pol.get("allowed_response_actions") or [])} for k, v in webhook_actions.items()},
+            "policy": {k: pol.get(k) for k in ("require_second_person", "max_steps", "auto_runs_per_hour")}}
+
+
+@app.post("/api/soar/playbooks")
+def api_soar_playbook_add(body: PlaybookBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        pb = soar_playbooks.save(body.name, body.description, body.trigger, body.steps, user["email"], body.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "soar.playbook.save", pb["name"], {"steps": len(pb["steps"]), "mode": pb["trigger"]["mode"]})
+    return pb
+
+
+@app.put("/api/soar/playbooks/{playbook_id}")
+def api_soar_playbook_update(playbook_id: int, body: PlaybookBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        pb = soar_playbooks.save(body.name, body.description, body.trigger, body.steps, user["email"], body.enabled, playbook_id=playbook_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such playbook") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "soar.playbook.save", pb["name"], {"steps": len(pb["steps"]), "mode": pb["trigger"]["mode"]})
+    return pb
+
+
+@app.delete("/api/soar/playbooks/{playbook_id}")
+def api_soar_playbook_delete(playbook_id: int, user: dict = Depends(rbac.require_admin)):
+    if not soar_playbooks.remove(playbook_id):
+        raise HTTPException(status_code=404, detail="No such playbook")
+    activity_log.record_activity(user["email"], "soar.playbook.delete", str(playbook_id), {})
+    return {"ok": True}
+
+
+@app.post("/api/soar/playbooks/{playbook_id}/run")
+def api_soar_run(playbook_id: int, body: PlaybookRunBody, user: dict = Depends(rbac.require_admin)):
+    """Starts a playbook on an alert. A dry run (the default) contacts nothing outside Quanta; a real run needs confirm: true."""
+    pb = soar_playbooks.get(playbook_id)
+    if not pb:
+        raise HTTPException(status_code=404, detail="No such playbook")
+    alert = hunt_store.get_alert(body.alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="No such alert")
+    if not body.dry_run and not body.confirm:
+        return {"preview_only": True, "steps": [{"type": s["type"], "params": s["params"]} for s in pb["steps"]],
+                "message": "A real run changes things and can contact other systems. Send confirm: true to run it, or run it as a dry run first."}
+    run = soar_engine.start(pb, alert, user["email"], dry_run=body.dry_run, providers=_soar_providers() if not body.dry_run else soar_engine.Providers(findings=dashboard_data.load_live_queue(), owners=_owner_map()))
+    activity_log.record_activity(user["email"], "soar.run.start", str(run["id"]), {"playbook": pb["name"], "alert_id": alert["id"], "dry_run": body.dry_run, "status": run["status"]})
+    return run
+
+
+@app.get("/api/soar/runs")
+def api_soar_runs(alert_id: int | None = None, status: str | None = None, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"runs": soar_engine.list_runs(alert_id=alert_id, status=status)}
+
+
+@app.get("/api/soar/runs/{run_id}")
+def api_soar_run_get(run_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    r = soar_engine.get_run(run_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="No such run")
+    return r
+
+
+@app.post("/api/soar/runs/{run_id}/approve")
+def api_soar_approve(run_id: int, user: dict = Depends(rbac.require_admin)):
+    try:
+        run = soar_engine.approve(run_id, user["email"], _soar_providers())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such run") from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "soar.run.approve", str(run_id), {"status": run["status"]})
+    return run
+
+
+@app.post("/api/soar/runs/{run_id}/reject")
+def api_soar_reject(run_id: int, body: RunDecisionBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        run = soar_engine.reject(run_id, user["email"], body.reason)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such run") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "soar.run.reject", str(run_id), {"reason": body.reason[:200]})
+    return run
+
+
+@app.post("/api/soar/runs/{run_id}/cancel")
+def api_soar_cancel(run_id: int, user: dict = Depends(rbac.require_admin)):
+    try:
+        run = soar_engine.cancel(run_id, user["email"])
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such run") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "soar.run.cancel", str(run_id), {})
+    return run
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

@@ -1,0 +1,43 @@
+# Starter playbooks. Copy one into your own playbooks and change it. Nothing here runs until you save it and start it.
+- id: triage-and-notify
+  name: Triage and notify
+  description: Investigate every alert, add the result to the alert, and tell the on-call channel when the verdict needs attention.
+  trigger: {mode: manual}
+  steps:
+    - {type: investigate, params: {reputation: false, siem: false}}
+    - {type: add-note, params: {text: "Quanta recommends {verdict} ({confidence} confidence)."}}
+    - {type: update-alert, params: {status: investigating}}
+    - {type: notify, when: {path: investigation.verdict, op: ne, value: likely-false-positive}, params: {channel: webhook, text: "{severity} alert on {asset}: {title}. Recommended: {verdict}."}}
+- id: contain-compromised-host
+  name: Contain a compromised host (with approval)
+  description: Investigate with reputation and SIEM evidence; if the verdict is a likely true positive, ask a second person to approve isolating the host, then request isolation from your EDR automation.
+  trigger: {mode: manual}
+  steps:
+    - {type: investigate, params: {reputation: true, siem: true}}
+    - {type: request-approval, when: {path: investigation.verdict, op: eq, value: likely-true-positive}, params: {message: "Isolate {asset}? Evidence is in the alert's latest investigation."}}
+    - {type: response-action, when: {path: investigation.verdict, op: eq, value: likely-true-positive}, params: {action: isolate-host, target: "{asset}"}}
+    - {type: notify, when: {path: investigation.verdict, op: eq, value: likely-true-positive}, params: {channel: webhook, text: "Isolation of {asset} was requested for alert {title}."}}
+- id: block-malicious-indicator
+  name: Block a flagged indicator (with approval)
+  description: Look up the alert's public indicators; if any is flagged by enough engines, ask for approval, then request a block at your firewall automation.
+  trigger: {mode: manual}
+  steps:
+    - {type: enrich-indicators, params: {}}
+    - {type: request-approval, when: {path: investigation.signals.ioc_malicious, op: truthy}, params: {message: "Block the flagged indicator(s) for alert {title}?"}}
+    - {type: response-action, when: {path: investigation.signals.ioc_malicious, op: truthy}, params: {action: block-ip, target: "{first_ip}"}}
+- id: compromised-credentials
+  name: Exposed or misused credentials (with approval)
+  description: For an identity alert, investigate, then on approval ask your identity automation to revoke the user's sessions and force a reset.
+  trigger: {mode: manual}
+  steps:
+    - {type: investigate, params: {reputation: false, siem: true}}
+    - {type: request-approval, params: {message: "Revoke sessions and reset credentials for {user}?"}}
+    - {type: response-action, params: {action: revoke-sessions, target: "{user}"}}
+    - {type: response-action, params: {action: reset-credentials, target: "{user}"}}
+- id: ticket-high-severity
+  name: Open a ticket for High and Critical alerts
+  description: Runs on its own for new High and Critical alerts. Investigates locally and asks your ITSM automation to open a ticket. Nothing else leaves Quanta.
+  trigger: {mode: on-alert, min_severity: High}
+  steps:
+    - {type: investigate, params: {reputation: false, siem: false}}
+    - {type: response-action, params: {action: create-ticket, target: "{title}"}}
