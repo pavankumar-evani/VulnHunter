@@ -332,6 +332,14 @@ const FAQS = [
     "page (admin) maps controls in NIST 800-53 r5, CSF 2.0 and an AI-governance set (built-in " +
     "subsets, or a full catalog you import as OSCAL JSON) to automated tests with thresholds " +
     "in remediation/config/grc_tests.yaml, collected about daily."],
+  ["What does the API Security page do, and does it change my WAF?",
+    "No, it never changes a WAF or gateway. It builds an inventory of your APIs from OpenAPI files " +
+    "and the access logs you import (Quanta cannot sniff traffic), checks it against the OWASP API " +
+    "Security Top 10 (2023) with an evidence chain and a cURL request a developer can use to confirm " +
+    "a true or false positive, and shows what each caller reached. Protection policies (rate limit, " +
+    "bad sources, data-loss limit, geography, signature) start in monitor mode; blocking needs a second " +
+    "administrator. A policy is sent as a signed request to a URL you own, or turned into AWS WAF / " +
+    "Cloud Armor rules for you to review. Data sensitivity comes only from the classification framework you import."],
   ["Is the Hunting & SOC page a SIEM? Does it run hunt queries?",
     "No to both. Quanta knows which assets carry exploitable vulnerabilities, so it proposes " +
     "one hunt per open CVE on the CISA KEV list or with EPSS of 0.5 or more, with the hosts, " +

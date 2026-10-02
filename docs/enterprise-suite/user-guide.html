@@ -401,4 +401,16 @@
   }
   document.getElementById('hs-btn').addEventListener('click', runSearch);
   document.getElementById('hs-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
-</script>
+</script>      <details>
+        <summary>How do I build an API inventory and check it for OWASP API Top 10 problems?<span class="route">/api-security</span></summary>
+        <div class="body"><p>Admin only. Quanta cannot watch traffic, so give it what you have. On Import, upload an OpenAPI or Swagger file (or fetch it from a URL; you are asked to confirm) and an access-log export from your gateway, load balancer or WAF, or have your log shipper push records with an API key that has the api:write scope. Inventory then lists every endpoint with its exposure, authentication, owner and the data it returns; endpoints in traffic that no spec describes are shadow endpoints. Import your own data-classification framework on Data classes so sensitivity follows your definitions; until then data is shown as unclassified. Findings lists OWASP API Top 10 indicators, each with an evidence chain and a cURL request a developer can run against a system they are allowed to test to confirm a true or false positive; Publish sends them to the main queue.</p></div>
+      </details>
+      <details>
+        <summary>How do I send a protection policy to my WAF, and what does Quanta change?<span class="route">/api-security</span></summary>
+        <div class="body"><p>Quanta changes nothing. On Protection policies create a policy (rate limit, bad sources, data-loss limit, geography or signature); it starts in monitor mode. Use Rules to review for an AWS WAF or Cloud Armor rule you apply yourself, or add a connection of type API protection policy endpoint on Connections and choose Send to my endpoint: Quanta posts a signed request to a URL you own and your automation decides. A blocking policy must be approved by a second administrator first. Your automation can report applied or rejected back, and each result raises an alert.</p></div>
+      </details>
+      <details>
+        <summary>How do I run API security tests in my pipeline and fail the build?<span class="route">/api-security</span></summary>
+        <div class="body"><p>On CI and rollout copy the GitHub Actions or GitLab CI example. Your tester posts its results to /api/ingest/api-test-results; the response says whether the gate passed, and the job fails when it did not. Start with report_only=true, then make the gate blocking.</p></div>
+      </details>
+

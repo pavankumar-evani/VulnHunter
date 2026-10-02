@@ -907,6 +907,13 @@ configured); requesters can rate a resolved ticket 1 to 5 and the Analytics tab 
 satisfaction. Policy lives in `remediation/config/support_sla.yaml` and
 `support_routing.yaml`. See [SUPPORT.md](SUPPORT.md).
 
+### What does the API Security page do, and does it change my WAF?
+
+It builds an inventory of your APIs from OpenAPI files and the access logs you import (Quanta cannot sniff traffic), checks it against the OWASP API Security Top 10 (2023) with an evidence chain and a
+cURL request that lets a developer confirm a true or false positive, shows what each caller reached, and keeps protection policies (rate limits, bad sources, data-loss limits, geography, signatures).
+It never changes a WAF or gateway: a policy is sent as a signed request to a URL you own, or turned into AWS WAF / Cloud Armor rules for you to review. A policy starts in monitor mode, and blocking needs a second administrator.
+Sensitivity comes only from the classification framework you import. See [API_SECURITY.md](API_SECURITY.md).
+
 ### What if I find a bug or need help?
 
 See [SUPPORT.md](SUPPORT.md) — the short version: open a ticket from the in-app Support

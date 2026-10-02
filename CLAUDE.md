@@ -600,9 +600,21 @@ not a SIEM: the analyst runs them in their own tool and records each result and 
 `POST /api/ingest/alerts` (key scope `soc:write`); `triage.py` ranks them with vulnerability context and attaches a runbook from `runbooks.yaml`
 (technique, then title keywords, else a generic one). Hunt metrics include ATT&CK coverage of the techniques in the estate's open findings.
 
+**API security** (`remediation/apisec/`, page `/api-security`, admin only; full reference `docs/API_SECURITY.md`): an API inventory built from OpenAPI uploads or URL fetches
+(`openapi.py`, `store.import_spec`) and imported gateway/WAF/access logs (`logs.py`; JSON lines, array, common/combined log, CSV; `POST /api/ingest/api-traffic`, key scope `api:write`).
+Quanta cannot sniff traffic and never changes a WAF. Endpoints are keyed (service, method, path key); shadow/zombie/drift come from spec vs traffic; daily metrics, per-caller rows and
+service dependencies are aggregated in memory per upload (tables `api_specs`, `api_endpoints`, `api_metrics`, `api_actor_hits`, `api_dependencies`). `classify.py` detects kinds of data and maps
+them ONLY to the customer's imported framework (`api_data_classes`); unmapped data is "unclassified", never assumed sensitive. `rules.py` applies the OWASP API Top 10 (2023) with an evidence
+chain and a placeholder-only cURL, thresholds in `remediation/config/api_security.yaml`; findings publish to the queue (source `api-security`, scan type dast) with curated guidance matched by
+`rule_id` (`match.rule_ids` in `knowledge.yaml`). `identity.py` joins callers to endpoints and data classes; `metrics.py` derives error rate (errors/calls) and trend; `cicd.py` takes CI results
+(`/api/ingest/api-test-results`, gate, DevSecOps control `api-security-testing`, scan type `api-test`); `policies.py` holds protection policies (monitor default, block needs a second
+approver, versioned, audited; tables `api_policies`, `api_policy_events`, `api_policy_pushes`), sent via `PolicyWebhook` (signed like the SOAR response webhook; connection type
+`api-policy-endpoint`; edge result reported back at `/api/inbound/api-policy-status`) with alerts on the notification webhook/email (`QUANTA_ALERT_EMAIL`); `waf.py` renders AWS WAF and Cloud Armor
+review artifacts (data-loss limits and Cloud Armor body matches are honestly "not expressible"); `rollout.py` is the onboarding checklist. Built against public docs, never run against a live source.
+
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
-`read:findings` / `controls:write` / `ai-usage:write` / `soc:write`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
+`read:findings` / `controls:write` / `ai-usage:write` / `soc:write` / `api:write`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
 guards `POST /api/ingest/findings`, `/api/ingest/scanner-csv`, `/api/inbound/ticket-status`,
 `GET /api/export/findings`; only `/api/ingest/`, `/api/inbound/`, `/api/export/` are exempt from the
 login gate, and only because each route checks a key itself. `/api/ingest/generic` needs a key when
