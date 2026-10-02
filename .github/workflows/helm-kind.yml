@@ -14,6 +14,9 @@ on:
             "scripts/e2e_cluster.py", ".github/workflows/helm-kind.yml"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   install:
     runs-on: ubuntu-latest

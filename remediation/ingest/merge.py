@@ -22,7 +22,8 @@ from remediation.utils.file_lock import FileLock
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "output" / "normalized-findings.json"
 _NUM = re.compile(r"FIND-(\d+)$")
-_REFRESH = ("severity", "cvss", "title", "description", "recommended_fix", "remediation_domain")
+_REFRESH = ("severity", "cvss", "title", "description", "recommended_fix", "remediation_domain", "scan_type", "location", "cwe", "rule_id", "tool",
+            "suggested_patch", "dependency")
 
 
 def key_of(f):

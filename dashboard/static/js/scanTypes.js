@@ -12,10 +12,16 @@ export const SCAN_TYPE_LABELS = {
   "secrets": "Secret Scanning (Repository)",
   "runtime": "Runtime / Container Security",
   "ai-ml": "AI/ML Security",
+  "sast": "Static Application Security Testing (SAST)",
+  "container": "Container Image Security",
+  "cicd": "CI/CD Pipeline Security",
+  "coverage": "Test Coverage on Security-Relevant Code",
 };
 
 // "sast" is deliberately excluded here: /remediate findings (what /queue and /assets show)
 // are never tagged scan_type "sast" - SAST findings live entirely in the separate /quanta-scan
 // data path (see scan_type_mapping.py's module docstring). Listing it in the queue's filter
 // would only ever show zero rows, so the Code Scan page is where "SAST" actually lives.
-export const QUEUE_SCAN_TYPES = ["infra-vm", "sca", "cert-mgmt", "dast", "iac", "secrets", "runtime", "ai-ml"];
+// "sast" is listed because findings from third-party SAST tools arrive through the SARIF ingest and do appear in the queue;
+// Quanta's own /quanta-scan results still live on the Code Scan page.
+export const QUEUE_SCAN_TYPES = ["infra-vm", "sca", "cert-mgmt", "sast", "dast", "iac", "secrets", "runtime", "ai-ml", "container", "cicd", "coverage"];

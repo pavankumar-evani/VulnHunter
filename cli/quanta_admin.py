@@ -325,6 +325,35 @@ def cmd_prepare(_a):
     return 0
 
 
+def cmd_scan_pipelines(a):
+    """Checks CI/CD pipeline files (GitHub Actions, GitLab CI, Jenkinsfile) under PATH and prints the result as SARIF
+    (default) or JSON, so a CI job can upload it with an API key. Exit status 1 when anything at or above --fail-on is found."""
+    from remediation.scanners import cicd
+    findings, files = cicd.scan_path(a.path)
+    out = json.dumps(cicd.to_sarif(findings) if a.format == "sarif" else findings, indent=2)
+    if a.out:
+        Path(a.out).write_text(out, encoding="utf-8")
+        print(f"{files} pipeline file(s) scanned, {len(findings)} finding(s) written to {a.out}")
+    else:
+        print(out)
+    rank = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+    return 1 if a.fail_on and any(rank[f["severity"]] >= rank[a.fail_on] for f in findings) else 0
+
+
+def cmd_import_sarif(a):
+    from remediation.ingest import merge, sarif
+    findings, skipped = sarif.parse(Path(a.file).read_text(encoding="utf-8"), a.source, scan_type=a.scan_type, asset=a.asset)
+    print(json.dumps({"parsed": len(findings), "skipped": skipped, **merge.merge(findings, a.source, reconcile=a.reconcile)}))
+    return 0
+
+
+def cmd_import_coverage(a):
+    from remediation.ingest import coverage, merge
+    findings, summary = coverage.analyse(Path(a.file).read_text(encoding="utf-8"), a.format, a.threshold, a.source, a.asset)
+    print(json.dumps({"coverage": summary, **merge.merge(findings, a.source, reconcile=True)}))
+    return 0
+
+
 def cmd_worker(_a):
     from remediation.coordination import worker
     worker.main()
@@ -363,6 +392,26 @@ def build_parser():
     b = sub.add_parser("backup")
     b.add_argument("--out", default="./backups")
     b.set_defaults(fn=cmd_backup)
+    sp = sub.add_parser("scan-pipelines")
+    sp.add_argument("path", nargs="?", default=".")
+    sp.add_argument("--format", choices=["sarif", "json"], default="sarif")
+    sp.add_argument("--out")
+    sp.add_argument("--fail-on", choices=["Critical", "High", "Medium", "Low"])
+    sp.set_defaults(fn=cmd_scan_pipelines)
+    isr = sub.add_parser("import-sarif")
+    isr.add_argument("file")
+    isr.add_argument("--source", required=True)
+    isr.add_argument("--scan-type")
+    isr.add_argument("--asset")
+    isr.add_argument("--reconcile", action="store_true")
+    isr.set_defaults(fn=cmd_import_sarif)
+    icv = sub.add_parser("import-coverage")
+    icv.add_argument("file")
+    icv.add_argument("--source", default="coverage")
+    icv.add_argument("--asset")
+    icv.add_argument("--format")
+    icv.add_argument("--threshold", type=float, default=60.0)
+    icv.set_defaults(fn=cmd_import_coverage)
     s = sub.add_parser("restore")
     s.add_argument("--from", dest="source", required=True)
     s.add_argument("--yes", action="store_true")

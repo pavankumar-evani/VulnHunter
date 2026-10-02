@@ -67,6 +67,12 @@ export function openFindingDetail(f) {
       </div>`;
   }
 
+  // where the problem is, for findings from code, web, pipeline and coverage scanners
+  const L = f.location || {};
+  const loc = (L.file || L.url)
+    ? `<code>${escapeHtml(L.file || L.url)}${L.line ? `:${escapeHtml(String(L.line))}` : ""}</code>${L.snippet ? `<pre class="finding-snippet">${escapeHtml(L.snippet)}</pre>` : ""}`
+    : null;
+
   const body = `
     <h2>${escapeHtml(f.title)}</h2>
     <p class="subtitle">
@@ -82,6 +88,9 @@ export function openFindingDetail(f) {
         <tbody>
           ${row("Source", f.source ? `${escapeHtml(f.source)}${f.source_ref ? ` <span class="muted">(${escapeHtml(f.source_ref)})</span>` : ""}` : null)}
           ${row("Severity", f.severity ? escapeHtml(f.severity) : null)}
+          ${row("Location", loc ? loc : null, true)}
+          ${row("Rule", f.rule_id ? `<code>${escapeHtml(f.rule_id)}</code>${f.tool ? ` <span class="muted">(${escapeHtml(f.tool)})</span>` : ""}` : null)}
+          ${row("CWE", f.cwe && f.cwe.length ? f.cwe.map((c) => `<code>${escapeHtml(c)}</code>`).join(" ") : null, true)}
           ${row("CVE", f.cve ? `<code>${escapeHtml(f.cve)}</code>` : null)}
           ${row("CVSS", f.cvss !== undefined && f.cvss !== null ? escapeHtml(String(f.cvss)) : null)}
           ${row("CISA KEV", kev)}

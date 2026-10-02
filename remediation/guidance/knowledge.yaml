@@ -371,7 +371,7 @@ entries:
 
   - id: container-image
     title: Container image and Dockerfile hardening
-    match: {cwe: [CWE-250, CWE-269], keywords: ["dockerfile", "base image", "container image", "runs as root", "latest tag", "unpinned image", "privileged container"], scan_types: [runtime]}
+    match: {cwe: [CWE-250, CWE-269], keywords: ["dockerfile", "base image", "container image", "runs as root", "latest tag", "unpinned image", "privileged container"], scan_types: [runtime, container]}
     summary: The image runs as root, uses an unpinned or bloated base, or the container runs with excess privileges.
     why: A compromise of one container becomes a compromise of the host or the cluster; bloated images carry more vulnerabilities.
     steps:
@@ -412,7 +412,7 @@ entries:
 
   - id: cicd-pipeline
     title: CI/CD pipeline weakness
-    match: {keywords: ["github actions", "workflow", "pull_request_target", "jenkins", "gitlab ci", "pipeline", "runner", "build agent", "artifact signing", "unpinned action"]}
+    match: {scan_types: [cicd], keywords: ["github actions", "workflow", "pull_request_target", "jenkins", "gitlab ci", "pipeline", "runner", "build agent", "artifact signing", "unpinned action"]}
     summary: The build and release pipeline can be abused to run attacker code, leak secrets or ship tampered artifacts.
     why: A compromised pipeline can publish malicious builds with your signing identity and reach production secrets.
     steps:
@@ -434,7 +434,7 @@ entries:
 
   - id: test-coverage-gap
     title: Test or code coverage gap on security-relevant code
-    match: {keywords: ["code coverage", "test coverage", "untested", "coverage below"]}
+    match: {scan_types: [coverage], keywords: ["code coverage", "test coverage", "untested", "coverage below"]}
     summary: Code that handles authentication, input or money has little or no automated testing.
     why: Coverage is not a vulnerability, but untested security code regresses silently.
     steps:

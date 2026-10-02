@@ -36,6 +36,36 @@ def check_source(source):
     return source
 
 
+SCAN_TYPES = ("sast", "dast", "sca", "secrets", "iac", "container", "cicd", "coverage", "infra-vm", "runtime", "cert-mgmt", "ai-ml")
+
+
+def _optional_fields(item):
+    """Optional fields a scanner-aware sender may add: scan_type, location, cwe, rule_id, tool, suggested_patch, dependency."""
+    out = {}
+    st = item.get("scan_type")
+    if st not in (None, ""):
+        if st not in SCAN_TYPES:
+            raise ValueError(f"scan_type must be one of {', '.join(SCAN_TYPES)}")
+        out["scan_type"] = st
+    loc = item.get("location")
+    if isinstance(loc, dict):
+        out["location"] = {"file": str(loc.get("file") or "")[:500] or None, "line": loc.get("line") if isinstance(loc.get("line"), int) else None,
+                           "end_line": loc.get("end_line") if isinstance(loc.get("end_line"), int) else None,
+                           "url": str(loc.get("url") or "")[:500] or None, "snippet": str(loc.get("snippet") or "")[:500] or None}
+    cwe = item.get("cwe")
+    if cwe:
+        out["cwe"] = [c for c in (cwe if isinstance(cwe, list) else [cwe]) if re.match(r"^CWE-\d+$", str(c), re.I)][:6]
+        out["cwe"] = [str(c).upper() for c in out["cwe"]]
+    for k in ("rule_id", "tool"):
+        if item.get(k):
+            out[k] = str(item[k])[:200]
+    if item.get("suggested_patch"):
+        out["suggested_patch"] = str(item["suggested_patch"])[:6000]
+    if isinstance(item.get("dependency"), dict):
+        out["dependency"] = {k: item["dependency"].get(k) for k in ("package", "ecosystem", "version", "fixed_version", "direct")}
+    return out
+
+
 def normalise(item, today=None):
     """One incoming finding (a dict) -> a Finding-schema dict without an id. Raises ValueError
     with a message naming the problem."""
@@ -75,7 +105,9 @@ def normalise(item, today=None):
         v = item.get(field)
         if v and not _DATE.match(str(v)):
             raise ValueError(f"{field} must start with a date like 2026-09-01")
+    extra = _optional_fields(item)
     return {
+        **extra,
         "source_ref": str(item.get("source_ref")).strip() if item.get("source_ref") not in (None, "") else None,
         "asset": {"name": name, "ip": str(asset.get("ip") or "").strip() or None, "type": asset_type, "os": os_name},
         "title": title, "cve": cve, "cvss": cvss, "severity": severity,

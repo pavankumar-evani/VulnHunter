@@ -24,7 +24,7 @@ VALID_PERIODS = ("daily", "weekly", "monthly", "quarterly", "half-yearly", "year
 # excludes it from QUEUE_SCAN_TYPES: /queue (and therefore this report) never tags a
 # finding "sast" - those live only in the separate /quanta-scan data path, which a scoped
 # (sub-domain/team) report can't meaningfully include (see the scope_note below).
-VALID_SCOPES = ("all", "infra-vm", "sca", "cert-mgmt", "dast", "iac", "secrets", "runtime", "ai-ml")
+VALID_SCOPES = ("all", "infra-vm", "sca", "cert-mgmt", "sast", "dast", "iac", "secrets", "runtime", "ai-ml", "container", "cicd", "coverage")
 
 
 def _scope_findings(findings, scope, team):

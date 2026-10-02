@@ -39,7 +39,7 @@ runtime detection, no CVE). Each is a genuinely distinct methodology from agent-
 infra-vm scanning, same reasoning DAST already got its own bucket for.
 """
 
-SCAN_TYPES = ("infra-vm", "sca", "cert-mgmt", "sast", "dast", "iac", "secrets", "runtime", "ai-ml")
+SCAN_TYPES = ("infra-vm", "sca", "cert-mgmt", "sast", "dast", "iac", "secrets", "runtime", "ai-ml", "container", "cicd", "coverage")
 
 SCAN_TYPE_LABELS = {
     "infra-vm": "Infrastructure Vulnerability Management",
@@ -51,6 +51,9 @@ SCAN_TYPE_LABELS = {
     "secrets": "Secret Scanning (Repository)",
     "runtime": "Runtime / Container Security",
     "ai-ml": "AI/ML Security",
+    "container": "Container Image Security",
+    "cicd": "CI/CD Pipeline Security",
+    "coverage": "Test Coverage on Security-Relevant Code",
 }
 
 _ASSET_TYPE_TO_SCAN_TYPE = {
@@ -73,6 +76,9 @@ def classify_finding(finding):
     label from `application`'s DAST bucket, and from /appsec's own SAST-CWE-based
     "Secrets Management" card, which is a fully separate data path - see
     scan_type_mapping's callers in appsec.js)."""
+    explicit = finding.get("scan_type")
+    if explicit in SCAN_TYPES:  # a scanner or an ingest adapter that knows the methodology says so (SARIF, pipeline checks)
+        return explicit
     asset_type = (finding.get("asset") or {}).get("type", "")
     if asset_type == "application":
         return "sca" if finding.get("cve") else "dast"

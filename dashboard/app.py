@@ -45,7 +45,7 @@ import observability  # noqa: E402
 from remediation.apikeys import store as apikey_store  # noqa: E402
 from remediation.connections import crypto as conn_crypto  # noqa: E402
 from remediation.connections import links as conn_links  # noqa: E402
-from remediation.ingest import api_findings, merge as findings_merge, scanner_csv  # noqa: E402
+from remediation.ingest import api_findings, coverage as coverage_ingest, merge as findings_merge, sarif as sarif_ingest, scanner_csv  # noqa: E402
 from remediation.connections import registry as conn_registry  # noqa: E402
 from remediation.connections import store as conn_store  # noqa: E402
 from remediation.connections import sync as conn_sync  # noqa: E402
@@ -2494,10 +2494,57 @@ async def api_import_file(request: Request, background: BackgroundTasks, source:
                           user: dict = Depends(rbac.require_admin)):
     """The same import for a signed-in admin (the Connections page's file upload), for sources
     that cannot be reached by API: export a CSV from the scanner and drop it in."""
-    out = _ingest_csv_bytes(await _read_upload(request), source, reconcile, user["email"])
+    data = await _read_upload(request)
+    if data.lstrip()[:1] == b"{":  # a SARIF file rather than a scanner CSV
+        out = _ingest_sarif_bytes(data, source, "", "", reconcile, user["email"])
+    else:
+        out = _ingest_csv_bytes(data, source, reconcile, user["email"])
     if out["added"] or out["updated"]:
         _enrich_in_background(background)
     return out
+
+
+def _merge_scanner_findings(findings, source, reconcile, actor, kind, extra=None):
+    result = findings_merge.merge(findings, source, reconcile=reconcile)
+    activity_log.record_activity(actor, kind, source, {"parsed": len(findings), **(extra or {}), **result})
+    return {"source": source, "parsed": len(findings), **(extra or {}), **result}
+
+
+def _ingest_sarif_bytes(data, source, scan_type, asset, reconcile, actor):
+    try:
+        api_findings.check_source(source)
+        findings, skipped = sarif_ingest.parse(data, source, scan_type=scan_type or None, asset=asset or None)
+    except (ValueError, sarif_ingest.SarifError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not findings and not any(skipped.values()):
+        raise HTTPException(status_code=400, detail="The SARIF file has no results.")
+    return _merge_scanner_findings(findings, source, reconcile, actor, "ingest.sarif", {"skipped": skipped})
+
+
+@app.post("/api/ingest/sarif")
+async def api_ingest_sarif(request: Request, background: BackgroundTasks, source: str = "sarif", scan_type: str = "", asset: str = "",
+                           reconcile: bool = False, key: dict = Depends(require_api_key("ingest:write"))):
+    """Upload a SARIF 2.1.0 file as the request body: Semgrep, CodeQL, ZAP, Trivy, Checkov, gitleaks, Hadolint and others.
+    `scan_type` (sast, dast, sca, secrets, iac, container, cicd) is inferred from the tool when omitted; `asset` names
+    the repository or application. `reconcile=true` says this is the complete current result for that source."""
+    out = _ingest_sarif_bytes(await _read_upload(request), source, scan_type, asset, reconcile, f"apikey:{key['name']}")
+    if out["added"] or out["updated"]:
+        _enrich_in_background(background)
+    return out
+
+
+@app.post("/api/ingest/coverage")
+async def api_ingest_coverage(request: Request, source: str = "coverage", asset: str = "", fmt: str = "", threshold: float = 60.0,
+                              reconcile: bool = True, key: dict = Depends(require_api_key("ingest:write"))):
+    """Upload a Cobertura, JaCoCo or lcov report. Only security-relevant files (authentication, cryptography, validation,
+    payments...) below `threshold` percent become findings; the response also reports the overall coverage."""
+    data = await _read_upload(request)
+    try:
+        api_findings.check_source(source)
+        findings, summary = coverage_ingest.analyse(data.decode("utf-8", "replace"), fmt or None, threshold, source, asset or None)
+    except (ValueError, coverage_ingest.CoverageError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _merge_scanner_findings(findings, source, reconcile, f"apikey:{key['name']}", "ingest.coverage", {"coverage": summary})
 
 
 class TicketStatusBody(BaseModel):
