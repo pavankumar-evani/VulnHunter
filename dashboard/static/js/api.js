@@ -255,6 +255,7 @@ export const api = {
     if (!res.ok) throw new Error((data && data.detail) || res.statusText);
     return data;
   },
+  capabilities: () => request("GET", "/api/capabilities"),
   detectionsOverview: () => request("GET", "/api/detections/overview"),
   detectionsAssess: () => request("POST", "/api/detections/assess", {}),
   detectionsAddRule: (body) => request("POST", "/api/detections/rules", body),

@@ -17,6 +17,7 @@ import { initCommandPalette } from "./commandPalette.js";
 
 const routes = [
   { pattern: /^\/$/, load: () => import("./pages/overview.js") },
+  { pattern: /^\/capabilities\/?$/, load: () => import("./pages/capabilities.js") },
   { pattern: /^\/quanta-scan\/?$/, load: () => import("./pages/quanta-scan.js") },
   { pattern: /^\/remediate\/?$/, load: () => import("./pages/remediate.js") },
   { pattern: /^\/queue\/?$/, load: () => import("./pages/queue.js") },

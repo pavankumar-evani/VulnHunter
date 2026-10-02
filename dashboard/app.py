@@ -61,6 +61,7 @@ from remediation.connectors.webhook_connector import ACTIONS as webhook_actions 
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
 from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa: E402
+from remediation import capabilities as capabilities_mod  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
 from remediation.enrichment import network_reachability as network_reach  # noqa: E402
@@ -5546,6 +5547,13 @@ def api_iam_revocations(campaign_id: int, user: dict = Depends(rbac.require_admi
     if not iam_store.get_campaign(campaign_id):
         raise HTTPException(status_code=404, detail="No such campaign")
     return {"revocations": iam_store.revocations(campaign_id), "note": "These are decisions recorded in Quanta. The identity team removes the access; Quanta changes no account."}
+
+
+# ---------------------------------------------------------------- capabilities
+@app.get("/api/capabilities")
+def api_capabilities(user: dict = Depends(rbac.require_login)):
+    """The five capability areas, what Quanta does in each, and what each currently holds. Administrator-only pages are left out for everyone else."""
+    return {"areas": capabilities_mod.build(dashboard_data.load_live_queue(), user.get("role") == "admin")}
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

@@ -11,6 +11,8 @@ export const NAV = [
   { group: "Overview", items: [
     { path: "/", label: "Dashboard", icon: "dashboard", exact: true,
       tip: "KPIs, SLA status, and coverage across both pipelines at a glance." },
+    { path: "/capabilities", label: "Capabilities", icon: "rules",
+      tip: "Pick what you want to do - vulnerability management, cyber risk, detection and hunting, the L1 SOC with SOAR, and more - and open the pages that belong to it." },
     { path: "/ai-assist", label: "AI Assist", icon: "ai",
       tip: "Ask Claude to explain a finding or draft remediation guidance - preview free, confirm to spend." },
     { path: "/ask", label: "Ask Quanta", icon: "search",
