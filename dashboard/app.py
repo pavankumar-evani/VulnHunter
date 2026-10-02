@@ -54,6 +54,7 @@ from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.controls import store as controls_store  # noqa: E402
+from remediation.aiusage import analytics as ai_analytics, discovery as ai_discovery, otlp as ai_otlp, store as ai_store  # noqa: E402
 from remediation.enrichment import client_controls  # noqa: E402
 from remediation.utils import file_sync, secret_files  # noqa: E402
 from remediation.support import analytics as support_analytics  # noqa: E402
@@ -3412,6 +3413,112 @@ def api_finding_compensating_controls(finding_id: str, user: dict | None = Depen
     """Compensating controls for this finding from the ATT&CK mitigations for the techniques it enables, checked against the
     controls recorded for its asset: which are verified, claimed, absent, or unknown."""
     return _fast_json(client_controls.assess(_visible_finding(finding_id, user)))
+
+
+# --------------------------------------------------------------------------- AI usage analytics
+# Organization-wide AI usage: spend and tokens by team, application and model, budgets, unusual days, and AI applications nobody
+# reviewed. Counts only; no prompt or response text is ever stored. Admin only. See remediation/aiusage/.
+class AiBudgetBody(BaseModel):
+    scope: str = "org"
+    scope_value: str | None = None
+    period: str = "month"
+    limit_usd: float | None = None
+    limit_tokens: int | None = None
+    alert_pct: int = 80
+
+
+class AiAppBody(BaseModel):
+    name: str | None = None
+    domain: str | None = None
+    status: str = "unreviewed"
+    owner: str | None = None
+    note: str | None = None
+
+
+class AiUsageBody(BaseModel):
+    source: str = "api"
+    events: list[dict]
+
+
+@app.get("/api/ai-usage/summary")
+def api_ai_usage_summary(days: int = 30, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return _fast_json(ai_analytics.summary(days=max(1, min(days, 365))))
+
+
+@app.post("/api/ai-usage/budgets")
+def api_ai_add_budget(body: AiBudgetBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        return {"id": ai_analytics.add_budget(body.scope, body.scope_value, body.period, body.limit_usd, body.limit_tokens, body.alert_pct, user["email"])}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/ai-usage/budgets/{budget_id}")
+def api_ai_delete_budget(budget_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    if not ai_analytics.delete_budget(budget_id):
+        raise HTTPException(status_code=404, detail="No such budget")
+    return {"deleted": True}
+
+
+@app.get("/api/ai-usage/apps")
+def api_ai_apps(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"apps": ai_discovery.list_apps(), "known_services": len(ai_discovery.services())}
+
+
+@app.post("/api/ai-usage/apps")
+def api_ai_add_app(body: AiAppBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        return {"id": ai_discovery.add_app(body.name, body.domain, status=body.status)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/ai-usage/apps/{app_id}")
+def api_ai_set_app(app_id: int, body: AiAppBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        ai_discovery.set_status(app_id, body.status, body.owner, body.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such application") from exc
+    activity_log.record_activity(user["email"], "ai.app.status", str(app_id), {"status": body.status})
+    return {"updated": True}
+
+
+@app.post("/api/ai-usage/discovery")
+async def api_ai_discovery(request: Request, source: str = "proxy-log", user: dict = Depends(rbac.require_admin)):
+    """Upload a proxy, DNS or CASB export (CSV with domain[,user,count] or any text log). Known AI services found become
+    applications to review."""
+    try:
+        found = ai_discovery.parse_log((await _read_upload(request)).decode("utf-8", "replace"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    out = ai_discovery.record(found, source[:60])
+    activity_log.record_activity(user["email"], "ai.discovery", source, out)
+    return out
+
+
+@app.post("/api/ingest/ai-usage")
+def api_ingest_ai_usage(body: AiUsageBody, key: dict = Depends(require_api_key("ai-usage:write"))):
+    """Events from a gateway, proxy or script: {model, input_tokens, output_tokens, ts, team, application, user_ref, cost_usd, ...}.
+    Counts only. Re-sending an event_key updates it."""
+    try:
+        out = ai_store.record(body.events, "gateway" if body.source == "gateway" else "api")
+    except ai_store.UsageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(f"apikey:{key['name']}", "ai.usage.push", body.source, {k: out[k] for k in ("recorded", "updated", "rejected")})
+    return out
+
+
+@app.post("/api/ingest/otlp/v1/traces")
+async def api_ingest_otlp(request: Request, key: dict = Depends(require_api_key("ai-usage:write"))):
+    """OpenTelemetry GenAI spans, OTLP/HTTP JSON (set OTEL_EXPORTER_OTLP_PROTOCOL=http/json). Non-AI spans are ignored."""
+    try:
+        events = ai_otlp.parse_traces(json.loads((await _read_upload(request)) or b"{}"))
+        out = ai_store.record(events, "otel")
+    except (ValueError, ai_store.UsageError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"partialSuccess": {"rejectedSpans": out["rejected"]}, **out}
 
 
 @app.get("/api/guidance")

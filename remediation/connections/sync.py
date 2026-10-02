@@ -61,6 +61,13 @@ def run(connection_id, actor="scheduler", engine=None, findings_path=merge.DEFAU
                     message += " Threat intel (KEV, EPSS) refreshed."
                 except Exception as exc:  # noqa: BLE001 - enrichment is best effort
                     message += f" Threat-intel refresh failed ({type(exc).__name__}); retry from the Overview page."
+        elif pulled["kind"] == "ai_usage":
+            from remediation.aiusage import store as usage_store
+            result = usage_store.record(pulled["events"], "provider-api", engine)
+            detail = {**result, "fetched": len(pulled["events"])}
+            message = (f"Fetched {detail['fetched']} usage bucket(s): {result['recorded']} new, {result['updated']} updated"
+                       + (f", {result['rejected']} rejected" if result["rejected"] else "") + ".")
+            count = detail["fetched"]
         else:
             result = _reconcile_assets(pulled["assets"], findings_path)
             detail = {"fetched": len(pulled["assets"]), "matched": len(result["matched"]), "unmatched": len(result["unmatched"]), "skipped": len(result["skipped"])}

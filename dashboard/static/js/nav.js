@@ -106,6 +106,8 @@ export const NAV = [
   { group: "Connectors / Adaptors", items: [
     { path: "/connections", label: "Connections", icon: "adaptor",
       tip: "Admin: store your scanner and asset-source credentials (encrypted) and schedule automatic syncs." },
+    { path: "/ai-usage", label: "AI Usage", icon: "rules",
+      tip: "Admin: AI spend and tokens across the organization by team, application and model, budgets, unusual days, and AI tools nobody reviewed." },
     { path: "/controls", label: "Security Controls", icon: "rules",
       tip: "Which firewalls, EDR, WAF and other controls protect which assets - what makes compensating-control advice specific to you." },
     { path: "/adaptors", label: "Connectors / Adaptors", icon: "adaptor",

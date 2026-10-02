@@ -1,0 +1,17 @@
+# Prices used to ESTIMATE the cost of AI usage events that arrive without a cost (provider usage reports, OpenTelemetry spans).
+#
+# Quanta ships this EMPTY on purpose. Prices change, differ by contract, region, tier, batch and cache use, and a number
+# that is wrong in a cost report is worse than an empty cell. Where an event carries its own cost (Quanta's own calls, a gateway
+# that reports cost) that figure is used and labelled "reported". Where a price exists below, the cost is computed from the token
+# counts and labelled "estimated". Where neither exists the cost is left blank and counted as "unknown", never as zero.
+#
+# Fill in your own contracted prices, in US dollars per MILLION tokens. Matching is on the model name exactly, or on a prefix
+# ending in `*` (for example `claude-sonnet-*`); the first match wins, so list specific names before wildcards.
+#
+# models:
+#   claude-example-model:        # replace with the model id your reports show
+#     input: 0.00                # $ per 1M uncached input tokens
+#     output: 0.00               # $ per 1M output tokens
+#     cache_read: 0.00           # $ per 1M cached input tokens read (optional)
+#     cache_write: 0.00          # $ per 1M tokens written to cache (optional)
+models: {}

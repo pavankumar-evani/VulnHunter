@@ -572,6 +572,14 @@ patterns, CSV import, `POST /api/ingest/controls` with a `controls:write` key, t
 finding's applicable mitigations against the asset's recorded controls (verified / claimed / absent / unknown) and is shown in the
 guidance (`/api/findings/{id}/compensating-controls`). With nothing recorded for an asset it says unknown rather than guessing.
 
+**AI usage analytics** (`remediation/aiusage/`, page `/ai-usage`, admin only): table `ai_usage_events` (counts only, never prompt text; unique per
+source + event_key) fed by provider usage connectors (`remediation/connectors/ai_usage_connector.py`: Anthropic Usage & Cost Admin API and
+OpenAI organization usage, stored connections of kind pull/output `ai-usage`), `POST /api/ingest/ai-usage` and OTLP JSON
+`/api/ingest/otlp/v1/traces` (key scope `ai-usage:write`), plus Quanta's own calls from `ai_usage_log`. Cost is reported, estimated from
+`ai_pricing.yaml` (ships empty) or unknown, never zero. `analytics.py` gives totals, breakdowns, cache-hit rate, unusual days, budgets
+(table `ai_budgets`) and models outside `ai_usage_policy.yaml`'s approved list; `discovery.py` + `ai_domains.yaml` find unreviewed AI
+applications from proxy/DNS exports (table `ai_apps`; record and report only).
+
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
 `read:findings`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`

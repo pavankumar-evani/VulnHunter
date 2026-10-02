@@ -175,6 +175,37 @@ Needs a key with `controls:write`. `control_class` is one of `patching`, `vuln-s
 `user-training` (`GET /api/controls` lists them with labels). `asset_name` may be a pattern such as `WEB-*`. Reported controls are
 stored as **verified**; ones typed in or imported as CSV on the Controls page are **claimed**. Sending the same one again refreshes it.
 
+### Report AI usage
+
+AI usage across the organization (the *AI Usage* page) is built from four kinds of source. Quanta stores counts, models, times and
+attribution only, never prompts or responses.
+
+* **Provider usage APIs.** Add an *Anthropic usage* or *OpenAI usage* connection on the Connections page with that provider's **Admin**
+  key (a workspace or project key does not work). Quanta pulls daily token counts by model and workspace or project on a schedule;
+  re-pulls update the same buckets.
+* **A gateway, proxy or script** posts events:
+
+```bash
+curl -X POST https://quanta.example.com/api/ingest/ai-usage   -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json"   -d '{"source": "gateway", "events": [{"ts": "2026-10-01T10:00:00Z", "model": "claude-sonnet", "provider": "anthropic",
+        "team": "Platform Engineering", "application": "support-bot", "user_ref": "u-017",
+        "input_tokens": 1200, "output_tokens": 300, "cache_read_tokens": 800, "event_key": "req-8841"}]}'
+```
+
+  Needs a key with `ai-usage:write`. Send an `event_key` (a request id) so a re-send updates instead of doubling. Send a pseudonymous
+  `user_ref` (a hash) if people should not be identifiable. `cost_usd` is optional.
+* **OpenTelemetry.** Point an OTLP/HTTP **JSON** exporter at `POST /api/ingest/otlp/v1/traces` with the same key
+  (`OTEL_EXPORTER_OTLP_PROTOCOL=http/json`). Spans carrying the GenAI attributes (`gen_ai.request.model`, `gen_ai.usage.input_tokens`,
+  `gen_ai.usage.output_tokens`) become events; `service.name` is the application. Protobuf is not read.
+* **Unreviewed AI tools.** Upload a proxy, DNS or CASB export on the AI Usage page (CSV with `domain`, optional `user` and `count`,
+  or any text log). Hostnames that match the list of known AI services (`remediation/config/ai_domains.yaml`) become applications to mark
+  sanctioned, unreviewed or blocked. Quanta records and reports; it does not block.
+
+**Cost** is shown only where it is known: reported by the source, or estimated from prices you enter in `remediation/config/ai_pricing.yaml`
+(shipped empty on purpose; contracts differ and a wrong figure is worse than a blank). Everything else is counted as "unknown cost", never as
+zero. **Budgets** (organization, team or application; day, week or month; dollars and/or tokens; warn at a percentage) show used,
+projected and state. Unusual days are flagged against the median of the days before (`ai_usage_policy.yaml`), and `allowed_models` lists
+usage of any model outside your approved set. Quanta's own Claude calls are included as source `quanta`.
+
 ### Report a ticket's state
 
 ```bash

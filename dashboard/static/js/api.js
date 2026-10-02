@@ -128,6 +128,19 @@ export const api = {
     if (!res.ok) throw new Error((data && data.detail) || res.statusText);
     return data;
   },
+  aiUsageSummary: (days) => request("GET", `/api/ai-usage/summary?days=${days || 30}`),
+  aiApps: () => request("GET", "/api/ai-usage/apps"),
+  aiSetApp: (id, body) => request("PUT", `/api/ai-usage/apps/${id}`, body),
+  aiAddApp: (body) => request("POST", "/api/ai-usage/apps", body),
+  aiAddBudget: (body) => request("POST", "/api/ai-usage/budgets", body),
+  aiDeleteBudget: (id) => request("DELETE", `/api/ai-usage/budgets/${id}`),
+  aiDiscovery: async (file, source) => {
+    const res = await fetch(`/api/ai-usage/discovery?source=${encodeURIComponent(source || "proxy-log")}`, { method: "POST", body: file });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
   findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
   importScannerFile: async (source, reconcile, file) => {
     const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });

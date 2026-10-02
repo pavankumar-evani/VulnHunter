@@ -21,7 +21,7 @@ import os
 import weakref
 from pathlib import Path
 
-from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table, Text, create_engine, text
+from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine, text
 
 from remediation.utils.file_lock import FileLock
 
@@ -389,6 +389,61 @@ asset_controls = Table(
 )
 
 
+# AI usage across the organization (remediation/aiusage/). No prompt or response text is ever stored.
+ai_usage_events = Table(
+    "ai_usage_events", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("ts", String, nullable=False, index=True),
+    Column("source", String, nullable=False),
+    Column("event_key", String, nullable=False),
+    Column("provider", String, nullable=True),
+    Column("model", String, nullable=False, index=True),
+    Column("team", String, nullable=True, index=True),
+    Column("application", String, nullable=True),
+    Column("user_ref", String, nullable=True),
+    Column("input_tokens", Integer, nullable=False, default=0),
+    Column("output_tokens", Integer, nullable=False, default=0),
+    Column("cache_read_tokens", Integer, nullable=False, default=0),
+    Column("cache_write_tokens", Integer, nullable=False, default=0),
+    Column("request_count", Integer, nullable=False, default=1),
+    Column("latency_ms", Integer, nullable=True),
+    Column("cost_usd", Float, nullable=True),
+    Column("cost_basis", String, nullable=False, default="unknown"),
+    Column("received_at", String, nullable=False),
+    UniqueConstraint("source", "event_key", name="uq_ai_usage_event"),
+)
+
+# AI applications found in the organization (sanctioned, unreviewed or blocked): the shadow-AI list.
+ai_apps = Table(
+    "ai_apps", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False),
+    Column("domain", String, nullable=False, unique=True),
+    Column("status", String, nullable=False),
+    Column("owner", String, nullable=True),
+    Column("users_seen", Integer, nullable=False, default=0),
+    Column("requests_seen", Integer, nullable=False, default=0),
+    Column("signals", Text, nullable=True),
+    Column("first_seen", String, nullable=False),
+    Column("last_seen", String, nullable=False),
+    Column("note", Text, nullable=True),
+)
+
+# Spending or token budgets, by team, application or the whole organization.
+ai_budgets = Table(
+    "ai_budgets", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("scope", String, nullable=False),
+    Column("scope_value", String, nullable=True),
+    Column("period", String, nullable=False),
+    Column("limit_usd", Float, nullable=True),
+    Column("limit_tokens", Integer, nullable=True),
+    Column("alert_pct", Integer, nullable=False, default=80),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
+
 _SCHEMA_ADVISORY_KEY = 727270001
 
 
@@ -432,7 +487,7 @@ def ensure_schema(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
-            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls,
+            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

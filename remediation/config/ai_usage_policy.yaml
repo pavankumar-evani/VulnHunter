@@ -1,0 +1,10 @@
+# AI usage policy, read by the AI Usage page and report.
+#
+# allowed_models: models your organization has approved. Empty means no restriction is recorded and nothing is flagged. When
+# set, usage of any other model is listed under "models outside the approved list". Matching is exact or a trailing * wildcard.
+allowed_models: []
+
+# A day is flagged as unusual when its token count is more than this many times the median of the days before it, and at least
+# anomaly_min_tokens. Both are deliberately simple and visible; tune them to your volume.
+anomaly_factor: 3.0
+anomaly_min_tokens: 100000

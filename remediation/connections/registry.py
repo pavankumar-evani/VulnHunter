@@ -18,6 +18,7 @@ from pathlib import Path
 
 from remediation.connectors import url_safety
 from remediation.connectors.active_directory_connector import ActiveDirectoryConnector
+from remediation.connectors.ai_usage_connector import AnthropicUsageConnector, OpenAIUsageConnector
 from remediation.connectors.axonius_connector import AxoniusConnector
 from remediation.connectors.cortex_xsiam_connector import CortexXsiamConnector
 from remediation.connectors.infoblox_connector import InfobloxConnector
@@ -152,6 +153,39 @@ SPECS = {
                                                    bind_password=c.get("bind_password") or None, use_ssl=bool(c.get("use_ssl"))).test_connection(),
     },
 }
+
+
+def _days(values):
+    try:
+        return max(1, min(int(values.get("days") or 7), 31))
+    except (TypeError, ValueError):
+        raise ValueError("days must be a whole number from 1 to 31") from None
+
+
+SPECS.update({
+    "anthropic-usage": {
+        "label": "Anthropic usage (AI spend)", "category": "AI usage", "output": "ai-usage",
+        "fields": [_f("admin_key", "Admin API key", secret=True, placeholder="sk-ant-admin..."),
+                   _f("days", "Days to pull each time (1 to 31)", required=False, placeholder="7")],
+        "docs": "Claude Console > Settings > Admin keys. A workspace API key does not work. Pulls daily token counts by model and workspace.",
+        "note": "Aggregated daily buckets; a re-pull updates them. Cost is estimated only if you enter prices in ai_pricing.yaml.",
+        "validate": _days,
+        "build": lambda c: AnthropicUsageConnector(c["admin_key"], days=_days(c)),
+        "pull": lambda c: {"kind": "ai_usage", "events": AnthropicUsageConnector(c["admin_key"], days=_days(c)).fetch_events()},
+        "test": lambda c: AnthropicUsageConnector(c["admin_key"], days=_days(c)).test_connection(),
+    },
+    "openai-usage": {
+        "label": "OpenAI usage (AI spend)", "category": "AI usage", "output": "ai-usage",
+        "fields": [_f("admin_key", "Admin key", secret=True, placeholder="sk-admin-..."),
+                   _f("days", "Days to pull each time (1 to 31)", required=False, placeholder="7")],
+        "docs": "OpenAI platform > Organization settings > Admin keys. A project API key does not work. Pulls daily token counts by model and project.",
+        "note": "Aggregated daily buckets; a re-pull updates them. Cost is estimated only if you enter prices in ai_pricing.yaml.",
+        "validate": _days,
+        "build": lambda c: OpenAIUsageConnector(c["admin_key"], days=_days(c)),
+        "pull": lambda c: {"kind": "ai_usage", "events": OpenAIUsageConnector(c["admin_key"], days=_days(c)).fetch_events()},
+        "test": lambda c: OpenAIUsageConnector(c["admin_key"], days=_days(c)).test_connection(),
+    },
+})
 
 
 SPECS.update({

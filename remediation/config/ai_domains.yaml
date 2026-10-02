@@ -1,0 +1,30 @@
+# AI services recognised in proxy, DNS, CASB and identity logs, for finding AI use the organization has not reviewed.
+#
+# A starting point, not a complete list: AI services appear weekly. Add your own (or tell Quanta about one on the AI Usage page).
+# A domain matches itself and any subdomain. An entry here only means "this is an AI service"; whether it is allowed is decided
+# per application on the AI Usage page (sanctioned, unreviewed or blocked).
+services:
+  - {name: OpenAI / ChatGPT, domains: [openai.com, chatgpt.com, oaistatic.com]}
+  - {name: Anthropic / Claude, domains: [anthropic.com, claude.ai, claude.com]}
+  - {name: Google Gemini, domains: [gemini.google.com, aistudio.google.com, generativelanguage.googleapis.com, notebooklm.google.com]}
+  - {name: Microsoft Copilot, domains: [copilot.microsoft.com, copilot.cloud.microsoft]}
+  - {name: Azure OpenAI, domains: [openai.azure.com]}
+  - {name: GitHub Copilot, domains: [githubcopilot.com]}
+  - {name: Perplexity, domains: [perplexity.ai]}
+  - {name: Mistral, domains: [mistral.ai]}
+  - {name: Cohere, domains: [cohere.com, cohere.ai]}
+  - {name: DeepSeek, domains: [deepseek.com]}
+  - {name: xAI / Grok, domains: [x.ai, grok.com]}
+  - {name: Meta AI, domains: [meta.ai]}
+  - {name: Hugging Face, domains: [huggingface.co]}
+  - {name: Replicate, domains: [replicate.com]}
+  - {name: Groq, domains: [groq.com]}
+  - {name: Together AI, domains: [together.ai, together.xyz]}
+  - {name: Poe, domains: [poe.com]}
+  - {name: Character.AI, domains: [character.ai]}
+  - {name: Cursor, domains: [cursor.com, cursor.sh]}
+  - {name: Midjourney, domains: [midjourney.com]}
+  - {name: Stability AI, domains: [stability.ai]}
+  - {name: Runway, domains: [runwayml.com]}
+  - {name: Jasper, domains: [jasper.ai]}
+  - {name: Otter.ai, domains: [otter.ai]}
