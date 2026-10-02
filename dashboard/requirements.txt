@@ -13,3 +13,4 @@ ldap3==2.9.1  # real Active Directory/LDAP group-membership lookups (dashboard/a
 scikit-learn==1.9.0  # real unsupervised ML (remediation/enrichment/ml_insights.py) - IsolationForest/KMeans/TfidfVectorizer; no honest way to do real anomaly detection/clustering/text-similarity from stdlib alone; pulls in numpy/scipy
 sqlalchemy==2.0.52  # first real DB-backed record store (remediation/utils/db.py) - SQLite today, a straightforward connection-string swap to Postgres later since this is SQLAlchemy Core, not raw sqlite3
 greenlet==3.5.5  # sqlalchemy's own transitive dependency
+cryptography==50.0.2  # encrypts stored connector credentials (remediation/connections/crypto.py); opt-in, needs QUANTA_ENCRYPTION_KEY

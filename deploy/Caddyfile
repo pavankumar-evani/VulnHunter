@@ -1,0 +1,10 @@
+# TLS-terminating reverse proxy for Quanta. Caddy obtains and renews a certificate for
+# QUANTA_DOMAIN automatically (the name must resolve to this host and ports 80/443 be open).
+{$QUANTA_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy quanta:5050
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

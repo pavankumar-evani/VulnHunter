@@ -17,6 +17,7 @@ instead of a file path, mirroring the exact same "isolate storage per test" inte
 old `path=None` parameter served on the JSON-backed stores.
 """
 import os
+import weakref
 from pathlib import Path
 
 from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table, Text, create_engine
@@ -31,6 +32,7 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "quanta.db"
 _SCHEMA_LOCK_PATH = Path(__file__).resolve().parent / ".db_schema.lock"
 
 _default_engine = None
+_MIGRATED = weakref.WeakSet()  # engines whose pending migrations have already been applied
 
 
 def get_engine():
@@ -274,6 +276,28 @@ support_ticket_comments = Table(
 )
 
 
+# Stored connector connections (remediation/connections/). Credentials are encrypted as one
+# blob (`secrets_blob`) with a key that lives outside the database; `config` holds the
+# non-secret settings as JSON. last_* describe the most recent sync.
+connections = Table(
+    "connections", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("type", String, nullable=False),
+    Column("config", Text, nullable=True),
+    Column("secrets_blob", Text, nullable=True),
+    Column("enabled", Integer, nullable=False, default=1),
+    Column("schedule_minutes", Integer, nullable=False, default=0),
+    Column("last_run_at", String, nullable=True),
+    Column("last_status", String, nullable=True),
+    Column("last_message", Text, nullable=True),
+    Column("last_count", Integer, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -293,18 +317,11 @@ def ensure_schema(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
-            teams, finding_assignments, support_tickets, support_ticket_comments,
+            teams, finding_assignments, support_tickets, support_ticket_comments, connections,
         ])
-        _add_missing_columns(engine, support_tickets)
+    if engine not in _MIGRATED:
+        from remediation.utils import migrations
+        migrations.apply(engine)
+        _MIGRATED.add(engine)
 
 
-def _add_missing_columns(engine, table):
-    """create_all() never alters an existing table. For tables that gained columns after
-    their first release, add any that are missing (nullable, so safe on existing rows)."""
-    from sqlalchemy import inspect, text
-    existing = {c["name"] for c in inspect(engine).get_columns(table.name)}
-    with engine.begin() as conn:
-        for col in table.columns:
-            if col.name not in existing:
-                ctype = col.type.compile(engine.dialect)
-                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ctype}'))

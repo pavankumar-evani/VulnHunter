@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""
+Quanta administration: the commands you need to install, run and look after a deployment.
+
+    python cli/quanta_admin.py gen-key            # a new QUANTA_ENCRYPTION_KEY
+    python cli/quanta_admin.py gen-secret         # a new QUANTA_SESSION_SECRET
+    python cli/quanta_admin.py init               # create the database schema (no demo data)
+    python cli/quanta_admin.py clear-sample-data --yes   # start empty: set the bundled sample data aside
+    python cli/quanta_admin.py migrate [--check]  # apply (or list) pending schema migrations
+    python cli/quanta_admin.py create-admin --email you@corp.com --name "You"
+    python cli/quanta_admin.py bootstrap          # container first run: admin from environment, only if none exists
+    python cli/quanta_admin.py reset-password --email you@corp.com
+    python cli/quanta_admin.py list-users
+    python cli/quanta_admin.py check              # is this deployment configured safely?
+    python cli/quanta_admin.py backup --out ./backups
+    python cli/quanta_admin.py restore --from ./backups/quanta-backup-....zip --yes
+    python cli/quanta_admin.py rotate-keys        # re-encrypt stored credentials under the newest key
+
+Passwords are read from QUANTA_ADMIN_PASSWORD or prompted for; never put one on the command line.
+"""
+import argparse
+import datetime
+import getpass
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path[:0] = [str(REPO_ROOT), str(REPO_ROOT / "dashboard")]
+
+from sqlalchemy import select, text, update  # noqa: E402
+from sqlalchemy.engine import make_url  # noqa: E402
+
+from remediation.connections import crypto  # noqa: E402
+from remediation.utils import db as db_module  # noqa: E402
+from remediation.utils import migrations  # noqa: E402
+
+FINDINGS = REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
+CONFIG_DIR = REPO_ROOT / "remediation" / "config"
+PLAN_FILE = REPO_ROOT / "REMEDIATION_PLAN.md"
+SAMPLE_BACKUP = REPO_ROOT / "remediation" / ".sample-backup"
+DEMO_ACCOUNTS = ("admin@quanta.local", "analyst@quanta.local")
+DEMO_PASSWORD = "ChangeMe123!"
+
+
+def _flag(name):
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+
+
+def _password(prompt_label="Password"):
+    pw = os.environ.get("QUANTA_ADMIN_PASSWORD")
+    if pw:
+        return pw
+    if not sys.stdin.isatty():
+        raise SystemExit("Set QUANTA_ADMIN_PASSWORD (no terminal to prompt on).")
+    a, b = getpass.getpass(f"{prompt_label}: "), getpass.getpass("Repeat: ")
+    if a != b:
+        raise SystemExit("Passwords do not match.")
+    return a
+
+
+def mask_url(url):
+    try:
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:  # noqa: BLE001
+        return "(unparseable)"
+
+
+# ------------------------------------------------------------------ commands
+def cmd_gen_key(_a):
+    print(crypto.generate_key())
+
+
+def cmd_gen_secret(_a):
+    import secrets
+    print(secrets.token_hex(32))
+
+
+def cmd_init(_a):
+    engine = db_module.get_engine()
+    db_module.ensure_schema(engine)
+    print(f"Database ready: {mask_url(db_module.database_url())}")
+    print("No demo accounts were created. Next: create-admin.")
+
+
+def cmd_migrate(a):
+    engine = db_module.get_engine()
+    pending = migrations.pending(engine)
+    if a.check:
+        print("Pending migrations: " + (", ".join(f"{v} {n}" for v, n in pending) if pending else "none"))
+        return 1 if pending else 0
+    ran = migrations.apply(engine)
+    print("Applied: " + (", ".join(f"{v} {n}" for v, n in ran) if ran else "nothing to do"))
+    return 0
+
+
+def cmd_create_admin(a):
+    from auth import users
+    db_module.ensure_schema(db_module.get_engine())
+    users.create_user(a.email, _password("New admin password"), a.name or a.email, role=a.role)
+    print(f"Created {a.role} {a.email}.")
+
+
+def cmd_bootstrap(_a):
+    """Idempotent first-run admin for containers: creates the admin named by
+    QUANTA_BOOTSTRAP_ADMIN_EMAIL (password from QUANTA_ADMIN_PASSWORD) only when no admin exists."""
+    from auth import users
+    db_module.ensure_schema(db_module.get_engine())
+    if any(u["role"] == "admin" for u in users.list_users()):
+        print("An administrator already exists; nothing to do.")
+        return
+    email, pw = os.environ.get("QUANTA_BOOTSTRAP_ADMIN_EMAIL", "").strip(), os.environ.get("QUANTA_ADMIN_PASSWORD", "")
+    if not email or not pw:
+        print("No administrator yet. Set QUANTA_BOOTSTRAP_ADMIN_EMAIL and QUANTA_ADMIN_PASSWORD, or run create-admin.")
+        return
+    users.create_user(email, pw, os.environ.get("QUANTA_BOOTSTRAP_ADMIN_NAME", email), role="admin")
+    print(f"Created the first administrator {email}. Change the password after signing in.")
+
+
+def is_sample_dataset(path=None):
+    """True only for the sample findings that ship with the repository (recognised by its
+    first record), never for data pulled from a real source."""
+    path = Path(path or FINDINGS)
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    first = data[0] if data else {}
+    return first.get("id") == "FIND-1" and first.get("source_ref") == "57608" and (first.get("asset") or {}).get("name") == "WIN-DC01"
+
+
+def cmd_clear_sample_data(a):
+    """Starts a production deployment empty: moves the bundled sample findings, sample
+    playbooks and sample plan aside (kept under remediation/.sample-backup) so real data is
+    never mixed with demo data. A no-op when the findings are not the shipped sample."""
+    if not is_sample_dataset():
+        print("No bundled sample data found (or the findings are real); nothing to clear.")
+        return
+    if not a.yes:
+        raise SystemExit("This moves the bundled sample findings, playbooks and plan aside. Re-run with --yes.")
+    backup = SAMPLE_BACKUP
+    backup.mkdir(parents=True, exist_ok=True)
+    moved = []
+    for f in [FINDINGS, *sorted(FINDINGS.parent.glob("FIND-*.yml")), PLAN_FILE]:
+        if f.exists():
+            shutil.move(str(f), str(backup / f.name))
+            moved.append(f.name)
+    FINDINGS.write_text("[]", encoding="utf-8")
+    print(f"Moved {len(moved)} sample file(s) to {backup}. The queue now starts empty.")
+
+
+def cmd_reset_password(a):
+    from auth import users
+    users.set_password(a.email, _password("New password"))
+    print(f"Password reset for {a.email}.")
+
+
+def cmd_list_users(_a):
+    from auth import users
+    for u in users.list_users():
+        print(f"{u['email']:40} {u['role']:6} team={u.get('team') or '-'}")
+
+
+def run_checks():
+    """[(level, name, detail)] where level is PASS / WARN / FAIL."""
+    out = []
+
+    def add(level, name, detail):
+        out.append((level, name, detail))
+    prod = _flag("QUANTA_PRODUCTION")
+    add("PASS" if prod else "WARN", "production mode", "QUANTA_PRODUCTION is on" if prod else "off: reads are public, demo behaviour. Set QUANTA_PRODUCTION=true")
+    add("PASS" if os.environ.get("QUANTA_SESSION_SECRET") else "FAIL", "session secret",
+        "set" if os.environ.get("QUANTA_SESSION_SECRET") else "QUANTA_SESSION_SECRET is not set: every restart signs everyone out")
+    if prod and _flag("QUANTA_ALLOW_PUBLIC_READS"):
+        add("WARN", "public reads", "QUANTA_ALLOW_PUBLIC_READS is on: anyone who can reach the app can read findings")
+    keys = crypto._keys()
+    if not keys:
+        add("WARN", "credential encryption", "QUANTA_ENCRYPTION_KEY not set: stored connections are disabled")
+    else:
+        add("PASS" if crypto.available() else "FAIL", "credential encryption", f"{len(keys)} key(s) configured" if crypto.available() else "QUANTA_ENCRYPTION_KEY is not a valid key")
+    try:
+        engine = db_module.get_engine()
+        db_module.ensure_schema(engine)
+        with engine.connect() as c:
+            c.execute(text("SELECT 1"))
+        add("PASS", "database", mask_url(db_module.database_url()))
+        pend = migrations.pending(engine)
+        add("PASS" if not pend else "WARN", "migrations", "up to date" if not pend else f"{len(pend)} pending: run migrate")
+        from auth import users
+        demo = [e for e in DEMO_ACCOUNTS if users.verify_login(e, DEMO_PASSWORD)]
+        add("FAIL" if demo else "PASS", "demo accounts", f"still have the published password: {', '.join(demo)}" if demo else "none with the published password")
+        admins = [u for u in users.list_users() if u["role"] == "admin"]
+        add("PASS" if admins else "FAIL", "administrators", f"{len(admins)} admin account(s)" if admins else "no admin yet: run create-admin")
+        if db_module.database_url().startswith("sqlite") and prod:
+            add("WARN", "database engine", "SQLite is fine for a single host; use PostgreSQL (QUANTA_DATABASE_URL) for anything larger")
+    except Exception as exc:  # noqa: BLE001
+        add("FAIL", "database", f"{type(exc).__name__}: {exc}")
+    if is_sample_dataset():
+        add("WARN" if not prod else "FAIL", "findings data", "this is the bundled SAMPLE data, not yours: run clear-sample-data --yes, then add a connection")
+    else:
+        add("PASS" if FINDINGS.exists() else "WARN", "findings data", "present" if FINDINGS.exists() else "none yet: add a connection on the Connections page")
+    smtp = all(os.environ.get(v) for v in ("SMTP_HOST", "SMTP_PORT", "SMTP_FROM_ADDRESS"))
+    add("PASS" if smtp else "WARN", "email (SMTP)", "configured" if smtp else "not configured: scheduled reports, alerts and SLA emails are recorded but not sent")
+    add("PASS" if shutil.which("claude") else "WARN", "Claude Code CLI",
+        "found" if shutil.which("claude") else "not found: AI fixers (playbooks, upgrade plans) and AI Assist are unavailable; everything else works")
+    add("PASS" if os.environ.get("QUANTA_METRICS_TOKEN") else "WARN", "metrics", "enabled" if os.environ.get("QUANTA_METRICS_TOKEN") else "off (set QUANTA_METRICS_TOKEN to expose /metrics)")
+    return out
+
+
+def cmd_check(_a):
+    results = run_checks()
+    width = max(len(n) for _, n, _ in results)
+    for level, name, detail in results:
+        print(f"[{level}] {name:<{width}}  {detail}")
+    fails = [r for r in results if r[0] == "FAIL"]
+    print(f"\n{len(fails)} failure(s), {sum(1 for r in results if r[0] == 'WARN')} warning(s).")
+    return 1 if fails else 0
+
+
+def _sqlite_path():
+    url = make_url(db_module.database_url())
+    return Path(url.database) if url.drivername.startswith("sqlite") and url.database not in (None, ":memory:") else None
+
+
+def cmd_backup(a):
+    out_dir = Path(a.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    target = out_dir / f"quanta-backup-{stamp}.zip"
+    manifest = {"created": stamp, "database": mask_url(db_module.database_url()), "files": []}
+    with tempfile.TemporaryDirectory() as tmp, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
+        sqlite_file = _sqlite_path()
+        if sqlite_file:
+            snap = Path(tmp) / "quanta.db"
+            src, dst = sqlite3.connect(sqlite_file), sqlite3.connect(snap)
+            with dst:
+                src.backup(dst)  # a consistent copy even while the app is writing
+            src.close()
+            dst.close()
+            z.write(snap, "database/quanta.db")
+            manifest["files"].append("database/quanta.db")
+        elif db_module.database_url().startswith("postgresql"):
+            if not shutil.which("pg_dump"):
+                raise SystemExit("pg_dump not found on PATH: install the PostgreSQL client tools, or back the database up with your platform's tooling.")
+            dump = Path(tmp) / "quanta.sql"
+            subprocess.run(["pg_dump", "--no-owner", "--format=plain", "--file", str(dump), db_module.database_url().replace("+psycopg2", "")], check=True)
+            z.write(dump, "database/quanta.sql")
+            manifest["files"].append("database/quanta.sql")
+        else:
+            raise SystemExit("Unsupported database for backup; back it up with your platform's tooling.")
+        if FINDINGS.exists():
+            z.write(FINDINGS, "data/normalized-findings.json")
+            manifest["files"].append("data/normalized-findings.json")
+        for f in sorted(CONFIG_DIR.glob("*.yaml")):
+            z.write(f, f"config/{f.name}")
+            manifest["files"].append(f"config/{f.name}")
+        z.writestr("manifest.json", json.dumps(manifest, indent=2))
+    print(f"Backup written: {target}")
+    print("It contains your findings, tickets and users but NOT QUANTA_ENCRYPTION_KEY: store that key separately, or stored credentials cannot be restored.")
+
+
+def cmd_restore(a):
+    if not a.yes:
+        raise SystemExit("Restore overwrites the current database and findings. Stop the app, then re-run with --yes.")
+    sqlite_file = _sqlite_path()
+    with zipfile.ZipFile(a.source) as z:
+        names = set(z.namelist())
+        if "database/quanta.db" in names:
+            if not sqlite_file:
+                raise SystemExit("This backup is a SQLite file but the configured database is not SQLite.")
+            if sqlite_file.exists():
+                shutil.copy2(sqlite_file, sqlite_file.with_name(sqlite_file.name + ".pre-restore"))
+            sqlite_file.write_bytes(z.read("database/quanta.db"))
+            print(f"Database restored to {sqlite_file} (previous copy kept as .pre-restore).")
+        elif "database/quanta.sql" in names:
+            print("This is a PostgreSQL dump. Restore it with: psql \"$QUANTA_DATABASE_URL\" < quanta.sql (extracted below).")
+            Path("quanta-restore.sql").write_bytes(z.read("database/quanta.sql"))
+        if "data/normalized-findings.json" in names:
+            FINDINGS.parent.mkdir(parents=True, exist_ok=True)
+            FINDINGS.write_bytes(z.read("data/normalized-findings.json"))
+            print("Findings restored.")
+        for n in sorted(x for x in names if x.startswith("config/")):
+            (CONFIG_DIR / Path(n).name).write_bytes(z.read(n))
+        print("Config restored. Start the app and run: check")
+
+
+def cmd_rotate_keys(_a):
+    engine = db_module.get_engine()
+    db_module.ensure_schema(engine)
+    t = db_module.connections
+    n = 0
+    with engine.begin() as conn:
+        for row in conn.execute(select(t.c.id, t.c.secrets_blob)).mappings().all():
+            if row["secrets_blob"]:
+                conn.execute(update(t).where(t.c.id == row["id"]).values(secrets_blob=crypto.rotate(row["secrets_blob"])))
+                n += 1
+    print(f"Re-encrypted {n} connection(s) under the newest key. You can now remove the old key from QUANTA_ENCRYPTION_KEY.")
+
+
+def build_parser():
+    p = argparse.ArgumentParser(prog="quanta-admin", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="command", required=True)
+    for name, fn in (("gen-key", cmd_gen_key), ("gen-secret", cmd_gen_secret), ("init", cmd_init), ("bootstrap", cmd_bootstrap), ("list-users", cmd_list_users),
+                     ("check", cmd_check), ("rotate-keys", cmd_rotate_keys)):
+        sub.add_parser(name).set_defaults(fn=fn)
+    cs = sub.add_parser("clear-sample-data")
+    cs.add_argument("--yes", action="store_true")
+    cs.set_defaults(fn=cmd_clear_sample_data)
+    m = sub.add_parser("migrate")
+    m.add_argument("--check", action="store_true")
+    m.set_defaults(fn=cmd_migrate)
+    c = sub.add_parser("create-admin")
+    c.add_argument("--email", required=True)
+    c.add_argument("--name")
+    c.add_argument("--role", default="admin", choices=["admin", "user"])
+    c.set_defaults(fn=cmd_create_admin)
+    r = sub.add_parser("reset-password")
+    r.add_argument("--email", required=True)
+    r.set_defaults(fn=cmd_reset_password)
+    b = sub.add_parser("backup")
+    b.add_argument("--out", default="./backups")
+    b.set_defaults(fn=cmd_backup)
+    s = sub.add_parser("restore")
+    s.add_argument("--from", dest="source", required=True)
+    s.add_argument("--yes", action="store_true")
+    s.set_defaults(fn=cmd_restore)
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    return args.fn(args) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

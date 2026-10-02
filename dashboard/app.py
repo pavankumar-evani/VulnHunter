@@ -41,6 +41,11 @@ from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
+import observability  # noqa: E402
+from remediation.connections import crypto as conn_crypto  # noqa: E402
+from remediation.connections import registry as conn_registry  # noqa: E402
+from remediation.connections import store as conn_store  # noqa: E402
+from remediation.connections import sync as conn_sync  # noqa: E402
 from remediation.support import analytics as support_analytics  # noqa: E402
 from remediation.support import escalation as support_escalation  # noqa: E402
 from remediation.support import routing as support_routing  # noqa: E402
@@ -221,7 +226,11 @@ def _require_login_for_reads_enabled():
     # Read fresh from the environment on every call (not cached at import time) so
     # tests can toggle this with patch.dict(os.environ, ...) without reloading the
     # whole app module.
-    return os.environ.get("QUANTA_REQUIRE_LOGIN_FOR_READS", "").strip().lower() in ("1", "true", "yes")
+    def flag(name):
+        return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+    # QUANTA_PRODUCTION makes the safe choice the default: every /api route needs a session
+    # unless QUANTA_ALLOW_PUBLIC_READS is set on purpose.
+    return flag("QUANTA_REQUIRE_LOGIN_FOR_READS") or (flag("QUANTA_PRODUCTION") and not flag("QUANTA_ALLOW_PUBLIC_READS"))
 
 
 @app.middleware("http")
@@ -270,15 +279,57 @@ async def _notification_scheduler_loop():
             traceback.print_exc()
 
 
+DEMO_ACCOUNTS = ("admin@quanta.local", "analyst@quanta.local")
+DEMO_PASSWORD = "ChangeMe123!"
+
+
+def assert_no_demo_accounts():
+    """In production, refuse to start while a seeded demo account still has its published
+    password. Cheap, and it removes the most common way a demo becomes a breach."""
+    if os.environ.get("QUANTA_PRODUCTION", "").strip().lower() not in ("1", "true", "yes"):
+        return
+    for email in DEMO_ACCOUNTS:
+        if auth_users.verify_login(email, DEMO_PASSWORD):
+            raise RuntimeError(
+                f"QUANTA_PRODUCTION is set but the demo account {email} still has its published password. "
+                "Delete it or change its password (python cli/quanta_admin.py reset-password), then restart.")
+
+
 @app.on_event("startup")
 async def _validate_production_requirements():
     rbac.validate_production_requirements()
+    observability.configure_logging()
+    from remediation.utils import migrations
+    migrations.apply(db_module.get_engine())
+    assert_no_demo_accounts()
+
+
+@app.middleware("http")
+async def _observability_middleware(request: Request, call_next):
+    return await observability.request_logging(request, call_next)
+
+
+_CONNECTION_CHECK_SECONDS = int(os.environ.get("QUANTA_CONNECTION_CHECK_SECONDS", "60"))
+_connection_task = None
+
+
+async def _connection_scheduler_loop():
+    """Runs every stored connection whose schedule has elapsed. Each sync runs in a worker
+    thread so a slow source never blocks requests; results are stored on the connection."""
+    while True:
+        await asyncio.sleep(_CONNECTION_CHECK_SECONDS)
+        try:
+            await asyncio.to_thread(conn_sync.run_due)
+        except Exception:  # noqa: BLE001 - a bad tick must never kill the loop
+            import traceback
+            traceback.print_exc()
 
 
 @app.on_event("startup")
 async def _start_notification_scheduler():
-    global _scheduler_task
+    global _scheduler_task, _connection_task
     _scheduler_task = asyncio.create_task(_notification_scheduler_loop())
+    _connection_task = asyncio.create_task(_connection_scheduler_loop())
 
 
 # ---------------------------------------------------------------------------
@@ -2173,6 +2224,171 @@ def api_delete_team(name: str, user: dict = Depends(rbac.require_admin)):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+
+
+
+
+
+# --------------------------------------------------------------------------- health + metrics
+# Outside /api on purpose: load balancers and orchestrators probe these without a session.
+# /healthz = the process is up. /readyz = it can actually serve (database, schema, data).
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz():
+    checks, ok = {}, True
+    try:
+        from sqlalchemy import text
+        engine = db_module.get_engine()
+        db_module.ensure_schema(engine)
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as exc:  # noqa: BLE001
+        checks["database"] = f"error: {type(exc).__name__}"
+        ok = False
+    findings = dashboard_data.REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
+    checks["findings_file"] = "ok" if findings.exists() else "missing (no data ingested yet)"
+    checks["scheduler"] = "ok" if (_scheduler_task is not None and not _scheduler_task.done()) else "not running"
+    return JSONResponse({"status": "ready" if ok else "not-ready", "checks": checks}, status_code=200 if ok else 503)
+
+
+@app.get("/metrics")
+def metrics(request: Request):
+    token = os.environ.get("QUANTA_METRICS_TOKEN", "").strip()
+    if not token:
+        raise HTTPException(status_code=404, detail="Not found")  # metrics are off unless a token is configured
+    import hmac
+    if not hmac.compare_digest(request.headers.get("authorization", ""), f"Bearer {token}"):
+        raise HTTPException(status_code=401, detail="Bad or missing bearer token")
+    findings = dashboard_data.load_remediation_findings()
+    tickets = support_store.list_tickets(status="open_all", limit=5000)
+    conns = conn_store.list_connections()
+    gauges = {
+        "quanta_findings_total": ("Findings in the system of record", len(findings)),
+        "quanta_support_tickets_open": ("Open support tickets", len(tickets)),
+        "quanta_support_tickets_sla_breached": ("Open support tickets past their SLA", sum(1 for t in tickets if t["sla"]["breached"])),
+        "quanta_connections_total": ("Configured connections", len(conns)),
+        "quanta_connections_failing": ("Connections whose last sync failed", sum(1 for c in conns if c["last_status"] == "error")),
+        "quanta_scheduler_alive": ("1 if the notification scheduler task is running", 1 if (_scheduler_task is not None and not _scheduler_task.done()) else 0),
+    }
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(observability.metrics_text(gauges), media_type="text/plain; version=0.0.4")
+
+
+# --------------------------------------------------------------------------- connections
+# Stored connector connections with encrypted credentials and scheduled sync
+# (remediation/connections/). Admin only. Credentials are accepted on write and never
+# returned; storing them needs QUANTA_ENCRYPTION_KEY, otherwise creation is refused with a
+# clear message and the per-request connector pages keep working as before.
+
+
+class ConnectionBody(BaseModel):
+    name: str
+    type: str
+    values: dict = {}
+    enabled: bool = True
+    schedule_minutes: int = 0
+
+
+class ConnectionUpdateBody(BaseModel):
+    name: str | None = None
+    values: dict | None = None
+    enabled: bool | None = None
+    schedule_minutes: int | None = None
+
+
+class ConnectionTestBody(BaseModel):
+    type: str
+    values: dict = {}
+    connection_id: int | None = None
+
+
+def _conn_error(exc):
+    if isinstance(exc, conn_crypto.EncryptionNotConfigured):
+        return HTTPException(status_code=400, detail=str(exc))
+    if isinstance(exc, KeyError):
+        return HTTPException(status_code=404, detail="Connection not found")
+    return HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/connections")
+def api_list_connections(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"connections": conn_store.list_connections(), "catalog": conn_registry.public_catalog(),
+            "encryption_available": conn_crypto.available(),
+            "min_schedule_minutes": conn_store.MIN_SCHEDULE_MINUTES}
+
+
+@app.post("/api/connections")
+def api_create_connection(body: ConnectionBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        return conn_store.create(body.name, body.type, body.values, user["email"], enabled=body.enabled,
+                                 schedule_minutes=body.schedule_minutes)
+    except (ValueError, conn_crypto.EncryptionNotConfigured) as exc:
+        raise _conn_error(exc) from exc
+
+
+@app.put("/api/connections/{connection_id}")
+def api_update_connection(connection_id: int, body: ConnectionUpdateBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        return conn_store.update_connection(connection_id, user["email"], values=body.values, name=body.name,
+                                            enabled=body.enabled, schedule_minutes=body.schedule_minutes)
+    except (ValueError, KeyError, conn_crypto.EncryptionNotConfigured, conn_crypto.DecryptionFailed) as exc:
+        raise _conn_error(exc) from exc
+
+
+@app.delete("/api/connections/{connection_id}")
+def api_delete_connection(connection_id: int, user: dict = Depends(rbac.require_admin)):
+    try:
+        conn_store.delete_connection(connection_id, user["email"])
+    except KeyError as exc:
+        raise _conn_error(exc) from exc
+    return {"deleted": True}
+
+
+@app.post("/api/connections/test")
+def api_test_connection(body: ConnectionTestBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Checks credentials with the source's cheapest authenticated call. For an existing
+    connection, blank secret fields fall back to the stored ones."""
+    spec = conn_registry.SPECS.get(body.type)
+    if not spec:
+        raise HTTPException(status_code=400, detail=f"Unknown connector type {body.type!r}")
+    values = dict(body.values)
+    if body.connection_id is not None:
+        try:
+            public, stored = conn_store.get_values(body.connection_id)
+        except (conn_crypto.EncryptionNotConfigured, conn_crypto.DecryptionFailed) as exc:
+            raise _conn_error(exc) from exc
+        if not public:
+            raise HTTPException(status_code=404, detail="Connection not found")
+        for k, v in stored.items():
+            if values.get(k) in (None, ""):
+                values[k] = v
+    try:
+        conn_registry.split_values(body.type, values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        conn_sync.test_connection(body.type, values)
+    except Exception as exc:  # noqa: BLE001 - surface any connection failure to the caller
+        raise HTTPException(status_code=502, detail=f"{spec['label']} connection failed: {exc}") from exc
+    return {"ok": True, "message": f"Connected to {spec['label']}."}
+
+
+@app.post("/api/connections/{connection_id}/sync")
+def api_sync_connection(connection_id: int, user: dict = Depends(rbac.require_admin)):
+    """Starts a sync in the background and returns at once; poll GET /api/connections for the
+    outcome (status, message, count are stored on the connection)."""
+    import threading
+    if not conn_store.get_public(connection_id):
+        raise HTTPException(status_code=404, detail="Connection not found")
+    threading.Thread(target=conn_sync.run, args=(connection_id, user["email"]), daemon=True).start()
+    return {"started": True}
 
 
 # --------------------------------------------------------------------------- support

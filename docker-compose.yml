@@ -1,6 +1,11 @@
-# Reference single-host deployment: the dashboard plus PostgreSQL. Put a TLS-terminating
-# reverse proxy in front of `quanta` (it serves plain HTTP). Secrets come from the
-# environment / an .env file, never from this file. See docs/DEPLOYMENT_ARCHITECTURE.md.
+# Reference single-host production deployment: Quanta + PostgreSQL + a TLS reverse proxy.
+#
+#   cp .env.production.example .env      # fill in every value (see the comments in it)
+#   docker compose up -d --build
+#   docker compose logs -f quanta        # the entrypoint prints the configuration check
+#
+# Secrets come from .env (or your secrets manager), never from this file. Full guide:
+# docs/PRODUCTION_GUIDE.md.
 services:
   db:
     image: postgres:16
@@ -24,18 +29,45 @@ services:
       db:
         condition: service_healthy
     environment:
+      QUANTA_PRODUCTION: "true"
       QUANTA_DATABASE_URL: postgresql+psycopg2://quanta:${QUANTA_DB_PASSWORD}@db:5432/quanta
       QUANTA_SESSION_SECRET: ${QUANTA_SESSION_SECRET:?set QUANTA_SESSION_SECRET}
-      QUANTA_PRODUCTION: "true"
-      QUANTA_REQUIRE_LOGIN_FOR_READS: "true"
+      QUANTA_ENCRYPTION_KEY: ${QUANTA_ENCRYPTION_KEY:?set QUANTA_ENCRYPTION_KEY}
+      QUANTA_BOOTSTRAP_ADMIN_EMAIL: ${QUANTA_BOOTSTRAP_ADMIN_EMAIL:-}
+      QUANTA_ADMIN_PASSWORD: ${QUANTA_ADMIN_PASSWORD:-}
+      QUANTA_METRICS_TOKEN: ${QUANTA_METRICS_TOKEN:-}
       QUANTA_SUPPORT_EMAIL: ${QUANTA_SUPPORT_EMAIL:-}
-    ports:
-      - "127.0.0.1:5050:5050"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+    expose:
+      - "5050"
     volumes:
       - quanta-output:/app/remediation/output
       - quanta-live-data:/app/remediation/live-data
+      - quanta-config:/app/remediation/config
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - quanta
+    environment:
+      QUANTA_DOMAIN: ${QUANTA_DOMAIN:?set QUANTA_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
   quanta-db:
   quanta-output:
   quanta-live-data:
+  quanta-config:
+  caddy-data:
+  caddy-config:

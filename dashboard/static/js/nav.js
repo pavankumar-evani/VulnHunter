@@ -104,6 +104,8 @@ export const NAV = [
   // researched-but-not-yet-wired-up catalog), consistent settings panel reflecting
   // whichever one is selected. See adaptorCatalog.js.
   { group: "Connectors / Adaptors", items: [
+    { path: "/connections", label: "Connections", icon: "adaptor",
+      tip: "Admin: store your scanner and asset-source credentials (encrypted) and schedule automatic syncs." },
     { path: "/adaptors", label: "Connectors / Adaptors", icon: "adaptor",
       tip: "Every external system Quanta talks to (or has researched), in one place - pick a connector from the dropdown." },
   ] },

@@ -38,6 +38,7 @@ const routes = [
   { pattern: /^\/active-directory\/?$/, load: () => import("./pages/activeDirectory.js") },
   { pattern: /^\/openvas\/?$/, load: () => import("./pages/openvas.js") },
   { pattern: /^\/adaptors\/?$/, load: () => import("./pages/adaptors.js") },
+  { pattern: /^\/connections\/?$/, load: () => import("./pages/connections.js") },
   { pattern: /^\/run\/?$/, load: () => import("./pages/run.js") },
   { pattern: /^\/ai-assist\/?$/, load: () => import("./pages/aiAssist.js") },
   { pattern: /^\/ask\/?$/, load: () => import("./pages/askQuanta.js") },
