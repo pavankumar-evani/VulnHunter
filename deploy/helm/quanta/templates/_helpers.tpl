@@ -83,10 +83,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- fail "secrets.csi.azure.keyvaultName is required" -}}
 {{- end -}}
 {{- $replicated := or (gt (int .Values.web.replicas) 1) .Values.web.autoscaling.enabled (and .Values.worker.enabled (gt (int .Values.worker.replicas) 1)) .Values.worker.autoscaling.enabled -}}
-{{- if and $replicated (not .Values.persistence.enabled) -}}
-{{- fail "More than one replica needs persistence.enabled=true with a ReadWriteMany volume: the findings and policy files must be shared. See docs/KUBERNETES.md." -}}
+{{- if not (has .Values.files.backend (list "db" "volume")) -}}
+{{- fail "files.backend must be db or volume" -}}
 {{- end -}}
-{{- if and $replicated .Values.persistence.enabled (not .Values.persistence.existingClaim) (not (has "ReadWriteMany" .Values.persistence.accessModes)) -}}
+{{- if and $replicated (eq .Values.files.backend "volume") (not .Values.persistence.enabled) -}}
+{{- fail "files.backend=volume with more than one replica needs persistence.enabled=true and a ReadWriteMany volume, or use files.backend=db (the default). See docs/KUBERNETES.md." -}}
+{{- end -}}
+{{- if and $replicated (eq .Values.files.backend "volume") .Values.persistence.enabled (not .Values.persistence.existingClaim) (not (has "ReadWriteMany" .Values.persistence.accessModes)) -}}
 {{- fail "persistence.accessModes must include ReadWriteMany when there is more than one replica" -}}
 {{- end -}}
 {{- if and $replicated (ne .Values.coordination.lockBackend "db") -}}
@@ -108,6 +111,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.config.logFormat | quote }}
 - name: QUANTA_LOCK_BACKEND
   value: {{ .Values.coordination.lockBackend | quote }}
+- name: QUANTA_FILES_BACKEND
+  value: {{ .Values.files.backend | quote }}
+- name: QUANTA_FILES_SYNC_SECONDS
+  value: {{ .Values.files.syncSeconds | quote }}
 - name: QUANTA_LEADER_TTL_SECONDS
   value: {{ .Values.config.leaderTtlSeconds | quote }}
 - name: QUANTA_JOB_VISIBILITY_SECONDS
@@ -156,7 +163,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
         path: {{ $key }}
     {{- end }}
 {{- end }}
-{{- if .Values.persistence.enabled }}
+{{- if and .Values.persistence.enabled (eq .Values.files.backend "volume") }}
 - name: quanta-data
   persistentVolumeClaim:
     claimName: {{ default (printf "%s-data" (include "quanta.fullname" .)) .Values.persistence.existingClaim }}
@@ -167,7 +174,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 - name: quanta-secrets
   mountPath: {{ .Values.secrets.mountPath }}
   readOnly: true
-{{- if .Values.persistence.enabled }}
+{{- if and .Values.persistence.enabled (eq .Values.files.backend "volume") }}
 - name: quanta-data
   mountPath: /app/remediation/output
   subPath: output
@@ -197,7 +204,7 @@ capabilities:
 
 {{/* Init containers: seed the shared config volume once, then create the schema / first admin exactly once */}}
 {{- define "quanta.initContainers" -}}
-{{- if .Values.persistence.enabled }}
+{{- if and .Values.persistence.enabled (eq .Values.files.backend "volume") }}
 - name: seed-config
   image: {{ include "quanta.image" . }}
   imagePullPolicy: {{ .Values.image.pullPolicy }}

@@ -71,9 +71,14 @@ def run_one(worker_id, handlers=None, visibility=VISIBILITY, engine=None, now=No
 def run_forever(stop_event=None, worker_id=None, handlers=None, poll=POLL):
     stop_event = stop_event or threading.Event()
     worker_id = worker_id or new_worker_id()
+    from remediation.utils import file_sync, secret_files
     while not stop_event.is_set():
         try:
+            secret_files.reload_changed()
+            file_sync.sync_if_enabled()
             ran = run_one(worker_id, handlers)
+            if ran is not None:
+                file_sync.sync_if_enabled(force=True)  # publish what the job wrote (e.g. enrichment)
         except Exception:  # noqa: BLE001 - database blip: back off and carry on
             ran = None
             stop_event.wait(poll * 2)

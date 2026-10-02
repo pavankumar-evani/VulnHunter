@@ -314,10 +314,13 @@ def cmd_prepare(_a):
     aside and create the first admin, exactly once. Every replica's init container runs this; a
     database lease makes the others wait for the first to finish, and each step is idempotent."""
     from remediation.coordination import leases
+    from remediation.utils import file_sync
     with leases.lease_lock("prepare", ttl=600, timeout=900):
         cmd_init(None)
+        file_sync.sync_if_enabled(force=True)   # QUANTA_FILES_BACKEND=db: seed or pull the working files first
         if os.environ.get("QUANTA_PRODUCTION", "").strip().lower() in ("1", "true", "yes") and os.environ.get("QUANTA_KEEP_SAMPLE_DATA") != "true":
             cmd_clear_sample_data(argparse.Namespace(yes=True))
+        file_sync.sync_if_enabled(force=True)   # publish the cleared state
         cmd_bootstrap(None)
     return 0
 

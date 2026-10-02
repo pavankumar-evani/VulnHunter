@@ -32,7 +32,7 @@ jobs:
           expect_fail() { if helm template quanta deploy/helm/quanta "$@" >/dev/null 2>&1; then echo "expected failure: $*"; exit 1; fi; }
           expect_fail --set image.repository=x --set secrets.mode=inline
           expect_fail --set image.repository=x --set secrets.externalSecrets.secretStoreRef.name=
-          expect_fail --set image.repository=x --set secrets.mode=existingSecret --set secrets.existingSecret=s --set persistence.enabled=false
+          expect_fail --set image.repository=x --set secrets.mode=existingSecret --set secrets.existingSecret=s --set files.backend=volume --set persistence.enabled=false
           expect_fail --set image.repository=x --set secrets.mode=existingSecret --set secrets.existingSecret=s --set coordination.lockBackend=file
       - name: No secret value appears in any rendered manifest
         run: |

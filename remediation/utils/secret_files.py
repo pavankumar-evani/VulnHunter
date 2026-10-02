@@ -20,6 +20,9 @@ SECRET_SETTINGS = (
 )
 
 
+_loaded = {}  # setting -> {"path", "mtime", "value"} for every setting filled from a file
+
+
 def load_file_env(environ=None):
     """Fills NAME from NAME_FILE for every secret setting. Returns the names it filled. A
     NAME_FILE that points at a missing or unreadable file is an error, not a silent skip:
@@ -39,4 +42,32 @@ def load_file_env(environ=None):
             raise RuntimeError(f"{name}_FILE is set to {path!r} but the file is empty")
         env[name] = value
         filled.append(name)
+        if environ is None:
+            _loaded[name] = {"path": path, "mtime": os.stat(path).st_mtime_ns, "value": value}
     return filled
+
+
+def reload_changed(environ=None):
+    """Re-reads secrets whose file changed (a rotated key vault value that the platform has
+    re-mounted) and updates the environment, so settings read on every use pick it up without a
+    restart: QUANTA_ENCRYPTION_KEY, QUANTA_METRICS_TOKEN, SMTP_*, QUANTA_ADMIN_PASSWORD. Two are read
+    once at startup and still need a rolling restart: QUANTA_SESSION_SECRET (and rotating it signs
+    everyone out) and QUANTA_DATABASE_URL. A setting someone also set explicitly is left alone.
+    An unreadable or empty file keeps the old value. Returns the names that changed."""
+    env = os.environ if environ is None else environ
+    changed = []
+    for name, info in list(_loaded.items()):
+        try:
+            mtime = os.stat(info["path"]).st_mtime_ns
+            if mtime == info["mtime"]:
+                continue
+            with open(info["path"], encoding="utf-8") as f:
+                value = f.read().rstrip("\r\n")
+        except OSError:
+            continue
+        info["mtime"] = mtime
+        if value and value != info["value"] and env.get(name) == info["value"]:
+            env[name] = value
+            info["value"] = value
+            changed.append(name)
+    return changed

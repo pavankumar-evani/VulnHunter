@@ -52,6 +52,7 @@ from remediation.connections import sync as conn_sync  # noqa: E402
 from remediation.coordination import jobs as job_queue  # noqa: E402
 from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
+from remediation.utils import file_sync, secret_files  # noqa: E402
 from remediation.support import analytics as support_analytics  # noqa: E402
 from remediation.support import escalation as support_escalation  # noqa: E402
 from remediation.support import routing as support_routing  # noqa: E402
@@ -289,6 +290,8 @@ _worker_stop = None
 async def _leader_loop():
     while True:
         await asyncio.to_thread(_leader.check)
+        await asyncio.to_thread(secret_files.reload_changed)   # a re-mounted key vault value, no restart
+        await asyncio.to_thread(file_sync.sync_if_enabled)
         await asyncio.sleep(_LEADER_CHECK_SECONDS)
 
 
@@ -329,6 +332,20 @@ async def _validate_production_requirements():
     from remediation.utils import migrations
     migrations.apply(db_module.get_engine())
     assert_no_demo_accounts()
+
+
+@app.middleware("http")
+async def _file_sync_middleware(request: Request, call_next):
+    """QUANTA_FILES_BACKEND=db: bring this replica's working files up to date before it serves a
+    request and publish anything a state-changing request wrote (see remediation/utils/file_sync.py).
+    A no-op, one environment lookup, when the backend is the default `file`."""
+    if not file_sync.enabled() or request.url.path.startswith("/static/") or request.url.path in ("/healthz", "/readyz"):
+        return await call_next(request)
+    await asyncio.to_thread(file_sync.sync_if_enabled)
+    response = await call_next(request)
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        await asyncio.to_thread(file_sync.sync_if_enabled, True)
+    return response
 
 
 @app.middleware("http")
@@ -2395,6 +2412,7 @@ def _enrich_in_background(background):
         try:
             from remediation.enrichment import kev_epss
             kev_epss.enrich_file(findings_merge.DEFAULT_PATH)
+            file_sync.sync_if_enabled(force=True)
         except Exception:  # noqa: BLE001 - enrichment is best effort
             pass
     background.add_task(run)

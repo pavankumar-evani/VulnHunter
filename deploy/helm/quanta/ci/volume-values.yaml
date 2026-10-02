@@ -1,0 +1,9 @@
+# Scenario: pods share a ReadWriteMany volume instead of the database file backend.
+image:
+  repository: registry.example.com/quanta
+  tag: "1.0.0"
+secrets:
+  mode: existingSecret
+  existingSecret: quanta-secrets
+files: {backend: volume}
+persistence: {enabled: true, storageClass: azurefile-csi}

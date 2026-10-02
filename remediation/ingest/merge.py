@@ -58,7 +58,9 @@ def _atomic_write(path, findings):
 def merge(new_findings, source, path=None, reconcile=False):
     """Returns {added, updated, removed, total}. Nothing is written when there is no change."""
     path = Path(path or DEFAULT_PATH)
+    from remediation.utils import file_sync
     with FileLock(str(path), timeout=60.0):
+        file_sync.sync_if_enabled(force=True)  # QUANTA_FILES_BACKEND=db: start from the cluster's latest copy
         existing = load(path)
         index = {key_of(f): i for i, f in enumerate(existing) if f.get("source") == source}
         seen, added, updated = set(), 0, 0
@@ -91,4 +93,5 @@ def merge(new_findings, source, path=None, reconcile=False):
             existing = keep
         if added or updated or removed:
             _atomic_write(path, existing)
+            file_sync.sync_if_enabled(force=True)  # publish it to the other replicas before releasing the lock
         return {"added": added, "updated": updated, "removed": removed, "total": len(existing)}

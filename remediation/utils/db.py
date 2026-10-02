@@ -360,6 +360,18 @@ jobs = Table(
 )
 
 
+# Working files shared between replicas when QUANTA_FILES_BACKEND=db (remediation/utils/file_sync.py).
+file_snapshots = Table(
+    "file_snapshots", metadata,
+    Column("path", String, primary_key=True),
+    Column("content", Text, nullable=False),
+    Column("sha", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("deleted", Boolean, nullable=False, default=False),
+    Column("updated_at", Float, nullable=False),
+)
+
+
 _SCHEMA_ADVISORY_KEY = 727270001
 
 
@@ -403,7 +415,7 @@ def ensure_schema(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
-            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs,
+            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

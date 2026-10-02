@@ -81,13 +81,20 @@ config:
 #   postgresql+psycopg2://quanta:<password>@host:5432/quanta?sslmode=require
 # The chart does not run a database.
 
-# ---------------------------------------------------------------------------- shared storage
-# The findings system of record and the policy YAML are files that every replica must see, so a
-# ReadWriteMany volume (Azure Files, EFS, Filestore, NFS, CephFS) is required for more than one
-# replica. Locks and the queue do not depend on this volume: they live in the database
-# (coordination.lockBackend). See docs/KUBERNETES.md for what the volume holds and why.
+# ---------------------------------------------------------------------------- working files
+# The findings system of record, generated playbooks and the admin-edited policy YAML are files
+# that every replica must agree on. Two ways to do that:
+#   db     (default): the database is the source of truth and each pod keeps a local copy that is
+#          reconciled with it (QUANTA_FILES_BACKEND=db). No shared volume, so any storage class works
+#          and pods can be rescheduled freely. Needs the PostgreSQL the chart already requires.
+#   volume: pods share one ReadWriteMany volume (Azure Files, EFS, Filestore, NFS, CephFS). Set
+#          persistence.enabled=true below. Use this only if you want the files visible on a share.
+files:
+  backend: db
+  syncSeconds: 3                             # how often a pod reconciles its copy with the database
+
 persistence:
-  enabled: true
+  enabled: false                             # only used with files.backend=volume
   existingClaim: ""
   storageClass: ""
   accessModes: [ReadWriteMany]
