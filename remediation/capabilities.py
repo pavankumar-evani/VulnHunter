@@ -66,6 +66,7 @@ def metrics(findings, engine=None):
     safe(lambda: put("ai-security", _count(engine, t.ai_assets), _plural(_count(engine, t.ai_assets), "AI asset") + " recorded"))
     safe(lambda: put("ai-usage", _count(engine, t.ai_usage_events), f"{_count(engine, t.ai_usage_events):,} usage records"))
     safe(lambda: put("triage", _count(engine, t.soc_alerts, t.soc_alerts.c.status != "closed"), _plural(_count(engine, t.soc_alerts, t.soc_alerts.c.status != "closed"), "open alert")))
+    safe(lambda: put("soc-cases", _count(engine, t.soc_cases, t.soc_cases.c.status.in_(("new", "in_progress", "pending", "escalated"))), _plural(_count(engine, t.soc_cases, t.soc_cases.c.status.in_(("new", "in_progress", "pending", "escalated"))), "open case")))
     safe(lambda: put("soar", _count(engine, t.soar_playbooks), _plural(_count(engine, t.soar_playbooks), "playbook")
                      + (f", {_count(engine, t.soar_runs, t.soar_runs.c.status == 'waiting-approval')} waiting for approval" if _count(engine, t.soar_runs, t.soar_runs.c.status == "waiting-approval") else "")))
     def firewall():

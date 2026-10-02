@@ -29,8 +29,8 @@ def build_queries(technique_ids, hosts, lib=None, index=None):
         if not entry:
             continue
         for d in entry.get("detections", []):
-            out.append({"technique": tid, "name": d["name"], "language": "splunk-spl", "query": translate.to_spl(d["selection"], hosts, index),
-                        "result": None, "notes": ""})
+            out.append({"technique": tid, "name": d["name"], "domain": entry.get("domain", "endpoint"), "source": "SIEM", "language": "splunk-spl",
+                        "query": translate.to_spl(d["selection"], hosts, index), "result": None, "notes": ""})
     return out
 
 

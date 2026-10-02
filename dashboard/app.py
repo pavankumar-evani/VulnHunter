@@ -71,6 +71,10 @@ from remediation.devsecops import controls as dso_controls, factory as dso_facto
 from remediation.enrichment import sbom as sbom_mod, zero_day_watch as zero_day  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
+from remediation.hunting import ttp as hunt_ttp  # noqa: E402
+from remediation.hunting import usecase_store as hunt_usecase_store, usecases as hunt_usecases  # noqa: E402
+from remediation.soar import ai_draft as soar_ai_draft, recommend as soar_recommend  # noqa: E402
+from remediation.soc import cases as soc_cases, loganalysis as soc_loganalysis, metrics as soc_metrics  # noqa: E402
 from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
 from remediation.threatmodel import engine as tm_engine, rules as tm_rules, seed as tm_seed, store as tm_store  # noqa: E402
 from remediation.aiusage import analytics as ai_analytics, discovery as ai_discovery, otlp as ai_otlp, store as ai_store  # noqa: E402
@@ -4789,9 +4793,10 @@ def api_soc_investigate(alert_id: int, body: InvestigateBody, user: dict = Depen
     inv = hunt_soc.investigate(alert, hunt_store.list_alerts(), dashboard_data.load_live_queue(), _owner_map(), lookup=lookup, siem_run=siem_run)
     md = hunt_soc.render_markdown(alert, inv)
     iid = hunt_service.save_investigation(inv, md, user["email"])
+    auto = soc_cases.auto_case(alert, inv)
     activity_log.record_activity(user["email"], "soc.alert.investigate", str(alert_id), {"verdict": inv["verdict"], "confidence": inv["confidence"],
                                                                                          "reputation": bool(lookup), "siem": bool(siem_run)})
-    return {"id": iid, "investigation": inv, "report_md": md}
+    return {"id": iid, "investigation": inv, "report_md": md, "case_id": auto["id"] if auto else None}
 
 
 @app.get("/api/soc/alerts/{alert_id}/investigation")
@@ -4800,6 +4805,266 @@ def api_soc_investigation(alert_id: int, user: dict = Depends(rbac.require_admin
     if not r:
         raise HTTPException(status_code=404, detail="This alert has not been investigated yet")
     return r
+
+
+# ---------------------------------------------------------------- SOC operations: cases, queues, escalation, metrics, log investigation, TTP identification
+class CaseOpenBody(BaseModel):
+    title: str
+    severity: str = "Medium"
+    impact: str | None = None
+    assets: list[str] = []
+    techniques: list[dict] = []
+    alert_ids: list[int] = []
+    summary: str | None = None
+    assignee: str | None = None
+    tier: int = 1
+
+
+class CaseActionBody(BaseModel):
+    note: str | None = None
+    summary: str | None = None
+    assignee: str | None = None
+    resolution: str | None = None
+    to_tier: int | None = None
+    impact: str | None = None
+    alert_id: int | None = None
+    reason: str | None = None
+    techniques: list[dict] | None = None
+
+
+class AnalystBody(BaseModel):
+    email: str
+    tier: int
+
+
+class LogBody(BaseModel):
+    text: str
+
+
+class TtpBody(BaseModel):
+    text: str
+    learn: bool = True
+
+
+def _case_400(exc):
+    return HTTPException(status_code=404 if isinstance(exc, KeyError) else 400, detail=str(exc.args[0]) if isinstance(exc, KeyError) else str(exc))
+
+
+def _ttp_examples():
+    """Labelled history for the TTP classifier: alerts an analyst closed as true positive, with the technique each carried."""
+    return [(f"{a['title']} {a.get('detail') or ''}", a["technique"]) for a in hunt_store.list_alerts() if a["disposition"] == "true-positive" and a.get("technique")][:500]
+
+
+@app.get("/api/soc/cases")
+def api_soc_cases(tier: int | None = None, status: str | None = None, assignee: str | None = None, priority: str | None = None, open_only: bool = False,
+                  user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    soc_cases.sweep()
+    return {"cases": soc_cases.list_cases(tier=tier, status=status, assignee=assignee, priority=priority, open_only=open_only), "policy": {"tiers": soc_cases.policy()["tiers"],
+            "targets": soc_cases.policy()["targets"], "resolution_codes": soc_cases.policy()["resolution_codes"]}}
+
+
+@app.post("/api/soc/cases")
+def api_soc_case_open(body: CaseOpenBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        c = soc_cases.open_case(body.model_dump(exclude_none=True), user["email"])
+    except (ValueError, KeyError) as exc:
+        raise _case_400(exc) from exc
+    activity_log.record_activity(user["email"], "soc.case.open", str(c["id"]), {"priority": c["priority"], "tier": c["tier"]})
+    return c
+
+
+@app.get("/api/soc/cases/{case_id}")
+def api_soc_case(case_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    c = soc_cases.get_case(case_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="No such case")
+    c["alerts"] = [a for a in (hunt_store.get_alert(i) for i in c["alert_ids"]) if a]
+    c["generated_summary"] = soc_cases.summarise(c, c["alerts"])
+    c["suggested_assignee"] = soc_cases.suggest_assignee(c["tier"])
+    return c
+
+
+@app.post("/api/soc/cases/{case_id}/analyse-logs")
+def api_soc_case_logs(case_id: int, body: LogBody, user: dict = Depends(rbac.require_admin)):
+    """Analyses pasted log lines locally and records a short finding on the case. No data leaves Quanta."""
+    if not soc_cases.get_case(case_id, detail=False):
+        raise HTTPException(status_code=404, detail="No such case")
+    res = soc_loganalysis.analyse(body.text, _ttp_examples())
+    bits = []
+    if res.get("beaconing"):
+        bits.append(f"{len(res['beaconing'])} regular-interval pair(s)")
+    if res.get("bursts"):
+        bits.append(f"{len(res['bursts'])} burst(s)")
+    if res.get("auth_pattern"):
+        bits.append("failures followed by a success")
+    if res.get("techniques"):
+        bits.append("techniques " + ", ".join(t["id"] for t in res["techniques"]))
+    try:
+        soc_cases.add_note(case_id, f"Log analysis of {res.get('lines', 0)} lines: " + ("; ".join(bits) if bits else "nothing notable") + ".", user["email"], kind="evidence")
+    except ValueError:
+        pass
+    activity_log.record_activity(user["email"], "soc.case.logs", str(case_id), {"lines": res.get("lines", 0)})
+    return res
+
+
+@app.post("/api/soc/cases/{case_id}/{action}")
+def api_soc_case_action(case_id: int, action: str, body: CaseActionBody, user: dict = Depends(rbac.require_admin)):
+    me = user["email"]
+    try:
+        if action == "note":
+            c = soc_cases.add_note(case_id, body.note, me)
+        elif action == "assign":
+            c = soc_cases.assign(case_id, body.assignee or me, me)
+        elif action == "acknowledge":
+            c = soc_cases.acknowledge(case_id, me)
+        elif action == "pending":
+            c = soc_cases.set_pending(case_id, body.reason, me)
+        elif action == "escalate":
+            c = soc_cases.escalate(case_id, body.summary, me, to_tier=body.to_tier)
+        elif action == "resolve":
+            c = soc_cases.resolve(case_id, body.resolution, body.summary, me)
+        elif action == "close":
+            c = soc_cases.close(case_id, body.summary, me)
+        elif action == "reopen":
+            c = soc_cases.reopen(case_id, body.reason, me)
+        elif action == "impact":
+            c = soc_cases.set_impact(case_id, body.impact, me)
+        elif action == "link-alert":
+            c = soc_cases.link_alert(case_id, body.alert_id, me)
+        elif action == "techniques":
+            c = soc_cases.set_techniques(case_id, body.techniques or [], me)
+        else:
+            raise HTTPException(status_code=404, detail="Unknown case action")
+    except (ValueError, KeyError) as exc:
+        raise _case_400(exc) from exc
+    activity_log.record_activity(me, f"soc.case.{action}", str(case_id), {"status": c["status"], "tier": c["tier"]})
+    return c
+
+
+@app.post("/api/soc/analyse-logs")
+def api_soc_analyse_logs(body: LogBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return soc_loganalysis.analyse(body.text, _ttp_examples())
+
+
+@app.post("/api/soc/ttp")
+def api_soc_ttp(body: TtpBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return hunt_ttp.classify(body.text[:20000], _ttp_examples() if body.learn else ())
+
+
+@app.get("/api/soc/metrics")
+def api_soc_metrics(days: int = 30, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    soc_cases.sweep()
+    return soc_metrics.compute(days=max(1, min(days, 365)))
+
+
+@app.get("/api/soc/analysts")
+def api_soc_analysts(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"analysts": soc_cases.list_analysts()}
+
+
+@app.post("/api/soc/analysts")
+def api_soc_analyst_add(body: AnalystBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        out = soc_cases.add_analyst(body.email, body.tier)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "soc.analyst.set", body.email, {"tier": body.tier})
+    return {"analysts": out}
+
+
+@app.delete("/api/soc/analysts/{email}")
+def api_soc_analyst_remove(email: str, user: dict = Depends(rbac.require_admin)):
+    activity_log.record_activity(user["email"], "soc.analyst.remove", email, None)
+    return {"analysts": soc_cases.remove_analyst(email)}
+
+
+class UseCaseStatusBody(BaseModel):
+    status: str
+    note: str | None = None
+
+
+class ConfirmBody(BaseModel):
+    confirm: bool = False
+
+
+class DraftPlaybookBody(BaseModel):
+    alert_id: int
+    confirm: bool = False
+
+
+def _usecases():
+    cases = hunt_usecases.generate_all(dashboard_data.load_live_queue(), hunt_store.list_alerts(), hunt_store.list_hunts(), hunt_service.list_intel(),
+                                       hunt_detection.list_rules(), hunt_detection.policy())
+    return hunt_usecase_store.sync(cases)
+
+
+@app.get("/api/detections/usecases")
+def api_detection_usecases(status: str | None = None, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    rows = _usecases()
+    counts = {}
+    for r in rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    return {"use_cases": [r for r in rows if not status or r["status"] == status], "counts": counts,
+            "note": "Proposals for a detection engineer, built from your findings, intelligence, hunts and alerts. Nothing is deployed, and a draft is not counted as coverage."}
+
+
+@app.post("/api/detections/usecases/{key}/status")
+def api_detection_usecase_status(key: str, body: UseCaseStatusBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        out = hunt_usecase_store.set_status(key, body.status, body.note, user["email"])
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such use case") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "detections.usecase", key, {"status": body.status})
+    return out
+
+
+@app.post("/api/detections/usecases/{key}/ai-refine")
+def api_detection_usecase_refine(key: str, body: ConfirmBody, user: dict = Depends(rbac.require_admin)):
+    """Optional model suggestion beside a use case: sharper hypothesis, evasions, false-positive sources, test ideas. Counts and ids only are sent; confirm-gated."""
+    case = hunt_usecase_store.get(key)
+    if not case:
+        raise HTTPException(status_code=404, detail="No such use case")
+    prompt = soar_ai_draft.usecase_prompt(case)
+    if not body.confirm:
+        return {"dry_run": True, "prompt": prompt, "message": "Preview only. Nothing was sent. Send confirm: true to ask the model; this spends API usage."}
+    governance = _enforce_ai_usage_limit(user["email"])
+    text = _run_ai_call_and_record_usage(prompt, "usecase-refine", user["email"], governance)
+    out = hunt_usecase_store.set_ai(key, text.strip() if isinstance(text, str) else str(text))
+    activity_log.record_activity(user["email"], "detections.usecase.ai", key, {})
+    return {"dry_run": False, "use_case": out}
+
+
+@app.get("/api/soc/alerts/{alert_id}/recommend-playbook")
+def api_soc_recommend_playbook(alert_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    alert = hunt_store.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="No such alert")
+    pbs = soar_playbooks.list_all()
+    by_id = {p["id"]: p for p in pbs}
+    past = []
+    for run in soar_engine.list_runs(limit=500):
+        a, p = hunt_store.get_alert(run["alert_id"]), by_id.get(run["playbook_id"])
+        if a and p and not run["dry_run"] and run["alert_id"] != alert_id:
+            past.append({"alert": a, "run": run, "playbook": p})
+    return soar_recommend.recommend(alert, pbs, past)
+
+
+@app.post("/api/soar/draft-playbook")
+def api_soar_draft_playbook(body: DraftPlaybookBody, user: dict = Depends(rbac.require_admin)):
+    """A model drafts a playbook for an alert type. The draft is run through the same validator as any playbook and is returned, never saved or run."""
+    alert = hunt_store.get_alert(body.alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="No such alert")
+    prompt = soar_ai_draft.playbook_prompt(soar_recommend.features(alert))
+    if not body.confirm:
+        return {"dry_run": True, "prompt": prompt, "message": "Preview only. The prompt has the alert's category, technique and rule, never its free text. Send confirm: true to ask the model."}
+    governance = _enforce_ai_usage_limit(user["email"])
+    text = _run_ai_call_and_record_usage(prompt, "playbook-draft", user["email"], governance)
+    draft = soar_ai_draft.check_draft(text)
+    activity_log.record_activity(user["email"], "soar.playbook.draft", str(body.alert_id), {"ok": draft["ok"]})
+    return {"dry_run": False, "draft": draft, "note": "A draft. Edit it, then save it yourself; it has not been saved and nothing has run."}
 
 
 @app.get("/api/detections/overview")

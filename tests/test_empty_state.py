@@ -54,6 +54,13 @@ class EmptyStateTests(unittest.TestCase):
             client.close()
         engine.dispose()
         tmp.cleanup()
+        # The routes above filled the module's short-lived caches from an EMPTY deployment. Leave them as found, or whichever test runs next
+        # within the cache's lifetime reads an empty queue instead of the real one.
+        for name in dir(dashboard_data):
+            cache = getattr(dashboard_data, name)
+            if name.endswith("_CACHE") and isinstance(cache, dict):
+                for k in cache:
+                    cache[k] = 0.0 if k == "expires_at" else None
         self.assertGreater(checked, 40)
         self.assertEqual(failures, [], f"{len(failures)} route(s) failed on an empty deployment: {failures[:5]}")
 

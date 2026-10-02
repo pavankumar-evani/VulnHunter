@@ -346,6 +346,21 @@ const FAQS = [
     "the ATT&CK techniques it tags and ready-made queries rendered as Splunk SPL by a small " +
     "translator for Sigma-style selections. You run them in your own SIEM and record each " +
     "result and the hunt's outcome here (closing needs one)."],
+  ["How do SOC cases, queues and escalation work?",
+    "On the SOC Operations page, a case sits in the L1, L2 or L3 queue. Priority is impact times " +
+    "urgency (P1 to P4), and the acknowledge, pickup and resolve clocks come from the targets in " +
+    "remediation/config/soc_ops.yaml. Escalating, resolving or closing needs a written summary of at " +
+    "least 20 characters, so the next person never starts cold. A case left in a tier past its resolve " +
+    "target moves up one tier automatically, with an event saying why. The Metrics tab shows MTTA, " +
+    "MTTR, service-level compliance, backlog and how often the first-look recommendation matched the " +
+    "analyst's resolution."],
+  ["Which models does the SOC tooling use? Is a language model involved?",
+    "Almost none. The alert verdict is a weighted score, reports are assembled from stored data, " +
+    "technique identification is a Naive Bayes classifier, the playbook recommender is a similarity-" +
+    "weighted success rate, and detection use cases come from counting patterns. A language model is " +
+    "used only to draft a playbook and to refine a use case, each asked for explicitly, validated, and " +
+    "never acted on automatically. The SOC, Hunting and Detection Engineering document gives the method " +
+    "for each."],
   ["Where do threat-model threats come from? Is an LLM involved?",
     "From explicit rules you can read in remediation/threatmodel/rules.py, not an LLM. You " +
     "describe a system as components, data flows and trust zones; the rules raise STRIDE " +

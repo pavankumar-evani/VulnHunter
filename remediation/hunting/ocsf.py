@@ -20,6 +20,7 @@ import datetime
 import ipaddress
 import re
 
+ACTION_IDS = {1: "Allowed", 2: "Denied", 3: "Observed", 4: "Modified"}
 SEVERITY = {1: "Informational", 2: "Low", 3: "Medium", 4: "High", 5: "Critical", 6: "Critical"}
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _HASH = re.compile(r"\b(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{40}|[a-fA-F0-9]{32})\b")
@@ -117,6 +118,7 @@ def map_detection_finding(ev):
         ct = fi["created_time"]
         occurred = datetime.datetime.fromtimestamp(ct / 1000 if ct > 1e11 else ct, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     desc = _first(fi.get("desc"), ev.get("message")) or ""
+    action = _first(ev.get("disposition"), ev.get("action"), ACTION_IDS.get(ev.get("action_id")))
     scan_text(desc, ent)
     return {"external_id": str(uid), "title": str(title), "severity": severity, "asset": asset, "technique": technique, "detail": desc,
-            "occurred_at": occurred, "rule_name": _first((fi.get("analytic") or {}).get("name"), (fi.get("analytic") or {}).get("uid")), "entities": ent}
+            "occurred_at": occurred, "action_taken": action, "rule_name": _first((fi.get("analytic") or {}).get("name"), (fi.get("analytic") or {}).get("uid")), "entities": ent}

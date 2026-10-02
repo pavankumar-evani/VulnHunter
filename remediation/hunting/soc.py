@@ -12,11 +12,13 @@ or mixed the answer is escalate-l2, never a guess at closing the alert. A Critic
 Nothing here closes or changes an alert; applying the verdict is a separate step a person takes.
 """
 import datetime
+import ipaddress
+import re
 from pathlib import Path
 
 import yaml
 
-from remediation.hunting import generate, triage
+from remediation.hunting import generate, report, triage
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "soc_triage.yaml"
 VERDICTS = ("likely-true-positive", "likely-false-positive", "escalate-l2")
@@ -71,21 +73,70 @@ def indicators(alert):
     return [{"type": t, "value": v} for t, key in (("ip", "ips"), ("domain", "domains"), ("hash", "hashes"), ("url", "urls")) for v in (e.get(key) or [])][:25]
 
 
+SAFE_VALUE = re.compile(r"^[A-Za-z0-9_.@:/-]{1,255}$")
+GOLDEN_PATH = Path(__file__).resolve().parent / "golden_playbook.yaml"
+
+
+def golden_playbook(path=None):
+    with open(path or GOLDEN_PATH, encoding="utf-8") as fh:
+        return (yaml.safe_load(fh) or {}).get("queries") or []
+
+
+def _fill(template, values):
+    """Fills {placeholders} from the alert. Alert fields can be written by an attacker, so a value that is not plain host/user/address text is refused rather than escaped."""
+    out = template
+    for k, v in values.items():
+        if "{" + k + "}" in out:
+            if not v or not SAFE_VALUE.match(str(v)):
+                return None
+            out = out.replace("{" + k + "}", str(v))
+    return None if re.search(r"\{[a-z]+\}", out) else out
+
+
+def playbook_values(alert):
+    e = alert.get("entities") or {}
+    pub = [i for i in e.get("ips") or [] if not _private(i)]
+    return {"host": alert.get("asset") or e.get("host"), "user": e.get("user"), "ip": (pub or (e.get("ips") or [None]))[0], "domain": (e.get("domains") or [None])[0],
+            "hash": (e.get("hashes") or [None])[0], "url": (e.get("urls") or [None])[0]}
+
+
+def _private(ip):
+    try:
+        a = ipaddress.ip_address(ip)
+        return a.is_private or a.is_loopback or a.is_link_local
+    except ValueError:
+        return False
+
+
 def siem_evidence(alert, run, cfg=None):
-    """Runs the library's host-scoped detections for the alert's technique through `run(query, earliest) -> {count, rows}`."""
+    """Runs the golden playbook's searches for this alert, then the library searches that would corroborate its technique, through
+    `run(query, earliest) -> {count, rows}`. Every look-back is capped at max_lookback_days. Returns one record per search."""
     cfg = cfg or config()
-    s = cfg.get("siem_evidence") or {}
-    host = alert.get("asset")
+    cap = cfg.get("max_lookback_days", 90)
+    limit = (cfg.get("siem_evidence") or {}).get("max_queries", 6)
+    values = playbook_values(alert)
+    category = classify(alert, cfg)
     tech = (alert.get("technique") or "").upper().split(".")[0]
-    if not host or not tech:
-        return []
+    planned = []
+    for q in golden_playbook():
+        applies = q.get("for") or []
+        if applies and category not in applies and tech not in applies:
+            continue
+        spl = _fill(q["spl"], values)
+        if spl and all(values.get(n) for n in q.get("needs") or []):
+            planned.append({"name": q["name"], "kind": "context", "query": spl, "days": min(int(q.get("lookback_days", 7)), cap)})
+    host = values["host"]
+    if host and tech and SAFE_VALUE.match(str(host)):
+        for q in generate.build_queries([tech], [host])[:2]:
+            planned.append({"name": q["name"], "kind": "corroboration", "query": q["query"], "days": 7})
     out = []
-    for q in generate.build_queries([tech], [host])[: s.get("max_queries", 3)]:
+    for q in planned[:limit]:
+        base = {"name": q["name"], "technique": tech or None, "kind": q["kind"], "query": q["query"], "lookback_days": q["days"], "window": f"{q['days']} days"}
         try:
-            r = run(q["query"], s.get("lookback", "-24h"))
-            out.append({"name": q["name"], "technique": tech, "query": q["query"], "count": r["count"], "rows": r["rows"][:3], "error": None})
+            r = run(q["query"], f"-{q['days']}d")
+            out.append({**base, "count": r["count"], "rows": r["rows"][:3], "error": None})
         except Exception as exc:  # noqa: BLE001 - a search failure is evidence of nothing, and is reported as such
-            out.append({"name": q["name"], "technique": tech, "query": q["query"], "count": None, "rows": [], "error": str(exc)[:200]})
+            out.append({**base, "count": None, "rows": [], "error": str(exc)[:200]})
     return out
 
 
@@ -101,7 +152,7 @@ def score(signals, cfg, severity):
     return "escalate-l2", "low" if (tp + fp) == 0 else "medium", tp, fp
 
 
-def investigate(alert, alerts, findings, owners=None, lookup=None, siem_run=None, cfg=None, now=None):
+def investigate(alert, alerts, findings, owners=None, lookup=None, siem_run=None, cfg=None, now=None, identity=None, playbooks=()):
     """Returns the investigation: classification, history, indicators with reputation, SIEM evidence, host context, signals, verdict, reasons, timeline.
 
     lookup(value) -> reputation dict (see ReputationConnector.lookup) or raises; siem_run(query, earliest) -> {count, rows}. Both are optional."""
@@ -130,7 +181,7 @@ def investigate(alert, alerts, findings, owners=None, lookup=None, siem_run=None
         "ioc_malicious": any((x.get("malicious") or 0) >= threshold for x in looked),
         "kev_match": bool(related_kev) or (ctx["kev_findings"] > 0 and any(f["related_to_alert"] for f in ctx["findings"])),
         "recurrence": bool(hist["recent_true_positives"]),
-        "siem_corroboration": any((e.get("count") or 0) > 0 for e in evidence),
+        "siem_corroboration": any((e.get("count") or 0) > 0 for e in evidence if e.get("kind") == "corroboration"),
         "critical_severity": alert.get("severity") == "Critical",
         "rule_noise_history": (hist["rule_closed"] >= (cfg.get("history") or {}).get("rule_noise_min_closed", 10)
                                and (hist["rule_noise_rate"] or 0) >= (cfg.get("history") or {}).get("rule_noise_false_positive_rate", 0.9)),
@@ -164,43 +215,56 @@ def investigate(alert, alerts, findings, owners=None, lookup=None, siem_run=None
     timeline += [{"at": a["received_at"], "event": f"Earlier alert #{a['id']} on the same host: {a['title']} ({a.get('disposition') or a['status']})"} for a in hist["same_host_alerts"][:5]]
     timeline.append({"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "event": "Quanta investigation run"})
     timeline.sort(key=lambda x: x["at"] or "")
-    return {"alert_id": alert["id"], "category": category, "threshold": threshold, "history": hist, "indicators": looked or inds, "lookup_note": lookup_note,
-            "siem_evidence": evidence, "host": {"asset": alert.get("asset"), "owner": ctx["owner"], "open_findings": ctx["open_findings"], "kev_findings": ctx["kev_findings"],
-                                                "findings": ctx["findings"]}, "signals": signals, "scores": {"true_positive": tp, "false_positive": fp},
-            "verdict": verdict, "confidence": confidence, "reasons": reasons, "timeline": timeline, "runbook": ctx["runbook"]}
+    inv = {"alert_id": alert["id"], "category": category, "threshold": threshold, "history": hist, "indicators": looked or inds, "lookup_note": lookup_note,
+           "siem_evidence": evidence, "host": {"asset": alert.get("asset"), "owner": ctx["owner"], "open_findings": ctx["open_findings"], "kev_findings": ctx["kev_findings"],
+                                               "findings": ctx["findings"]}, "signals": signals, "scores": {"true_positive": tp, "false_positive": fp},
+           "verdict": verdict, "confidence": confidence, "reasons": reasons, "timeline": timeline, "runbook": ctx["runbook"]}
+    inv["report"] = report.build(alert, alerts, inv, findings, identity, playbooks, cfg.get("max_lookback_days", 90))
+    return inv
 
 
 def render_markdown(alert, inv):
-    L = [f"# Alert investigation: {alert['title']}", "",
-         f"**Recommended verdict: {inv['verdict']}** (confidence {inv['confidence']}). A person validates this; Quanta has not closed or changed the alert.", "",
-         "## Why", *[f"- {r}" for r in inv["reasons"]], "",
-         "## Alert", f"- Source: {alert['source']} / {alert['external_id']}", f"- Severity: {alert['severity']}   Rule: {alert.get('rule_name') or 'not given'}   ATT&CK: {alert.get('technique') or 'not given'}",
-         f"- Host: {alert.get('asset') or 'not given'}   Category: {inv['category']}"]
-    ent = alert.get("entities") or {}
-    if ent.get("user"):
-        L.append(f"- User: {ent['user']}")
-    L += ["", "## Indicators"]
-    if inv["indicators"]:
-        L += ["| Indicator | Type | Result | Flagged by |", "|---|---|---|---|"]
-        for x in inv["indicators"]:
-            L.append(f"| {x['value']} | {x['type']} | {x.get('result') or 'not looked up'} | {x.get('malicious') if x.get('malicious') is not None else '-'}{' of ' + str(x['total']) if x.get('total') else ''} |")
+    return report.to_markdown(alert, inv)
+
+
+def render_html(alert, inv):
+    return report.to_html(alert, inv)
+
+
+FOLLOWUP_KINDS = ("similar-alerts", "entity-history", "indicator-sightings")
+
+
+def follow_up(alert, inv, kind, value, alerts, findings=(), siem_run=None, cfg=None):
+    """Answers a question asked after the first report, from the same data, and returns {question, answer, data}. Nothing is sent anywhere unless siem_run is given."""
+    cfg = cfg or config()
+    value = (value or "").strip()
+    if kind not in FOLLOWUP_KINDS:
+        raise ValueError(f"kind must be one of {', '.join(FOLLOWUP_KINDS)}")
+    if not value:
+        raise ValueError("Give the host, user, address, domain or hash to ask about")
+    others = [a for a in alerts if a["id"] != alert["id"]]
+    match = [a for a in others if any(str(x).lower() == value.lower() for _, x in report._vals(a))]
+    if kind == "similar-alerts":
+        same_rule = [a for a in match if alert.get("rule_name") and a.get("rule_name") == alert["rule_name"]]
+        q, ans = f"How many similar alerts involve {value}?", f"{len(match)} alert(s) involve {value}" + (f", {len(same_rule)} from the same rule" if alert.get("rule_name") else "") + "."
+        data = [{"id": a["id"], "title": a["title"], "status": a["status"], "disposition": a.get("disposition")} for a in match[:20]]
+    elif kind == "entity-history":
+        q = f"What is the history of {value}?"
+        tp, noise = sum(1 for a in match if a.get("disposition") == "true-positive"), sum(1 for a in match if a.get("disposition") in ("benign", "false-positive"))
+        ans = (f"{len(match)} earlier alert(s): {tp} true positive, {noise} benign or false positive, {sum(1 for a in match if a['status'] != 'closed')} open; first on {min(a['received_at'] for a in match)[:10]}."
+               if match else f"No earlier alert involves {value}.")
+        data = [{"id": a["id"], "title": a["title"], "received_at": a["received_at"], "disposition": a.get("disposition")} for a in match[:20]]
     else:
-        L.append("None found in the alert.")
-    if inv["lookup_note"]:
-        L.append(f"\n{inv['lookup_note']}")
-    h = inv["history"]
-    L += ["", "## History", f"- Rule: {h['rule_closed']} closed alerts, {h['rule_noise']} benign or false positive" + (f" ({round(100 * h['rule_noise_rate'])}%)" if h["rule_noise_rate"] is not None else ""),
-          f"- Same host in the last window: {len(h['same_host_alerts'])} alert(s)"]
-    L += ["", "## Host context", f"- Owner: {inv['host']['owner'] or 'none recorded'}", f"- Open vulnerabilities: {inv['host']['open_findings']}, known-exploited: {inv['host']['kev_findings']}"]
-    for f in inv["host"]["findings"][:5]:
-        L.append(f"  - {f['id']} {f['title']} ({f['severity']}{', ' + f['cve'] if f.get('cve') else ''}){' KEV' if f['kev'] else ''}{' - matches this alert' if f['related_to_alert'] else ''}")
-    L += ["", "## SIEM evidence"]
-    if inv["siem_evidence"]:
-        for e in inv["siem_evidence"]:
-            L.append(f"- {e['name']}: " + (f"{e['count']} event(s)" if e["error"] is None else f"search failed ({e['error']})"))
-    else:
-        L.append("The SIEM was not searched for this investigation.")
-    L += ["", "## Timeline", *[f"- {t['at']}  {t['event']}" for t in inv["timeline"]]]
-    if inv.get("runbook"):
-        L += ["", f"## Suggested steps: {inv['runbook']['title']}", *[f"{i}. {s}" for i, s in enumerate(inv["runbook"]["steps"], 1)]]
-    return "\n".join(L) + "\n"
+        hosts = sorted({(a.get("asset") or "").lower() for a in match if a.get("asset")})
+        q = f"Where else was {value} seen?"
+        ans = f"In alerts on {len(hosts)} other host(s): {', '.join(hosts[:10])}." if hosts else f"{value} appears in no other alert Quanta holds."
+        data = [{"host": h} for h in hosts[:20]]
+    if siem_run is not None and SAFE_VALUE.match(value):
+        days = min(int(cfg.get("max_lookback_days", 90)), 90)
+        try:
+            r = siem_run(f'search ("{value}") | stats count, dc(host) as hosts', f"-{days}d")
+            h = (r["rows"][0].get("hosts") if r["rows"] else None)
+            ans += f" SIEM, last {days} days: {r['count']} result row(s)" + (f", {h} host(s)" if h else "") + "."
+        except Exception as exc:  # noqa: BLE001
+            ans += f" The SIEM search failed ({str(exc)[:120]})."
+    return {"question": q, "answer": ans, "data": data, "asked": kind}

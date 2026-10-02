@@ -149,7 +149,7 @@ def receive_alert(a, engine=None):
     row = {"source": source, "external_id": ext[:200], "title": title[:300], "severity": _clean_severity(a.get("severity")), "asset": (a.get("asset") or None),
            "technique": (a.get("technique") or None), "detail": (a.get("detail") or "")[:4000], "status": "new", "disposition": None, "assignee": None,
            "notes": "", "occurred_at": a.get("occurred_at"), "received_at": _now(), "closed_at": None,
-           "rule_name": (a.get("rule_name") or None) and str(a["rule_name"])[:200]}
+           "rule_name": (a.get("rule_name") or None) and str(a["rule_name"])[:200], "action_taken": (str(a.get("action_taken") or "").strip()[:120] or None)}
     ent = a.get("entities") if isinstance(a.get("entities"), dict) else None
     if ent is None:
         ent = ocsf.scan_text(f"{title} {a.get('detail') or ''}")

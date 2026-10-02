@@ -179,7 +179,7 @@ def propose_hunt(ex, rel, hosts, index=None):
     queries = generate.build_queries([t for t in tids if t in lib], hosts, lib, index)
     sel = ioc_selection(ex)
     if sel:
-        queries.append({"technique": "IOC", "name": "Sweep the report's indicators", "language": "splunk-spl", "query": translate.to_spl(sel, hosts, index), "result": None, "notes": ""})
+        queries.append({"technique": "IOC", "name": "Sweep the report's indicators", "domain": "network", "source": "SIEM", "language": "splunk-spl", "query": translate.to_spl(sel, hosts, index), "result": None, "notes": ""})
     actors = ", ".join(ex["actors"][:3]) or "the actor in the report"
     why = "; ".join(rel[2][:2])
     hyp = (f"{ex['title']}: {actors} may be active against this environment. {why}. "

@@ -3,6 +3,7 @@
 # process_creation / webserver / authentication conventions and will need mapping to the customer's data model.
 T1190:
   hunt: Exploitation of an internet-facing application
+  domain: network
   data_sources: [web server access logs, WAF logs, application error logs]
   detections:
     - name: Suspicious request patterns against the affected hosts
@@ -12,6 +13,7 @@ T1190:
   notes: Look for the same source IP probing and then receiving a 200 on an unusual path, and for new files or processes on the host in the hour after.
 T1059:
   hunt: Command or script interpreters started by an unexpected parent
+  domain: endpoint
   data_sources: [process creation (EDR, Sysmon 1, Windows 4688), command-line logging]
   detections:
     - name: Shells spawned by server or office processes
@@ -19,6 +21,7 @@ T1059:
   notes: A web or print service parent starting a shell is rarely legitimate. Check the command line and any network connection that follows.
 T1068:
   hunt: Local privilege escalation
+  domain: endpoint
   data_sources: [process creation, token and privilege events (Windows 4672, 4673), auditd]
   detections:
     - name: Low-privilege process spawning a SYSTEM or root child
@@ -26,6 +29,7 @@ T1068:
   notes: Compare against the host's patch state in Quanta; an unpatched host raises the likelihood.
 T1548:
   hunt: Abuse of elevation controls
+  domain: endpoint
   data_sources: [process creation, sudo and UAC logs]
   detections:
     - name: sudo or UAC bypass patterns
@@ -33,6 +37,7 @@ T1548:
   notes: Review any setuid binary changes and new sudoers entries on the affected hosts.
 T1021:
   hunt: Remote service use for lateral movement
+  domain: network
   data_sources: [authentication logs (Windows 4624 type 3 or 10), SSH logs, firewall flows]
   detections:
     - name: Remote logons to affected hosts
@@ -40,6 +45,7 @@ T1021:
   notes: Baseline first. The signal is a new source-destination pair, not the logon itself.
 T1210:
   hunt: Exploitation of remote services
+  domain: network
   data_sources: [IDS or network detection, service crash logs, process creation]
   detections:
     - name: Inbound connections to commonly exploited service ports
@@ -47,6 +53,7 @@ T1210:
   notes: Look for a service crash or restart within minutes of an unusual inbound connection.
 T1552:
   hunt: Unsecured credentials found or used
+  domain: identity
   data_sources: [file access auditing, process creation, secrets scanner results]
   detections:
     - name: Reads of credential files and history
@@ -54,6 +61,7 @@ T1552:
   notes: Any secret Quanta flagged in code or config should be treated as exposed and rotated; hunt for its use from unusual sources.
 T1556:
   hunt: Authentication process tampering
+  domain: identity
   data_sources: [authentication logs, registry and PAM config change auditing, domain controller logs]
   detections:
     - name: Changes to authentication modules or policy
@@ -61,6 +69,7 @@ T1556:
   notes: Compare against change records; unexplained changes on a domain controller are urgent.
 T1195:
   hunt: Supply chain compromise
+  domain: cloud
   data_sources: [build and CI logs, package install logs, outbound network from build hosts]
   detections:
     - name: Package installs from unexpected registries
@@ -68,6 +77,7 @@ T1195:
   notes: Cross-check against the SBOM page for affected packages and versions.
 T1499:
   hunt: Endpoint denial of service
+  domain: network
   data_sources: [web and network logs, resource metrics]
   detections:
     - name: Throttled or unavailable responses in bursts
@@ -75,6 +85,7 @@ T1499:
   notes: Check for a pattern that targets the vulnerable endpoint rather than raw volume.
 T1600:
   hunt: Weakened encryption
+  domain: network
   data_sources: [TLS handshake logs, configuration change auditing]
   detections:
     - name: Downgraded protocol use
