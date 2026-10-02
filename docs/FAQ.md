@@ -800,6 +800,68 @@ or send OpenTelemetry JSON to `/api/ingest/otlp/v1/traces`, with an API key that
 every connector here, these are built against public documentation and tested against mocked
 responses, not run against a live provider account.
 
+### How do I register an application?
+
+Admin only. On Applications & SBOM (`/applications`), add an application and fill in what you
+know: environment, platform, owner and team, business criticality, whether it is internet-facing,
+and (for fix pull requests) its Git provider, repository, default branch and the paths of its
+dependency files. The criticality and internet-facing flag feed the ranking, so set them
+honestly; they are your statement, not something Quanta discovers.
+
+### How do I upload or generate an SBOM for an application?
+
+Admin only. Open the application's Context & SBOM tab. Upload a CycloneDX or SPDX JSON file (each
+application keeps one current SBOM), or generate one from a requirements.txt, package.json,
+package-lock.json, pom.xml or go.mod; only a lock file gives transitive dependencies, and Quanta
+says so when you generate from a manifest alone. It never runs a package manager. CI can upload
+an SBOM with an `ingest:write` API key to `POST /api/ingest/sbom`. Quanta ships no advisory
+database: components show as vulnerable only when a scanner finding names the package or when you
+run the OSV check (admin-confirmed, package URLs only). Without either, an SBOM shows components,
+not a clean bill of health. The OSV connector is unit-tested against fakes and not run live.
+
+### How do I read the dependency and exposure graph and the ranked work?
+
+The graph shows the dependency tree (direct and transitive, with the blast radius of a vulnerable
+package) and the lane from the internet through any WAF, load balancer, DMZ and firewall recorded
+in `network_topology.yaml`; with nothing recorded the lane is absent, not guessed. The ranked
+work lists each finding with its score breakdown: CVSS, EPSS, KEV, application criticality,
+package sensitivity, attack surface, attack-chain position and a lower multiplier when the network
+path is denied. Dependency findings are grouped into the one upgrade that closes them. The weights
+(`appsec_scoring.yaml`) are a disclosed choice, not a standard.
+
+### How do I propose and open a fix pull request?
+
+Admin only for anything that changes state. Store a GitHub or GitLab connection on Connections and
+set the repository on the application, then create a proposal (a dependency upgrade or a
+first-party code fix) from the ranked work, review the diff and evidence on Fix Pull Requests
+(`/fix-prs`) and approve it. Opening is a dry run until you tick confirm; a real open creates a new
+branch and a pull request. Quanta never merges, never writes to a default or protected branch and
+refuses pipeline files, CODEOWNERS, keys and env files. It does not run a package manager or tests,
+so refresh the lock file and run your tests on the branch; with a lock file present the pull
+request opens as a draft. Use Sync to read state back and Verify after the next scan. The GitHub
+and GitLab connectors are unit-tested against fakes and not run against a live host.
+
+### How do I use the release gate in CI?
+
+Create an API key with the `read:findings` scope. On Pipeline Gates (`/pipeline-gates`), open "Add
+it to a pipeline", choose GitHub Actions, GitLab CI or shell, and paste the snippet; it calls
+`GET /api/gate/evaluate` and fails the job when the result says block. The Policy section shows
+what blocks, warns or is off (`remediation/config/pipeline_gates.yaml`); a finding with an
+approved exception is not counted, and every evaluation is recorded in the History.
+
+### How do I use the secure design assistant?
+
+Open Secure Design (`/secure-design`) and answer the questionnaire. You get security requirements
+with OWASP ASVS references, the pipeline controls to put in place and questions for the threat
+model. They come from explicit rules (`design_rules.yaml`), not a model, so the same answers give
+the same result. Treat the output as a starting checklist for a design review.
+
+### How do I add our own DevSecOps control?
+
+Admin only. On DevSecOps (`/devsecops`), open the "Our own controls" tab and add a control that is
+specific to your organisation. It uses the same evidence model as the built-in library and can be
+edited or deleted later.
+
 ### How do I see which ticket belongs to a finding?
 
 Open the finding (click its ID anywhere). The "External tickets" section lists tickets a push

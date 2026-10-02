@@ -121,6 +121,7 @@
     <a href="#scantypes">11 · Scan types</a>
     <a href="#threatmodel">12 · Threat-model engine</a>
     <a href="#hunting">13 · Hunting &amp; alert triage</a>
+    <a href="#appsec-sbom">14 · Applications &amp; SBOMs</a>
   </nav>
 
   <main>
@@ -287,6 +288,7 @@ sequenceDiagram
             <tr><td>Armis</td><td>A — CVE-scoped host/IoT</td><td><span class="chip live">live</span> (CLI ingestion)</td></tr>
             <tr><td>CrowdStrike Falcon</td><td>B — posture/EDR</td><td><span class="chip live">live</span></td></tr>
             <tr><td>Any SARIF 2.1.0 producer (Semgrep, CodeQL, ZAP, Trivy, Checkov, gitleaks and more)</td><td>Code, web, dependency, IaC, secrets, container</td><td><span class="chip live">live</span> (inbound upload, §10)</td></tr>
+            <tr><td>OSV (public advisory API, via an application's SBOM)</td><td>Dependency / SCA</td><td><span class="chip live">live</span> (admin-confirmed, unit-tested against fakes, §14)</td></tr>
             <tr><td>Black Duck · Polaris · BitSight · BishopFox · 15+ more</td><td>Various</td><td><span class="chip ref">reference</span></td></tr>
           </tbody>
         </table>
@@ -360,6 +362,18 @@ sequenceDiagram
         <div class="card"><h4>Runbooks</h4><p>Each alert gets a runbook from <code>runbooks.yaml</code>, chosen by technique first, then by title keywords, else a generic one. Five ship (public-facing application exploitation, privilege escalation, lateral movement, credential access, generic) and your team can edit them.</p></div>
       </div>
       <div class="callout warn"><span class="label">Not a SIEM, and it executes nothing</span><p>Quanta does not execute hunt queries, collect logs or detect anything itself. It tells you where exposure justifies looking, gives you the query text, and records what you found. Triage ranking is context for ordering a queue, not a verdict. Neither feature has been exercised against a live Splunk or SIEM tenant.</p></div>
+    </section>
+
+    <section id="appsec-sbom">
+      <h2><span class="num">14</span>Applications, SBOMs, the dependency graph and ranking</h2>
+      <p class="section-intro">The application model (<code>remediation/appsec/</code>, pages <code>/applications</code>) gives dependency findings somewhere to live: an application with an owner, a criticality and exactly one current SBOM. It extends the SBOM-derived blast radius in §09 from a sample file to a per-application record.</p>
+      <div class="grid2">
+        <div class="card"><h4>SBOM intake</h4><p><code>sbom_parse.py</code> reads CycloneDX and SPDX JSON into one shape. <code>manifest_gen.py</code> can build a CycloneDX SBOM from <code>requirements.txt</code>, <code>package.json</code>, <code>package-lock.json</code>, <code>pom.xml</code> or <code>go.mod</code>; only a lock file gives transitive dependencies, and the result says so when it was built from a manifest alone. It never runs a package manager. CI can upload an SBOM to <code>POST /api/ingest/sbom</code>.</p></div>
+        <div class="card"><h4>Where vulnerabilities come from</h4><p>Quanta ships no advisory database. A component is vulnerable because a scanner finding names its package (<code>dependency.package</code>), or because an admin-confirmed OSV check (<code>connectors/osv_connector.py</code>, package URLs only) returned an advisory. An SBOM with no matching finding and no OSV check shows components and no vulnerabilities, and that is stated rather than implied to be clean.</p></div>
+        <div class="card"><h4>Graph and blast radius</h4><p><code>graph.py</code> computes depth, direct vs transitive, the dependency paths to a component and its blast radius. <code>depGraph.js</code> draws it as plain SVG, with a lane from the internet through WAF, load balancer, DMZ and firewall to the application, taken from the recorded <code>network_topology.yaml</code> (which ships empty; with nothing recorded the lane is absent, not guessed).</p></div>
+        <div class="card"><h4>Ranking with a visible breakdown</h4><p><code>scoring.py</code> and <code>config/appsec_scoring.yaml</code> rank every finding from CVSS, EPSS, KEV, application business criticality, package sensitivity (<code>config/appsec_criticality.yaml</code>), attack surface, position in an attack chain, and a lower multiplier when the network path is denied. Each score lists its parts. The weights are a disclosed, editable choice, not a standard, so treat the order as a way to sequence work. <code>analysis.py</code> groups dependency findings into the one upgrade that closes them.</p></div>
+      </div>
+      <div class="callout warn"><span class="label">Honest limits</span><p>The OSV connector is built against OSV's public API documentation and unit-tested against fakes; it has not been run against the live service. Reachability of vulnerable code is not analysed: a component being present and a vulnerability being exploitable are different facts, and the graph shows only the first. The fix itself is handled by the pull-request workflow in the Remediation Engine document.</p></div>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c" target="_blank" rel="noopener" data-suite-link="connectors">Connectors &amp; Adaptors Catalog</a> or <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a>.</footer>

@@ -241,6 +241,36 @@ X-Quanta-Signature: sha256=<hex HMAC-SHA256 of "<timestamp>.<body>" with the sig
 
 Verify the signature and reject a timestamp more than a few minutes old before acting.
 
+### Upload an SBOM
+
+```
+curl -X POST "https://quanta.example.com/api/ingest/sbom?application=orders-service&source=ci"   -H "Authorization: Bearer $QUANTA_KEY" --data-binary @bom.json
+```
+
+Scope `ingest:write`. The body is CycloneDX JSON (1.3 to 1.6) or SPDX JSON (2.2, 2.3). The application is created if it is new and its previous SBOM is replaced. The
+response gives the format, the component count and whether the document records dependency edges (a flat component list does not, and then direct or transitive is
+reported as unknown). Quanta ships no advisory database: vulnerable components come from scanner findings that name the package, or from an administrator's OSV check.
+
+### Ask the release gate
+
+```
+curl --fail-with-body -H "Authorization: Bearer $QUANTA_KEY"   "https://quanta.example.com/api/gate/evaluate?application=orders-service&environment=production"
+```
+
+Scope `read:findings`. Returns `decision` (`pass`, `warn` or `fail`), each rule with its mode, status and reason, and the policy version. The policy is
+`remediation/config/pipeline_gates.yaml`; a finding with an approved exception does not count; a scan that was never uploaded is reported, not assumed clean. Each call is
+recorded. The Pipeline gates page gives a ready-made GitHub Actions, GitLab CI or shell step that fails the job only on `fail`.
+
+### Report a pull request's state
+
+```
+curl -X POST "https://quanta.example.com/api/inbound/pr-status" -H "Authorization: Bearer $QUANTA_KEY"   -H "Content-Type: application/json" -d '{"proposal": "12", "state": "merged", "merged_at": "2026-10-03T08:00:00Z"}'
+```
+
+Scope `tickets:update`. `proposal` is the proposal number or the pull request URL of a pull request Quanta opened; `state` is `open`, `merged` or `closed`. Use it from a
+Git host webhook or a CI job so Quanta need not poll. Quanta also polls the host itself (`POST /api/gitops/sync`, administrators). Verification is separate: it is
+set only when a later scan stops reporting the findings.
+
 ### Report a ticket's state
 
 ```bash
