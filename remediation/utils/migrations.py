@@ -41,9 +41,16 @@ def _m002_support_ticket_columns(engine):
         _add_missing_columns(engine, db.support_tickets)
 
 
+def _m003_soc_alert_columns(engine):
+    from remediation.utils import db
+    if inspect(engine).has_table("soc_alerts"):
+        _add_missing_columns(engine, db.soc_alerts)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
+    (3, "soc_alert_rule_and_entities", _m003_soc_alert_columns),
 ]
 
 

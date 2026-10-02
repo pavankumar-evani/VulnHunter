@@ -1,0 +1,60 @@
+# Rules for the L1 alert investigation (remediation/hunting/soc.py). Every threshold below is a plain number you can change; the verdict
+# is a score of the signals listed here, and the reasons it prints name the signals that fired.
+
+# How many security engines must flag an indicator as malicious before it counts, by alert category. Endpoint detections are noisier at
+# the reputation level than network ones, so they need more engines to agree.
+reputation_thresholds:
+  endpoint: 20
+  network: 10
+  identity: 10
+  cloud: 10
+  email: 10
+  other: 10
+
+# An alert's category comes from its ATT&CK technique first, then from words in its title.
+technique_categories:
+  T1190: network
+  T1021: network
+  T1210: network
+  T1499: network
+  T1600: network
+  T1059: endpoint
+  T1068: endpoint
+  T1548: endpoint
+  T1195: cloud
+  T1552: identity
+  T1556: identity
+title_keywords:
+  endpoint: [malware, ransomware, process, powershell, edr, endpoint, persistence, lsass]
+  network: [firewall, ips, ids, beacon, scan, port, dns, c2, exfil, vpn]
+  identity: [login, logon, password, mfa, credential, account, kerberos, brute]
+  cloud: [cloud, s3, bucket, iam, azure, aws, gcp, container, kubernetes]
+  email: [phish, email, attachment, spam, mailbox]
+
+# Signals and their weights.
+weights:
+  ioc_malicious: 3          # at least one indicator is flagged by enough engines
+  kev_match: 2              # an open known-exploited vulnerability on the host matches the alert's technique
+  recurrence: 2             # an earlier true positive on the same host or from the same rule within recurrence_days
+  siem_corroboration: 1     # the SIEM shows matching events on the host
+  critical_severity: 1
+  rule_noise_history: 3     # this rule's closed alerts are overwhelmingly false positives
+  clean_indicators: 1       # every looked-up indicator is known and none is flagged
+  prior_benign_same_host: 2 # the same rule on the same host was closed benign or false positive before
+
+verdict:
+  true_positive_min_score: 3
+  false_positive_min_score: 3
+  high_confidence_score: 5
+  # A Critical alert is never called a likely false positive automatically; a person decides.
+  critical_never_false_positive: true
+
+history:
+  window_days: 30
+  recurrence_days: 7
+  rule_noise_min_closed: 10     # closed alerts needed before a rule's history counts
+  rule_noise_false_positive_rate: 0.9
+
+siem_evidence:
+  lookback: "-24h"
+  max_queries: 3

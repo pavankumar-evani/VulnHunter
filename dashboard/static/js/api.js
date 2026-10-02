@@ -181,6 +181,24 @@ export const api = {
   socAlerts: () => request("GET", "/api/soc/alerts"),
   socAlert: (id) => request("GET", `/api/soc/alerts/${id}`),
   socUpdateAlert: (id, body) => request("PUT", `/api/soc/alerts/${id}`, body),
+  huntingIntelList: () => request("GET", "/api/hunting/intel"),
+  huntingIntelAdd: (body) => request("POST", "/api/hunting/intel", body),
+  huntingIntelHunt: (id) => request("POST", `/api/hunting/intel/${id}/hunt`, {}),
+  huntingRunQuery: (hunt, index, body) => request("POST", `/api/hunting/hunts/${hunt}/queries/${index}/run`, body),
+  socInvestigate: (id, body) => request("POST", `/api/soc/alerts/${id}/investigate`, body),
+  socInvestigation: (id) => request("GET", `/api/soc/alerts/${id}/investigation`),
+  detectionsOverview: () => request("GET", "/api/detections/overview"),
+  detectionsAssess: () => request("POST", "/api/detections/assess", {}),
+  detectionsAddRule: (body) => request("POST", "/api/detections/rules", body),
+  detectionsToggle: (id, enabled) => request("PUT", `/api/detections/rules/${id}`, { enabled }),
+  detectionsDelete: (id) => request("DELETE", `/api/detections/rules/${id}`),
+  detectionsImport: async (text) => {
+    const res = await fetch("/api/detections/rules/import", { method: "POST", body: text });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
   findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
   importScannerFile: async (source, reconcile, file) => {
     const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });

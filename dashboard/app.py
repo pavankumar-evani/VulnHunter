@@ -12,7 +12,9 @@ section for why and how to get past it, or QUANTA_DISABLE_TLS=true to disable).
 import asyncio
 import datetime
 import json
+import logging
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -23,7 +25,7 @@ import uvicorn
 import yaml
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from sqlalchemy import func, select
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
@@ -54,7 +56,9 @@ from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.controls import store as controls_store  # noqa: E402
-from remediation.hunting import generate as hunt_generate, store as hunt_store, triage as hunt_triage  # noqa: E402
+from remediation.connectors import reputation_connector as hunt_rep, siem_search_connector as sec_search  # noqa: E402
+from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
+from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
 from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
 from remediation.threatmodel import engine as tm_engine, rules as tm_rules, seed as tm_seed, store as tm_store  # noqa: E402
 from remediation.aiusage import analytics as ai_analytics, discovery as ai_discovery, otlp as ai_otlp, store as ai_store  # noqa: E402
@@ -312,6 +316,7 @@ async def _notification_scheduler_loop():
             alert_checker.check_and_send_alerts(dashboard_data, email_sender)
             _run_support_sla_escalations()
             _run_grc_evidence_if_due()
+            _run_detection_assessment_if_due()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -3472,6 +3477,19 @@ def _grc_suggestions():
     return grc_risks.suggestions(dashboard_data.load_live_queue(), analyses)
 
 
+def _run_detection_assessment_if_due():
+    """Once a week, record a detection-health snapshot so the trend between runs is real. Skipped when there are no alerts."""
+    try:
+        latest = hunt_detection.list_assessments(limit=1)
+        if latest and (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.strptime(latest[0]["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)).days < 7:
+            return
+        alerts = hunt_store.list_alerts()
+        if alerts:
+            hunt_detection.save_assessment(hunt_detection.assess(alerts, hunt_detection.list_rules(), dashboard_data.load_live_queue()), "scheduler")
+    except Exception:  # noqa: BLE001 - a failed snapshot must never stop the scheduler
+        logging.getLogger("quanta.scheduler").exception("detection assessment failed")
+
+
 def _run_grc_evidence_if_due():
     """Called by the leader's hourly tick: collects control evidence about once a day so the history builds up without anyone remembering."""
     latest = grc_evidence.latest()
@@ -4417,6 +4435,8 @@ class AlertBody(BaseModel):
     technique: str | None = None
     detail: str | None = None
     occurred_at: str | None = None
+    rule_name: str | None = None
+    entities: dict | None = None
 
 
 class AlertsPushBody(BaseModel):
@@ -4471,7 +4491,7 @@ def api_hunting_accept(body: HuntProposalBody, user: dict = Depends(rbac.require
 
 @app.get("/api/hunting/hunts")
 def api_hunting_list(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
-    return {"hunts": hunt_store.list_hunts()}
+    return {"hunts": [_hunt_out(h) for h in hunt_store.list_hunts()]}
 
 
 @app.post("/api/hunting/hunts")
@@ -4489,7 +4509,7 @@ def api_hunting_get(hunt_id: int, user: dict = Depends(rbac.require_admin)):  # 
     h = hunt_store.get_hunt(hunt_id)
     if not h:
         raise HTTPException(status_code=404, detail="No such hunt")
-    return h
+    return _hunt_out(h)
 
 
 @app.put("/api/hunting/hunts/{hunt_id}")
@@ -4499,7 +4519,7 @@ def api_hunting_update(hunt_id: int, body: HuntBody, user: dict = Depends(rbac.r
     except (ValueError, KeyError) as exc:
         raise _hunt_400(exc) from exc
     activity_log.record_activity(user["email"], "hunt.update", str(hunt_id), {"status": h["status"], "outcome": h["outcome"]})
-    return h
+    return _hunt_out(h)
 
 
 @app.post("/api/ingest/alerts")
@@ -4545,6 +4565,291 @@ def api_soc_alert_update(alert_id: int, body: AlertUpdateBody, user: dict = Depe
         raise _hunt_400(exc) from exc
     activity_log.record_activity(user["email"], "soc.alert.update", str(alert_id), {"status": a["status"], "disposition": a["disposition"]})
     return a
+
+
+# ---------------------------------------------------------------- SOC agents: hunt execution, threat intel, investigation, detection engineering
+class HuntRunBody(BaseModel):
+    connection_id: int | None = None
+    earliest: str = "-24h"
+    confirm: bool = False
+
+
+class IntelBody(BaseModel):
+    content: str
+    title: str | None = None
+    source: str | None = None
+
+
+class InvestigateBody(BaseModel):
+    confirm: bool = False
+    reputation: bool = False
+    siem: bool = False
+    reputation_connection_id: int | None = None
+    siem_connection_id: int | None = None
+
+
+class RuleBody(BaseModel):
+    name: str
+    platform: str | None = None
+    logic: str | None = None
+    techniques: list[str] = []
+    enabled: bool = True
+
+
+class RuleEnabledBody(BaseModel):
+    enabled: bool
+
+
+_EARLIEST = re.compile(r"^-\d{1,4}[mhd]$")
+
+
+def _hunt_out(h):
+    h = dict(h)
+    h["verdict"] = hunt_verdict.hunt_verdict(h)
+    return h
+
+
+def _intel_out(r):
+    return {k: r[k] for k in ("id", "title", "source", "relevance", "priority", "reasons", "extracted", "hunt_id", "received_at", "received_by")}
+
+
+def _store_intel(content, title, source, actor):
+    ex = hunt_intel.extract(content)
+    if title:
+        ex["title"] = title[:160]
+    findings = dashboard_data.load_live_queue()
+    score, prio, reasons, matches = hunt_intel.relevance(ex, findings)
+    rid, created = hunt_service.save_intel(ex["title"], source, hunt_intel.content_hash(content), ex, score, prio, reasons, actor)
+    return hunt_service.get_intel(rid), created, matches
+
+
+@app.post("/api/hunting/intel")
+def api_hunting_intel_add(body: IntelBody, user: dict = Depends(rbac.require_admin)):
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="Paste the report text or a STIX bundle")
+    if len(body.content) > 2_000_000:
+        raise HTTPException(status_code=413, detail="The report is too large (limit 2 MB)")
+    rec, created, matches = _store_intel(body.content, body.title, body.source, user["email"])
+    if created:
+        activity_log.record_activity(user["email"], "intel.add", str(rec["id"]), {"title": rec["title"], "priority": rec["priority"]})
+    return {**_intel_out(rec), "created": created, "matches": matches}
+
+
+@app.post("/api/ingest/threat-intel")
+def api_ingest_threat_intel(body: IntelBody, key: dict = Depends(require_api_key("soc:write"))):
+    """A threat-intelligence report (text or a STIX 2.1 bundle) from a feed, SOAR playbook or script. A repeat of the same content is ignored."""
+    if len(body.content) > 2_000_000:
+        raise HTTPException(status_code=413, detail="The report is too large (limit 2 MB)")
+    rec, created, _ = _store_intel(body.content, body.title, body.source or f"apikey:{key['name']}", f"apikey:{key['name']}")
+    activity_log.record_activity(f"apikey:{key['name']}", "intel.push", str(rec["id"]), {"created": created, "priority": rec["priority"]})
+    return {"id": rec["id"], "created": created, "relevance": rec["relevance"], "priority": rec["priority"]}
+
+
+@app.get("/api/hunting/intel")
+def api_hunting_intel_list(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"reports": [_intel_out(r) for r in hunt_service.list_intel()]}
+
+
+@app.post("/api/hunting/intel/{report_id}/hunt")
+def api_hunting_intel_hunt(report_id: int, user: dict = Depends(rbac.require_admin)):
+    rec = hunt_service.get_intel(report_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="No such report")
+    if rec["hunt_id"]:
+        raise HTTPException(status_code=400, detail="A hunt was already started from this report")
+    ex = rec["extracted"]
+    score, prio, reasons, matches = hunt_intel.relevance(ex, dashboard_data.load_live_queue())
+    proposal = hunt_intel.propose_hunt(ex, (score, prio, reasons, matches), matches["hosts"])
+    proposal["source_ref"] = f"intel-{rec['id']}"
+    try:
+        h = hunt_store.create_hunt(proposal, user["email"])
+    except ValueError as exc:
+        raise _hunt_400(exc) from exc
+    hunt_service.link_intel_hunt(report_id, h["id"])
+    activity_log.record_activity(user["email"], "hunt.create", str(h["id"]), {"title": h["title"], "source": "intel"})
+    return _hunt_out(h)
+
+
+@app.post("/api/hunting/hunts/{hunt_id}/queries/{index}/run")
+def api_hunting_run_query(hunt_id: int, index: int, body: HuntRunBody, user: dict = Depends(rbac.require_admin)):
+    """Runs one lead in the customer's SIEM (a stored Splunk search connection). Read-only; asks for confirmation first."""
+    h = hunt_store.get_hunt(hunt_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="No such hunt")
+    if index < 0 or index >= len(h["queries"]):
+        raise HTTPException(status_code=404, detail="No such query")
+    if not _EARLIEST.match(body.earliest):
+        raise HTTPException(status_code=400, detail="earliest must look like -24h, -7d or -30m")
+    try:
+        conn, public = hunt_service.connector("splunk-search", body.connection_id)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+    q = h["queries"][index]
+    if not body.confirm:
+        return {"preview_only": True, "query": q["query"], "connection": public["name"], "earliest": body.earliest,
+                "message": "This read-only search will run in your SIEM. Send confirm: true to run it."}
+    try:
+        res = hunt_service.run_hunt_query(hunt_id, index, conn, body.earliest)
+    except sec_search.SearchRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"The search failed: {str(exc)[:200]}") from exc
+    activity_log.record_activity(user["email"], "hunt.query.run", str(hunt_id), {"index": index, "count": res["count"], "connection": public["name"]})
+    return {"query": res, "hunt": _hunt_out(hunt_store.get_hunt(hunt_id))}
+
+
+@app.get("/api/hunting/hunts/{hunt_id}/report")
+def api_hunting_report(hunt_id: int, format: str = "md", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    h = hunt_store.get_hunt(hunt_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="No such hunt")
+    if format == "html":
+        return HTMLResponse(hunt_verdict.to_html(h), headers={"Content-Disposition": f'attachment; filename="hunt-{hunt_id}.html"'})
+    return PlainTextResponse(hunt_verdict.to_markdown(h), media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="hunt-{hunt_id}.md"'})
+
+
+@app.post("/api/ingest/alerts/ocsf")
+async def api_ingest_alerts_ocsf(request: Request, key: dict = Depends(require_api_key("soc:write"))):
+    """OCSF Detection Finding events (class_uid 2004): one JSON object, a list, or {"events": [...]}."""
+    try:
+        data = await request.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="The body must be JSON") from exc
+    events = data.get("events") if isinstance(data, dict) and "events" in data else data
+    events = events if isinstance(events, list) else [events]
+    created, repeats, errors = 0, 0, []
+    for i, ev in enumerate(events[:2000]):
+        try:
+            a = hunt_ocsf.map_detection_finding(ev)
+            _, new = hunt_store.receive_alert({**a, "source": f"apikey:{key['name']}"})
+            created += new
+            repeats += not new
+        except ValueError as exc:
+            errors.append({"index": i, "error": str(exc)})
+    activity_log.record_activity(f"apikey:{key['name']}", "soc.alerts.push", "ocsf", {"created": created, "repeats": repeats, "rejected": len(errors)})
+    return {"created": created, "already_known": repeats, "rejected": len(errors), "errors": errors[:50]}
+
+
+@app.post("/api/soc/alerts/{alert_id}/investigate")
+def api_soc_investigate(alert_id: int, body: InvestigateBody, user: dict = Depends(rbac.require_admin)):
+    """Runs the L1 investigation. Local by default; reputation lookups and SIEM searches only happen with confirm: true."""
+    alert = hunt_store.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="No such alert")
+    lookup = siem_run = None
+    rep_name = siem_name = None
+    if body.reputation or body.siem:
+        if body.reputation:
+            try:
+                rconn, rpub = hunt_service.connector("reputation", body.reputation_connection_id)
+            except (ValueError, KeyError) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not rconn:
+                raise HTTPException(status_code=400, detail="No reputation connection is configured. Add one on the Connections page.")
+            rep_name, lookup = rpub["name"], rconn.lookup
+        if body.siem:
+            try:
+                sconn, spub = hunt_service.connector("splunk-search", body.siem_connection_id)
+            except (ValueError, KeyError) as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            if not sconn:
+                raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+            siem_name = spub["name"]
+            siem_run = lambda q, earliest: sconn.search(q, earliest=earliest, max_rows=10)  # noqa: E731
+        if not body.confirm:
+            sendable = [i["value"] for i in hunt_soc.indicators(alert) if hunt_rep.classify(i["value"])[0]] if body.reputation else []
+            return {"preview_only": True, "reputation_connection": rep_name, "indicators_that_would_be_sent": sendable, "siem_connection": siem_name,
+                    "message": "Only the public indicators listed are sent to the reputation service; the SIEM searches are read-only. Send confirm: true to run."}
+    inv = hunt_soc.investigate(alert, hunt_store.list_alerts(), dashboard_data.load_live_queue(), _owner_map(), lookup=lookup, siem_run=siem_run)
+    md = hunt_soc.render_markdown(alert, inv)
+    iid = hunt_service.save_investigation(inv, md, user["email"])
+    activity_log.record_activity(user["email"], "soc.alert.investigate", str(alert_id), {"verdict": inv["verdict"], "confidence": inv["confidence"],
+                                                                                         "reputation": bool(lookup), "siem": bool(siem_run)})
+    return {"id": iid, "investigation": inv, "report_md": md}
+
+
+@app.get("/api/soc/alerts/{alert_id}/investigation")
+def api_soc_investigation(alert_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    r = hunt_service.latest_investigation(alert_id)
+    if not r:
+        raise HTTPException(status_code=404, detail="This alert has not been investigated yet")
+    return r
+
+
+@app.get("/api/detections/overview")
+def api_detections_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    a = hunt_detection.assess(hunt_store.list_alerts(), hunt_detection.list_rules(), dashboard_data.load_live_queue())
+    return {**a, "history": hunt_detection.list_assessments()}
+
+
+@app.post("/api/detections/assess")
+def api_detections_assess(user: dict = Depends(rbac.require_admin)):
+    a = hunt_detection.assess(hunt_store.list_alerts(), hunt_detection.list_rules(), dashboard_data.load_live_queue())
+    hunt_detection.save_assessment(a, user["email"])
+    activity_log.record_activity(user["email"], "detections.assess", None, {"rules": a["totals"]["rules"], "alerts": a["totals"]["alerts"]})
+    return {**a, "history": hunt_detection.list_assessments()}
+
+
+@app.get("/api/detections/rules")
+def api_detections_rules(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"rules": hunt_detection.list_rules()}
+
+
+@app.post("/api/detections/rules")
+def api_detections_add_rule(body: RuleBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = hunt_detection.upsert_rule(body.name, body.platform, body.logic, body.techniques, "text", body.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "detections.rule.save", r["name"], {})
+    return r
+
+
+@app.post("/api/detections/rules/import")
+async def api_detections_import(request: Request, user: dict = Depends(rbac.require_admin)):
+    """Sigma rules as YAML (several documents allowed) in the request body."""
+    raw = (await request.body()).decode("utf-8", "replace")
+    if len(raw) > 2_000_000:
+        raise HTTPException(status_code=413, detail="The file is too large (limit 2 MB)")
+    try:
+        rules = hunt_detection.import_sigma(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "detections.rule.import", None, {"count": len(rules)})
+    return {"imported": len(rules), "rules": [r["name"] for r in rules]}
+
+
+@app.put("/api/detections/rules/{rule_id}")
+def api_detections_enable(rule_id: int, body: RuleEnabledBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        return hunt_detection.set_enabled(rule_id, body.enabled)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such rule") from exc
+
+
+@app.delete("/api/detections/rules/{rule_id}")
+def api_detections_delete(rule_id: int, user: dict = Depends(rbac.require_admin)):
+    if not hunt_detection.delete_rule(rule_id):
+        raise HTTPException(status_code=404, detail="No such rule")
+    activity_log.record_activity(user["email"], "detections.rule.delete", str(rule_id), {})
+    return {"ok": True}
+
+
+@app.get("/api/detections/report")
+def api_detections_report(rule: str | None = None, format: str = "md", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    a = hunt_detection.assess(hunt_store.list_alerts(), hunt_detection.list_rules(), dashboard_data.load_live_queue())
+    if rule:
+        r = next((x for x in a["rules"] if x["rule"] == rule), None)
+        if not r:
+            raise HTTPException(status_code=404, detail="No such rule")
+        md, title, fname = hunt_detection.rule_report_md(r), f"Detection tuning: {rule}", "tuning"
+    else:
+        md, title, fname = hunt_detection.summary_md(a), "Detection engineering summary", "detection-summary"
+    if format == "html":
+        return HTMLResponse(hunt_detection.to_html(md, title), headers={"Content-Disposition": f'attachment; filename="{fname}.html"'})
+    return PlainTextResponse(md, media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="{fname}.md"'})
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

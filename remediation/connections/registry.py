@@ -25,7 +25,9 @@ from remediation.connectors.infoblox_connector import InfobloxConnector
 from remediation.connectors.prismacloud_connector import PrismaCloudConnector
 from remediation.connectors.jira_connector import JiraConnector
 from remediation.connectors.qualys_connector import QualysConnector
+from remediation.connectors.reputation_connector import ReputationConnector
 from remediation.connectors.servicenow_connector import ServiceNowConnector
+from remediation.connectors.siem_search_connector import SplunkSearchConnector
 from remediation.connectors.splunk_connector import SplunkConnector
 from remediation.connectors.tenable_connector import TenableConnector
 from remediation.connections import push as push_mod
@@ -216,6 +218,40 @@ SPECS.update({
         "docs": "Splunk > Settings > Data inputs > HTTP Event Collector. Each finding is sent once as an event (an append-only stream, so no duplicate check).",
         "make": lambda c: SplunkConnector(c["hec_url"], c["hec_token"]),
         "test": lambda c: SplunkConnector(c["hec_url"], c["hec_token"]).session.get(c["hec_url"].rsplit("/services/", 1)[0] + "/services/collector/health", timeout=15).raise_for_status(),
+    },
+})
+
+
+def _validate_splunk_search(values):
+    if not values.get("token") and not (values.get("username") and values.get("password")):
+        raise ValueError("Give a Splunk token, or a username and password")
+
+
+def _splunk_search(c):
+    return SplunkSearchConnector(c["base_url"], token=c.get("token") or None, username=c.get("username") or None,
+                                 password=c.get("password") or None, verify_tls=not c.get("skip_tls_verify"))
+
+
+SPECS.update({
+    "splunk-search": {
+        "label": "Splunk search (hunting and triage)", "category": "SIEM / logging", "output": "searches", "kind": "tool",
+        "fields": [_f("base_url", "Management URL", placeholder="https://splunk.acme.com:8089"),
+                   _f("token", "Authentication token", secret=True, required=False),
+                   _f("username", "Username (if no token)", required=False), _f("password", "Password (if no token)", secret=True, required=False),
+                   _f("skip_tls_verify", "Skip TLS certificate verification (self-signed lab only)", required=False, kind="checkbox")],
+        "safe_targets": ["base_url"], "validate": _validate_splunk_search,
+        "docs": "Splunk > Settings > Tokens. Use an account that can run searches on the indexes you hunt in and nothing else. Quanta only sends read-only "
+                "searches, from a hunt or an alert investigation, after an administrator confirms; it caps the rows it keeps and cancels a slow search.",
+        "note": "Not synced on a schedule. Used on demand from Hunting & SOC.",
+        "build": _splunk_search, "test": lambda c: _splunk_search(c).test_connection(),
+    },
+    "reputation": {
+        "label": "Indicator reputation (VirusTotal)", "category": "Threat intelligence", "output": "reputation", "kind": "tool",
+        "fields": [_f("api_key", "API key", secret=True)],
+        "docs": "VirusTotal > your profile > API key. Only the indicator value (IP, domain, hash or URL) is sent, never the alert; private addresses are never sent. "
+                "The public key is rate limited.",
+        "note": "Not synced on a schedule. Used on demand when an alert is investigated.",
+        "build": lambda c: ReputationConnector(c["api_key"]), "test": lambda c: ReputationConnector(c["api_key"]).test_connection(),
     },
 })
 

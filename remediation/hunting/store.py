@@ -11,6 +11,7 @@ import json
 from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 
+from remediation.hunting import ocsf
 from remediation.utils import db as db_module
 
 HUNT_STATUSES = ("proposed", "active", "closed")
@@ -19,6 +20,7 @@ ALERT_STATUSES = ("new", "investigating", "closed")
 DISPOSITIONS = ("true-positive", "benign", "false-positive", "needs-data")
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Informational")
 QUERY_RESULTS = ("hits", "no-hits", "not-run", "error")
+ASSESSMENTS = ("benign", "suspicious", "malicious")
 
 
 def _now():
@@ -90,6 +92,8 @@ def update_hunt(hunt_id, fields, engine=None):
         for q in qs:
             if q.get("result") not in (None, *QUERY_RESULTS):
                 raise ValueError(f"A query result must be one of {', '.join(QUERY_RESULTS)}")
+            if q.get("assessment") not in (None, *ASSESSMENTS):
+                raise ValueError(f"A lead assessment must be one of {', '.join(ASSESSMENTS)}")
         values["queries_json"] = json.dumps(qs)
     status, outcome = fields.get("status", cur["status"]), fields.get("outcome", cur["outcome"])
     if status not in HUNT_STATUSES:
@@ -126,6 +130,15 @@ def _clean_severity(s):
     return s
 
 
+def _alert(r):
+    d = dict(r)
+    try:
+        d["entities"] = json.loads(d.pop("entities_json") or "null") or ocsf.empty_entities()
+    except ValueError:
+        d["entities"] = ocsf.empty_entities()
+    return d
+
+
 def receive_alert(a, engine=None):
     """Stores one alert. Returns (alert, created); a repeat of (source, external_id) returns the existing one untouched."""
     ext, title = str(a.get("external_id") or "").strip(), (a.get("title") or "").strip()
@@ -135,7 +148,15 @@ def receive_alert(a, engine=None):
     engine, t = _engine(engine), db_module.soc_alerts
     row = {"source": source, "external_id": ext[:200], "title": title[:300], "severity": _clean_severity(a.get("severity")), "asset": (a.get("asset") or None),
            "technique": (a.get("technique") or None), "detail": (a.get("detail") or "")[:4000], "status": "new", "disposition": None, "assignee": None,
-           "notes": "", "occurred_at": a.get("occurred_at"), "received_at": _now(), "closed_at": None}
+           "notes": "", "occurred_at": a.get("occurred_at"), "received_at": _now(), "closed_at": None,
+           "rule_name": (a.get("rule_name") or None) and str(a["rule_name"])[:200]}
+    ent = a.get("entities") if isinstance(a.get("entities"), dict) else None
+    if ent is None:
+        ent = ocsf.scan_text(f"{title} {a.get('detail') or ''}")
+        ent["host"] = a.get("asset")
+    else:
+        ent = {**ocsf.empty_entities(), **ent}
+    row["entities_json"] = json.dumps(ent)
     try:
         with engine.begin() as conn:
             aid = conn.execute(insert(t), row).inserted_primary_key[0]
@@ -143,14 +164,14 @@ def receive_alert(a, engine=None):
     except IntegrityError:
         with engine.connect() as conn:
             r = conn.execute(select(t).where(t.c.source == source, t.c.external_id == ext[:200])).mappings().first()
-        return dict(r), False
+        return _alert(r), False
 
 
 def get_alert(alert_id, engine=None):
     engine, t = _engine(engine), db_module.soc_alerts
     with engine.connect() as conn:
         r = conn.execute(select(t).where(t.c.id == int(alert_id))).mappings().first()
-    return dict(r) if r else None
+    return _alert(r) if r else None
 
 
 def list_alerts(engine=None, status=None):
@@ -159,7 +180,7 @@ def list_alerts(engine=None, status=None):
     if status:
         q = q.where(t.c.status == status)
     with engine.connect() as conn:
-        return [dict(r) for r in conn.execute(q).mappings().all()]
+        return [_alert(r) for r in conn.execute(q).mappings().all()]
 
 
 def update_alert(alert_id, fields, engine=None):

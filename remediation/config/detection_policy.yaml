@@ -1,0 +1,32 @@
+# Rules for detection engineering (remediation/hunting/detection.py). Health is judged on CLOSED alerts that carry a disposition.
+# decided = true-positive + benign + false-positive. benign means the alert was accurate but harmless. needs-data is not counted.
+#   noise rate = (false-positive + benign) / decided
+#   true-positive rate = true-positive / decided
+window_days: 90
+
+# Fewer decided alerts than this and a rule is Low Volume: there is not enough evidence to judge it either way.
+min_decided: 5
+
+health:
+  high_fidelity_tp_rate: 0.8        # at least this share are real
+  healthy_max_noise_rate: 0.5       # at most this share are noise
+  critical_noise_min_rate: 0.9      # noise rate at or above this, with at least critical_noise_min_volume decided alerts
+  critical_noise_min_volume: 30
+  low_value_min_benign_share: 0.8   # no true positives and this share or more of decided alerts were benign
+
+# What to recommend for each tier (Maintain, Tune or Disable).
+recommendation:
+  high_fidelity: maintain
+  healthy: maintain
+  noisy: tune
+  critical_noise: tune
+  low_value: disable
+  low_volume: maintain
+
+# A critical-noise rule with no true positive at all is recommended for disabling instead of tuning.
+disable_critical_noise_without_true_positives: true
+
+# An exclusion is only suggested for an entity that accounts for at least this share of the rule's noise and at least this many alerts.
+exclusion_min_share: 0.2
+exclusion_min_alerts: 3
+max_exclusions: 5

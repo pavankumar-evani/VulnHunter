@@ -624,7 +624,59 @@ soc_alerts = Table(
     Column("occurred_at", String, nullable=True),
     Column("received_at", String, nullable=False),
     Column("closed_at", String, nullable=True),
+    Column("rule_name", String, nullable=True),
+    Column("entities_json", Text, nullable=True),
     UniqueConstraint("source", "external_id", name="uq_soc_alert_source_ext"),
+)
+
+threat_intel_reports = Table(
+    "threat_intel_reports", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("title", String, nullable=False),
+    Column("source", String, nullable=True),
+    Column("content_hash", String, nullable=False, unique=True),
+    Column("extracted_json", Text, nullable=False),
+    Column("relevance", Integer, nullable=False),
+    Column("priority", String, nullable=False),
+    Column("reasons_json", Text, nullable=False),
+    Column("hunt_id", Integer, nullable=True),
+    Column("received_by", String, nullable=True),
+    Column("received_at", String, nullable=False),
+)
+
+soc_investigations = Table(
+    "soc_investigations", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("alert_id", Integer, nullable=False),
+    Column("verdict", String, nullable=False),  # likely-true-positive | likely-false-positive | escalate-l2
+    Column("confidence", String, nullable=False),  # low | medium | high
+    Column("reasons_json", Text, nullable=False),
+    Column("evidence_json", Text, nullable=False),
+    Column("report_md", Text, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
+detection_rules = Table(
+    "detection_rules", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("platform", String, nullable=True),
+    Column("logic", Text, nullable=True),
+    Column("format", String, nullable=False),  # sigma | text
+    Column("techniques_json", Text, nullable=False),
+    Column("enabled", Integer, nullable=False, default=1),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+detection_assessments = Table(
+    "detection_assessments", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("created_at", String, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("window_days", Integer, nullable=False),
+    Column("result_json", Text, nullable=False),
 )
 
 def ensure_schema(engine):
@@ -648,7 +700,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts,
+            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

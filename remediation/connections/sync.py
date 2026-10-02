@@ -38,6 +38,10 @@ def run(connection_id, actor="scheduler", engine=None, findings_path=merge.DEFAU
         spec = registry.SPECS[public["type"]]
         # re-check the SSRF guard at run time: an edited config must never bypass it
         registry.split_values(public["type"], values)
+        if spec.get("kind") == "tool":
+            message = "This connection is used on demand from Hunting & SOC; there is nothing to sync."
+            store.finish_run(connection_id, "ok", message, None, engine, now)
+            return {"ok": True, "message": message, "count": None, "detail": {}}
         if spec.get("kind") == "push":
             r = push.push(spec["system"], spec["make"](values), connection_id, registry.rule_from(values), findings_path, engine, actor)
             detail = r
