@@ -41,7 +41,7 @@ export async function render(container) {
   async function proposals() {
     const { proposals: ps, note } = await api.huntingProposals();
     shell(`<p class="muted">${escapeHtml(note)}</p>
-      ${ps.length ? ps.map((p) => `<div class="card"><h3>${escapeHtml(p.title)}</h3><p>${escapeHtml(p.hypothesis)}</p>
+      ${ps.length ? ps.map((p) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:4px 18px 14px;margin:14px 0"><h3>${escapeHtml(p.title)}</h3><p>${escapeHtml(p.hypothesis)}</p>
         <p>${techniques(p.techniques)}</p><p><strong>Hosts:</strong> ${p.assets.slice(0, 12).map(escapeHtml).join(", ")}${p.assets.length > 12 ? ` and ${p.assets.length - 12} more` : ""}</p>
         <p class="muted">${p.queries.length} ready-made queries. ${escapeHtml(p.notes || "")}</p>
         <button type="button" data-accept="${escapeHtml(p.source_ref)}">Start this hunt</button></div>`).join("") : '<p class="empty-state">No open known-exploited or high-probability vulnerabilities need a hunt right now.</p>'}`);

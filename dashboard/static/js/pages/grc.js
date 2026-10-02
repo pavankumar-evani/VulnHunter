@@ -45,7 +45,7 @@ export async function render(container) {
     if (!framework || !frameworks.find((f) => f.id === framework)) framework = frameworks[0] && frameworks[0].id;
     const rep = framework ? await api.grcReport(framework) : null;
     shell(`<label>Framework <select id="fw">${frameworks.map((f) => `<option value="${escapeHtml(f.id)}"${f.id === framework ? " selected" : ""}>${escapeHtml(f.name)} (${f.control_count})</option>`).join("")}</select></label>
-      ${rep ? `<p>${rep.evidenced} of ${rep.total} controls have evidence or a current attestation (${rep.evidenced_pct}%). <a href="/api/grc/frameworks/${encodeURIComponent(framework)}/oscal">Download OSCAL assessment results</a></p>
+      ${rep ? `<p>${rep.evidenced} of ${rep.total} controls have evidence or a current attestation (${rep.evidenced_pct}%). <a style="color:var(--accent)" href="/api/grc/frameworks/${encodeURIComponent(framework)}/oscal">Download OSCAL assessment results</a></p>
       <p class="muted">${escapeHtml(rep.note)}</p>
       <div class="table-scroll"><table class="data-table"><thead><tr><th>Control</th><th>Status</th><th>Evidence</th><th>Attestation</th></tr></thead><tbody>
       ${rep.controls.map((c) => `<tr><td class="wrap-cell"><strong>${escapeHtml(c.control_id)}</strong> ${escapeHtml(c.title)}<br><span class="muted">${escapeHtml(c.family || "")}</span></td>

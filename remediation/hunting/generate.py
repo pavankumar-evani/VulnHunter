@@ -44,6 +44,11 @@ def data_sources(technique_ids, lib=None):
     return seen
 
 
+def _short(text, n=90):
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[: n - 1].rstrip() + "..."
+
+
 def _is_open(f):
     return not (f.get("status") in ("resolved", "closed") or (f.get("exception") or {}).get("active"))
 
@@ -59,7 +64,7 @@ def candidates(findings, epss_min=DEFAULT_EPSS):
         epss = (f.get("epss") or {}).get("score") or 0
         if not kev and epss < epss_min:
             continue
-        g = groups.setdefault(cve, {"cve": cve, "title": f.get("title") or cve, "kev": False, "epss": 0, "ransomware": False, "hosts": set(),
+        g = groups.setdefault(cve, {"cve": cve, "title": _short((f.get("kev") or {}).get("vulnerability_name") or f.get("title") or cve), "kev": False, "epss": 0, "ransomware": False, "hosts": set(),
                                     "findings": [], "techniques": {}})
         g["kev"] = g["kev"] or kev
         g["epss"] = max(g["epss"], epss)
