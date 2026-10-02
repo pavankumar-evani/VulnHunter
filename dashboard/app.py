@@ -41,6 +41,7 @@ from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
+from remediation.support import store as support_store  # noqa: E402
 from remediation.audit import ai_usage_log  # noqa: E402
 from remediation.config import ai_governance  # noqa: E402
 from remediation.connectors.active_directory_connector import ActiveDirectoryConnector  # noqa: E402
@@ -2111,6 +2112,130 @@ def api_delete_team(name: str, user: dict = Depends(rbac.require_admin)):
         raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+
+# --------------------------------------------------------------------------- support
+# In-app helpdesk (remediation/support/store.py). Tickets live in the deployment's own
+# database - never a public tracker. A requester sees only their own tickets and the
+# non-internal comments; admins triage everything.
+
+
+class TicketCreateBody(BaseModel):
+    kind: str
+    subject: str
+    description: str
+    severity: str = "normal"
+
+
+class TicketCommentBody(BaseModel):
+    body: str
+    internal: bool = False
+
+
+class TicketUpdateBody(BaseModel):
+    status: str | None = None
+    severity: str | None = None
+    assignee_email: str | None = None
+    clear_assignee: bool = False
+    resolution: str | None = None
+
+
+class TicketEscalateBody(BaseModel):
+    confirm: bool = False
+
+
+def _ticket_or_404(ref_value, user):
+    try:
+        ticket = support_store.get_ticket(support_store.parse_ref(ref_value))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 404, not 403: a non-admin must not be able to probe which ticket numbers exist
+    if not ticket or (user.get("role") != "admin" and ticket["requester_email"] != user["email"].lower()):
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return ticket
+
+
+def _ticket_detail(ticket, user):
+    is_admin = user.get("role") == "admin"
+    return {**ticket, "comments": support_store.list_comments(ticket["id"], include_internal=is_admin)}
+
+
+@app.post("/api/support/tickets")
+def api_create_ticket(body: TicketCreateBody, user: dict = Depends(rbac.require_login)):
+    try:
+        ticket = support_store.create_ticket(user["email"], body.kind, body.subject, body.description, body.severity)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ticket
+
+
+@app.get("/api/support/tickets")
+def api_list_tickets(status: str | None = None, mine: bool = False, user: dict = Depends(rbac.require_login)):
+    is_admin = user.get("role") == "admin"
+    tickets = support_store.list_tickets(requester_email=None if (is_admin and not mine) else user["email"], status=status)
+    out = {"tickets": tickets, "is_admin": is_admin}
+    if is_admin:
+        out["summary"] = support_store.summary()
+        out["escalation_configured"] = bool(os.environ.get("QUANTA_SUPPORT_EMAIL")) and email_sender.is_configured()
+    return out
+
+
+@app.get("/api/support/tickets/{ref}")
+def api_get_ticket(ref: str, user: dict = Depends(rbac.require_login)):
+    return _ticket_detail(_ticket_or_404(ref, user), user)
+
+
+@app.post("/api/support/tickets/{ref}/comments")
+def api_comment_ticket(ref: str, body: TicketCommentBody, user: dict = Depends(rbac.require_login)):
+    ticket = _ticket_or_404(ref, user)
+    internal = body.internal and user.get("role") == "admin"
+    try:
+        support_store.add_comment(ticket["id"], user["email"], body.body, internal=internal)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _ticket_detail(support_store.get_ticket(ticket["id"]), user)
+
+
+@app.post("/api/support/tickets/{ref}/update")
+def api_update_ticket(ref: str, body: TicketUpdateBody, user: dict = Depends(rbac.require_admin)):
+    ticket = _ticket_or_404(ref, user)
+    try:
+        updated = support_store.update_ticket(
+            ticket["id"], user["email"], status=body.status, severity=body.severity,
+            assignee_email=body.assignee_email, clear_assignee=body.clear_assignee, resolution=body.resolution)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _ticket_detail(updated, user)
+
+
+@app.post("/api/support/tickets/{ref}/escalate")
+def api_escalate_ticket(ref: str, body: TicketEscalateBody, user: dict = Depends(rbac.require_admin)):
+    """Optional hand-off to the vendor's support desk by email. Preview by default; sends
+    only with confirm=true AND a configured QUANTA_SUPPORT_EMAIL + SMTP relay. Public
+    comments only - internal notes never leave the deployment."""
+    ticket = _ticket_or_404(ref, user)
+    to_addr = os.environ.get("QUANTA_SUPPORT_EMAIL", "").strip()
+    comments = support_store.list_comments(ticket["id"], include_internal=False)
+    subject = f"[Quanta support {ticket['ref']}] {ticket['subject']}"
+    lines = [f"Ticket: {ticket['ref']}", f"Type: {ticket['kind']}   Severity: {ticket['severity']}",
+             f"Requester: {ticket['requester_email']}", "", ticket["description"]]
+    for c in comments:
+        lines += ["", f"--- {c['author_email']} at {c['created_at']}", c["body"]]
+    body_text = chr(10).join(lines)
+    if not body.confirm:
+        return {"preview_only": True, "to": to_addr or None, "subject": subject, "body": body_text,
+                "configured": bool(to_addr) and email_sender.is_configured()}
+    if not to_addr:
+        raise HTTPException(status_code=400, detail="QUANTA_SUPPORT_EMAIL is not set on this server")
+    if not email_sender.is_configured():
+        raise HTTPException(status_code=400, detail="SMTP is not configured on this server")
+    try:
+        email_sender.send_email([to_addr], subject, body_text)
+    except Exception as exc:  # delivery failures are surfaced, never swallowed
+        raise HTTPException(status_code=502, detail=f"Email delivery failed: {exc}") from exc
+    support_store.add_comment(ticket["id"], user["email"], f"Escalated to {to_addr} by email.", internal=True)
+    return {"sent": True, "to": to_addr}
 
 
 @app.get("/api/assignable-users")

@@ -267,9 +267,10 @@ const FAQS = [
     "name, or this FAQ's own entries by keyword overlap. It is explicitly not an LLM " +
     "and not a chatbot - there is no persistent conversational chat interface " +
     "anywhere in this app."],
-  ["How do I request a new feature?",
-    "No in-app form - open a GitHub issue using the Feature Request template, which " +
-    "walks through the safety-model checklist before anything is scoped."],
+  ["How do I request a new feature, or report a bug?",
+    "Open a ticket from the Support page (type: feature request or bug). It is stored in " +
+    "this deployment's own database and triaged by your administrators, who can assign it, " +
+    "reply, and optionally escalate it to the vendor by email. Nothing goes to a public tracker."],
   ["How does this compare to ServiceNow's Vulnerability Response / USEM module?",
     "The core bet is remediation, not just detection: three separate mechanisms by " +
     "asset domain (Ansible playbooks, a real git-PR flow for app code, and a " +

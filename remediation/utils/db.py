@@ -220,6 +220,36 @@ finding_assignments = Table(
     Column("updated_at", String, nullable=False),
 )
 
+# In-app support tickets (the helpdesk behind the Support page). Kept in the customer's
+# own database on purpose: a ticket can describe their environment, so it is never sent
+# to a public tracker. `id` is the numeric key; the human reference is "TKT-<id>".
+# Comments are a separate table; `internal` comments are visible to admins only.
+support_tickets = Table(
+    "support_tickets", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", String, nullable=False),
+    Column("severity", String, nullable=False),
+    Column("subject", String, nullable=False),
+    Column("description", Text, nullable=False),
+    Column("status", String, nullable=False),
+    Column("requester_email", String, nullable=False),
+    Column("assignee_email", String, nullable=True),
+    Column("resolution", Text, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    Column("resolved_at", String, nullable=True),
+)
+
+support_ticket_comments = Table(
+    "support_ticket_comments", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("ticket_id", Integer, nullable=False),
+    Column("author_email", String, nullable=False),
+    Column("body", Text, nullable=False),
+    Column("internal", Integer, nullable=False, default=0),
+    Column("created_at", String, nullable=False),
+)
+
 
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
@@ -240,5 +270,5 @@ def ensure_schema(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
-            teams, finding_assignments,
+            teams, finding_assignments, support_tickets, support_ticket_comments,
         ])
