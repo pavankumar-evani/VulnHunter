@@ -174,6 +174,9 @@ class TriageTests(unittest.TestCase):
         self.assertEqual(triage.runbook_for({"title": "Odd thing"})["id"], "rb-generic")
         for b in triage.runbooks():
             self.assertTrue(b["steps"], b["id"])
+            self.assertTrue(all(isinstance(x, str) for x in b["steps"]), b["id"])  # an unquoted "Word: text" step parses as a mapping
+        for tid, entry in generate.library().items():
+            self.assertTrue(all(isinstance(x, str) for x in [entry["hunt"], entry["notes"], *entry["data_sources"], *[d["name"] for d in entry["detections"]]]), tid)
 
     def test_metrics_count_coverage_only_for_active_or_closed_hunts(self):
         e = create_engine("sqlite:///:memory:")

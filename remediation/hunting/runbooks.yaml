@@ -5,45 +5,45 @@
   techniques: [T1190]
   keywords: [web shell, webshell, exploit, injection, rce, log4shell]
   steps:
-    - Confirm the alert is real: check the request, the response and any new process or file on the host.
-    - Check Quanta for the host's open vulnerabilities and whether a known-exploited one matches the alert.
-    - Contain: restrict inbound access at the WAF or firewall, or isolate the host through EDR if exploitation is confirmed.
-    - Preserve evidence before changing anything: memory, web logs, a disk snapshot.
-    - Look for persistence (web shells, scheduled tasks, new accounts) and for lateral movement from this host.
-    - Patch or apply the compensating control Quanta recommends, rescan, and record the closure on the finding.
+    - "Confirm the alert is real: check the request, the response and any new process or file on the host."
+    - "Check Quanta for the host's open vulnerabilities and whether a known-exploited one matches the alert."
+    - "Contain: restrict inbound access at the WAF or firewall, or isolate the host through EDR if exploitation is confirmed."
+    - "Preserve evidence before changing anything: memory, web logs, a disk snapshot."
+    - "Look for persistence (web shells, scheduled tasks, new accounts) and for lateral movement from this host."
+    - "Patch or apply the compensating control Quanta recommends, rescan, and record the closure on the finding."
 - id: rb-priv-esc
   title: Privilege escalation on a server
   techniques: [T1068, T1548]
   keywords: [privilege, escalation, uac, sudo, token]
   steps:
-    - Identify the account and the parent process that gained higher privilege.
-    - Check whether the host is missing the relevant patch in Quanta.
-    - Reset exposed credentials and review recent logons by the account.
-    - Isolate the host if the escalation led to new persistence or credential dumping.
+    - "Identify the account and the parent process that gained higher privilege."
+    - "Check whether the host is missing the relevant patch in Quanta."
+    - "Reset exposed credentials and review recent logons by the account."
+    - "Isolate the host if the escalation led to new persistence or credential dumping."
 - id: rb-lateral
   title: Suspected lateral movement
   techniques: [T1021, T1210]
   keywords: [lateral, rdp, smb, psexec, winrm, remote service]
   steps:
-    - Map the source and destination hosts and the account used.
-    - Check Quanta's attack paths for the destination; a reachable vulnerable service raises priority.
-    - Disable the account or block the source segment while you confirm.
-    - Hunt for the same pair elsewhere and for the tools used.
+    - "Map the source and destination hosts and the account used."
+    - "Check Quanta's attack paths for the destination; a reachable vulnerable service raises priority."
+    - "Disable the account or block the source segment while you confirm."
+    - "Hunt for the same pair elsewhere and for the tools used."
 - id: rb-credential
   title: Exposed or misused credentials
   techniques: [T1552, T1556]
   keywords: [credential, secret, password, token, api key]
   steps:
-    - Treat the credential as compromised and rotate it first.
-    - Find where it was used since it was exposed and from which sources.
-    - Check the code or config location Quanta flagged and remove the secret from history.
-    - Review the account's access and enable stronger authentication.
+    - "Treat the credential as compromised and rotate it first."
+    - "Find where it was used since it was exposed and from which sources."
+    - "Check the code or config location Quanta flagged and remove the secret from history."
+    - "Review the account's access and enable stronger authentication."
 - id: rb-generic
   title: General alert triage
   techniques: []
   keywords: []
   steps:
-    - Decide whether the alert is a true positive, benign or needs more data, and record why.
-    - Look up the asset in Quanta: owner, open vulnerabilities, known-exploited ones, exposure.
-    - Escalate to the asset owner if it is a true positive; open a ticket from the case.
-    - Note anything that should become a detection or a hunt.
+    - "Decide whether the alert is a true positive, benign or needs more data, and record why."
+    - "Look up the asset in Quanta: owner, open vulnerabilities, known-exploited ones, exposure."
+    - "Escalate to the asset owner if it is a true positive; open a ticket from the case."
+    - "Note anything that should become a detection or a hunt."
