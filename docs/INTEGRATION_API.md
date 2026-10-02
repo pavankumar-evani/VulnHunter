@@ -115,6 +115,49 @@ The Tenable column layout (`Plugin ID, CVE, Risk, CVSS v3.0 Base Score, Host, IP
 Synopsis, Solution, Port, Protocol, First Discovered, Last Observed`). Qualys and other scanners can export
 or be transformed to it. The same upload is on the Connections page as *Import a scanner file* for an admin.
 
+### Upload scanner results in SARIF
+
+SARIF 2.1.0 is the common output of Semgrep, CodeQL, SonarQube (export), OWASP ZAP, Trivy, Grype, Checkov, tfsec,
+KICS, gitleaks, Hadolint, actionlint and many others, so one endpoint covers SAST, DAST, SCA, secrets, IaC, container
+and pipeline findings.
+
+```bash
+curl -X POST "https://quanta.example.com/api/ingest/sarif?source=semgrep&asset=shop-api&reconcile=true"   -H "Authorization: Bearer $QUANTA_KEY" --data-binary @semgrep.sarif
+```
+
+* `scan_type` (`sast`, `dast`, `sca`, `secrets`, `iac`, `container`, `cicd`) is worked out from the tool name; pass it to override.
+* `asset` names the repository or application (a web scan uses the host in the URL when you give none).
+* A finding keeps its identity through the tool's own fingerprint, or a hash of rule + file + code, so a moved line is not a new
+  finding. `reconcile=true` says this file is the complete current result for that source, so fixed findings leave the queue.
+* Severity comes from a numeric `security-severity` when the tool supplies one, otherwise the SARIF level (error = High,
+  warning = Medium, note = Low). Suppressed results are skipped. Each finding keeps its file and line (or URL), rule id, CWE ids
+  and the tool's own fix text, and shows them in the finding detail.
+* The admin **Import a scanner file** button accepts a SARIF file as well as a CSV; `quanta-admin import-sarif FILE --source NAME` does it from the command line.
+
+### Check your pipelines
+
+```bash
+python cli/quanta_admin.py scan-pipelines . --format sarif --out pipelines.sarif --fail-on High
+curl -X POST "https://quanta.example.com/api/ingest/sarif?source=pipelines&scan_type=cicd&asset=shop-repo"   -H "Authorization: Bearer $QUANTA_KEY" --data-binary @pipelines.sarif
+```
+
+Deterministic rules over GitHub Actions workflows, GitLab CI files and Jenkinsfiles, mapped to the OWASP Top 10 CI/CD risks:
+unpinned third-party actions, `pull_request_target` that checks out the pull request, untrusted event data in `run:` scripts,
+token permissions left broad, secrets echoed or written into the file, self-hosted runners reachable from pull requests, and
+downloads piped into a shell. Each finding has the file and line and a fix, and a missing `permissions:` block comes with a
+ready patch. It reads the file only: branch protection, approvers and runner settings are outside it, so a clean result means
+"no file-level weaknesses", not "secure".
+
+### Upload test coverage
+
+```bash
+curl -X POST "https://quanta.example.com/api/ingest/coverage?source=coverage&asset=shop-api&threshold=60"   -H "Authorization: Bearer $QUANTA_KEY" --data-binary @coverage.xml
+```
+
+Cobertura XML, JaCoCo XML or lcov. Only files whose path suggests security-relevant code (authentication, authorization, sessions,
+cryptography, validation, payments, uploads, parsers) and that fall below the threshold become findings; the response also gives
+the overall percentage. The path match is a heuristic on file names.
+
 ### Report a ticket's state
 
 ```bash

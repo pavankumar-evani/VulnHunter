@@ -559,6 +559,12 @@ PostgreSQL, Caddy TLS), `.env.production.example`, `deploy/`. See `docs/PRODUCTI
 `docs/CONNECTOR_ONBOARDING.md`. Still true: AI fixers need the Claude Code CLI, and no connector
 has been run against a live vendor tenant.
 
+**Scanner ingest**: `remediation/ingest/sarif.py` reads SARIF 2.1.0 (Semgrep, CodeQL, ZAP, Trivy, Checkov, gitleaks, ...) into findings
+with `scan_type`, `location`, `cwe`, `rule_id` and `tool` fields (`POST /api/ingest/sarif`); `remediation/scanners/cicd.py` checks
+GitHub Actions / GitLab CI / Jenkinsfiles against OWASP CI/CD risks (`quanta-admin scan-pipelines`); `remediation/ingest/coverage.py`
+turns Cobertura/JaCoCo/lcov reports into findings for security-relevant files only (`POST /api/ingest/coverage`). The new scan
+types are `container`, `cicd` and `coverage`; an explicit `scan_type` on a finding wins over inference.
+
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
 `read:findings`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
