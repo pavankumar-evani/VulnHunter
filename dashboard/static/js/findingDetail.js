@@ -189,7 +189,8 @@ async function loadOwnership(f, modalBody) {
         ${a && a.notes ? row("Note", escapeHtml(a.notes), true) : ""}
       </tbody></table>
     </div>
-    <p style="margin:10px 0 0"><button type="button" class="secondary-button" id="ownership-assign">${a ? "Reassign" : "Assign"}</button></p>
+    <p style="margin:10px 0 0"><button type="button" class="secondary-button" id="ownership-assign">${a ? "Reassign" : "Assign"}</button>
+      <a class="secondary-button" href="/support?finding_id=${encodeURIComponent(f.id)}" data-link id="ownership-ticket">Raise a ticket</a></p>
     ${history ? `<ul class="ownership-history">${history}</ul>` : ""}`;
   el.querySelector("#ownership-assign").addEventListener("click", () => {
     openAssignModal({ findingId: f.id, title: f.title, onSaved: () => openFindingDetail(f) });

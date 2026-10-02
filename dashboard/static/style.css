@@ -2044,3 +2044,10 @@ select.searchable-select-native {
 #support-tickets input[name=subject], #support-tickets input[name=assignee_email], .modal-body input[name=assignee_email] {
   background: transparent; color: inherit; border: 1px solid rgba(120,140,190,0.35); border-radius: 6px; padding: 10px 12px; }
 #support-tickets a[data-ticket] { color: #8fb0ff; font-weight: 600; }
+.sla-risk { color: #f0b44c; font-weight: 600; }
+.sla-breach { color: #f06a6a; font-weight: 600; }
+.sla-met { color: #3fd0b6; }
+.nowrap { white-space: nowrap; font-size: 0.85rem; }
+.tab-row { display: flex; gap: 8px; }
+.tab-row .secondary-button.active { border-color: #6d97f7; color: #6d97f7; }
+.kpi-card.kpi-bad .kpi-value { color: #f06a6a; }

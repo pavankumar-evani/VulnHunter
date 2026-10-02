@@ -1,0 +1,28 @@
+# Support ticket SLA and priority policy (ITIL-style impact x urgency).
+#
+# Priority = impact x urgency. Impact is who is affected (individual, team, organization);
+# urgency is the requester's severity (low, normal, high, urgent). Their weights multiply
+# and the product is mapped to P1 (critical) .. P4 (low) by `priority_thresholds`.
+# Targets are calendar minutes. The resolution clock is paused while a ticket waits on the
+# requester (the due time moves out by the paused time). A ticket turns "at risk" once
+# `at_risk_threshold` of its allowed time has elapsed, and "breached" past 100%.
+#
+# Read live (edit and the next request sees it). Business-hours calendars are a roadmap item.
+
+impact_weights: {individual: 1, team: 2, organization: 3}
+urgency_weights: {low: 1, normal: 2, high: 3, urgent: 4}
+
+# the first threshold the score meets or exceeds wins, checked top to bottom
+priority_thresholds:
+  - {priority: P1, min_score: 9}
+  - {priority: P2, min_score: 6}
+  - {priority: P3, min_score: 3}
+  - {priority: P4, min_score: 0}
+
+targets:
+  P1: {response_minutes: 30,  resolution_minutes: 240}
+  P2: {response_minutes: 60,  resolution_minutes: 480}
+  P3: {response_minutes: 240, resolution_minutes: 4320}
+  P4: {response_minutes: 480, resolution_minutes: 7200}
+
+at_risk_threshold: 0.8

@@ -248,6 +248,16 @@ support_tickets = Table(
     Column("created_at", String, nullable=False),
     Column("updated_at", String, nullable=False),
     Column("resolved_at", String, nullable=True),
+    # ITSM layer (added after first release; ensure_schema() adds them to an older table)
+    Column("team", String, nullable=True),              # routed assignment group
+    Column("impact", String, nullable=True),            # individual | team | organization
+    Column("priority", String, nullable=True),          # P1..P4 = impact x urgency (severity)
+    Column("finding_id", String, nullable=True),        # optional link to a finding
+    Column("first_response_at", String, nullable=True),
+    Column("response_due_at", String, nullable=True),
+    Column("resolution_due_at", String, nullable=True),
+    Column("paused_at", String, nullable=True),         # set while waiting on the requester
+    Column("reopen_count", Integer, nullable=True),
 )
 
 support_ticket_comments = Table(
@@ -282,3 +292,16 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments,
         ])
+        _add_missing_columns(engine, support_tickets)
+
+
+def _add_missing_columns(engine, table):
+    """create_all() never alters an existing table. For tables that gained columns after
+    their first release, add any that are missing (nullable, so safe on existing rows)."""
+    from sqlalchemy import inspect, text
+    existing = {c["name"] for c in inspect(engine).get_columns(table.name)}
+    with engine.begin() as conn:
+        for col in table.columns:
+            if col.name not in existing:
+                ctype = col.type.compile(engine.dialect)
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {col.name} {ctype}'))

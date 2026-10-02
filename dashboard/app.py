@@ -41,6 +41,9 @@ from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
+from remediation.support import analytics as support_analytics  # noqa: E402
+from remediation.support import routing as support_routing  # noqa: E402
+from remediation.support import sla as support_sla  # noqa: E402
 from remediation.support import store as support_store  # noqa: E402
 from remediation.validation import playbook_lint  # noqa: E402
 from remediation.verification import closed_loop  # noqa: E402
@@ -2164,9 +2167,15 @@ def api_delete_team(name: str, user: dict = Depends(rbac.require_admin)):
 
 
 # --------------------------------------------------------------------------- support
-# In-app helpdesk (remediation/support/store.py). Tickets live in the deployment's own
-# database - never a public tracker. A requester sees only their own tickets and the
-# non-internal comments; admins triage everything.
+# In-app helpdesk (remediation/support/). Tickets live in the deployment's own database -
+# never a public tracker. ITSM model: priority = impact x urgency, routed to a team queue,
+# SLA clocks derived from remediation/config/support_sla.yaml. Three roles per ticket:
+#   requester - sees their own ticket and public replies
+#   agent     - a member of the team the ticket is routed to: works the queue (reply,
+#               internal notes, status, assignee, resolution); cannot change priority,
+#               team, or escalate outside the deployment
+#   admin     - everything, including priority/team changes, analytics for all teams and
+#               optional email escalation to the vendor
 
 
 class TicketCreateBody(BaseModel):
@@ -2174,6 +2183,8 @@ class TicketCreateBody(BaseModel):
     subject: str
     description: str
     severity: str = "normal"
+    impact: str = "individual"
+    finding_id: str | None = None
 
 
 class TicketCommentBody(BaseModel):
@@ -2184,6 +2195,8 @@ class TicketCommentBody(BaseModel):
 class TicketUpdateBody(BaseModel):
     status: str | None = None
     severity: str | None = None
+    impact: str | None = None
+    team: str | None = None
     assignee_email: str | None = None
     clear_assignee: bool = False
     resolution: str | None = None
@@ -2193,68 +2206,144 @@ class TicketEscalateBody(BaseModel):
     confirm: bool = False
 
 
+def _ticket_role(ticket, user):
+    if user.get("role") == "admin":
+        return "admin"
+    team = (user.get("team") or "").lower()
+    if team and (ticket.get("team") or "").lower() == team:
+        return "agent"
+    if ticket["requester_email"] == user["email"].lower():
+        return "requester"
+    return None
+
+
 def _ticket_or_404(ref_value, user):
     try:
         ticket = support_store.get_ticket(support_store.parse_ref(ref_value))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # 404, not 403: a non-admin must not be able to probe which ticket numbers exist
-    if not ticket or (user.get("role") != "admin" and ticket["requester_email"] != user["email"].lower()):
+    role = _ticket_role(ticket, user) if ticket else None
+    # 404, not 403: a user must not be able to probe which ticket numbers exist
+    if not role:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    return ticket
+    return ticket, role
 
 
-def _ticket_detail(ticket, user):
-    is_admin = user.get("role") == "admin"
-    return {**ticket, "comments": support_store.list_comments(ticket["id"], include_internal=is_admin)}
+def _ticket_detail(ticket, role):
+    staff = role in ("admin", "agent")
+    return {**ticket, "role": role, "comments": support_store.list_comments(ticket["id"], include_internal=staff)}
+
+
+def _visible_tickets(user, **filters):
+    """Every ticket this user may see: all (admin), else own requests plus their team's queue."""
+    if user.get("role") == "admin":
+        return support_store.list_tickets(**filters)
+    own = support_store.list_tickets(requester_email=user["email"], **filters)
+    team = user.get("team")
+    queue = support_store.list_tickets(team=team, **filters) if team else []
+    seen, merged = set(), []
+    for t in own + queue:
+        if t["id"] not in seen:
+            seen.add(t["id"])
+            merged.append(t)
+    return sorted(merged, key=lambda t: -t["id"])
 
 
 @app.post("/api/support/tickets")
 def api_create_ticket(body: TicketCreateBody, user: dict = Depends(rbac.require_login)):
+    if body.finding_id:
+        _visible_finding(body.finding_id.strip(), user)  # 404 for a finding the caller cannot see
     try:
-        ticket = support_store.create_ticket(user["email"], body.kind, body.subject, body.description, body.severity)
+        return support_store.create_ticket(
+            user["email"], body.kind, body.subject, body.description, body.severity, impact=body.impact,
+            finding_id=body.finding_id, team_names=[t["name"] for t in _team_catalog()])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return ticket
 
 
 @app.get("/api/support/tickets")
-def api_list_tickets(status: str | None = None, mine: bool = False, user: dict = Depends(rbac.require_login)):
+def api_list_tickets(status: str | None = None, mine: bool = False, team: str | None = None, breached: bool | None = None,
+                     user: dict = Depends(rbac.require_login)):
     is_admin = user.get("role") == "admin"
-    tickets = support_store.list_tickets(requester_email=None if (is_admin and not mine) else user["email"], status=status)
-    out = {"tickets": tickets, "is_admin": is_admin}
+    filters = {"status": status, "breached": breached}
+    if mine:
+        tickets = support_store.list_tickets(requester_email=user["email"], **filters)
+    else:
+        tickets = _visible_tickets(user, **filters)
+    if team:
+        tickets = [t for t in tickets if (t.get("team") or "").lower() == team.lower()]
+    out = {"tickets": tickets, "is_admin": is_admin, "is_agent": bool(user.get("team")), "team": user.get("team")}
+    if is_admin or user.get("team"):
+        scope = tickets if is_admin else [t for t in tickets if (t.get("team") or "").lower() == user["team"].lower()]
+        out["summary"] = support_store.summary(scope)
     if is_admin:
-        out["summary"] = support_store.summary()
         out["escalation_configured"] = bool(os.environ.get("QUANTA_SUPPORT_EMAIL")) and email_sender.is_configured()
+        out["teams"] = [t["name"] for t in _team_catalog()]
     return out
+
+
+@app.get("/api/support/analytics")
+def api_support_analytics(user: dict = Depends(rbac.require_login)):
+    """Admin: the whole desk. A team member: their own team's queue. Anyone else: 403."""
+    if user.get("role") == "admin":
+        tickets = support_store.list_tickets(limit=5000)
+        scope = "all teams"
+    elif user.get("team"):
+        tickets = support_store.list_tickets(team=user["team"], limit=5000)
+        scope = user["team"]
+    else:
+        raise HTTPException(status_code=403, detail="Support analytics are for team members and admins")
+    return {"scope": scope, **support_analytics.compute(tickets)}
+
+
+@app.get("/api/support/policy")
+def api_support_policy(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """The live SLA targets and routing rules, so the UI can show what governs a ticket."""
+    return {"sla": support_sla.load_policy(), "routing": support_routing.load_rules()}
+
+
+@app.get("/api/findings/{finding_id}/tickets")
+def api_finding_tickets(finding_id: str, user: dict = Depends(rbac.require_login)):
+    _visible_finding(finding_id, user)
+    return {"tickets": _visible_tickets(user, finding_id=finding_id)}
 
 
 @app.get("/api/support/tickets/{ref}")
 def api_get_ticket(ref: str, user: dict = Depends(rbac.require_login)):
-    return _ticket_detail(_ticket_or_404(ref, user), user)
+    ticket, role = _ticket_or_404(ref, user)
+    return _ticket_detail(ticket, role)
 
 
 @app.post("/api/support/tickets/{ref}/comments")
 def api_comment_ticket(ref: str, body: TicketCommentBody, user: dict = Depends(rbac.require_login)):
-    ticket = _ticket_or_404(ref, user)
-    internal = body.internal and user.get("role") == "admin"
+    ticket, role = _ticket_or_404(ref, user)
+    internal = body.internal and role in ("admin", "agent")
     try:
         support_store.add_comment(ticket["id"], user["email"], body.body, internal=internal)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _ticket_detail(support_store.get_ticket(ticket["id"]), user)
+    return _ticket_detail(support_store.get_ticket(ticket["id"]), role)
 
 
 @app.post("/api/support/tickets/{ref}/update")
-def api_update_ticket(ref: str, body: TicketUpdateBody, user: dict = Depends(rbac.require_admin)):
-    ticket = _ticket_or_404(ref, user)
+def api_update_ticket(ref: str, body: TicketUpdateBody, user: dict = Depends(rbac.require_login)):
+    ticket, role = _ticket_or_404(ref, user)
+    if role not in ("admin", "agent"):
+        raise HTTPException(status_code=403, detail="Only the assigned team or an administrator can triage a ticket")
+    if role == "agent" and (body.severity is not None or body.impact is not None or body.team is not None):
+        raise HTTPException(status_code=403, detail="Priority and team changes need an administrator")
+    if body.team:
+        canonical = _canonical_team(body.team)
+        if not canonical:
+            raise HTTPException(status_code=400, detail=f"No team named {body.team!r}")
+        body.team = canonical
     try:
         updated = support_store.update_ticket(
-            ticket["id"], user["email"], status=body.status, severity=body.severity,
+            ticket["id"], user["email"], status=body.status, severity=body.severity, impact=body.impact, team=body.team,
             assignee_email=body.assignee_email, clear_assignee=body.clear_assignee, resolution=body.resolution)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _ticket_detail(updated, user)
+    return _ticket_detail(updated, role)
 
 
 @app.post("/api/support/tickets/{ref}/escalate")
@@ -2262,11 +2351,11 @@ def api_escalate_ticket(ref: str, body: TicketEscalateBody, user: dict = Depends
     """Optional hand-off to the vendor's support desk by email. Preview by default; sends
     only with confirm=true AND a configured QUANTA_SUPPORT_EMAIL + SMTP relay. Public
     comments only - internal notes never leave the deployment."""
-    ticket = _ticket_or_404(ref, user)
+    ticket, _role = _ticket_or_404(ref, user)
     to_addr = os.environ.get("QUANTA_SUPPORT_EMAIL", "").strip()
     comments = support_store.list_comments(ticket["id"], include_internal=False)
     subject = f"[Quanta support {ticket['ref']}] {ticket['subject']}"
-    lines = [f"Ticket: {ticket['ref']}", f"Type: {ticket['kind']}   Severity: {ticket['severity']}",
+    lines = [f"Ticket: {ticket['ref']}", f"Type: {ticket['kind']}   Priority: {ticket.get('priority')}   Severity: {ticket['severity']}",
              f"Requester: {ticket['requester_email']}", "", ticket["description"]]
     for c in comments:
         lines += ["", f"--- {c['author_email']} at {c['created_at']}", c["body"]]
@@ -2284,7 +2373,6 @@ def api_escalate_ticket(ref: str, body: TicketEscalateBody, user: dict = Depends
         raise HTTPException(status_code=502, detail=f"Email delivery failed: {exc}") from exc
     support_store.add_comment(ticket["id"], user["email"], f"Escalated to {to_addr} by email.", internal=True)
     return {"sent": True, "to": to_addr}
-
 
 @app.get("/api/assignable-users")
 def api_assignable_users(user: dict = Depends(rbac.require_login)):

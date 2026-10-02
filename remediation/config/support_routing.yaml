@@ -1,0 +1,26 @@
+# Support ticket routing: which team's queue a new ticket lands in.
+#
+# Rules are checked top to bottom; the first match wins. A rule matches on any of:
+#   kinds:     ticket types (bug, question, feature, access, other)
+#   keywords:  words in the subject or description (case-insensitive)
+#   min_priority: P1..P4 - matches when the ticket is at least this urgent
+# `team` is only used if a team of that name exists (Users & Teams page); otherwise the
+# next rule is tried, then `default_team`. A rule may also name an `assignee` (an email).
+# Leave default_team null to leave unmatched tickets for an admin to triage.
+
+default_team: null
+
+rules:
+  - name: Access and identity
+    kinds: [access]
+    keywords: [login, password, sso, mfa, role, permission, account]
+    team: Security Operations
+  - name: Integrations and connectors
+    keywords: [connector, scanner, tenable, qualys, openvas, prisma, xsiam, integration, api, webhook, servicenow, jira, splunk]
+    team: Platform Engineering
+  - name: Remediation and findings
+    keywords: [playbook, remediation, finding, queue, sla, approval, patch, vulnerability]
+    team: Security Operations
+  - name: Reports and analytics
+    keywords: [report, dashboard, chart, export, analytics]
+    team: Application Security
