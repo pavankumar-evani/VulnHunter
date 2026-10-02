@@ -154,7 +154,7 @@ empty state with instructions instead of erroring.
 | `/infoblox`, `/axonius`, `/active-directory` | Infoblox NIOS, Axonius, and Active Directory (LDAP) Test Connection + Fetch pages - asset-discovery pull connectors; Fetch reconciles real ip/mac into the asset inventory (`asset_inventory.reconcile_pulled_assets()`), not vulnerability findings |
 | `/run` | Form to trigger a pipeline run (dry-run by default), plus recent-run audit log |
 | `/reports` | Generate a real, downloadable KPI/SLA/coverage snapshot report (daily through yearly framing) |
-| `/support` | In-app helpdesk (tickets in the local database: open, reply, admin triage/assign/resolve, optional email escalation via `QUANTA_SUPPORT_EMAIL`), plus known limitations and a before-you-file checklist |
+| `/support` | In-app ITSM service desk (tickets in the local database: impact x urgency priority, rule-based team routing, SLA clocks, team-agent queues, finding links, analytics, optional email escalation via `QUANTA_SUPPORT_EMAIL`), plus known limitations and a before-you-file checklist |
 | `/faq` | Direct answers about what this product does and doesn't do |
 | `/login` | Local email/password sign-in; shows a "Sign in with SSO" button only when real OIDC provider env vars are configured |
 | `/profile` | Current user's name/email/role, change-password form, log out |

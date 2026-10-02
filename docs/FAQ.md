@@ -656,6 +656,16 @@ in this product should be represented as "patent pending" unless and until a rea
 happens. See `docs/enterprise-suite/whitepaper.html` §04 for the full assessment and
 sourcing.
 
+### How are support tickets prioritised, routed and measured?
+
+Priority is impact x urgency (P1 to P4). Rules route a ticket to a team's queue; team
+members work that queue, administrators see all of it. Each priority has response and
+resolution targets with at-risk and breached states, and the resolution clock pauses while
+a ticket waits on the requester. The Analytics tab shows SLA compliance, first-response
+time, mean time to resolve, reopen rate, backlog age and workload by team and assignee. A
+ticket can link to a finding. Policy lives in `remediation/config/support_sla.yaml` and
+`support_routing.yaml`. See [SUPPORT.md](SUPPORT.md).
+
 ### What if I find a bug or need help?
 
 See [SUPPORT.md](SUPPORT.md) — the short version: open a ticket from the in-app Support

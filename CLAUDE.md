@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,567 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,603 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,567 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,603 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -537,15 +537,22 @@ still-present / awaiting-rescan (evidence, not proof; surfaced on the Approvals 
 `rollout_rings`) stage a fix canary, pilot, broad. See `docs/AGENTIC_REMEDIATION_ROADMAP.md`
 and `docs/DEPLOYMENT_ARCHITECTURE.md` (Dockerfile, compose, `QUANTA_DATABASE_URL`).
 
-## Support tickets
+## Support tickets (ITSM service desk)
 
 The Support page is a real helpdesk, not a link to an external tracker. Tables
-`support_tickets` / `support_ticket_comments` (`remediation/utils/db.py`), logic in
-`remediation/support/store.py`, routes `/api/support/tickets*` (login required; a
-requester sees only their own tickets and non-internal comments, other tickets are 404;
-triage and escalation are admin-only). Optional vendor escalation is an admin-confirmed
-email (`QUANTA_SUPPORT_EMAIL` + SMTP), public content only. Tickets deliberately never go
-to a public issue tracker: they can describe the customer's environment.
+`support_tickets` / `support_ticket_comments` (`remediation/utils/db.py`; older tables gain
+new columns via `_add_missing_columns`), logic in `remediation/support/`: `store.py`
+(create/comment/triage, pause, reopen), `sla.py` (priority = impact x urgency, response and
+resolution clocks derived on read), `routing.py` (rules in `remediation/config/
+support_routing.yaml`, only to teams that exist), `analytics.py` (SLA compliance, first
+response, MTTR, reopen rate, ageing, by team/assignee, trend). Policy:
+`remediation/config/support_sla.yaml`. Routes `/api/support/tickets*`, `/api/support/analytics`,
+`/api/support/policy`, `/api/findings/{id}/tickets`. Three roles per ticket: requester (own
+ticket, public replies), agent (a member of the routed team: works the queue, no priority/team
+change, no vendor escalation), admin (everything). Other users get 404. Optional vendor
+escalation is an admin-confirmed email (`QUANTA_SUPPORT_EMAIL` + SMTP), public content only.
+Tickets deliberately never go to a public issue tracker: they can describe the customer's
+environment.
 
 ## Naming
 

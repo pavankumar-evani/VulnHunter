@@ -267,6 +267,12 @@ const FAQS = [
     "name, or this FAQ's own entries by keyword overlap. It is explicitly not an LLM " +
     "and not a chatbot - there is no persistent conversational chat interface " +
     "anywhere in this app."],
+  ["How are support tickets prioritised, routed and measured?",
+    "Priority is impact times urgency (P1 to P4). Routing rules send a ticket to a team queue; team " +
+    "members work it and administrators see everything. Each priority has response and resolution " +
+    "targets with at-risk and breached states, and the clock pauses while a ticket waits on the " +
+    "requester. Analytics cover SLA compliance, first response, time to resolve, reopen rate, backlog " +
+    "age and workload by team. A ticket can link to a finding."],
   ["How do I request a new feature, or report a bug?",
     "Open a ticket from the Support page (type: feature request or bug). It is stored in " +
     "this deployment's own database and triaged by your administrators, who can assign it, " +

@@ -74,13 +74,31 @@ reports against Quanta itself.
 
 ## How tickets work
 
+The Support page is a small ITSM service desk (ITIL-style), stored in your own database.
+
 - **Open:** any signed-in user, from `/support`. Fields: type (bug, question, feature,
-  access, other), severity (low to urgent), subject, description.
-- **Visibility:** a requester sees only their own tickets and the replies addressed to
-  them. Administrators see the whole queue, can assign a ticket, change status and
-  severity, record a resolution, and add internal notes the requester never sees.
-- **Status:** open, in progress, waiting on requester, resolved, closed. A requester's
-  reply on a ticket waiting on them puts it back in progress.
+  access, other), who is affected (just me, my team, the whole organization), urgency
+  (low to urgent), an optional related finding, subject, description. A finding's detail
+  panel has a "Raise a ticket" button that pre-fills the link.
+- **Priority:** impact x urgency gives P1 (critical) to P4 (low). The matrix and weights
+  are in `remediation/config/support_sla.yaml`.
+- **Routing:** rules in `remediation/config/support_routing.yaml` (type, keywords, minimum
+  priority) send a new ticket to a team's queue. A rule only fires for a team that exists;
+  unmatched tickets stay "unrouted" for an admin.
+- **SLA:** each priority has a response target and a resolution target (P1 30 min and
+  4 hours, down to P4 8 hours and 5 days by default). Clocks are derived from timestamps,
+  go to *at risk* at 80% of the allowed time and *breached* past 100%, and the resolution
+  clock pauses while a ticket waits on the requester. Calendar time today; business-hours
+  calendars are not built yet.
+- **Who sees what:** a requester sees their own tickets and public replies. A **team
+  member** (an agent) sees and works the queue routed to their team: reply, internal
+  notes, status, assignee, resolution. Only an **administrator** changes priority or team,
+  sees every team, and can escalate to the vendor. Other users' tickets return 404.
+- **Status:** open, in progress, waiting on requester, resolved, closed. A requester's reply
+  on a ticket waiting on them resumes it. Reopening a resolved ticket is counted.
+- **Analytics:** SLA compliance, average first response, mean time to resolve, reopen rate,
+  open backlog by age, workload by team and by assignee, opened-per-day trend and by-priority
+  tables. Admins see all teams; a team member sees their own team.
 - **Escalation to the vendor (optional):** set `QUANTA_SUPPORT_EMAIL` and the SMTP
   variables, and an admin can send a ticket (public content only, never internal notes)
   to the vendor's support desk by email. It previews first and sends only on explicit
