@@ -75,6 +75,9 @@ def metrics(findings, engine=None):
         put("firewall", n_rules, f"{n_rules:,} rules from {_plural(devices, 'firewall')}")
 
     safe(firewall)
+    safe(lambda: put("api-inventory", _count(engine, t.api_endpoints), _plural(_count(engine, t.api_endpoints), "endpoint") + " in the inventory"))
+    safe(lambda: put("api-policies", _count(engine, t.api_policies), _plural(_count(engine, t.api_policies), "protection policy", "protection policies")))
+    safe(lambda: put("api-ci", _count(engine, t.scan_runs, t.scan_runs.c.scan_type == "api-test"), _plural(_count(engine, t.scan_runs, t.scan_runs.c.scan_type == "api-test"), "test upload")))
     safe(lambda: put("iam", _count(engine, t.iam_entitlements), f"{_count(engine, t.iam_entitlements):,} entitlements"))
     safe(lambda: put("ownership", _count(engine, t.asset_ownership), _plural(_count(engine, t.asset_ownership), "asset") + " with an owner"))
     safe(lambda: put("support", _count(engine, t.support_tickets, t.support_tickets.c.status != "resolved"), _plural(_count(engine, t.support_tickets, t.support_tickets.c.status != "resolved"), "open ticket")))

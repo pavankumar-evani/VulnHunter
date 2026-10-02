@@ -856,6 +856,158 @@ iam_review_items = Table(
     Column("snapshot_json", Text, nullable=False),
 )
 
+# ---------------------------------------------------------------- API security (inventory, traffic aggregates, classification, protection policies)
+api_specs = Table(
+    "api_specs", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("service", String, nullable=False, unique=True),
+    Column("title", String, nullable=True),
+    Column("version", String, nullable=True),
+    Column("source", String, nullable=False),
+    Column("source_ref", String, nullable=True),
+    Column("sha256", String, nullable=False),
+    Column("hosts_json", Text, nullable=False),
+    Column("meta_json", Text, nullable=False),
+    Column("endpoints", Integer, nullable=False, default=0),
+    Column("content", Text, nullable=False),
+    Column("uploaded_by", String, nullable=True),
+    Column("uploaded_at", String, nullable=False),
+)
+
+api_endpoints = Table(
+    "api_endpoints", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("service", String, nullable=False),
+    Column("method", String, nullable=False),
+    Column("path_key", String, nullable=False),
+    Column("template", String, nullable=False),
+    Column("in_spec", Boolean, nullable=False, default=False),
+    Column("observed", Boolean, nullable=False, default=False),
+    Column("spec_json", Text, nullable=True),
+    Column("observed_json", Text, nullable=False),
+    Column("owner", String, nullable=True),
+    Column("exposure_override", String, nullable=True),
+    Column("status", String, nullable=False, default="active"),
+    Column("notes", Text, nullable=True),
+    Column("first_seen", String, nullable=True),
+    Column("last_seen", String, nullable=True),
+    Column("calls_total", Integer, nullable=False, default=0),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    UniqueConstraint("service", "method", "path_key", name="uq_api_endpoint"),
+)
+
+api_metrics = Table(
+    "api_metrics", metadata,
+    Column("endpoint_id", Integer, primary_key=True),
+    Column("day", String, primary_key=True),
+    Column("calls", Integer, nullable=False, default=0),
+    Column("errors", Integer, nullable=False, default=0),
+    Column("exceptions", Integer, nullable=False, default=0),
+    Column("latency_sum_ms", Float, nullable=False, default=0.0),
+    Column("latency_n", Integer, nullable=False, default=0),
+    Column("latency_max_ms", Float, nullable=True),
+    Column("bytes_in", Integer, nullable=False, default=0),
+    Column("bytes_out", Integer, nullable=False, default=0),
+    Column("security_events", Integer, nullable=False, default=0),
+)
+
+api_actor_hits = Table(
+    "api_actor_hits", metadata,
+    Column("endpoint_id", Integer, primary_key=True),
+    Column("day", String, primary_key=True),
+    Column("actor", String, primary_key=True),
+    Column("calls", Integer, nullable=False, default=0),
+    Column("errors", Integer, nullable=False, default=0),
+    Column("bytes_out", Integer, nullable=False, default=0),
+    Column("distinct_objects", Integer, nullable=False, default=0),
+    Column("ips_json", Text, nullable=True),
+)
+
+api_dependencies = Table(
+    "api_dependencies", metadata,
+    Column("source_service", String, primary_key=True),
+    Column("dest_service", String, primary_key=True),
+    Column("dest_exposure", String, nullable=True),
+    Column("calls", Integer, nullable=False, default=0),
+    Column("first_seen", String, nullable=True),
+    Column("last_seen", String, nullable=True),
+)
+
+api_data_classes = Table(
+    "api_data_classes", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("priority", Integer, nullable=False),
+    Column("description", Text, nullable=True),
+    Column("detectors_json", Text, nullable=False),
+    Column("patterns_json", Text, nullable=False),
+    Column("imported_by", String, nullable=True),
+    Column("imported_at", String, nullable=False),
+)
+
+api_policies = Table(
+    "api_policies", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("kind", String, nullable=False),
+    Column("mode", String, nullable=False),
+    Column("enabled", Boolean, nullable=False, default=True),
+    Column("scope_json", Text, nullable=False),
+    Column("params_json", Text, nullable=False),
+    Column("description", Text, nullable=True),
+    Column("version", Integer, nullable=False, default=1),
+    Column("approved_by", String, nullable=True),
+    Column("approved_version", Integer, nullable=True),
+    Column("push_state", String, nullable=False, default="draft"),
+    Column("last_push_id", Integer, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_by", String, nullable=True),
+    Column("updated_at", String, nullable=False),
+)
+
+api_policy_events = Table(
+    "api_policy_events", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("policy_id", Integer, nullable=False),
+    Column("policy_name", String, nullable=False),
+    Column("version", Integer, nullable=True),
+    Column("action", String, nullable=False),
+    Column("actor", String, nullable=True),
+    Column("detail_json", Text, nullable=True),
+    Column("at", String, nullable=False),
+)
+
+api_policy_pushes = Table(
+    "api_policy_pushes", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("policy_id", Integer, nullable=False),
+    Column("policy_name", String, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("mode", String, nullable=False),
+    Column("connection_id", Integer, nullable=True),
+    Column("status", String, nullable=False),
+    Column("http_status", Integer, nullable=True),
+    Column("message", Text, nullable=True),
+    Column("payload_sha256", String, nullable=False),
+    Column("requested_by", String, nullable=True),
+    Column("approved_by", String, nullable=True),
+    Column("sent_at", String, nullable=False),
+    Column("reported_at", String, nullable=True),
+    Column("reported_by", String, nullable=True),
+)
+
+api_rollout_state = Table(
+    "api_rollout_state", metadata,
+    Column("item_id", String, primary_key=True),
+    Column("done", Boolean, nullable=False, default=False),
+    Column("note", Text, nullable=True),
+    Column("set_by", String, nullable=True),
+    Column("set_at", String, nullable=False),
+)
+
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -878,6 +1030,7 @@ def ensure_schema(engine):
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
             hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
+            api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

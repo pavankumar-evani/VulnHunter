@@ -61,6 +61,8 @@ from remediation.connectors.webhook_connector import ACTIONS as webhook_actions 
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
 from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa: E402
+from remediation.apisec import cicd as api_cicd, classify as api_classify, config as api_config, generate as api_generate, identity as api_identity, logs as api_logs  # noqa: E402
+from remediation.apisec import metrics as api_metrics, openapi as api_openapi, policies as api_policies, rollout as api_rollout, rules as api_rules, store as api_store, waf as api_waf  # noqa: E402
 from remediation import capabilities as capabilities_mod  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
@@ -5403,6 +5405,525 @@ def api_ai_security_publish(body: AiPublishBody, background: BackgroundTasks, us
     if result["added"] or result["updated"]:
         _enrich_in_background(background)
     return {"published": len(findings), "rejected": len(errors), **result}
+
+
+# ---------------------------------------------------------------- API security
+# Inventory, OWASP API Top 10 findings, caller activity, classification, protection policies, metrics and rollout. Admin only, except the routes a machine calls with an
+# API key (scope api:write). Quanta reads exports and pushed records; it never sniffs traffic and never changes a WAF: a policy is a signed request to a URL the customer owns.
+_api_http_get = None  # tests inject a fake; None means requests.get
+
+
+class ApiSpecBody(BaseModel):
+    content: str
+    service: str | None = None
+
+
+class ApiSpecFetchBody(BaseModel):
+    url: str
+    service: str | None = None
+    confirm: bool = False
+
+
+class ApiTrafficBody(BaseModel):
+    records: list[dict]
+    service: str | None = None
+    source: str = "api-traffic"
+
+
+class ApiEndpointBody(BaseModel):
+    owner: str | None = None
+    exposure: str | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class ApiPolicyBody(BaseModel):
+    name: str
+    kind: str
+    mode: str = "monitor"
+    enabled: bool = True
+    scope: dict = {}
+    params: dict = {}
+    description: str | None = None
+
+
+class ApiPushBody(BaseModel):
+    confirm: bool = False
+    connection_id: int | None = None
+
+
+class ApiPolicyStatusBody(BaseModel):
+    push_id: int
+    status: str
+    detail: str = ""
+
+
+class ApiRolloutBody(BaseModel):
+    done: bool
+    note: str = ""
+
+
+class ApiClassificationBody(BaseModel):
+    content: str
+    format: str | None = None
+    replace: bool = True
+
+
+def _api_state(today=None):
+    eps, specs, classes = api_store.list_endpoints(), api_store.list_specs(), api_store.list_classes()
+    pols = api_policies.list_all()
+    actors = api_store.actor_rows()
+    views, findings, gaps = api_rules.run(eps, specs, classes, actors, api_store.dependencies(), pols, today)
+    return {"endpoints": eps, "specs": specs, "classes": classes, "policies": pols, "actors": actors, "views": views, "findings": findings, "gaps": gaps}
+
+
+def _api_summary(st):
+    v = st["views"]
+    cnt = lambda key: {k: sum(1 for x in v if x[key] == k) for k in sorted({x[key] for x in v})}  # noqa: E731
+    return {"endpoints": len(v), "services": len({x["service"] for x in v}), "by_state": cnt("state"), "by_exposure": cnt("exposure"), "by_auth": cnt("auth_state"),
+            "sensitive_endpoints": sum(1 for x in v if x["sensitive"]), "without_owner": sum(1 for x in v if not x["owner"]),
+            "findings": len(st["findings"]), "by_severity": {s: sum(1 for f in st["findings"] if f["severity"] == s) for s in api_rules.SEV_WEIGHT},
+            "by_rule": {r: sum(1 for f in st["findings"] if f["rule"] == r) for r in api_rules.OWASP if any(f["rule"] == r for f in st["findings"])},
+            "gaps": len(st["gaps"]), "classes": len(st["classes"]), "policies": len(st["policies"])}
+
+
+def _api_notify_targets():
+    def conn(kind):
+        try:
+            c, _ = hunt_service.connector(kind)
+            return c
+        except Exception:  # noqa: BLE001
+            return None
+    to = [a.strip() for a in os.environ.get("QUANTA_ALERT_EMAIL", "").split(",") if a.strip()]
+    mail = (lambda addrs, subject, body: email_sender.send_email(addrs, subject, body)) if email_sender.is_configured() and to else None
+    return conn("notify-webhook"), mail, to
+
+
+@app.get("/api/api-security/overview")
+def api_apisec_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    facts, manual = api_rollout.gather(db_module.get_engine(), unclassified=sum(1 for g in st["gaps"] if g["kind"] == "unclassified-data"),
+                                       owners_missing=sum(1 for v in st["views"] if v["exposure"] == "external" and not v["owner"]), smtp_configured=email_sender.is_configured())
+    rb = api_rollout.build(facts, manual)
+    return {"summary": _api_summary(st), "specs": st["specs"], "services": sorted({v["service"] for v in st["views"]}), "gaps": st["gaps"], "dependencies": api_store.dependencies()[:50],
+            "rollout": {"done": rb["done"], "total": rb["total"]}, "limits": ["Quanta reads exports and pushed records. It cannot see traffic nobody gives it.",
+                                                                                   "Everything here is built against public documentation and tests with sample data; it has not been run against a live gateway, WAF or traffic source."]}
+
+
+@app.get("/api/api-security/endpoints")
+def api_apisec_endpoints(service: str = "", state: str = "", exposure: str = "", auth: str = "", q: str = "", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    out = [v for v in st["views"] if (not service or v["service"] == service) and (not state or v["state"] == state) and (not exposure or v["exposure"] == exposure)
+           and (not auth or v["auth_state"] == auth) and (not q or q.lower() in (v["template"] + " " + v["service"]).lower())]
+    return {"endpoints": out[:3000], "total": len(out), "services": sorted({v["service"] for v in st["views"]}), "states": ["documented", "shadow", "undocumented", "spec-only"],
+            "exposures": list(api_store.EXPOSURES), "statuses": list(api_store.STATUSES)}
+
+
+@app.get("/api/api-security/endpoints/{endpoint_id}")
+def api_apisec_endpoint(endpoint_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    v = next((x for x in st["views"] if x["id"] == endpoint_id), None)
+    if not v:
+        raise HTTPException(status_code=404, detail="No such endpoint")
+    ep = next(e for e in st["endpoints"] if e["id"] == endpoint_id)
+    rows = api_store.metrics_rows(endpoint_id=endpoint_id)
+    actors = {}
+    for a in st["actors"]:
+        if a["endpoint_id"] == endpoint_id:
+            x = actors.setdefault(a["actor"], {"actor": a["actor"], "calls": 0, "bytes_out": 0, "max_distinct_objects": 0})
+            x["calls"] += a["calls"]
+            x["bytes_out"] += a["bytes_out"]
+            x["max_distinct_objects"] = max(x["max_distinct_objects"], a["distinct_objects"])
+    return {"endpoint": v, "spec": ep.get("spec"), "observed": {k: ep["obs"][k] for k in ("query_params", "request_fields", "response_fields", "detected", "auth_counts", "status_counts", "jwt", "rules")},
+            "findings": [f for f in st["findings"] if f["endpoint_id"] == endpoint_id], "series": api_metrics.series(rows), "trend": api_metrics.trend(rows),
+            "callers": sorted(actors.values(), key=lambda x: -x["calls"])[:25], "policies": [{"id": p["id"], "name": p["name"], "kind": p["kind"], "mode": p["mode"]} for p in st["policies"]
+                                                                                              if p["enabled"] and api_policies.covers(p, v["service"], v["method"], v["path_key"])]}
+
+
+@app.patch("/api/api-security/endpoints/{endpoint_id}")
+def api_apisec_endpoint_update(endpoint_id: int, body: ApiEndpointBody, user: dict = Depends(rbac.require_admin)):
+    fields = set(body.model_fields_set)
+    try:
+        ep = api_store.update_endpoint(endpoint_id, owner=body.owner, exposure=body.exposure, status=body.status, notes=body.notes, fields=fields)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such endpoint") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "api-security.endpoint.update", f"{ep['method']} {ep['template']}", {"fields": sorted(fields), "service": ep["service"]})
+    return {"id": ep["id"], "owner": ep["owner"], "exposure_override": ep["exposure_override"], "status": ep["status"], "notes": ep["notes"]}
+
+
+# ---- specifications and traffic
+def _api_spec_import(text, service, source, actor, source_ref=None):
+    try:
+        out = api_store.import_spec(text, service, source, actor, source_ref=source_ref)
+    except api_openapi.SpecError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    out["drift"] = api_store.drift(out["service"])
+    activity_log.record_activity(actor, "api-security.spec", out["service"], {"operations": out["operations"], "source": source})
+    return out
+
+
+@app.get("/api/api-security/specs")
+def api_apisec_specs(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"specs": api_store.list_specs()}
+
+
+@app.post("/api/api-security/specs")
+def api_apisec_spec_upload(body: ApiSpecBody, user: dict = Depends(rbac.require_admin)):
+    return _api_spec_import(body.content, body.service, "upload", user["email"])
+
+
+@app.post("/api/api-security/specs/fetch")
+def api_apisec_spec_fetch(body: ApiSpecFetchBody, user: dict = Depends(rbac.require_admin)):
+    """Fetches a specification from a URL. An outbound request, so it needs confirm: true; the destination is checked with the SSRF guard and redirects are not followed."""
+    url = body.url.strip()
+    if not re.match(r"^https?://", url, re.I):
+        raise HTTPException(status_code=400, detail="The URL must start with http:// or https://")
+    try:
+        url_safety.assert_safe_target(url)
+    except UnsafeTargetError as exc:
+        raise HTTPException(status_code=400, detail=f"url: {exc}") from exc
+    if not body.confirm:
+        return {"preview_only": True, "url": url, "message": "This makes an outbound request from the Quanta server to that URL. Send confirm: true to fetch it."}
+    import requests as _rq
+    get = _api_http_get or _rq.get
+    try:
+        resp = get(url, timeout=20, allow_redirects=False, headers={"Accept": "application/json, application/yaml, text/yaml, */*"}, stream=True)
+        if resp.status_code in (301, 302, 303, 307, 308):
+            raise HTTPException(status_code=400, detail="The URL redirects. Redirects are not followed; use the final address.")
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"The server answered {resp.status_code}")
+        data = b""
+        for chunk in resp.iter_content(65536):
+            data += chunk
+            if len(data) > api_openapi.MAX_BYTES:
+                break
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Could not fetch the specification: {str(exc)[:150]}") from exc
+    if len(data) > api_openapi.MAX_BYTES:
+        raise HTTPException(status_code=400, detail="A specification may be at most 5 MB")
+    return _api_spec_import(data.decode("utf-8", "replace"), body.service, "url", user["email"], source_ref=re.sub(r"\?.*$", "", url)[:300])
+
+
+@app.delete("/api/api-security/specs/{service}")
+def api_apisec_spec_delete(service: str, user: dict = Depends(rbac.require_admin)):
+    if not api_store.delete_spec(service):
+        raise HTTPException(status_code=404, detail="No such specification")
+    activity_log.record_activity(user["email"], "api-security.spec.delete", service, {})
+    return {"ok": True}
+
+
+@app.get("/api/api-security/generated-spec")
+def api_apisec_generated_spec(service: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    doc = api_generate.build(service, api_store.list_endpoints(), api_store.list_classes(), api_store.list_specs())
+    if not doc:
+        raise HTTPException(status_code=404, detail="No observed traffic for that service")
+    return doc
+
+
+@app.get("/api/api-security/drift")
+def api_apisec_drift(service: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return api_store.drift(service)
+
+
+def _api_traffic(records, service, source, actor, stats=None):
+    if len(records) > api_config.threshold("max_records_per_import"):
+        raise HTTPException(status_code=413, detail=f"At most {api_config.threshold('max_records_per_import'):,} records per import")
+    out = api_store.ingest_records(records, default_service=service, source=source)
+    activity_log.record_activity(actor, "api-security.traffic", source, {"records": out["records"], "endpoints": out["endpoints"], "new": out["new_endpoints"]})
+    return {**out, **({"read": stats} if stats else {}), "drift": {s: api_store.drift(s) for s in out["services"][:20]}}
+
+
+@app.post("/api/api-security/import-logs")
+async def api_apisec_import_logs(request: Request, service: str = "", format: str = "", source: str = "log-import", user: dict = Depends(rbac.require_admin)):
+    """An access-log export as the raw request body: JSON lines, a JSON array, common/combined log format or CSV."""
+    data = await _read_upload(request)
+    try:
+        api_findings.check_source(source)
+        records, stats = api_logs.parse(data, format or None, default_host=None, max_records=api_config.threshold("max_records_per_import"))
+    except (ValueError, api_logs.LogError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _api_traffic(records, service or None, source, user["email"], stats)
+
+
+@app.post("/api/ingest/api-traffic")
+def api_ingest_api_traffic(body: ApiTrafficBody, key: dict = Depends(require_api_key("api:write"))):
+    """Request records pushed by a log shipper, gateway plugin or WAF export: {"service": "...", "records": [{method, path, status, latency_ms, bytes_out, actor, client_ip, auth, ...}]}."""
+    try:
+        api_findings.check_source(body.source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    good, bad = [], 0
+    for raw in body.records:
+        try:
+            good.append(api_logs.normalise(raw))
+        except api_logs.LogError:
+            bad += 1
+    if not good:
+        raise HTTPException(status_code=400, detail="No request records could be read (each needs a method and a path)")
+    return _api_traffic(good, body.service, body.source, f"apikey:{key['name']}", {"read": len(body.records), "skipped": bad})
+
+
+@app.post("/api/ingest/openapi")
+async def api_ingest_openapi(request: Request, service: str = "", key: dict = Depends(require_api_key("api:write"))):
+    """An OpenAPI or Swagger document as the raw request body, typically from a pipeline. The response includes the drift against observed traffic."""
+    data = await _read_upload(request)
+    return _api_spec_import(data.decode("utf-8", "replace"), service or None, "ci", f"apikey:{key['name']}")
+
+
+@app.post("/api/ingest/api-test-results")
+def api_ingest_api_test_results(body: dict, background: BackgroundTasks, reconcile: bool = False, fail_on: str = "", report_only: bool = False,
+                                key: dict = Depends(require_api_key("api:write"))):
+    """Results from an API security test run in CI. Failures become findings; the response carries the pass/fail gate for the pipeline."""
+    actor = f"apikey:{key['name']}"
+    try:
+        up = api_cicd.parse(body)
+        gate = api_cicd.gate(up["results"], fail_on or None)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not up["results"]:
+        raise HTTPException(status_code=400, detail="No usable results" + (f": {up['errors'][0]['error']}" if up["errors"] else ""))
+    api_cicd.record_run(up, actor)
+    source = api_cicd.source_for(up["repository"])
+    findings, errors = api_findings.normalise_batch(api_cicd.to_queue_items(up))
+    result = findings_merge.merge(findings, source, reconcile=reconcile) if (findings or reconcile) else {"added": 0, "updated": 0, "removed": 0}
+    activity_log.record_activity(actor, "api-security.ci-results", up["repository"], {"results": len(up["results"]), "failed": gate["failed"], "gate_passed": gate["passed"], **result})
+    if result["added"] or result["updated"]:
+        _enrich_in_background(background)
+    if report_only:
+        gate = {**gate, "reported_only": True, "message": gate["message"] + " (report-only: the pipeline is told to pass)"}
+        gate["passed"] = True
+    return {"source": source, "gate": gate, "findings": {"published": len(findings), "rejected": len(errors), **result}, "invalid_results": up["errors"][:20]}
+
+
+# ---- findings
+@app.get("/api/api-security/findings")
+def api_apisec_findings(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    return {"findings": st["findings"], "gaps": st["gaps"], "summary": _api_summary(st), "owasp": api_rules.OWASP,
+            "note": "Findings are indicators raised by explicit rules from the records Quanta holds. A rule that lacks the data it needs raises nothing; the gaps list says what is missing."}
+
+
+@app.post("/api/api-security/publish")
+def api_apisec_publish(body: AiPublishBody, background: BackgroundTasks, user: dict = Depends(rbac.require_admin)):
+    """Sends the current API findings to the main queue (source api-security, scan type dast). It is the complete set, so findings the data no longer shows are removed."""
+    st = _api_state()
+    items = api_rules.to_queue_items(st["findings"], st["specs"])
+    if not body.confirm:
+        return {"preview_only": True, "findings": len(items), "message": "This replaces the api-security findings in the main queue with the current set. Send confirm: true to publish."}
+    findings, errors = api_findings.normalise_batch(items)
+    result = findings_merge.merge(findings, "api-security", reconcile=True)
+    activity_log.record_activity(user["email"], "api-security.publish", "api-security", {"findings": len(findings), "rejected": len(errors), **result})
+    if result["added"] or result["updated"]:
+        _enrich_in_background(background)
+    return {"published": len(findings), "rejected": len(errors), **result}
+
+
+# ---- callers
+@app.get("/api/api-security/callers")
+def api_apisec_callers(days: int = 30, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    since = (datetime.date.today() - datetime.timedelta(days=max(1, min(days, 365)) - 1)).isoformat()
+    byid = {v["id"]: v for v in st["views"]}
+    return {"callers": api_identity.listing(st["actors"], byid, since=since), "days": days, "thresholds": {k: api_config.threshold(k) for k in ("scraping_calls_per_actor_day", "exfil_bytes_per_actor_day", "bola_distinct_objects_per_actor_day")},
+            "actor_handling": api_config.threshold("actor_handling")}
+
+
+@app.get("/api/api-security/callers/detail")
+def api_apisec_caller(actor: str, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    out = api_identity.investigate(actor, st["actors"], {v["id"]: v for v in st["views"]})
+    if not out:
+        raise HTTPException(status_code=404, detail="No activity recorded for that caller")
+    return out
+
+
+# ---- your data classification framework
+@app.get("/api/api-security/classification")
+def api_apisec_classification(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    seen = {}
+    for v in st["views"]:
+        for d in v["data"]["unclassified"]:
+            seen[d] = seen.get(d, 0) + 1
+    return {"classes": st["classes"], "detectors": [{"id": d["id"], "label": d["label"]} for d in api_classify.detectors()], "unclassified": seen,
+            "endpoints_by_class": {c["name"]: sum(1 for v in st["views"] if any(x["name"] == c["name"] for x in v["data"]["classes"])) for c in st["classes"]},
+            "format": "JSON {\"classes\": [{\"name\", \"priority\" (1 = most sensitive), \"description\", \"detectors\": [...], \"field_patterns\": [...]}]} or CSV with those columns (lists separated by ;).",
+            "note": "Quanta ships no framework. Until you import yours, data seen in APIs is reported as unclassified: never assumed sensitive and never assumed harmless."}
+
+
+@app.post("/api/api-security/classification")
+def api_apisec_classification_import(body: ApiClassificationBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        classes = api_store.import_classes(body.content, user["email"], fmt=body.format, replace=body.replace)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "api-security.classification.import", None, {"classes": len(classes), "replace": body.replace})
+    return {"classes": classes}
+
+
+@app.delete("/api/api-security/classification")
+def api_apisec_classification_clear(user: dict = Depends(rbac.require_admin)):
+    n = api_store.clear_classes()
+    activity_log.record_activity(user["email"], "api-security.classification.clear", None, {"removed": n})
+    return {"removed": n}
+
+
+# ---- metrics
+@app.get("/api/api-security/metrics")
+def api_apisec_metrics(days: int = 30, service: str = "", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    days = max(1, min(days, 365))
+    eps = [e for e in api_store.list_endpoints() if not service or e["service"] == service]
+    ids = {e["id"] for e in eps}
+    rows = [r for r in api_store.metrics_rows() if r["endpoint_id"] in ids]
+    return api_metrics.overview(eps, rows, [a for a in api_store.actor_rows() if a["endpoint_id"] in ids], days=days)
+
+
+# ---- runtime protection policies
+def _api_policy_meta():
+    return {"kinds": [{"id": k, "label": api_policies.KIND_LABELS[k]} for k in api_policies.KINDS], "modes": list(api_policies.MODES), "targets": api_waf.TARGETS,
+            "limits": api_config.load()["policy"], "classes": [c["name"] for c in api_store.list_classes()]}
+
+
+def _api_policy_or_404(pid):
+    p = api_policies.get(pid)
+    if not p:
+        raise HTTPException(status_code=404, detail="No such policy")
+    return p
+
+
+@app.get("/api/api-security/policies")
+def api_apisec_policies(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"policies": api_policies.list_all(), "meta": _api_policy_meta(), "log": {"events": api_policies.events(limit=100), "pushes": api_policies.pushes(limit=100)},
+            "note": "Quanta does not change any firewall, gateway or WAF. A policy is a record that can be sent as a signed request to an endpoint you own, or turned into a rule for you to review and apply yourself."}
+
+
+@app.post("/api/api-security/policies")
+def api_apisec_policy_create(body: ApiPolicyBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        p = api_policies.save(body.model_dump(), user["email"], classes=api_store.list_classes())
+    except api_policies.PolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "api-security.policy.create", p["name"], {"kind": p["kind"], "mode": p["mode"]})
+    return p
+
+
+@app.put("/api/api-security/policies/{policy_id}")
+def api_apisec_policy_update(policy_id: int, body: ApiPolicyBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        p = api_policies.save(body.model_dump(), user["email"], policy_id=policy_id, classes=api_store.list_classes())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such policy") from exc
+    except api_policies.PolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "api-security.policy.update", p["name"], {"version": p["version"], "mode": p["mode"]})
+    return p
+
+
+@app.delete("/api/api-security/policies/{policy_id}")
+def api_apisec_policy_delete(policy_id: int, user: dict = Depends(rbac.require_admin)):
+    if not api_policies.remove(policy_id, user["email"]):
+        raise HTTPException(status_code=404, detail="No such policy")
+    activity_log.record_activity(user["email"], "api-security.policy.delete", str(policy_id), {})
+    return {"ok": True}
+
+
+@app.post("/api/api-security/policies/{policy_id}/approve")
+def api_apisec_policy_approve(policy_id: int, user: dict = Depends(rbac.require_admin)):
+    try:
+        p = api_policies.approve(policy_id, user["email"])
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such policy") from exc
+    except api_policies.PolicyError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "api-security.policy.approve", p["name"], {"version": p["version"]})
+    return p
+
+
+@app.get("/api/api-security/policies/{policy_id}/artifact")
+def api_apisec_policy_artifact(policy_id: int, target: str = "aws-waf", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    p = _api_policy_or_404(policy_id)
+    try:
+        return api_waf.generate(p, target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/api-security/policies/{policy_id}/history")
+def api_apisec_policy_history(policy_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    _api_policy_or_404(policy_id)
+    return {"events": api_policies.events(policy_id), "pushes": api_policies.pushes(policy_id)}
+
+
+@app.post("/api/api-security/policies/{policy_id}/push")
+def api_apisec_policy_push(policy_id: int, body: ApiPushBody, user: dict = Depends(rbac.require_admin)):
+    """Sends the policy, signed, to the customer's endpoint (connection type api-policy-endpoint). Confirm-gated. Quanta applies nothing itself."""
+    p = _api_policy_or_404(policy_id)
+    ok, why = api_policies.can_push(p)
+    if not ok:
+        raise HTTPException(status_code=409, detail=why)
+    try:
+        connector, public = hunt_service.connector("api-policy-endpoint", body.connection_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"The policy endpoint connection could not be used: {str(exc)[:150]}") from exc
+    if connector is None:
+        raise HTTPException(status_code=400, detail="No API protection policy endpoint is connected. Add one on the Connections page (type: API protection policy endpoint).")
+    payload = api_policies.payload(p, user["email"], p["approved_by"], "quanta-push-preview")
+    if not body.confirm:
+        return {"preview_only": True, "connection": public["name"] if public else None, "payload": payload, "payload_sha256": api_policies.digest(payload),
+                "message": "This sends the policy, signed, to the endpoint above. Your automation decides whether to apply it. Send confirm: true to send."}
+    push = api_policies.send(policy_id, user["email"], connector, connection_id=public["id"] if public else None)
+    hook, mail, to = _api_notify_targets()
+    alerts = api_policies.notify(push, hook, mail, to)
+    activity_log.record_activity(user["email"], "api-security.policy.push", p["name"], {"version": p["version"], "mode": p["mode"], "status": push["status"], "http_status": push["http_status"]})
+    return {"push": push, "alerts": alerts}
+
+
+@app.get("/api/api-security/policy-log")
+def api_apisec_policy_log(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"events": api_policies.events(limit=300), "pushes": api_policies.pushes(limit=300)}
+
+
+@app.post("/api/inbound/api-policy-status")
+def api_inbound_policy_status(body: ApiPolicyStatusBody, key: dict = Depends(require_api_key("api:write"))):
+    """The customer's automation reports what the edge service said about a policy it was sent: applied or rejected. Raises the per-policy change alert."""
+    try:
+        push = api_policies.report_status(body.push_id, body.status, body.detail, f"apikey:{key['name']}")
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such push") from exc
+    except api_policies.PolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    hook, mail, to = _api_notify_targets()
+    alerts = api_policies.notify(push, hook, mail, to)
+    activity_log.record_activity(f"apikey:{key['name']}", "api-security.policy.edge-result", push["policy_name"], {"push_id": push["id"], "status": push["status"]})
+    return {"push": push, "alerts": alerts}
+
+
+# ---- rollout and CI
+@app.get("/api/api-security/rollout")
+def api_apisec_rollout(track: str = "", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    st = _api_state()
+    facts, manual = api_rollout.gather(db_module.get_engine(), unclassified=sum(1 for g in st["gaps"] if g["kind"] == "unclassified-data"),
+                                       owners_missing=sum(1 for v in st["views"] if v["exposure"] == "external" and not v["owner"]), smtp_configured=email_sender.is_configured())
+    return api_rollout.build(facts, manual, track or None)
+
+
+@app.post("/api/api-security/rollout/{item_id}")
+def api_apisec_rollout_set(item_id: str, body: ApiRolloutBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        api_rollout.set_item(item_id, body.done, body.note, user["email"], db_module.get_engine())
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc.args[0])) from exc
+    activity_log.record_activity(user["email"], "api-security.rollout", item_id, {"done": body.done})
+    return {"ok": True}
+
+
+@app.get("/api/api-security/ci-templates")
+def api_apisec_ci_templates(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"templates": api_cicd.TEMPLATES, "gate": api_config.load()["ci"], "note": "Starting points. Pin every action and image to a version you have reviewed, and keep the API key in your CI secret store."}
 
 
 # ---------------------------------------------------------------- identity and access governance

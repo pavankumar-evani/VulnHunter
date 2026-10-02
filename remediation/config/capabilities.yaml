@@ -66,6 +66,44 @@
       summary: Static analysis, dependency, secret and infrastructure-as-code findings tracked with a fix brief until a later scan stops reporting them.
       needs:
       - Code scan results
+  - number: '1.3'
+    title: API security
+    items:
+    - id: api-inventory
+      title: API inventory and discovery
+      path: /api-security
+      summary: Every endpoint from uploaded specifications and imported gateway or access logs, with exposure, authentication, the data it returns under your classification framework, owners, and shadow or deprecated endpoints.
+      needs:
+      - OpenAPI files and/or access-log exports
+      admin: true
+    - id: api-findings
+      title: OWASP API Top 10 findings
+      path: /api-security?tab=findings
+      summary: Findings mapped to the OWASP API Security Top 10 (2023) with an evidence chain and a request that confirms a true or false positive, published to the main queue.
+      needs:
+      - Traffic records and specifications
+      admin: true
+    - id: api-identity
+      title: Caller activity
+      path: /api-security?tab=callers
+      summary: What each caller reached, how much, and which of your data classes it carried, for investigating scraping and exfiltration.
+      needs:
+      - Traffic records that carry a caller identity
+      admin: true
+    - id: api-policies
+      title: Runtime protection policies
+      path: /api-security?tab=policies
+      summary: Monitor-or-block policies (rate limits, bad sources, data-loss limits, geography, signatures) sent as signed requests to an endpoint you own, with review artifacts for common web application firewalls and an audit trail. Quanta changes no firewall.
+      needs:
+      - An endpoint you own that applies policies
+      admin: true
+    - id: api-ci
+      title: API tests in CI and rollout
+      path: /api-security?tab=ci
+      summary: A results format, a pass/fail gate and GitHub Actions and GitLab CI examples, plus the onboarding checklist, phased rollout and who does what.
+      needs:
+      - An API key with the api:write scope
+      admin: true
 - id: risk
   number: '2'
   title: Cyber risk management

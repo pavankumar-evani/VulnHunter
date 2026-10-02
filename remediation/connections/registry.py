@@ -29,7 +29,7 @@ from remediation.connectors.reputation_connector import ReputationConnector
 from remediation.connectors.servicenow_connector import ServiceNowConnector
 from remediation.connectors.siem_search_connector import SplunkSearchConnector
 from remediation.connectors.splunk_connector import SplunkConnector
-from remediation.connectors.webhook_connector import NotifyWebhook, ResponseWebhook
+from remediation.connectors.webhook_connector import NotifyWebhook, PolicyWebhook, ResponseWebhook
 from remediation.connectors.tenable_connector import TenableConnector
 from remediation.connections import push as push_mod
 from remediation.ingest import scanner_csv
@@ -273,6 +273,16 @@ SPECS.update({
                 "automation decides. Verify the signature and the timestamp before acting. Actions that change something need an approval step in the playbook.",
         "note": "Not synced on a schedule. Used by SOAR playbooks. Testing sends a harmless enrich-asset request.",
         "build": _response_webhook, "test": lambda c: _response_webhook(c).test_connection(),
+    },
+    "api-policy-endpoint": {
+        "label": "API protection policy endpoint (your WAF or gateway automation)", "category": "Response", "output": "policies", "kind": "tool",
+        "fields": [_f("url", "Endpoint URL", placeholder="https://waf-automation.acme.com/hooks/quanta-policy"), _f("signing_secret", "Signing secret", secret=True)],
+        "safe_targets": ["url"],
+        "docs": "A URL you own. Quanta never changes a WAF or gateway itself: it sends a protection policy as a signed request (HMAC-SHA256 over timestamp.body in X-Quanta-Signature) and your "
+                "automation decides whether and how to apply it. Verify the signature and the timestamp. A blocking policy is only sent after a second administrator approved that version. "
+                "Your automation can report the result back with POST /api/inbound/api-policy-status (an API key with the api:write scope).",
+        "note": "Not synced on a schedule. Used by the API Security page. Testing sends a harmless connection-test request that carries nothing to apply.",
+        "build": lambda c: PolicyWebhook(c["url"], c["signing_secret"]), "test": lambda c: PolicyWebhook(c["url"], c["signing_secret"]).test_connection(),
     },
     "notify-webhook": {
         "label": "Notification webhook (Slack, Teams)", "category": "Response", "output": "notifications", "kind": "tool",
