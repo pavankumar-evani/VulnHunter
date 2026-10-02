@@ -116,6 +116,8 @@ export const api = {
   createApiKey: (body) => request("POST", "/api/api-keys", body),
   revokeApiKey: (id) => request("DELETE", `/api/api-keys/${id}`),
   connectionSchema: () => request("GET", "/api/connections/schema"),
+  findingGuidance: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/guidance`),
+  guidanceLookup: (params) => request("GET", `/api/guidance?${new URLSearchParams(params)}`),
   findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
   importScannerFile: async (source, reconcile, file) => {
     const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });

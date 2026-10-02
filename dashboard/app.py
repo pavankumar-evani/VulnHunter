@@ -52,6 +52,7 @@ from remediation.connections import sync as conn_sync  # noqa: E402
 from remediation.coordination import jobs as job_queue  # noqa: E402
 from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
+from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.utils import file_sync, secret_files  # noqa: E402
 from remediation.support import analytics as support_analytics  # noqa: E402
 from remediation.support import escalation as support_escalation  # noqa: E402
@@ -3290,6 +3291,24 @@ def api_control_coverage(finding_id: str):
     if coverage is None:
         raise HTTPException(status_code=404, detail="Finding not found")
     return _fast_json(coverage)
+
+
+@app.get("/api/findings/{finding_id}/guidance")
+def api_finding_guidance(finding_id: str, user: dict | None = Depends(rbac.get_current_user)):
+    """Step-by-step how-to-fix for one finding: curated guidance for its class of problem, tailored with
+    what Quanta knows about this finding (package and fixed version, OS, KEV, SLA, the client's own
+    controls). See remediation/guidance/engine.py."""
+    return _fast_json(guidance_engine.build(_visible_finding(finding_id, user)))
+
+
+@app.get("/api/guidance")
+def api_guidance_lookup(cwe: str = "", title: str = "", description: str = "", scan_type: str = "", file: str = "",
+                        fix_hint: str = "", severity: str = "", auto_fixable: str = ""):
+    """The same guidance for a finding that is not in the queue, such as a row from the code scan report
+    (/quanta-scan), identified by its CWE, title and file."""
+    finding = {"cwe": cwe, "title": title[:300], "description": description[:2000], "file": file[:300], "recommended_fix": fix_hint[:2000],
+               "severity": severity, "auto_fixable": auto_fixable, "scan_type": scan_type or "sast", "asset": {}}
+    return _fast_json(guidance_engine.build(finding, client_controls=False))
 
 
 @app.get("/api/assets/{asset_name}/network-path")

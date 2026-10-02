@@ -2051,3 +2051,6 @@ select.searchable-select-native {
 .tab-row { display: flex; gap: 8px; }
 .tab-row .secondary-button.active { border-color: #6d97f7; color: #6d97f7; }
 .kpi-card.kpi-bad .kpi-value { color: #f06a6a; }
+
+.guidance-list { margin: 6px 0 14px 22px; }
+.guidance-list li { margin: 4px 0; line-height: 1.45; }

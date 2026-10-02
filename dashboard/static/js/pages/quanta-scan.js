@@ -1,5 +1,6 @@
 import { api } from "../api.js";
-import { escapeHtml } from "../dom.js";
+import { escapeHtml, openModal } from "../dom.js";
+import { guidanceHtml } from "../guidanceView.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
 import { paginate, paginationHtml, wirePagination, DEFAULT_PAGE_SIZE } from "../pagination.js";
 
@@ -70,6 +71,7 @@ function rowHtml(f) {
         ? `<span class="badge badge-auto_approvable">Yes</span>`
         : `<span class="badge badge-manual_only">No</span>`}</td>
       <td>${verificationBadgeHtml(f.verification)}</td>
+      <td><button type="button" class="link-button" data-guide="${escapeHtml(f.ID)}">How to fix</button></td>
     </tr>`;
 }
 
@@ -122,13 +124,27 @@ export async function render(container) {
 
     <div class="table-scroll">
       <table class="data-table">
-        <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Category</th><th>CWE</th><th>File</th><th>Auto-fixable?</th><th>Verified</th></tr></thead>
+        <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Category</th><th>CWE</th><th>File</th><th>Auto-fixable?</th><th>Verified</th><th>Guidance</th></tr></thead>
         <tbody id="scan-body"></tbody>
       </table>
     </div>
     <div id="scan-pagination"></div>`;
 
   const tbody = container.querySelector("#scan-body");
+  tbody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-guide]");
+    if (!btn) return;
+    const f = findings.find((x) => x.ID === btn.dataset.guide);
+    if (!f) return;
+    const body = openModal(`<h2>How to fix: ${escapeHtml(f.Title)}</h2><p class="muted">Loading...</p>`);
+    try {
+      const g = await api.guidanceLookup({ cwe: f.CWE || "", title: f.Title || "", file: f.File || "", severity: f.Severity || "",
+        scan_type: "sast", auto_fixable: f["Auto-fixable?"] || "" });
+      body.innerHTML = `<h2>How to fix: ${escapeHtml(f.Title)}</h2><p class="muted"><code>${escapeHtml(f.File || "")}</code> &middot; ${escapeHtml(f.CWE || "")}</p>${guidanceHtml(g)}`;
+    } catch (err) {
+      body.innerHTML = `<h2>How to fix: ${escapeHtml(f.Title)}</h2><p>Couldn't load guidance (${escapeHtml(err.message || String(err))}).</p>`;
+    }
+  });
   const countEl = container.querySelector("#scan-count");
   let currentFiltered = findings;
   let page = 1;
@@ -148,7 +164,7 @@ export async function render(container) {
     page = paged.page;
     tbody.innerHTML = paged.rows.length
       ? paged.rows.map(rowHtml).join("")
-      : `<tr><td colspan="8" class="empty-state">No findings match the current filters.</td></tr>`;
+      : `<tr><td colspan="9" class="empty-state">No findings match the current filters.</td></tr>`;
     countEl.textContent = `${filtered.length} of ${findings.length} finding(s)`;
     container.querySelector("#scan-pagination").innerHTML = paginationHtml(paged.page, paged.totalPages);
 

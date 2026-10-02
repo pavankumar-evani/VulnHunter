@@ -297,6 +297,18 @@ const FAQS = [
     "name, or this FAQ's own entries by keyword overlap. It is explicitly not an LLM " +
     "and not a chatbot - there is no persistent conversational chat interface " +
     "anywhere in this app."],
+  ["How do I get step-by-step instructions to fix a finding?",
+    "Open the finding and read \"How to fix this\": summary, why it matters, ordered steps, how to " +
+    "confirm the fix, what to do if you cannot fix it now, effort and references. It says what it " +
+    "matched on and is tailored from what Quanta knows (fixed version, KB number, KEV, EPSS, SLA). " +
+    "On Code Scan use the \"How to fix\" button. It changes nothing itself and states what Quanta " +
+    "can automate for that finding."],
+  ["What does Quanta recommend if I cannot fix a finding right now, and how complete is the guidance?",
+    "Each entry lists compensating controls. If the asset's firewall and EDR coverage is recorded in " +
+    "security_controls.yaml (ships empty) it shows your real coverage; otherwise it says the controls " +
+    "are general. The knowledge base is hand-curated for 29 common classes, not every CWE; unmatched " +
+    "findings get a generic approach, labelled generic. Compensating controls reduce risk, they do not " +
+    "close the finding."],
   ["How are support tickets prioritised, routed and measured?",
     "Priority is impact times urgency (P1 to P4). Routing rules send a ticket to a team queue; team " +
     "members work it and administrators see everything. Each priority has response and resolution " +

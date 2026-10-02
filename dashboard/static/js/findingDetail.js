@@ -2,6 +2,7 @@
 // are listed (queue.js today; appsec/infrastructure/aiVulnerabilities hub tables can
 // reuse it too). Reuses the same openModal/closeModal pattern as assets.js's edit-owner
 // modal (see dom.js) - this one just renders, it never submits anything.
+import { guidanceHtml } from "./guidanceView.js";
 import { escapeHtml, openModal, closeModal } from "./dom.js";
 import { api } from "./api.js";
 import { getCurrentUser } from "./auth.js";
@@ -104,6 +105,11 @@ export function openFindingDetail(f) {
       <h3>Recommended fix</h3>
       <p>${escapeHtml(f.recommended_fix)}</p>` : ""}
 
+    <h3>How to fix this</h3>
+    <div id="guidance-body">
+      <p class="filter-count">Loading the step-by-step guidance...</p>
+    </div>
+
     <h3>Ownership</h3>
     <div id="ownership-body">
       <p class="filter-count">Loading — who owns this and what state it is in…</p>
@@ -141,11 +147,26 @@ export function openFindingDetail(f) {
     a.addEventListener("click", () => closeModal());
   });
 
+  loadGuidance(f.id, modalBody);
   loadOwnership(f, modalBody);
   loadTicketLinks(f.id, modalBody);
   loadSimilarFindings(f.id, modalBody);
   loadControlCoverage(f.id, modalBody);
   loadNetworkPath(asset.name, modalBody);
+}
+
+// Step-by-step guidance (remediation/guidance): curated for this class of problem and tailored to the
+// finding. Fetched lazily like the other sections.
+async function loadGuidance(findingId, modalBody) {
+  const el = modalBody.querySelector("#guidance-body");
+  if (!el) return;
+  try {
+    const g = await api.findingGuidance(findingId);
+    if (!modalBody.querySelector("#guidance-body")) return;
+    el.innerHTML = guidanceHtml(g);
+  } catch (err) {
+    el.innerHTML = `<p class="filter-count">Couldn't load guidance (${escapeHtml(err.message || String(err))}).</p>`;
+  }
 }
 
 // Tickets in ServiceNow / Jira (or events sent to Splunk) that were opened for this finding by a

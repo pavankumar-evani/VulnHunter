@@ -1,0 +1,579 @@
+# Curated remediation guidance: what an analyst or developer should actually do about a finding.
+#
+# This is hand-written knowledge, not model output, so it is the same every time and can be reviewed and
+# extended by your own security team (add or edit entries; changes are read live). Each entry is matched to a
+# finding by CWE, then by scan type and keywords, then by asset type (see remediation/guidance/engine.py).
+# Entries describe the approach and the checks; the engine adds what it knows about the specific finding
+# (package and fixed version, operating system, KEV status, the client's own controls).
+#
+# Fields: id, title, match {cwe: [...], keywords: [...], scan_types: [...], asset_types: [...]}, summary, why,
+# steps (ordered), verify, compensating (when the fix cannot ship now), effort, references [{title, url}].
+# Keep steps concrete and tool-neutral; never invent a CVE-specific fix here.
+
+entries:
+  # ---------------------------------------------------------------- injection and input handling (SAST / DAST)
+  - id: sql-injection
+    title: SQL injection
+    match: {cwe: [CWE-89, CWE-564, CWE-943], keywords: ["sql injection", "sqli"]}
+    summary: User input reaches a SQL statement as text, so an attacker can change the query.
+    why: Lets an attacker read, change or delete data and, on some databases, run commands on the server.
+    steps:
+      - Find every place the query string is built by concatenation, formatting or an f-string with request data.
+      - Replace it with a parameterized query or prepared statement (placeholders `?` for sqlite3, `%s` for psycopg2 and MySQL drivers), passing values separately from the SQL text.
+      - Where a column, table or sort direction must vary, choose it from a fixed allow-list in code; never pass it through from the request.
+      - If an ORM is in use, use its query builder and avoid raw-SQL escape hatches; where raw SQL is unavoidable, bind parameters there too.
+      - Run the application's database account with only the privileges it needs (no DDL, no access to other schemas).
+    verify:
+      - Send a single quote and a boolean payload such as `' OR '1'='1` to the endpoint; it must behave like any other invalid value, with no database error text in the response.
+      - Re-run the scanner or a DAST scan against the endpoint and confirm the finding no longer reproduces.
+      - Add a regression test that submits an injection string and asserts the query returns no extra rows.
+    compensating:
+      - Put a web application firewall rule set for SQL injection in blocking mode in front of the endpoint (this reduces risk, it does not fix the flaw).
+      - Reduce the database account's privileges and remove access to sensitive tables.
+      - Turn on database query logging and alert on errors and unusual statements from the application account.
+    effort: Small to medium; usually hours per query.
+    references:
+      - {title: OWASP SQL Injection Prevention Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"}
+      - {title: OWASP Query Parameterization Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html"}
+
+  - id: command-injection
+    title: OS command injection
+    match: {cwe: [CWE-78, CWE-77, CWE-88], keywords: ["command injection", "shell=true", "os command"]}
+    summary: Request data is passed to a shell, so an attacker can run their own commands.
+    why: Gives an attacker code execution as the application's user, usually the first step to taking over the host.
+    steps:
+      - Look for `shell=True`, `os.system`, `exec`, `Runtime.exec`, backticks and string-built command lines that include input.
+      - Prefer a library or API call over a shell command (for example a DNS or ping library instead of running `ping`).
+      - If a command is unavoidable, call it without a shell, with arguments as a list (`subprocess.run(["ping", "-c", "1", host])`), never a joined string.
+      - Validate input against a strict allow-list (for a host, a hostname or IP pattern) before use, and reject anything else.
+      - Run the process with the least privilege it needs and without network access it does not need.
+    verify:
+      - Submit `; id`, `$(id)` and a backtick payload; the application must reject them or treat them as plain text.
+      - Re-scan and confirm the finding is gone; add a regression test with those payloads.
+    compensating:
+      - Run the service in a container or sandbox with a read-only filesystem and no outbound network.
+      - Restrict the service account so a spawned shell can do little (no sudo, no write access outside its working directory).
+    effort: Small; mostly a localized code change.
+    references:
+      - {title: OWASP OS Command Injection Defense Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"}
+
+  - id: code-injection
+    title: Code injection and unsafe evaluation
+    match: {cwe: [CWE-94, CWE-95, CWE-96, CWE-1336], keywords: ["eval(", "code injection", "template injection"]}
+    summary: Input is executed as code by `eval`, `exec` or a template engine.
+    why: Gives an attacker arbitrary code execution inside the application.
+    steps:
+      - Remove `eval`/`exec` on anything derived from input. If the goal is to parse a literal (a number, list or dict), use a safe parser such as `ast.literal_eval` or a JSON parser.
+      - If the goal is a calculator or rule language, use a purpose-built expression library with no access to builtins, or write a small parser.
+      - For server-side templates, never build the template from input; pass input only as data to a sandboxed template.
+      - If dynamic evaluation is a genuine requirement, treat it as a design problem and escalate for a design review instead of patching around it.
+    verify:
+      - Submit `__import__('os').system('id')` and a template expression such as `{{7*7}}`; the output must not be evaluated.
+      - Re-scan and add a regression test with those payloads.
+    compensating:
+      - Sandbox the process (container, seccomp, no network, non-root) so evaluated code can do little.
+    effort: Small if a safe parser fits; larger if the feature depends on dynamic evaluation.
+    references:
+      - {title: OWASP Input Validation Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"}
+
+  - id: xss
+    title: Cross-site scripting (XSS)
+    match: {cwe: [CWE-79, CWE-80, CWE-83], keywords: ["cross-site scripting", "xss"]}
+    summary: Untrusted data is written into a page without being encoded for its context.
+    why: Lets an attacker run script in a victim's browser to steal sessions, act as the user, or deface the page.
+    steps:
+      - Find where request or stored data is written into HTML, attributes, JavaScript or URLs.
+      - Use the framework's automatic output encoding (templates that escape by default) and avoid the raw/safe escape hatches (`innerHTML`, `|safe`, `dangerouslySetInnerHTML`, `v-html`).
+      - Encode for the exact context (HTML body, attribute, JavaScript string, URL) rather than one generic escape.
+      - If rich text is required, sanitize it with a maintained library using an allow-list of tags and attributes.
+      - Add a Content-Security-Policy that disallows inline script, as defence in depth.
+      - Mark session cookies `HttpOnly`, `Secure` and `SameSite`.
+    verify:
+      - Submit `"><script>alert(1)</script>` and an event-handler payload; it must appear as inert text.
+      - Re-run the DAST scan against the page and add a test that asserts the encoded output.
+    compensating:
+      - Deploy a Content-Security-Policy in report-only mode first, then enforce it.
+      - A WAF rule for common XSS payloads can reduce exposure while the fix ships.
+    effort: Small per sink; larger if encoding was never applied consistently.
+    references:
+      - {title: OWASP XSS Prevention Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"}
+      - {title: OWASP Content Security Policy Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html"}
+
+  - id: path-traversal
+    title: Path traversal
+    match: {cwe: [CWE-22, CWE-23, CWE-36, CWE-73], keywords: ["path traversal", "directory traversal", "../"]}
+    summary: A file path is built from input, so an attacker can reach files outside the intended folder.
+    why: Exposes configuration, keys and source code, and can allow overwriting files.
+    steps:
+      - Avoid using user input in file paths. Use an identifier that maps to a file on the server side.
+      - If a name must be used, resolve the full path and check it stays inside the allowed base directory (canonicalize, then compare the prefix).
+      - Reject names containing `..`, absolute paths, drive letters and encoded variants.
+      - Serve downloads through a handler with an allow-list, not by exposing the directory.
+    verify:
+      - Request `../../etc/passwd` and an encoded `%2e%2e%2f` variant; both must be refused.
+      - Add a regression test and re-scan.
+    compensating:
+      - Run the service as a user that cannot read sensitive files, and in a container with only the needed paths mounted.
+    effort: Small.
+    references:
+      - {title: OWASP Path Traversal, url: "https://owasp.org/www-community/attacks/Path_Traversal"}
+
+  - id: ssrf
+    title: Server-side request forgery (SSRF)
+    match: {cwe: [CWE-918], keywords: ["ssrf", "server-side request forgery"]}
+    summary: The server fetches a URL supplied by the user, so an attacker can make it call internal systems.
+    why: Reaches cloud metadata services, internal admin interfaces and other hosts that trust the server.
+    steps:
+      - Prefer not to fetch user-supplied URLs. If needed, accept only a known identifier and look up the URL server-side.
+      - Otherwise allow-list the permitted hosts and schemes (`https` only), resolve the name yourself, and block private, loopback, link-local and metadata addresses after resolution.
+      - Do not follow redirects blindly; re-validate every hop.
+      - Enforce the cloud provider's metadata protections (for AWS, require IMDSv2 and a hop limit of 1).
+      - Run outbound requests from a network segment that cannot reach internal services.
+    verify:
+      - Try `http://169.254.169.254/`, `http://localhost:` and a DNS name that resolves to a private address; all must be refused.
+    compensating:
+      - Egress filtering so the application host cannot reach internal ranges or metadata endpoints.
+    effort: Medium.
+    references:
+      - {title: OWASP SSRF Prevention Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"}
+
+  - id: xxe
+    title: XML external entity (XXE)
+    match: {cwe: [CWE-611, CWE-776, CWE-827], keywords: ["xxe", "xml external entity"]}
+    summary: The XML parser resolves external entities or DTDs from untrusted XML.
+    why: Reads local files, reaches internal services (SSRF) and can cause denial of service.
+    steps:
+      - Disable DTDs and external entity resolution in the XML parser (the exact feature flags differ by library; consult its documentation).
+      - Prefer a simpler format (JSON) where XML is not required.
+      - Keep the XML library current; many fixes ship as defaults.
+    verify:
+      - Submit a document with an external entity pointing at a local file; the parser must reject it.
+    compensating:
+      - Block the application's outbound access to internal ranges and restrict file permissions.
+    effort: Small.
+    references:
+      - {title: OWASP XXE Prevention Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"}
+
+  - id: insecure-deserialization
+    title: Insecure deserialization
+    match: {cwe: [CWE-502], keywords: ["deserializ", "pickle", "unsafe yaml", "yaml.load"]}
+    summary: Untrusted bytes are turned back into objects with a format that can execute code.
+    why: Commonly leads straight to remote code execution.
+    steps:
+      - Do not deserialize untrusted data with `pickle`, Java native serialization, `yaml.load` (use `safe_load`) or similar object formats.
+      - Use a data-only format (JSON) with schema validation.
+      - If native serialization cannot be removed, add an integrity check (a signature or HMAC verified before parsing) and a strict class allow-list.
+    verify:
+      - Confirm no code path passes request, queue or file data into an object deserializer; add a test.
+    compensating:
+      - Isolate the service (non-root, no outbound network) and monitor for unexpected child processes.
+    effort: Medium.
+    references:
+      - {title: OWASP Deserialization Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"}
+
+  - id: open-redirect
+    title: Open redirect
+    match: {cwe: [CWE-601], keywords: ["open redirect"]}
+    summary: The application redirects to a URL taken from the request.
+    why: Makes phishing links look like they come from your site.
+    steps:
+      - Redirect only to relative paths or to a fixed allow-list of destinations; map a short key to the target on the server.
+      - Reject values with a scheme or host you do not control, including `//host` and encoded forms.
+      - Reject line breaks in the destination so it cannot be used to inject response headers.
+    verify:
+      - Request the redirect with an external URL; it must be refused or sent to a safe default.
+    compensating: [Warn users on an interstitial page before leaving the site.]
+    effort: Small.
+    references:
+      - {title: OWASP Unvalidated Redirects and Forwards Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"}
+
+  - id: csrf
+    title: Cross-site request forgery (CSRF)
+    match: {cwe: [CWE-352], keywords: ["csrf", "cross-site request forgery"]}
+    summary: A state-changing request can be triggered by another site using the user's logged-in browser.
+    why: An attacker can make a signed-in user change settings, transfer data or perform admin actions.
+    steps:
+      - Use the framework's CSRF protection (synchronizer token or signed double-submit cookie) on every state-changing request.
+      - Set session cookies `SameSite=Lax` or `Strict`.
+      - Require re-authentication for sensitive actions, and do not change state on GET.
+    verify:
+      - Replay a state-changing request without the token, from another origin; it must be refused.
+    compensating: [Check the `Origin` and `Referer` headers server-side as an extra layer.]
+    effort: Small.
+    references:
+      - {title: OWASP CSRF Prevention Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"}
+
+  # ---------------------------------------------------------------- authentication, access, crypto
+  - id: broken-access-control
+    title: Broken access control and IDOR
+    match: {cwe: [CWE-284, CWE-285, CWE-639, CWE-862, CWE-863, CWE-306, CWE-425], keywords: ["idor", "missing authorization", "broken access control", "missing authentication"]}
+    summary: A user can reach data or functions they should not, by changing an id or calling an unprotected route.
+    why: Direct exposure of other users' data and privileged functions; one of the most common serious web flaws.
+    steps:
+      - Enforce authorization on the server for every request, deny by default, and check the caller's right to the specific object (owner, team, role), not just that they are logged in.
+      - Do not rely on hidden fields, client-side checks or obscure ids.
+      - Centralize the checks (middleware or a policy layer) so a new route cannot forget them.
+      - Log denied attempts and alert on enumeration patterns.
+    verify:
+      - As user A, request user B's object by id; it must be refused. Test each role against each sensitive route.
+      - Add automated authorization tests for each route and role.
+    compensating:
+      - Restrict the route at the gateway to the networks or groups that need it.
+    effort: Medium; depends on how consistent the existing checks are.
+    references:
+      - {title: OWASP Authorization Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"}
+      - {title: OWASP IDOR Prevention Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"}
+
+  - id: broken-authentication
+    title: Weak authentication and session handling
+    match: {cwe: [CWE-287, CWE-307, CWE-384, CWE-613, CWE-521, CWE-1391], keywords: ["brute force", "weak password", "session fixation", "default credentials", "authentication bypass"]}
+    summary: Login, passwords or sessions can be guessed, bypassed, fixed or kept too long.
+    why: Account takeover, including administrator accounts.
+    steps:
+      - Require multi-factor authentication for administrators and remote access; prefer your SSO provider.
+      - Throttle and lock out repeated failures, and add alerting on bursts.
+      - Issue a new session id at login, expire sessions on logout and after inactivity, and mark cookies `HttpOnly`, `Secure`, `SameSite`.
+      - Remove default and shared credentials; enforce a password policy based on length and breached-password checks.
+    verify:
+      - Attempt repeated logins and confirm throttling; confirm the session id changes after login and the old one stops working after logout.
+    compensating:
+      - Restrict the login surface to your network or VPN; add a WAF rate-limit rule.
+    effort: Small to medium.
+    references:
+      - {title: OWASP Authentication Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"}
+      - {title: OWASP Session Management Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"}
+
+  - id: password-storage
+    title: Passwords stored in plaintext or with weak hashing
+    match: {cwe: [CWE-256, CWE-257, CWE-259, CWE-261, CWE-328, CWE-759, CWE-760, CWE-916], keywords: ["plaintext password", "plain text password", "md5 password", "unsalted"]}
+    summary: Passwords are stored in a form that is readable or cheap to crack.
+    why: A database leak exposes every user's password, which people reuse elsewhere.
+    steps:
+      - "Store passwords only as a salted hash from a purpose-built algorithm: Argon2id, scrypt, bcrypt or PBKDF2 with a high iteration count, using a maintained library."
+      - "Migrate existing accounts: hash on next successful login, or force a reset, and rehash old weak hashes at login."
+      - Never log or email passwords.
+    verify:
+      - Inspect the stored values; none should be readable or a bare fast hash. Add a test that the stored value differs from the password.
+    compensating:
+      - Restrict database access and encrypt backups; notify users to reset if exposure is suspected.
+    effort: Small to medium, plus migration.
+    references:
+      - {title: OWASP Password Storage Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"}
+
+  - id: weak-crypto
+    title: Weak or misused cryptography
+    match: {cwe: [CWE-327, CWE-326, CWE-330, CWE-338, CWE-310, CWE-319, CWE-295, CWE-780], keywords: ["md5", "sha1", "des ", "ecb mode", "weak cipher", "insecure random", "certificate validation"]}
+    summary: A broken algorithm, short key, predictable random value or disabled certificate check is in use.
+    why: Protected data or tokens can be recovered or forged.
+    steps:
+      - Replace broken algorithms (MD5, SHA-1 for security, DES, RC4, ECB mode) with current ones (AES-GCM or ChaCha20-Poly1305; SHA-256 or better; RSA 2048+ or an elliptic curve).
+      - Use a cryptographically secure random source for tokens and keys (`secrets`, `SecureRandom`, `crypto.randomBytes`).
+      - Never disable certificate or hostname verification; fix the trust store instead.
+      - Use a high-level library rather than composing primitives yourself.
+      - Plan for crypto agility so algorithms can be rotated.
+    verify:
+      - Confirm the algorithm and key size in code and configuration; scan the endpoint with a TLS scanner and re-run the code scan.
+    compensating:
+      - Terminate TLS at a hardened proxy while the application is updated.
+    effort: Small to medium.
+    references:
+      - {title: OWASP Cryptographic Storage Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"}
+      - {title: OWASP Transport Layer Security Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html"}
+
+  - id: hardcoded-secret
+    title: Hard-coded or exposed secret
+    match: {cwe: [CWE-798, CWE-321, CWE-259, CWE-532], scan_types: [secrets], keywords: ["hardcoded", "hard-coded", "api key", "secret in", "credential in", "exposed token"]}
+    summary: A credential, key or token is in source, configuration, an image layer or a log.
+    why: Anyone with read access to the repository, image or log can use it, and it stays valid in history.
+    steps:
+      - "Treat the secret as compromised: rotate or revoke it first, before cleaning the code, and check the provider's audit logs for use by someone else."
+      - Remove it from the code and load it at runtime from the environment or, better, a secrets manager (a cloud key vault or HashiCorp Vault).
+      - Add the file to `.gitignore`, add a placeholder to `.env.example`, and enable a pre-commit and CI secret scanner.
+      - Remove it from history only if the repository is private to a small group; otherwise rotation is the control (history rewriting does not recall copies).
+      - For container images, never put secrets in `ENV`, `ARG` or a layer; mount them at runtime.
+    verify:
+      - Search the repository and image for the old value; confirm the old credential no longer works; confirm the scanner is clean.
+    compensating:
+      - Restrict the credential's scope and source IPs, shorten its lifetime, and alert on its use from unexpected locations.
+    effort: Small to remove, plus the time to rotate everywhere it was used.
+    references:
+      - {title: OWASP Secrets Management Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"}
+
+  # ---------------------------------------------------------------- configuration and exposure
+  - id: debug-enabled
+    title: Debug mode or verbose errors enabled
+    match: {cwe: [CWE-489, CWE-215, CWE-209, CWE-497], keywords: ["debug=true", "debug mode", "stack trace", "verbose error"]}
+    summary: Debug features or detailed errors are reachable in a deployed environment.
+    why: Exposes code, paths and sometimes an interactive console that allows code execution.
+    steps:
+      - Turn debug off for any non-development environment, driven by an environment setting that defaults to off.
+      - Return a generic error message to users and keep details in server logs.
+      - Remove or protect diagnostic endpoints and consoles.
+    verify:
+      - Trigger an error; the response must not include a stack trace or internal paths.
+    compensating: [Block access to debug paths at the gateway.]
+    effort: Small.
+    references:
+      - {title: OWASP Error Handling Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html"}
+
+  - id: security-headers
+    title: Missing security headers and cookie flags
+    match: {cwe: [CWE-693, CWE-1021, CWE-614, CWE-1004, CWE-16], keywords: ["missing header", "x-frame-options", "content-security-policy", "hsts", "cookie without", "clickjacking", "security header"]}
+    summary: The response lacks protective headers or cookies lack secure attributes.
+    why: Makes clickjacking, XSS and downgrade attacks easier.
+    steps:
+      - "Set `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Referrer-Policy` and a frame policy (`frame-ancestors` or `X-Frame-Options`) at the application or reverse proxy."
+      - Mark cookies `Secure`, `HttpOnly` and `SameSite`.
+      - Remove version-revealing headers.
+    verify:
+      - Check the headers with a header scanner or `curl -I`, and re-run the DAST scan.
+    compensating: [Add the headers at the load balancer or reverse proxy if the application cannot change quickly.]
+    effort: Small.
+    references:
+      - {title: OWASP HTTP Headers Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html"}
+
+  - id: tls-certificate
+    title: Certificate and TLS problems
+    match: {scan_types: [cert-mgmt], asset_types: [certificate], keywords: ["certificate", "tls 1.0", "tls 1.1", "ssl 3", "expired cert", "self-signed"]}
+    summary: A certificate is expiring, weak, self-signed or the endpoint accepts outdated protocols.
+    why: Expired or untrusted certificates cause outages and train users to ignore warnings; old protocols can be downgraded.
+    steps:
+      - Reissue the certificate from your approved CA with a 2048-bit RSA or P-256 key and a modern signature, covering the right names.
+      - Disable SSL 3, TLS 1.0 and 1.1; allow TLS 1.2 and 1.3 with current cipher suites.
+      - Automate renewal (ACME or your PKI's agent) and monitor expiry with alerts well before the date.
+      - Keep an inventory so every certificate has an owner.
+    verify:
+      - Scan the endpoint with a TLS scanner and confirm the chain, expiry and protocol versions.
+    compensating: [Terminate TLS on a hardened gateway while the origin is updated.]
+    effort: Small per certificate; larger to automate.
+    references:
+      - {title: OWASP Transport Layer Security Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html"}
+
+  # ---------------------------------------------------------------- dependencies, containers, IaC, CI/CD
+  - id: vulnerable-dependency
+    title: Vulnerable dependency (SCA)
+    match: {scan_types: [sca], keywords: ["vulnerable dependency", "outdated package", "dependabot", "transitive dependency"]}
+    summary: A third-party library in use has a known vulnerability.
+    why: You inherit the flaw; public exploits for popular libraries appear quickly.
+    steps:
+      - Identify whether the package is a direct or a transitive dependency and which of your components use it (the Dependencies page shows the blast radius).
+      - Upgrade to the fixed version, or the nearest supported one. For a transitive dependency, upgrade the parent, or pin or override the child version.
+      - Update the lockfile, run the full test suite and a build, and review the changelog for breaking changes.
+      - If no fix exists, check whether the vulnerable function is reachable from your code; if it is not, record that as an exception with an expiry, otherwise replace the library or apply a mitigation.
+      - Open the change as a pull request so review, tests and rollback follow your normal path.
+    verify:
+      - Rebuild the dependency tree and confirm the version; rescan and confirm the finding closes.
+    compensating:
+      - Disable or block the feature that uses the vulnerable code path; add a WAF rule where the flaw is remotely reachable.
+    effort: Small for a patch release; larger for a major upgrade.
+    references:
+      - {title: OWASP Vulnerable Dependency Management Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html"}
+
+  - id: container-image
+    title: Container image and Dockerfile hardening
+    match: {cwe: [CWE-250, CWE-269], keywords: ["dockerfile", "base image", "container image", "runs as root", "latest tag", "unpinned image", "privileged container"], scan_types: [runtime]}
+    summary: The image runs as root, uses an unpinned or bloated base, or the container runs with excess privileges.
+    why: A compromise of one container becomes a compromise of the host or the cluster; bloated images carry more vulnerabilities.
+    steps:
+      - Add a non-root `USER` after installing dependencies, and make application files owned by that user.
+      - Pin the base image by version and, for production, by digest; rebuild on a schedule to pick up patches.
+      - Use a minimal base (a slim or distroless image) and a multi-stage build so build tools do not ship.
+      - Do not put secrets in `ENV`, `ARG` or layers; add a `.dockerignore`; add a `HEALTHCHECK`.
+      - "At run time drop all capabilities and add back only what is needed, set `allowPrivilegeEscalation: false`, a read-only root filesystem where possible, and never run privileged."
+      - Scan the image in CI and fail the build on fixable critical and high findings.
+    verify:
+      - Run `docker run --rm image id` (it must not be root); scan the rebuilt image; check the pod's security context.
+    compensating:
+      - Enforce a pod security standard (restricted) or admission policy in the cluster; restrict the network for the workload.
+    effort: Small to medium.
+    references:
+      - {title: OWASP Docker Security Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html"}
+      - {title: CIS Docker Benchmark, url: "https://www.cisecurity.org/benchmark/docker"}
+
+  - id: iac-misconfiguration
+    title: Infrastructure-as-code misconfiguration
+    match: {scan_types: [iac], asset_types: [iac-resource], keywords: ["terraform", "cloudformation", "kubernetes manifest", "ckv_", "public bucket", "unencrypted", "open security group", "0.0.0.0/0"]}
+    summary: A template creates insecure infrastructure (public storage, open ports, no encryption, over-broad roles).
+    why: The weakness is deployed every time the template runs, and drift fixes in the console are overwritten.
+    steps:
+      - Fix the resource in the template, not in the running environment, so the change survives the next deployment.
+      - Apply the secure setting the rule names (for example enable encryption, block public access, restrict the source range, narrow the role to the actions needed).
+      - Run the plan and review the diff; apply through your normal pipeline with approval.
+      - Add the scanner and a policy-as-code check to the pipeline so the same issue cannot return.
+      - Check for the same pattern in other templates and modules.
+    verify:
+      - Re-run the IaC scanner and the plan; confirm the live resource's setting after the apply.
+    compensating:
+      - Add a guardrail at the account level (a service control policy or organization policy) that blocks the unsafe setting.
+    effort: Small per resource.
+    references:
+      - {title: OWASP Infrastructure as Code Security Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Infrastructure_as_Code_Security_Cheat_Sheet.html"}
+      - {title: OWASP Kubernetes Security Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Kubernetes_Security_Cheat_Sheet.html"}
+
+  - id: cicd-pipeline
+    title: CI/CD pipeline weakness
+    match: {keywords: ["github actions", "workflow", "pull_request_target", "jenkins", "gitlab ci", "pipeline", "runner", "build agent", "artifact signing", "unpinned action"]}
+    summary: The build and release pipeline can be abused to run attacker code, leak secrets or ship tampered artifacts.
+    why: A compromised pipeline can publish malicious builds with your signing identity and reach production secrets.
+    steps:
+      - Pin third-party actions, plugins and images to a full commit SHA or digest, not a tag.
+      - "Give the pipeline token the least permission (`permissions: contents: read` by default) and use short-lived OIDC credentials to the cloud instead of stored keys."
+      - "Do not run untrusted code with secrets: avoid `pull_request_target` on forks and never interpolate untrusted values (branch names, titles) into shell steps."
+      - "Protect the main branch: required reviews, status checks, no force-push, and separate who can change the pipeline from who can approve a release."
+      - Keep secrets in the platform's secret store, scoped to the environment, and scan logs for leakage.
+      - Use ephemeral, isolated runners; sign artifacts (for example with Sigstore) and verify provenance at deploy time (SLSA).
+    verify:
+      - Review the workflow file after the change; run a pipeline-security scanner; confirm a test pull request from a fork cannot reach secrets.
+    compensating:
+      - Rotate secrets the pipeline can see, restrict who can edit workflows, and monitor pipeline runs for unusual jobs.
+    effort: Small per workflow; larger to adopt signing and provenance.
+    references:
+      - {title: OWASP CI/CD Security Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/CI_CD_Security_Cheat_Sheet.html"}
+      - {title: OWASP Top 10 CI/CD Security Risks, url: "https://owasp.org/www-project-top-10-ci-cd-security-risks/"}
+      - {title: SLSA supply-chain framework, url: "https://slsa.dev/"}
+
+  - id: test-coverage-gap
+    title: Test or code coverage gap on security-relevant code
+    match: {keywords: ["code coverage", "test coverage", "untested", "coverage below"]}
+    summary: Code that handles authentication, input or money has little or no automated testing.
+    why: Coverage is not a vulnerability, but untested security code regresses silently.
+    steps:
+      - Rank the uncovered code by risk (authentication, authorization, parsing, crypto, payments) and test those first.
+      - Write tests for abuse cases (invalid and hostile input, missing permission), not only the happy path.
+      - Set a ratchet in CI so coverage of changed code cannot fall, rather than a single global target.
+    verify:
+      - Confirm the new tests fail without the code they protect (mutation or a deliberate break), and that CI enforces the threshold.
+    compensating: [Add a security review step for changes to the untested areas until tests exist.]
+    effort: Ongoing.
+    references:
+      - {title: OWASP Application Security Verification Standard, url: "https://owasp.org/www-project-application-security-verification-standard/"}
+
+  # ---------------------------------------------------------------- infrastructure
+  - id: os-patch
+    title: Operating-system or software patch
+    match: {scan_types: [infra-vm], asset_types: [windows-server, windows-endpoint, unix-server, unix-endpoint, virtualization-host], keywords: ["kb", "security update", "patch", "cumulative update", "kernel", "apply the update"]}
+    summary: A vendor patch is available for the installed software.
+    why: Exploits for patched flaws are published quickly; unpatched hosts are the common way in.
+    steps:
+      - "Confirm the finding is real: check the installed version or build against the vendor advisory (a scanner can be wrong about a backported fix)."
+      - Test the patch on a non-production host of the same build, then schedule it through your change process using the rollout rings (canary, pilot, broad).
+      - Take a snapshot or backup and write the rollback step before you start.
+      - Apply the update with your patch tool, reboot if the vendor requires it, and confirm services come back.
+      - If the patch cannot be applied now, apply the vendor's workaround and the compensating controls below, and record an exception with an expiry.
+    verify:
+      - Confirm the installed version or KB on the host, then rescan; the finding closes on the next scan.
+    compensating:
+      - Restrict network access to the vulnerable service to the systems that need it; add monitoring for the exploit's known behaviour.
+    effort: Small per host; the scheduling is the real cost.
+    references:
+      - {title: CISA Known Exploited Vulnerabilities Catalog, url: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}
+
+  - id: network-device
+    title: Network and security device vulnerability or misconfiguration
+    match: {scan_types: [infra-vm], asset_types: [network-routing-switching, network-security-device], keywords: ["firmware", "ios", "junos", "firewall", "router", "switch", "vpn", "snmp", "telnet"]}
+    summary: A router, switch, firewall or VPN device runs vulnerable firmware or has an unsafe setting.
+    why: Network devices sit on the boundary and are heavily targeted; a compromise exposes everything behind them.
+    steps:
+      - Check the vendor advisory for the fixed release for your platform and hardware; read the upgrade notes and dependencies.
+      - Back up the configuration, plan a maintenance window and a rollback image, and stage the upgrade on a lab or standby unit first.
+      - Upgrade the firmware (use a high-availability pair one node at a time) and re-apply any hardening the upgrade reset.
+      - Disable unused management services (telnet, HTTP, SNMP v1/v2c), restrict management to a dedicated network and use strong, centrally managed authentication.
+      - Where no fix exists yet, apply the vendor mitigation or an access-control rule and monitor.
+    verify:
+      - Confirm the running version and the settings on the device, then rescan.
+    compensating:
+      - Limit management-plane access to a jump host; enable logging to your SIEM and alert on configuration changes.
+    effort: Medium; limited by maintenance windows.
+    references:
+      - {title: CISA Known Exploited Vulnerabilities Catalog, url: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}
+
+  - id: ot-device
+    title: Operational technology or IoT device
+    match: {asset_types: [iot-ot-device], keywords: ["plc", "scada", "ics", "modbus", "firmware"]}
+    summary: A controller or connected device has a flaw that is often unsafe to patch while it is running.
+    why: Patching or rebooting can stop a process; many devices cannot be updated quickly or at all.
+    steps:
+      - Do not patch or scan aggressively without the operations owner's agreement. Coordinate a window with the plant or site owner and the device vendor.
+      - "Isolate the device: put it in its own network zone, allow only the required protocols from named sources, and block internet access."
+      - Request the vendor's advisory and fixed firmware; test on a spare unit if one exists.
+      - Add passive monitoring for the device's protocols and alert on unexpected commands or sources.
+      - Record the residual risk and the compensating controls as an accepted exception with a review date.
+    verify:
+      - Confirm the segmentation with a firewall rule review and, with the owner's consent, a controlled connectivity test.
+    compensating:
+      - Network segmentation and a unidirectional or heavily filtered gateway; strict remote-access control with a jump host and multi-factor authentication.
+    effort: Large; change control dominates.
+    references:
+      - {title: NIST SP 800-82 Guide to Operational Technology Security, url: "https://csrc.nist.gov/pubs/sp/800/82/r3/final"}
+
+  - id: cloud-misconfiguration
+    title: Cloud configuration and exposure
+    match: {asset_types: [cloud-infrastructure], keywords: ["s3 bucket", "storage account", "security group", "iam", "public access", "unencrypted", "publicly accessible", "cloudtrail", "mfa"]}
+    summary: A cloud resource is publicly reachable, unencrypted, over-permissioned or not logged.
+    why: Cloud exposures are scanned for continuously and are exploited within hours of appearing.
+    steps:
+      - Confirm who owns the resource and whether the exposure is intended; if data is exposed, treat it as an incident first.
+      - Apply the secure setting through your infrastructure-as-code so it persists (block public access, enable encryption with a managed key, restrict the source range, enable logging and versioning).
+      - Narrow roles and policies to the actions and resources needed, remove unused access keys, and require MFA for human users.
+      - Add an account-level guardrail (service control policy, Azure Policy or organization policy) so the unsafe setting cannot be created again.
+    verify:
+      - Re-check the resource in the console or with the cloud CLI, and rescan with your posture tool.
+    compensating:
+      - Place the resource behind a private endpoint or private network and restrict by identity.
+    effort: Small per resource; guardrails take longer.
+    references:
+      - {title: CIS Benchmarks, url: "https://www.cisecurity.org/cis-benchmarks"}
+
+  - id: ai-ml-risk
+    title: AI and machine-learning system risk
+    match: {scan_types: [ai-ml], asset_types: [ai-ml-system], keywords: ["prompt injection", "model deserialization", "llm", "pickle model", "jailbreak", "training data", "model theft"]}
+    summary: A model or the application around it can be manipulated, leaks data or loads untrusted model files.
+    why: Models act on untrusted text and may hold secrets and sensitive data; model files can execute code when loaded.
+    steps:
+      - "Treat model output and any retrieved text as untrusted input: validate it before it reaches tools, databases or shells, and give the model's tools the least privilege."
+      - Separate system instructions from user content, filter and rate-limit inputs, and require human approval for high-impact actions.
+      - Load models only from trusted sources in safe formats (for example safetensors rather than pickle) and verify checksums.
+      - Keep secrets and personal data out of prompts, logs and training sets; restrict who can query the model and log usage.
+    verify:
+      - Test with known prompt-injection and data-leak probes; confirm the tool permissions and the model file format.
+    compensating:
+      - Put a guardrail or moderation layer in front of the model and cap what its tools can reach.
+    effort: Medium.
+    references:
+      - {title: OWASP Top 10 for LLM Applications, url: "https://genai.owasp.org/llm-top-10/"}
+
+  - id: end-of-life
+    title: End-of-life or unsupported software
+    match: {keywords: ["end of life", "end-of-life", "eol", "unsupported version", "no longer supported", "end of support"]}
+    summary: The product no longer receives security updates from its vendor.
+    why: New flaws will never be fixed, so risk only grows.
+    steps:
+      - Identify the supported replacement or version and the dependencies that block the move.
+      - Plan the migration with an owner and a date; if a vendor sells extended support, treat it as a bridge with an end date.
+      - Until then, isolate the system, restrict access and monitor it closely, and record an exception with an expiry.
+    verify:
+      - Confirm the replacement is in service and the old system is decommissioned and removed from the scan scope.
+    compensating:
+      - Network isolation, application allow-listing and enhanced monitoring.
+    effort: Large.
+    references:
+      - {title: CISA Known Exploited Vulnerabilities Catalog, url: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}
+
+# Used when nothing above matches. Keeps the page useful rather than blank, and says it is generic.
+fallback:
+  id: generic
+  title: General remediation approach
+  summary: No curated guidance matches this finding yet, so this is the general approach.
+  why: Every finding should end with a verified fix, a documented exception, or a documented mitigation.
+  steps:
+    - Read the finding's description and the source tool's recommendation, and confirm the issue is real on the affected asset.
+    - Identify the owner of the asset and agree who will make the change and by when.
+    - Apply the vendor's or the tool's recommended fix through your normal change process, with a rollback plan.
+    - If the fix cannot ship now, apply a mitigation and record an exception with an expiry date.
+    - Rescan to confirm the finding closes.
+  verify:
+    - Rescan the asset and confirm the finding no longer appears.
+  compensating:
+    - Restrict access to the affected service, increase monitoring, and apply any vendor workaround.
+  effort: Varies.
+  references: []
