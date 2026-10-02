@@ -224,7 +224,7 @@ git worktree remove ../quanta-feature-x   # after merging</code></pre>
         <tr><td class="mono">.claude/agents/*.md</td><td>Every subagent's prompt and its tool-access frontmatter &mdash; the actual enforcement point behind &ldquo;never executes against real infrastructure.&rdquo; See &sect;9.</td></tr>
         <tr><td class="mono">.claude/commands/*.md</td><td>The <code>/quanta-scan</code> and <code>/remediate</code> slash-command orchestrators that sequence the subagents.</td></tr>
         <tr><td class="mono">cli/quanta.py</td><td>Headless pipeline runner &mdash; the same entry point the dashboard's <code>/run</code> page calls as a subprocess.</td></tr>
-        <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group &mdash; 1,458 tests today, all passing. Hand-rolled fakes, not vendor mock libraries.</td></tr>
+        <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group &mdash; 1,752 tests today, all passing. Hand-rolled fakes, not vendor mock libraries.</td></tr>
         <tr><td class="mono">docs/enterprise-suite/</td><td>Fifteen HTML reference documents (architecture, RBAC, connectors, pricing, etc.), each also published as a shareable page &mdash; see <code>MANIFEST.md</code> for the sync rules.</td></tr>
       </tbody>
     </table>
@@ -279,7 +279,7 @@ python cli/quanta.py remediate --generate</code></pre>
   <!-- ============ 6. Testing ============ -->
   <section class="doc-section" id="sec-6">
     <h1 class="section-h1">6. Testing</h1>
-    <pre class="codeblock"><code>python -m unittest discover -s tests -p "test_*.py"    # everything &mdash; 1,458 tests today
+    <pre class="codeblock"><code>python -m unittest discover -s tests -p "test_*.py"    # everything &mdash; 1,752 tests today
 python -m unittest tests.test_dashboard -v               # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                     # passwords/sessions/users/OIDC</code></pre>
     <p>GitHub Actions (.github/workflows/ci.yml) runs the full suite on every push and pull request. For JavaScript, <code>node --check &lt;file&gt;</code> only catches syntax errors &mdash; it will not catch a missing import, which only surfaces as a runtime error in the browser. Reload the actual page and check the console before calling a frontend change done.</p>

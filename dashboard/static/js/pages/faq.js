@@ -254,6 +254,36 @@ const FAQS = [
     "AD group-membership check), Reject (with a reason), Mark staging validated (an " +
     "attestation, not a real check), and - once approved - Trigger Remediation, which " +
     "is confirm-gated and spends real API usage to generate the playbook."],
+  ["How do I connect a scanner?",
+    "Admin only, on Connections: add a connection, pick the source (Tenable, Qualys, " +
+    "Prisma Cloud, Cortex XSIAM, Infoblox, Axonius or Active Directory), enter its " +
+    "credentials, Test connection, then set a schedule or Sync now. Credentials are " +
+    "stored encrypted and never shown again. Each sync is a queued job; a second click " +
+    "does not queue another. If scanner credentials must stay out of other systems, have " +
+    "the scanner push to Quanta with an API key instead."],
+  ["How do I open ServiceNow or Jira tickets automatically for urgent findings?",
+    "Add a ServiceNow, Jira Cloud or Splunk connection on Connections (a \"push\" " +
+    "connection) and set its rule: minimum severity, KEV only, minimum EPSS, and the " +
+    "most tickets per run. Each run opens tickets for matching findings not yet sent, " +
+    "most urgent first, never duplicating on a re-run. Ticket state is read back each " +
+    "sync."],
+  ["How do I create an API key for a scanner, SOAR playbook or CI job?",
+    "On Connections, in \"Send data to Quanta\", click Create an API key: name it, tick " +
+    "only the access it needs (send findings in, report ticket status, read findings " +
+    "out) and pick an expiry (never, 30, 90 or 365 days). The key is shown once - copy " +
+    "it. Send it as Authorization: Bearer <key>. Revoke in the key table stops it " +
+    "immediately."],
+  ["How do I import a scanner CSV?",
+    "On Connections, \"Import a scanner file\": choose a CSV in the Tenable column " +
+    "layout, enter a source name, upload. Tick \"this is the complete export\" only if " +
+    "the file is everything that scanner currently reports - it then removes that " +
+    "source's findings missing from the file."],
+  ["How do I see which ticket belongs to a finding?",
+    "Open the finding (click its ID). \"External tickets\" lists tickets a push " +
+    "connection opened for it: reference, system, state (Open, In progress, Blocked, " +
+    "Resolved) and the last error. State flows back each sync and updates the finding's " +
+    "assignment status; a resolved ticket does not close the finding - the next scan " +
+    "decides."],
   ["How do I set up scheduled reports or team alerts?",
     "Reports generates on-demand snapshots and has its own \"Schedule automatic email " +
     "reports\" panel. Notification Settings is the fuller surface: the same report-" +
