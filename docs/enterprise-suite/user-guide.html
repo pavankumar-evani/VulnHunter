@@ -101,7 +101,8 @@
     <a href="#integrations">05 · Connecting your tools</a>
     <a href="#reporting">06 · Reports &amp; alerts</a>
     <a href="#ai">07 · AI, search &amp; analytics</a>
-    <a href="#help">08 · Getting help</a>
+    <a href="#secops">08 · Controls, risk, hunting &amp; AI usage</a>
+    <a href="#help">09 · Getting help</a>
   </nav>
 
   <main>
@@ -225,7 +226,7 @@
 
       <details class="howto">
         <summary>How do I create an API key for a scanner, SOAR playbook or CI job?<span class="route">/connections</span></summary>
-        <div class="body"><p>In the "Send data to Quanta" section, click Create an API key. Give it a name, tick only the access it needs (send findings in, report ticket status, read findings out) and choose an expiry (never, 30, 90 or 365 days). The key is shown once, so copy it immediately; Quanta keeps only a hash. Use it as <code>Authorization: Bearer &lt;key&gt;</code>. The key table lists your keys, and Revoke stops one working immediately. See docs/INTEGRATION_API.md for the endpoints.</p></div>
+        <div class="body"><p>In the "Send data to Quanta" section, click Create an API key. Give it a name, tick only the access it needs (scopes: <code>ingest:write</code> send findings and scanner files in; <code>tickets:update</code> report ticket status; <code>read:findings</code> read findings out; <code>controls:write</code> report observed security controls; <code>ai-usage:write</code> report AI usage; <code>soc:write</code> send SIEM or XDR alerts) and choose an expiry (never, 30, 90 or 365 days). The key is shown once, so copy it immediately; Quanta keeps only a hash. Use it as <code>Authorization: Bearer &lt;key&gt;</code>. The key table lists your keys, and Revoke stops one working immediately. See docs/INTEGRATION_API.md for the endpoints.</p></div>
       </details>
 
       <details class="howto">
@@ -273,8 +274,72 @@
       </details>
     </section>
 
+    <section id="secops">
+      <h2><span class="num">08</span>Controls, risk, hunting &amp; AI usage</h2>
+
+      <details class="howto">
+        <summary>How do I read the guidance on a finding, and does it change by scan type?<span class="route">/queue</span></summary>
+        <div class="body"><p>Open the finding (click its ID anywhere) and read "How to fix this". Guidance is chosen from the finding's scan type and its CWE or asset type: code flaws found by static analysis (SAST) or by testing a running app (DAST), vulnerable libraries (SCA, with the fixed version and upgrade command when known), committed secrets, infrastructure-as-code, container images, CI/CD pipeline weaknesses, test-coverage gaps in security-relevant files, and infrastructure hosts each get steps suited to that kind of problem. It says what it matched on; a finding with no specific entry gets a general approach, labelled as general. Further down, "Compensating controls for your environment" lists the MITRE ATT&amp;CK mitigations for the techniques the flaw enables and whether each is in place on that asset. The guidance changes nothing by itself.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I bring in SARIF, pipeline or coverage results from my CI?<span class="route">/connections</span></summary>
+        <div class="body"><p>Create an API key with the <code>ingest:write</code> scope (Connections, "Send data to Quanta"), then post the file from your pipeline: SARIF 2.1.0 from Semgrep, CodeQL, ZAP, Trivy, Checkov, gitleaks and similar tools to <code>POST /api/ingest/sarif</code>; a Cobertura, JaCoCo or lcov report to <code>POST /api/ingest/coverage</code> (only security-relevant files become findings). For GitHub Actions, GitLab CI and Jenkinsfile weaknesses, an operator runs <code>quanta-admin scan-pipelines</code>. Each finding carries a scan type (the newer ones are container, cicd and coverage); an explicit scan type sent with the data wins over inference. Examples are in docs/INTEGRATION_API.md.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I record a security control on an asset?<span class="route">/controls</span></summary>
+        <div class="body"><p>Admin only. On Security Controls, under "Add a control", enter the asset name or a pattern such as <code>WEB-*</code>, choose the kind of control (for example EDR, network filtering, MFA), describe it in your own words and click Add control. To load many at once, use "or import a CSV". A control you or a CSV record is <strong>claimed</strong>; one an EDR or firewall integration reports through the controls API (an API key with the <code>controls:write</code> scope) is <strong>verified</strong>. Re-sending the same control refreshes its last-seen time instead of duplicating it. The more complete this list, the more specific the compensating-control advice and threat-model residual risk become; with nothing recorded for an asset, Quanta says unknown.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>What do verified, claimed, absent and unknown mean in the compensating-control advice?<span class="route">/queue</span></summary>
+        <div class="body"><p><strong>In place (verified)</strong>: a connector or script observed the control on that asset. <strong>In place (recorded, not verified)</strong>: a person recorded it. <strong>Not in place</strong>: controls are recorded for the asset but this mitigation is not among them. <strong>Not known for this asset</strong>: nothing is recorded, so Quanta does not guess. The coverage percentage is indicative (verified counts 1, recorded counts 0.5), and compensating controls reduce risk; they do not close the finding.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I build a threat model and review its threats?<span class="route">/threat-models</span></summary>
+        <div class="body"><p>Admin only. Under "New model", name it and start from an editable example, from your assets (components drafted from the findings), or empty. Open the model, adjust components, data flows and trust zones in the JSON editor (properties you leave out count as not recorded) and click Save model. Quanta raises STRIDE threats from explicit rules, not an LLM, and recomputes them whenever the model changes, so nothing goes stale. Each threat shows likelihood x impact, the live findings on the affected assets (KEV flagged), the mitigating controls recorded for them and the residual score. Use the Decision list to mark a threat accepted, mitigated or not-applicable; only those decisions are stored. Threats marked unconfirmed are questions to answer, not established weaknesses. The scores rank work for discussion; they are not a measurement.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I import a framework and collect evidence?<span class="route">/grc</span></summary>
+        <div class="body"><p>Admin only. On Risk &amp; Compliance, open the Controls tab. The built-in catalogs (NIST 800-53 r5, CSF 2.0 and an AI-governance set) are subsets. To work against every control, use "Import a full catalog": give it an id and upload the framework's OSCAL JSON (for a licensed standard, your licensed copy in OSCAL form). Then open the Evidence tab and click Collect evidence now; it also runs about once a day. Each automated test reports pass, fail, warn or na with what it measured and the threshold; with too little data it says na, never a pass. Back on the Controls tab each control shows its status and tests, and you can download the OSCAL assessment results. Quanta supplies evidence and workflow; it does not certify compliance, and a passing test shows that Quanta observed something, not that an auditor would agree.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I attest to a control Quanta cannot observe?<span class="route">/grc</span></summary>
+        <div class="body"><p>On the Controls tab of Risk &amp; Compliance, click Attest beside the control, say whether it is effective, partially-effective or ineffective, and give the statement it rests on (required). The attestation sits beside the automated evidence rather than replacing it, and shows as expired when it is no longer current.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I register a risk?<span class="route">/grc</span></summary>
+        <div class="body"><p>Admin only. Open the Risk register tab. "Worth registering" lists suggestions drawn from live findings and threat models: click one to add it. Or fill in "Add a risk": title, owner, likelihood and impact from 1 to 5, a treatment (mitigate, accept, transfer, avoid) with the plan or reason, and a review date. The register shows inherent and residual level, owner, status and whether a review is overdue. Policies are on their own tab; anyone signed in can read the active ones and click "I have read this" to acknowledge.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I start a hunt from a proposal and close it with an outcome?<span class="route">/hunting</span></summary>
+        <div class="body"><p>Admin only. Quanta is not a SIEM and does not run queries; it proposes where to look and you run the queries in your own tool. On Proposed hunts, each card is an open CVE that is on the KEV list or has an EPSS of 0.5 or more, with the hosts, the ATT&amp;CK techniques Quanta tags and ready-made queries (Splunk SPL, to be adapted to your data model). Click Start this hunt, then on Hunts open it, run each query in your SIEM, and set each query's result (hits, no-hits, not-run, error). Add notes and follow-ups, tick "This hunt led to a new detection" if it did, set the status to closed and choose an outcome (confirmed, not-found or needs-data). Closing requires an outcome. The Overview tab then shows hunts closed and confirmed and how many of the techniques in your open findings have been hunted.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I triage a SOC alert?<span class="route">/hunting</span></summary>
+        <div class="body"><p>Alerts reach Quanta from your SIEM or XDR through <code>POST /api/ingest/alerts</code> with an API key that has the <code>soc:write</code> scope. On the Alert triage tab they are ranked by a priority that reflects what Quanta knows about the host: its owner, open findings, and known-exploited ones, with the reasons listed. Open an alert to see findings that match it and a runbook (chosen by technique, then title keywords, else a generic one), and set status, disposition (true-positive, benign, false-positive, needs-data), assignee and notes. Quanta shows the runbook steps; responding stays with your team or SOAR.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I set an AI budget, and see which AI tools nobody reviewed?<span class="route">/ai-usage</span></summary>
+        <div class="body"><p>Admin only. AI Usage shows tokens and spend by team, application, model and source. Quanta stores counts only, never prompts or responses, and the page lists which sources are reporting; cost is reported or estimated, and requests of unknown cost are counted separately, never shown as zero. To set a budget, use the "Add budget" form: choose the organization, a team or an application, a period (month, week, day), a limit in dollars and/or tokens, and a warning percentage. The table shows used, on-track-for and a state of ok, alert or exceeded. To find unreviewed tools, upload a proxy or DNS export under "AI applications found" (CSV with a domain column, optionally user and count); known AI services appear as unreviewed, which you can change to sanctioned or blocked. That status is a record for reporting; Quanta does not block anything.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I feed AI usage into Quanta?<span class="route">/connections</span></summary>
+        <div class="body"><p>Three ways. Add an Anthropic usage or OpenAI usage connection on Connections, using that provider's Admin key. Or post events from a gateway or script to <code>POST /api/ingest/ai-usage</code>, or send OpenTelemetry JSON to <code>/api/ingest/otlp/v1/traces</code>, with an API key that has the <code>ai-usage:write</code> scope. Quanta's own calls are included. See docs/INTEGRATION_API.md. As with every connector here, these are built against public documentation and tested against mocked responses, not run against a live provider account.</p></div>
+      </details>
+    </section>
+
     <section id="help">
-      <h2><span class="num">08</span>Getting help</h2>
+      <h2><span class="num">09</span>Getting help</h2>
 
       <details class="howto">
         <summary>How do I get step-by-step instructions to fix a finding?<span class="route">/queue</span></summary>

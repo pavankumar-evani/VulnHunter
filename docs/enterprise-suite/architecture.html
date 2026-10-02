@@ -155,6 +155,7 @@
     <a href="#frontend">07 · Frontend architecture</a>
     <a href="#constraints">08 · Honest current-state limits</a>
     <a href="#scaling">09 · Scaling &amp; replicas</a>
+    <a href="#modules">10 · Feature modules &amp; inbound API</a>
   </nav>
 
   <main>
@@ -227,7 +228,7 @@ flowchart LR
             <tr><td class="mono">remediation/output/normalized-findings.json</td><td>Every finding, in the one common schema (§4) — the system of record.</td></tr>
             <tr><td class="mono">REMEDIATION_PLAN.md</td><td>A point-in-time snapshot: risk tier, action type, rollback plan per finding, written by the <code>remediation-planner</code> subagent.</td></tr>
             <tr><td class="mono">remediation/output/*.yml</td><td>Generated Ansible playbooks, one per remediable finding.</td></tr>
-            <tr><td class="mono">remediation/quanta.db</td><td>Shared local SQLite database (gitignored; PostgreSQL when <code>QUANTA_DATABASE_URL</code> is set) — approvals, exceptions, activity/AI-usage logs, asset ownership, user accounts, notification-scheduler dedup state, pending live-data adapter output, and the coordination tables <code>leases</code> and <code>jobs</code> (§9), one table each.</td></tr>
+            <tr><td class="mono">remediation/quanta.db</td><td>Shared local SQLite database (gitignored; PostgreSQL when <code>QUANTA_DATABASE_URL</code> is set) — approvals, exceptions, activity/AI-usage logs, asset ownership, user accounts, notification-scheduler dedup state, pending live-data adapter output, the coordination tables <code>leases</code>, <code>jobs</code> and <code>file_snapshots</code> (§9), and the tables behind the feature modules in §10 (controls, AI usage, threat models, GRC, hunting and SOC triage), one table each.</td></tr>
             <tr><td class="mono">remediation/config/*.yaml</td><td>Every admin-editable policy: priority weights, SLA windows, remediation policy per asset domain, risk-scoring weights, exposure-score weights.</td></tr>
             <tr><td class="mono">remediation/live-data/*</td><td>Raw CSV/XML exports written by a CVE-scoped connector's Fetch action (Tenable/Qualys/OpenVAS) before ingestion via <code>/remediate</code>.</td></tr>
           </tbody>
@@ -351,7 +352,7 @@ flowchart LR
       <h2><span class="num">07</span>Frontend architecture</h2>
       <p class="section-intro">A hand-rolled single-page app — no React, no build step, no bundler. Deliberate: the environment this was built in had no Node/npm runtime available to compile or verify a framework-based frontend against, and shipping unverifiable code is a worse outcome than a plainer one that's actually been run.</p>
       <ul>
-        <li><strong>Router:</strong> a regex-pattern table (<code>app.js</code>) maps a URL path to a page module — around 50 routes today.</li>
+        <li><strong>Router:</strong> a regex-pattern table (<code>app.js</code>) maps a URL path to a page module — around 60 routes today.</li>
         <li><strong>Page module convention:</strong> every <code>pages/*.js</code> file exports <code>title</code> and an async <code>render(container)</code> — it owns its own markup, its own <code>api.js</code> calls, and its own event wiring.</li>
         <li><strong>Shared libraries:</strong> <code>api.js</code> (every backend call in one place), <code>dom.js</code> (escaping, flash messages, KPI-card helpers), <code>charts.js</code> (bar/pie SVG, shared severity palette), <code>rbac</code>-aware helpers for showing/hiding admin-only controls client-side (never the actual security boundary — that's always enforced server-side too).</li>
       </ul>
@@ -385,6 +386,51 @@ flowchart LR
       </div>
       <p><code>quanta-admin prepare</code> does first-run setup once per release under a lease, and PostgreSQL schema creation/migrations take an advisory lock, so several replicas can start together safely. Operators can inspect the queue with <code>quanta-admin jobs</code> or <code>GET /api/admin/jobs</code>; <code>/metrics</code> exposes <code>quanta_jobs_queued</code>, <code>quanta_jobs_dead</code> and <code>quanta_scheduler_leader</code>.</p>
       <div class="callout warn"><span class="label">Stated plainly</span><p>The chart is verified by CI (<code>helm lint</code>, <code>helm template</code>, kubeconform) and unit tests but has not yet been installed on a live cluster. Findings and policy files are reconciled through the database by default (when two replicas change the same file at once the database copy wins, and the findings are stored as one whole file, which suits tens of thousands of findings rather than millions); a ReadWriteMany volume is optional. No connector has been exercised against a live vendor tenant.</p></div>
+    </section>
+
+    <section id="modules">
+      <h2><span class="num">10</span>Feature modules, tables &amp; the inbound API</h2>
+      <p class="section-intro">Each module below is a package under <code>remediation/</code> with its own store (a table in the shared database) and a route group in <code>dashboard/app.py</code>. Only the data that people or collectors produce is stored; anything that can be derived is computed on read, so an edited input never leaves a stale result behind.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Module</th><th>Tables</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">guidance/</td><td>none (<code>knowledge.yaml</code>)</td><td>Curated remediation guidance per finding: summary, why it matters, ordered steps, verification and compensating options. Deterministic lookup, not LLM-generated.</td></tr>
+            <tr><td class="mono">controls/ + enrichment/client_controls</td><td><code>asset_controls</code></td><td>Controls inventory per asset (verified vs claimed, glob asset patterns, CSV import). <code>assess()</code> checks the MITRE ATT&amp;CK mitigations applicable to a finding against what is recorded for the asset: verified, claimed, absent or unknown. With nothing recorded it says unknown.</td></tr>
+            <tr><td class="mono">ingest/ + scanners/</td><td>none (merges into the findings file)</td><td>SARIF 2.1.0, Cobertura/JaCoCo/lcov coverage (security-relevant files only) and CI/CD pipeline checks (GitHub Actions, GitLab CI, Jenkinsfile) become findings with <code>scan_type</code>, <code>location</code>, <code>cwe</code>, <code>rule_id</code> and <code>tool</code> fields.</td></tr>
+            <tr><td class="mono">aiusage/</td><td><code>ai_usage_events</code>, <code>ai_apps</code>, <code>ai_budgets</code></td><td>AI usage analytics: counts only, never prompt text. See the AI Capabilities document.</td></tr>
+            <tr><td class="mono">threatmodel/</td><td><code>threat_models</code>, <code>threat_reviews</code></td><td>A system as components, data flows and trust zones. STRIDE threats are raised by explicit rules and computed on read; only a person's decision (accepted, mitigated, not applicable) is stored. Each threat is joined to live findings (technique or CWE overlap) and recorded controls.</td></tr>
+            <tr><td class="mono">grc/</td><td><code>grc_frameworks</code>, <code>grc_controls</code>, <code>grc_risks</code>, <code>grc_evidence</code>, <code>grc_attestations</code>, <code>grc_policies</code>, <code>grc_policy_acks</code></td><td>Framework catalogs (built-in subsets or imported OSCAL JSON), a risk register, automated control tests, attestations, versioned policies with acknowledgements, and per-control status plus an OSCAL assessment-results export. Evidence and workflow, not certification.</td></tr>
+            <tr><td class="mono">hunting/</td><td><code>hunts</code>, <code>soc_alerts</code></td><td>Hunts proposed from live exposure, a hunt workspace, alert intake and triage with vulnerability context, and runbooks. Quanta does not run hunt queries and is not a SIEM.</td></tr>
+            <tr><td class="mono">coordination/</td><td><code>leases</code>, <code>jobs</code>, (<code>file_snapshots</code> via <code>utils/file_sync.py</code>)</td><td>Multi-replica support, described in §9.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>The inbound API and scoped keys</h3>
+      <p>Tools that call Quanta authenticate with an API key (<code>qk_&lt;prefix&gt;_&lt;secret&gt;</code>, SHA-256 hash stored, shown once) from <code>remediation/apikeys/store.py</code> (table <code>api_keys</code>). Each key carries explicit scopes, an optional expiry, a last-used time, can be revoked, and is rate limited per key. The route dependency <code>require_api_key(scope)</code> verifies the key and the scope itself, because the <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> prefixes are the only paths exempt from the browser-login gate. Full contract: <code>docs/INTEGRATION_API.md</code>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Scope</th><th>Allows</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">ingest:write</td><td>Push findings and scanner CSV (also SARIF and coverage reports).</td></tr>
+            <tr><td class="mono">tickets:update</td><td>Report external ticket status back onto assignments.</td></tr>
+            <tr><td class="mono">read:findings</td><td>Export findings.</td></tr>
+            <tr><td class="mono">controls:write</td><td>Push controls into the inventory.</td></tr>
+            <tr><td class="mono">ai-usage:write</td><td>Push AI usage events, including OTLP JSON traces.</td></tr>
+            <tr><td class="mono">soc:write</td><td>Push alerts to SOC triage (<code>POST /api/ingest/alerts</code>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Multi-replica design and its limits</h3>
+      <p>Section 9 describes the mechanisms: database leases, scheduler leader election, a <code>SKIP LOCKED</code> job queue, <code>QUANTA_FILES_BACKEND=db</code> and the Helm chart. The limits that go with them are design trade-offs, documented in <code>docs/SCALING_LIMITS.md</code>:</p>
+      <ul>
+        <li><strong>Queue delivery is at-least-once.</strong> A worker that dies after doing the work but before reporting it causes the job to run again, so handlers must be idempotent. Pull syncs and ServiceNow/Jira pushes are; a Splunk push is not protected against a duplicate event.</li>
+        <li><strong>Leader election is only as strict as the lease time.</strong> A frozen (not crashed) leader can briefly overlap with its successor; scheduled work is written to be safe to repeat, and a fencing token is the documented next step.</li>
+        <li><strong>Findings are one whole stored file.</strong> Cost grows with the total count, which suits tens of thousands of findings, not millions.</li>
+        <li><strong>The chart has not been installed on a live cluster.</strong> It is checked by <code>helm lint</code>/<code>template</code>, kubeconform, <code>scripts/e2e_replicas.py</code> with real processes and static tests; the kind install job has not yet run.</li>
+      </ul>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>

@@ -101,6 +101,7 @@
     <a href="#health">08 · Health checks &amp; monitoring</a>
     <a href="#queue">09 · Queue jobs &amp; the worker</a>
     <a href="#pushapi">10 · Push connections &amp; API keys</a>
+    <a href="#recipes">11 · Guidance, control tests &amp; hunts</a>
   </nav>
 
   <main>
@@ -126,6 +127,13 @@
           <tr><td class="mono">remediation/ingest/, apikeys/</td><td>Deterministic ingest (<code>scanner_csv.py</code>, <code>api_findings.py</code> for pushed findings, <code>merge.py</code>) and Quanta-issued API keys (<code>apikeys/store.py</code>)</td></tr>
           <tr><td class="mono">deploy/helm/quanta, docker-compose.yml</td><td>Helm chart for a multi-replica Kubernetes deployment (<code>docs/KUBERNETES.md</code>) and the single-host compose stack</td></tr>
           <tr><td class="mono">cli/quanta.py, cli/quanta_admin.py</td><td>Headless pipeline runner (the same entry point the dashboard's <code>/run</code> page calls) and the operator tool (<code>prepare</code>, <code>worker</code>, <code>jobs</code>, <code>check</code>, <code>backup</code>, <code>rotate-keys</code>, <code>migrate</code>, ...)</td></tr>
+          <tr><td class="mono">remediation/guidance/</td><td>Curated remediation guidance: <code>knowledge.yaml</code> (the entries) and <code>engine.py</code> (matching and tailoring to the finding)</td></tr>
+          <tr><td class="mono">remediation/controls/, enrichment/attack_mitigations.yaml</td><td>Controls inventory store (table <code>asset_controls</code>), MITRE ATT&amp;CK mitigations and indicative NIST 800-53 mappings; <code>enrichment/client_controls.py</code> assesses a finding against the controls recorded for its asset</td></tr>
+          <tr><td class="mono">remediation/ingest/, scanners/</td><td>Beside the scanner CSV and pushed findings: <code>sarif.py</code> (SARIF 2.1.0), <code>coverage.py</code> (Cobertura/JaCoCo/lcov) and <code>scanners/cicd.py</code> (CI/CD pipeline checks)</td></tr>
+          <tr><td class="mono">remediation/aiusage/</td><td>AI usage analytics: <code>store.py</code>, <code>analytics.py</code>, <code>discovery.py</code> (shadow-AI), with <code>connectors/ai_usage_connector.py</code> and the policy/price/domain YAML under <code>config/</code></td></tr>
+          <tr><td class="mono">remediation/threatmodel/</td><td>Threat models: <code>rules.py</code> (STRIDE rules), <code>engine.py</code> (scoring and joins), <code>store.py</code>, <code>seed.py</code></td></tr>
+          <tr><td class="mono">remediation/grc/</td><td>Governance, risk and compliance: <code>catalog.py</code> and <code>builtin.yaml</code>, <code>risks.py</code>, <code>evidence.py</code>, <code>report.py</code>, policies and attestations</td></tr>
+          <tr><td class="mono">remediation/hunting/</td><td>Threat hunting and SOC triage: <code>generate.py</code>, <code>library.yaml</code>, <code>translate.py</code>, <code>triage.py</code>, <code>runbooks.yaml</code>, <code>store.py</code></td></tr>
           <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group — see §5</td></tr>
         </tbody>
       </table></div>
@@ -180,7 +188,8 @@
     <section id="testing">
       <h2><span class="num">05</span>Testing conventions</h2>
       <ul>
-        <li><strong>Python:</strong> <code>python -m unittest discover -s tests -p "test_*.py"</code> — 1,773 tests today, all passing; one file per module/route group, hand-rolled fakes over vendor mock libraries.</li>
+        <li><strong>Python:</strong> <code>python -m unittest discover -s tests -p "test_*.py"</code> — 1,933 tests today, all passing; one file per module/route group, hand-rolled fakes over vendor mock libraries.</li>
+        <li><strong>Test files for the newer modules:</strong> <code>tests/test_guidance.py</code>, <code>test_scanner_ingest.py</code> (SARIF, coverage, CI/CD checks), <code>test_client_controls.py</code>, <code>test_ai_usage.py</code>, <code>test_threat_models.py</code>, <code>test_grc.py</code> and <code>test_hunting.py</code>. Each runs against a temporary database and fakes, with no network and no model call.</li>
         <li><strong>JS:</strong> <code>node --check &lt;file&gt;</code> catches syntax errors only — a passing check is necessary, never sufficient. Frontend behavior is verified live in a running browser, not assumed from source reading.</li>
         <li><strong>CI:</strong> GitHub Actions runs the full Python suite on every push. A clean local pass can still mask an environment-specific failure (see the CLI's own dry-run-ordering bug, fixed after reproducing it in a simulated clean environment) — reproduce, don't assume.</li>
       </ul>
@@ -209,6 +218,8 @@ python cli/quanta.py /remediate --generate --max-budget-usd 5.00</pre></div>
           <tr><td>A new API-key-guarded inbound route</td><td class="mono">remediation/apikeys/store.py + dashboard/app.py (§10)</td></tr>
           <tr><td>A new dashboard page</td><td class="mono">dashboard/static/js/pages/ + app.js router entry</td></tr>
           <tr><td>A new or edited remediation guidance entry</td><td class="mono">remediation/guidance/knowledge.yaml (summary, why, ordered steps, verification, compensating controls, effort, references, match keys); matching and tailoring in engine.py; tests in tests/test_guidance.py</td></tr>
+          <tr><td>A new automated control test</td><td class="mono">remediation/grc/evidence.py + remediation/config/grc_tests.yaml (§11); tests in tests/test_grc.py</td></tr>
+          <tr><td>A new hunt technique or runbook</td><td class="mono">remediation/hunting/library.yaml and runbooks.yaml (§11); tests in tests/test_hunting.py</td></tr>
           <tr><td>A new finding taxonomy</td><td class="mono">remediation/enrichment/ + normalized-finding-schema.md</td></tr>
         </tbody>
       </table></div>
@@ -261,6 +272,35 @@ python cli/quanta_admin.py prepare</pre></div>
       <h2><span class="num">10</span>Push connections &amp; API-key-guarded routes</h2>
       <p><strong>Push connections.</strong> ServiceNow, Jira and Splunk are stored in Connections like pull sources, each with a rule (<code>min_severity</code>, <code>kev_only</code>, <code>min_epss</code>, <code>max_per_run</code>). To add one, implement it in <code>remediation/connections/push.py</code>, register it in <code>registry.py</code>, and keep ticket creation idempotent through the finding-to-ticket links in <code>links.py</code> (table <code>ticket_links</code>). Ticket state is read back and mirrored onto the finding's assignment (ServiceNow state 1..8, Jira status category).</p>
       <p><strong>API-key-guarded routes.</strong> Inbound machine routes (<code>POST /api/ingest/findings</code>, <code>POST /api/ingest/scanner-csv</code>, <code>POST /api/inbound/ticket-status</code>, <code>GET /api/export/findings</code>) use Quanta-issued keys from <code>remediation/apikeys/store.py</code>: <code>qk_&lt;prefix&gt;_&lt;secret&gt;</code>, SHA-256 hash only, scopes <code>ingest:write</code> / <code>tickets:update</code> / <code>read:findings</code>, expiry, revocation, rate limit <code>QUANTA_API_KEY_RATE_MAX</code>. Only paths under <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> are exempt from the login gate, so a new key-guarded route must live under one of those prefixes and check its required scope. Pushed findings are validated by <code>remediation/ingest/api_findings.py</code> (identity = source + asset + source_ref + CVE; reconcile only for complete exports). <code>GET /api/connections/schema</code> returns a JSON Schema for every connection type. See <code>docs/INTEGRATION_API.md</code>.</p>
+    </section>
+
+    <section id="recipes">
+      <h2><span class="num">11</span>Adding guidance, a control test, a hunt technique or a runbook</h2>
+      <p>These four extensions are data or a few lines of code, each with a matching test file. None calls a model, so the result is the same every run and can be reviewed in git.</p>
+
+      <h4>A guidance entry</h4>
+      <div class="steps">
+      <div class="step"><div class="n">1</div><div><h4>Add the entry</h4><p>Append to <code>entries:</code> in <code>remediation/guidance/knowledge.yaml</code>: <code>id</code>, <code>title</code>, <code>match</code> (any of <code>cwe</code>, <code>keywords</code>, <code>scan_types</code>, <code>asset_types</code>), <code>summary</code>, <code>why</code>, ordered <code>steps</code>, <code>verify</code>, <code>compensating</code>, <code>effort</code> and <code>references</code>. Keep steps concrete and tool-neutral, and never invent a CVE-specific fix here.</p></div></div>
+      <div class="step"><div class="n">2</div><div><h4>Know how it is matched</h4><p><code>engine.py</code> matches by CWE first, then scan type and keywords, then asset type, and adds what it knows about the specific finding (package and fixed version, operating system, KEV status, the client's recorded controls). The file is read live.</p></div></div>
+      <div class="step"><div class="n">3</div><div><h4>Test</h4><p>Add a case to <code>tests/test_guidance.py</code> that builds a finding with the CWE or keyword and asserts the entry is chosen.</p></div></div>
+      </div>
+
+      <h4>A control test</h4>
+      <div class="steps">
+      <div class="step"><div class="n">1</div><div><h4>Write the check</h4><p>In <code>remediation/grc/evidence.py</code>, add a function <code>t_something(c)</code> that reads the shared <code>Context</code> (<code>c.findings</code>, <code>c.engine</code>, <code>c.t</code> thresholds) and returns <code>_res(result, metric, threshold, detail)</code>, where result is <code>pass</code>, <code>fail</code>, <code>warn</code> or <code>na</code>. Return <code>na</code> when there is too little data; never return <code>pass</code> on no data. Register it in the <code>TESTS</code> dict under a test id with a title.</p></div></div>
+      <div class="step"><div class="n">2</div><div><h4>Set the threshold and the mapping</h4><p>In <code>remediation/config/grc_tests.yaml</code>, add any threshold under <code>thresholds</code> and map the test id under <code>mappings</code> to the framework controls it is evidence for (for example <code>nist-800-53-r5: [RA-5]</code>). A test with no mapping still runs but supports no control.</p></div></div>
+      <div class="step"><div class="n">3</div><div><h4>Test</h4><p>Add cases to <code>tests/test_grc.py</code> for pass, fail and the <code>na</code> path. Results are evidence that Quanta observed something, not an audit conclusion; keep detail strings worded that way.</p></div></div>
+      </div>
+
+      <h4>A hunt-library technique</h4>
+      <div class="steps">
+      <div class="step"><div class="n">1</div><div><h4>Add the technique</h4><p>In <code>remediation/hunting/library.yaml</code>, add a key for an ATT&amp;CK technique id that Quanta tags, with <code>hunt</code> (title), <code>data_sources</code>, one or more <code>detections</code> (each a <code>name</code> and a Sigma-style <code>selection</code>) and <code>notes</code>. Selections use field names with the modifiers <code>contains</code>, <code>startswith</code> and <code>endswith</code>; a list means OR, several fields mean AND.</p></div></div>
+      <div class="step"><div class="n">2</div><div><h4>Know the limit</h4><p><code>translate.py</code> renders the selection as Splunk SPL. It is a small translator, not pySigma, and raises on an unsupported modifier or field name. Quanta never runs the query: the analyst maps field names to their own data model, runs it, and records the result.</p></div></div>
+      <div class="step"><div class="n">3</div><div><h4>Test</h4><p>Add a case to <code>tests/test_hunting.py</code> that generates a hunt for a finding carrying the technique and checks the rendered query.</p></div></div>
+      </div>
+
+      <h4>A runbook</h4>
+      <p>Add an entry to <code>remediation/hunting/runbooks.yaml</code> with <code>id</code>, <code>title</code>, <code>techniques</code>, <code>keywords</code> and ordered <code>steps</code>. <code>triage.py</code> picks a runbook by the alert's technique first, then by title keywords, and falls back to the generic runbook. Runbooks are shown to responders; execution stays with the customer's own tools. Cover a new entry in <code>tests/test_hunting.py</code>.</p>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7" target="_blank" rel="noopener" data-suite-link="arch">Architecture &amp; Schema Reference</a> for the full data contract this all builds on.</footer>

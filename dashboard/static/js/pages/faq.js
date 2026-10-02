@@ -269,8 +269,8 @@ const FAQS = [
     "sync."],
   ["How do I create an API key for a scanner, SOAR playbook or CI job?",
     "On Connections, in \"Send data to Quanta\", click Create an API key: name it, tick " +
-    "only the access it needs (send findings in, report ticket status, read findings " +
-    "out) and pick an expiry (never, 30, 90 or 365 days). The key is shown once - copy " +
+    "only the access it needs (send findings in, report ticket status, read findings out, report controls, AI usage or SIEM alerts) " +
+    "and pick an expiry (never, 30, 90 or 365 days). The key is shown once - copy " +
     "it. Send it as Authorization: Bearer <key>. Revoke in the key table stops it " +
     "immediately."],
   ["How do I import a scanner CSV?",
@@ -320,6 +320,101 @@ const FAQS = [
     "Open a ticket from the Support page (type: feature request or bug). It is stored in " +
     "this deployment's own database and triaged by your administrators, who can assign it, " +
     "reply, and optionally escalate it to the vendor by email. Nothing goes to a public tracker."],
+  ["What do the scopes on a Quanta API key allow?",
+    "ingest:write sends findings, scanner files, SARIF and coverage reports in; " +
+    "tickets:update reports ticket status changes; read:findings exports findings; " +
+    "controls:write reports security controls an EDR or firewall observes; ai-usage:write " +
+    "reports AI usage (gateway events or OpenTelemetry JSON); soc:write sends SIEM or XDR " +
+    "alerts for triage. Tick only what a given job needs."],
+  ["Does Quanta certify compliance, and what is Risk & Compliance for?",
+    "No. Quanta supplies evidence and workflow; it does not certify compliance, and a passing " +
+    "test shows that Quanta observed something, not that an auditor would agree. The /grc " +
+    "page (admin) maps controls in NIST 800-53 r5, CSF 2.0 and an AI-governance set (built-in " +
+    "subsets, or a full catalog you import as OSCAL JSON) to automated tests with thresholds " +
+    "in remediation/config/grc_tests.yaml, collected about daily."],
+  ["Is the Hunting & SOC page a SIEM? Does it run hunt queries?",
+    "No to both. Quanta knows which assets carry exploitable vulnerabilities, so it proposes " +
+    "one hunt per open CVE on the CISA KEV list or with EPSS of 0.5 or more, with the hosts, " +
+    "the ATT&CK techniques it tags and ready-made queries rendered as Splunk SPL by a small " +
+    "translator for Sigma-style selections. You run them in your own SIEM and record each " +
+    "result and the hunt's outcome here (closing needs one)."],
+  ["Where do threat-model threats come from? Is an LLM involved?",
+    "From explicit rules you can read in remediation/threatmodel/rules.py, not an LLM. You " +
+    "describe a system as components, data flows and trust zones; the rules raise STRIDE " +
+    "threats and recompute them on every read, so an edited model never leaves stale threats. " +
+    "Each is scored likelihood x impact, with residual risk reduced by recorded control " +
+    "coverage, and joined to live findings by ATT&CK technique or CWE overlap."],
+  ["How do I see AI spend, and does Quanta read our prompts?",
+    "The /ai-usage page (admin) shows tokens and spend by team, application and model, " +
+    "budgets, unusual days, cache-hit rate and AI tools nobody reviewed. Quanta stores " +
+    "counts, models, times and attribution only, never prompts or responses. Sources: " +
+    "Anthropic and OpenAI usage connections (Admin key), gateway events, OpenTelemetry JSON, " +
+    "and Quanta's own calls."],
+  ["How do I read the guidance on a finding, and does it change by scan type?",
+    "Open the finding (click its ID anywhere) and read \"How to fix this\". Guidance is chosen " +
+    "from the finding's scan type and its CWE or asset type: code flaws found by static " +
+    "analysis (SAST) or by testing a running app (DAST), vulnerable libraries (SCA, with the " +
+    "fixed version and upgrade command when known), committed secrets, " +
+    "infrastructure-as-code, container images, CI/CD pipeline weaknesses, test-coverage gaps " +
+    "in secu"],
+  ["How do I bring in SARIF, pipeline or coverage results from my CI?",
+    "Create an API key with the ingest:write scope (Connections, \"Send data to Quanta\"), then " +
+    "post the file from your pipeline: SARIF 2.1.0 from Semgrep, CodeQL, ZAP, Trivy, Checkov, " +
+    "gitleaks and similar tools to POST /api/ingest/sarif; a Cobertura, JaCoCo or lcov report " +
+    "to POST /api/ingest/coverage (only security-relevant files become findings)."],
+  ["How do I record a security control on an asset?",
+    "Admin only. On Security Controls, under \"Add a control\", enter the asset name or a " +
+    "pattern such as WEB-*, choose the kind of control (for example EDR, network filtering, " +
+    "MFA), describe it in your own words and click Add control. To load many at once, use \"or " +
+    "import a CSV\"."],
+  ["What do verified, claimed, absent and unknown mean in the compensating-control advice?",
+    "In place (verified): a connector or script observed the control on that asset. In place " +
+    "(recorded, not verified): a person recorded it. Not in place: controls are recorded for " +
+    "the asset but this mitigation is not among them. Not known for this asset: nothing is " +
+    "recorded, so Quanta does not guess."],
+  ["How do I build a threat model and review its threats?",
+    "Admin only. Under \"New model\", name it and start from an editable example, from your " +
+    "assets (components drafted from the findings), or empty. Open the model, adjust " +
+    "components, data flows and trust zones in the JSON editor (properties you leave out " +
+    "count as not recorded) and click Save model."],
+  ["How do I import a framework and collect evidence?",
+    "Admin only. On Risk & Compliance, open the Controls tab. The built-in catalogs (NIST " +
+    "800-53 r5, CSF 2.0 and an AI-governance set) are subsets. To work against every control, " +
+    "use \"Import a full catalog\": give it an id and upload the framework's OSCAL JSON (for a " +
+    "licensed standard, your licensed copy in OSCAL form). Then open the Evidence tab and " +
+    "click Collect evidence now; it also runs about once a day."],
+  ["How do I attest to a control Quanta cannot observe?",
+    "On the Controls tab of Risk & Compliance, click Attest beside the control, say whether " +
+    "it is effective, partially-effective or ineffective, and give the statement it rests on " +
+    "(required). The attestation sits beside the automated evidence rather than replacing it, " +
+    "and shows as expired when it is no longer current."],
+  ["How do I register a risk?",
+    "Admin only. Open the Risk register tab. \"Worth registering\" lists suggestions drawn from " +
+    "live findings and threat models: click one to add it. Or fill in \"Add a risk\": title, " +
+    "owner, likelihood and impact from 1 to 5, a treatment (mitigate, accept, transfer, " +
+    "avoid) with the plan or reason, and a review date. The register shows inherent and " +
+    "residual level, owner, status and whether a review is overdue."],
+  ["How do I start a hunt from a proposal and close it with an outcome?",
+    "Admin only. Quanta is not a SIEM and does not run queries; it proposes where to look and " +
+    "you run the queries in your own tool. On Proposed hunts, each card is an open CVE that " +
+    "is on the KEV list or has an EPSS of 0.5 or more, with the hosts, the ATT&CK techniques " +
+    "Quanta tags and ready-made queries (Splunk SPL, to be adapted to your data model)."],
+  ["How do I triage a SOC alert?",
+    "Alerts reach Quanta from your SIEM or XDR through POST /api/ingest/alerts with an API " +
+    "key that has the soc:write scope. On the Alert triage tab they are ranked by a priority " +
+    "that reflects what Quanta knows about the host: its owner, open findings, and " +
+    "known-exploited ones, with the reasons listed."],
+  ["How do I set an AI budget, and see which AI tools nobody reviewed?",
+    "Admin only. AI Usage shows tokens and spend by team, application, model and source. " +
+    "Quanta stores counts only, never prompts or responses, and the page lists which sources " +
+    "are reporting; cost is reported or estimated, and requests of unknown cost are counted " +
+    "separately, never shown as zero."],
+  ["How do I feed AI usage into Quanta?",
+    "Three ways. Add an Anthropic usage or OpenAI usage connection on Connections, using that " +
+    "provider's Admin key. Or post events from a gateway or script to POST " +
+    "/api/ingest/ai-usage, or send OpenTelemetry JSON to /api/ingest/otlp/v1/traces, with an " +
+    "API key that has the ai-usage:write scope. Quanta's own calls are included. See " +
+    "docs/INTEGRATION_API.md."],
   ["How does this compare to ServiceNow's Vulnerability Response / USEM module?",
     "The core bet is remediation, not just detection: three separate mechanisms by " +
     "asset domain (Ansible playbooks, a real git-PR flow for app code, and a " +

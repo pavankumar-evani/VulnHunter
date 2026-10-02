@@ -140,9 +140,13 @@
             <tr><td><strong>Active Directory</strong></td><td><span class="chip pull">pull</span></td><td>LDAP simple bind (or anonymous)</td><td>Computer objects → asset inventory (no ip/mac — AD doesn't carry it)</td></tr>
             <tr><td><strong>CrowdStrike Falcon</strong></td><td><span class="chip pull">pull</span></td><td>OAuth2 client-credentials</td><td>EDR/XDR alerts (CLI-driven ingestion today, no dashboard form yet)</td></tr>
             <tr><td><strong>Armis</strong></td><td><span class="chip pull">pull</span></td><td>CLI ingestion</td><td>Device-risk/IoT-OT findings, agentless-reachable assets</td></tr>
+            <tr><td><strong>Anthropic usage</strong></td><td><span class="chip pull">pull</span></td><td>Admin API key (<code>x-api-key</code>); a workspace key does not work</td><td>Daily token counts by model and workspace from the Usage &amp; Cost Admin API (<code>/v1/organizations/usage_report/messages</code>) into AI usage analytics, not findings</td></tr>
+            <tr><td><strong>OpenAI usage</strong></td><td><span class="chip pull">pull</span></td><td>Organization admin key (Bearer)</td><td>Daily token counts by model and project from the organization usage API (<code>/v1/organization/usage/completions</code>) into AI usage analytics, not findings</td></tr>
           </tbody>
         </table>
       </div>
+
+      <div class="callout warn"><span class="label">AI-usage connectors: counts only, and never run against a live account</span><p><code>remediation/connectors/ai_usage_connector.py</code> holds both provider connectors. They are stored connections on the Connections page (output type <code>ai-usage</code>), pulled on a schedule as queued jobs, and they return aggregated daily buckets keyed so a re-pull updates rather than doubles. Quanta stores token counts, model, time and workspace or project attribution only, never prompts or responses. Both were built against the providers' published documentation and unit-tested against hand-written responses; <strong>neither has been exercised against a live Anthropic or OpenAI account</strong>, and each provider's schema evolves, so check field names against your own account first. Cost is reported, estimated from <code>ai_pricing.yaml</code> (which ships empty) or shown as unknown, never as zero.</p></div>
 
       <h3>A fourth path: findings pushed in, not pulled out</h3>
       <p><code>remediation/connectors/generic_connector.py</code> is a different shape from every connector above — the receiving side of a webhook, for any SIEM/XDR/EDR/SOAR tool that already supports posting a custom outbound webhook. Quanta never calls out; the outside tool calls <code>POST /api/ingest/generic</code> with a JSON body validated against a minimal required shape (<code>title</code>, <code>severity</code>, <code>asset_name</code>, <code>asset_type</code>) and normalized into the same Finding schema every other source uses. One real, generic, testable adapter instead of another bespoke vendor connector nobody has real API access to verify.</p>
@@ -262,7 +266,7 @@
 
     <section id="credentials">
       <h2><span class="num">07</span>Credential handling — the one rule that never changes</h2>
-      <div class="callout warn"><span class="label">Two modes, and which keeps nothing</span><p><strong>Each connector's own page</strong> asks for credentials fresh on every action and persists nothing. <strong>The Connections page</strong> (admin only) is an explicit, opt-in alternative for scheduled syncs: credentials are encrypted at rest (Fernet) with <code>QUANTA_ENCRYPTION_KEY</code>, a key that lives outside the database. Without that key nothing is stored and the page says so. A stored credential is never returned by any API, a blank secret on edit keeps the stored one, backups never contain the key, and every run is audited. Supported for scheduled sync: Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius and Active Directory. OpenVAS/GVM keeps its own start/status/import flow. Stored push connections: ServiceNow, Jira Cloud and Splunk HEC (§03).</p></div>
+      <div class="callout warn"><span class="label">Two modes, and which keeps nothing</span><p><strong>Each connector's own page</strong> asks for credentials fresh on every action and persists nothing. <strong>The Connections page</strong> (admin only) is an explicit, opt-in alternative for scheduled syncs: credentials are encrypted at rest (Fernet) with <code>QUANTA_ENCRYPTION_KEY</code>, a key that lives outside the database. Without that key nothing is stored and the page says so. A stored credential is never returned by any API, a blank secret on edit keeps the stored one, backups never contain the key, and every run is audited. Supported for scheduled sync: Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius and Active Directory, plus the Anthropic and OpenAI usage connections (AI usage analytics, not findings). OpenVAS/GVM keeps its own start/status/import flow. Stored push connections: ServiceNow, Jira Cloud and Splunk HEC (§03).</p></div>
       <div class="callout info"><span class="label">Where the encryption key itself lives</span><p>In a Kubernetes or vault-backed deployment, <code>QUANTA_ENCRYPTION_KEY</code> and the other secrets are supplied as mounted files through the <code>NAME_FILE</code> convention (for example <code>QUANTA_ENCRYPTION_KEY_FILE</code>), never as environment variables. A key vault (Azure Key Vault, AWS Secrets Manager, GCP Secret Manager or HashiCorp Vault) feeds those files through External Secrets or the Secrets Store CSI driver. The Helm chart's <code>secrets.mode</code> is <code>externalSecrets</code>, <code>csi</code>, <code>existingSecret</code> or <code>inline</code>; <code>inline</code> is development only and refused unless <code>secrets.allowInline</code> is set. An explicit environment variable still wins over a file; a <code>_FILE</code> pointing at a missing or empty file stops the pod rather than starting with a random secret.</p></div>
     </section>
 
@@ -273,8 +277,8 @@
         <table>
           <thead><tr><th>Direction</th><th>Whose credential</th><th>Use it for</th></tr></thead>
           <tbody>
-            <tr><td><strong>Outbound</strong></td><td>The vendor's key, stored encrypted on the Connections page</td><td>Scheduled pulls (Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory); tickets in ServiceNow and Jira; events to Splunk</td></tr>
-            <tr><td><strong>Inbound</strong></td><td>A Quanta API key with only the scope it needs</td><td>A scanner or SOAR playbook pushing findings, a CI job uploading an export, ServiceNow reporting a ticket change, a BI tool reading findings</td></tr>
+            <tr><td><strong>Outbound</strong></td><td>The vendor's key, stored encrypted on the Connections page</td><td>Scheduled pulls (Tenable, Qualys, Prisma Cloud, Cortex XSIAM, Infoblox, Axonius, Active Directory, Anthropic and OpenAI usage); tickets in ServiceNow and Jira; events to Splunk</td></tr>
+            <tr><td><strong>Inbound</strong></td><td>A Quanta API key with only the scope it needs</td><td>A scanner or SOAR playbook pushing findings, a CI job uploading an export, SARIF or coverage report, an EDR or firewall integration reporting controls, a gateway reporting AI usage, a SIEM sending alerts for triage, ServiceNow reporting a ticket change, a BI tool reading findings</td></tr>
             <tr><td><strong>File</strong></td><td>A signed-in admin, or an API key</td><td>Export a CSV and import it (<em>Import a scanner file</em> on the Connections page)</td></tr>
           </tbody>
         </table>
@@ -286,9 +290,12 @@
         <table>
           <thead><tr><th>Scope</th><th>Allows</th></tr></thead>
           <tbody>
-            <tr><td><code>ingest:write</code></td><td><code>POST /api/ingest/findings</code>, <code>POST /api/ingest/scanner-csv</code>, and (in production) <code>POST /api/ingest/generic</code></td></tr>
+            <tr><td><code>ingest:write</code></td><td><code>POST /api/ingest/findings</code>, <code>/api/ingest/scanner-csv</code>, <code>/api/ingest/sarif</code>, <code>/api/ingest/coverage</code>, and (in production) <code>/api/ingest/generic</code></td></tr>
             <tr><td><code>tickets:update</code></td><td><code>POST /api/inbound/ticket-status</code></td></tr>
             <tr><td><code>read:findings</code></td><td><code>GET /api/export/findings</code></td></tr>
+            <tr><td><code>controls:write</code></td><td><code>POST /api/ingest/controls</code></td></tr>
+            <tr><td><code>ai-usage:write</code></td><td><code>POST /api/ingest/ai-usage</code> and <code>POST /api/ingest/otlp/v1/traces</code></td></tr>
+            <tr><td><code>soc:write</code></td><td><code>POST /api/ingest/alerts</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -315,6 +322,40 @@
       <pre><code>curl -X POST "https://quanta.example.com/api/ingest/scanner-csv?source=tenable-export&amp;reconcile=true" \
   -H "Authorization: Bearer $QUANTA_KEY" --data-binary @export.csv</code></pre>
       <p>The body is the raw CSV in the Tenable column layout (<code>Plugin ID, CVE, Risk, CVSS v3.0 Base Score, Host, IP Address, FQDN, OS, Name, Synopsis, Solution, Port, Protocol, First Discovered, Last Observed</code>); Qualys and other scanners can export or be transformed to it.</p>
+
+      <h3>Upload scanner results in SARIF</h3>
+      <pre><code>curl -X POST "https://quanta.example.com/api/ingest/sarif?source=semgrep&amp;asset=shop-api&amp;reconcile=true" \
+  -H "Authorization: Bearer $QUANTA_KEY" --data-binary @semgrep.sarif</code></pre>
+      <p>SARIF 2.1.0 is what Semgrep, CodeQL, OWASP ZAP, Trivy, Grype, Checkov, tfsec, KICS, gitleaks, Hadolint, actionlint and many others emit, so one endpoint covers SAST, DAST, SCA, secrets, IaC, container and pipeline findings without a connector per tool. Needs <code>ingest:write</code>. <code>scan_type</code> is worked out from the tool name (override with the query parameter), <code>asset</code> names the repository or application, and a finding keeps its identity through the tool's own fingerprint or a hash of rule, file and code (the line number is deliberately left out, so a moved line is not a new finding). <code>reconcile=true</code> declares the file the complete current result for that source. Severity comes from a numeric <code>security-severity</code> when supplied, otherwise the SARIF level (error High, warning Medium, note Low); Quanta does not raise a result to Critical on level alone. Suppressed results are skipped. The admin <em>Import a scanner file</em> button and <code>quanta-admin import-sarif</code> accept the same files. See the Vulnerability Finding Engine document for what is done with them.</p>
+
+      <h3>Upload test coverage</h3>
+      <pre><code>curl -X POST "https://quanta.example.com/api/ingest/coverage?source=coverage&amp;asset=shop-api&amp;threshold=60" \
+  -H "Authorization: Bearer $QUANTA_KEY" --data-binary @coverage.xml</code></pre>
+      <p>Cobertura XML, JaCoCo XML or lcov. Only files whose path suggests security-relevant code and that fall below the threshold become findings; the response also gives the overall percentage. The path match is a heuristic on file names.</p>
+
+      <h3>Report the security controls you observe</h3>
+      <pre><code>curl -X POST https://quanta.example.com/api/ingest/controls \
+  -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json" \
+  -d '{"source": "falcon", "controls": [
+        {"asset_name": "WEB-*", "control_class": "edr", "name": "EDR, prevention on"},
+        {"asset_name": "WIN-DC01", "control_class": "network-filtering", "name": "Perimeter firewall, deny by default"}]}'</code></pre>
+      <p>Needs <code>controls:write</code>. An EDR, firewall or cloud-posture integration (or a script) tells Quanta which controls protect which assets; <code>asset_name</code> may be a glob such as <code>WEB-*</code> and <code>control_class</code> comes from a fixed vocabulary (<code>GET /api/controls</code> lists it). Controls reported this way are stored as <strong>verified</strong>; controls typed in or imported as CSV on the Controls page are <strong>claimed</strong>. This is what lets compensating-control advice be specific to your environment (see the Remediation Engine document).</p>
+
+      <h3>Report AI usage</h3>
+      <pre><code>curl -X POST https://quanta.example.com/api/ingest/ai-usage \
+  -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json" \
+  -d '{"source": "gateway", "events": [{"ts": "2026-10-01T10:00:00Z", "model": "claude-sonnet", "provider": "anthropic",
+        "team": "Platform Engineering", "application": "support-bot", "user_ref": "u-017",
+        "input_tokens": 1200, "output_tokens": 300, "cache_read_tokens": 800, "event_key": "req-8841"}]}'</code></pre>
+      <p>Needs <code>ai-usage:write</code>. Send an <code>event_key</code> (a request id) so a re-send updates instead of doubling, and a pseudonymous <code>user_ref</code> if people should not be identifiable. <code>cost_usd</code> is optional. Counts, models, times and attribution only.</p>
+      <p><strong>OpenTelemetry (OTLP GenAI, JSON).</strong> Point an OTLP/HTTP exporter at <code>POST /api/ingest/otlp/v1/traces</code> with the same key and <code>OTEL_EXPORTER_OTLP_PROTOCOL=http/json</code>. Spans carrying the GenAI attributes (<code>gen_ai.request.model</code>, <code>gen_ai.usage.input_tokens</code>, <code>gen_ai.usage.output_tokens</code>) become events and <code>service.name</code> is the application; spans without a model or token count are ignored. The protobuf encoding is not read, and because the GenAI conventions are still evolving, both the older <code>gen_ai.system</code> and the newer <code>gen_ai.provider.name</code> are accepted.</p>
+
+      <h3>Send SIEM or XDR alerts for triage</h3>
+      <pre><code>curl -X POST https://quanta.example.com/api/ingest/alerts \
+  -H "Authorization: Bearer $QUANTA_KEY" -H "Content-Type: application/json" \
+  -d '{"alerts": [{"external_id": "ALERT-1042", "source": "splunk", "title": "Shell spawned by w3wp.exe", "severity": "High",
+       "asset": "WEB-1", "technique": "T1190", "occurred_at": "2026-10-02T09:14:00Z"}]}'</code></pre>
+      <p>Needs <code>soc:write</code>. An alert is unique per <code>source</code> + <code>external_id</code>, so a re-send changes nothing. <code>technique</code> (an ATT&amp;CK id) and <code>asset</code> are optional but are what let Quanta add vulnerability context when ranking the triage queue. Quanta never changes the alert's own severity and never decides an alert is real; this is intake for context and workflow, not a SIEM.</p>
 
       <h3>Report a ticket's state</h3>
       <pre><code>curl -X POST https://quanta.example.com/api/inbound/ticket-status \

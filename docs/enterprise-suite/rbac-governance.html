@@ -96,6 +96,7 @@
     <a href="#governance">04 · Policy &amp; governance config</a>
     <a href="#compliance">05 · Standards &amp; compliance mapping</a>
     <a href="#guardrails">06 · AI &amp; security guardrails</a>
+    <a href="#newpages">07 · Access to GRC, hunting &amp; related pages</a>
   </nav>
 
   <main>
@@ -117,7 +118,7 @@
           </tbody>
         </table>
       </div>
-      <p>A third kind of principal sits beside people: the <strong>API key</strong>, a scoped machine credential for tools that call Quanta (see the Connectors &amp; Adaptors Catalog, §08). Keys carry only the scopes <code>ingest:write</code>, <code>tickets:update</code> and <code>read:findings</code>; Quanta stores a hash only (<code>qk_…</code> keys are shown once), each key has an expiry, can be revoked at any time, is rate limited per key (<code>QUANTA_API_KEY_RATE_MAX</code>, default 600 a minute) and appears in the activity log as <code>apikey:&lt;name&gt;</code>. A key grants no admin role and no access to any other route.</p>
+      <p>A third kind of principal sits beside people: the <strong>API key</strong>, a scoped machine credential for tools that call Quanta (see the Connectors &amp; Adaptors Catalog, §08). Keys carry only the scopes <code>ingest:write</code>, <code>tickets:update</code>, <code>read:findings</code>, <code>controls:write</code> (push controls), <code>ai-usage:write</code> (push AI usage events) and <code>soc:write</code> (push alerts to SOC triage); Quanta stores a hash only (<code>qk_…</code> keys are shown once), each key has an expiry, can be revoked at any time, is rate limited per key (<code>QUANTA_API_KEY_RATE_MAX</code>, default 600 a minute) and appears in the activity log as <code>apikey:&lt;name&gt;</code>. A key grants no admin role and no access to any other route.</p>
       <div class="callout warn"><span class="label">The one gap worth knowing before a real rollout</span><p>Every read (<code>GET</code>) route is public by default in this MVP — team-scoping included, meaning it's bypassable by an anonymous request unless <code>QUANTA_REQUIRE_LOGIN_FOR_READS=true</code> is explicitly set. This is a disclosed, deliberate MVP default, not an oversight — but it means "team scoping" today protects against an authenticated user browsing outside their lane, not against an anonymous one.</p></div>
       <div class="callout info"><span class="label">The login gate has a narrow, deliberate exemption</span><p>With <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> (or <code>QUANTA_PRODUCTION</code>) on, only <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> skip the browser-login check, because tools cannot sign in through a browser. Each of those routes verifies an API key itself and rejects a missing, expired, revoked or out-of-scope key. In production the older <code>POST /api/ingest/generic</code> webhook requires an <code>ingest:write</code> key as well.</p></div>
     </section>
@@ -188,6 +189,25 @@
       </div>
 
       <div class="callout warn"><span class="label">Disclosed gap, not fixed here</span><p>The daily AI token limit (Admin Settings) is real and enforced pre-flight, but defaults to unlimited until an admin sets one - not a bug, an opt-in cap rather than a surprise restriction on an unconfigured deployment.</p></div>
+    </section>
+
+    <section id="newpages">
+      <h2><span class="num">07</span>Access to GRC, hunting &amp; related pages</h2>
+      <p class="section-intro">The newer governance and security-operations pages follow the same two-role model: they are admin-only, with two narrow exceptions that need only a login. Like every other read, the data behind them is open to anonymous <code>GET</code> requests only where the deployment leaves reads public; with <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> or <code>QUANTA_PRODUCTION</code> on, the routes are gated as described here.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Page</th><th>Who can use it</th><th>Rule worth knowing</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">/grc</td><td>Admin. Policy list and policy acknowledgement need login only.</td><td>Accepting a risk requires the reason (in the treatment plan) and a review date. Automated control tests with too little data return <code>na</code>, never a pass. Attestations sit beside the evidence and do not replace it.</td></tr>
+            <tr><td class="mono">/threat-models</td><td>Admin</td><td>Accepting a threat or marking it not applicable requires a note saying why.</td></tr>
+            <tr><td class="mono">/hunting</td><td>Admin</td><td>Closing a hunt requires an outcome (confirmed, not-found or needs-data). Closing an alert requires a disposition (true-positive, benign, false-positive or needs-data).</td></tr>
+            <tr><td class="mono">/ai-usage</td><td>Admin</td><td>Reads usage counts and cost figures only; no prompt text is ever stored.</td></tr>
+            <tr><td class="mono">/controls</td><td>Listing needs login; add, delete and import are admin</td><td>The inventory feeds compensating-control assessments. Automated pushes use a <code>controls:write</code> key.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Machine intake for these areas uses API keys, not sessions: <code>soc:write</code> for <code>POST /api/ingest/alerts</code>, <code>ai-usage:write</code> for AI usage events and OTLP traces, <code>controls:write</code> for controls. A key with one scope cannot call a route that needs another.</p>
+      <div class="callout warn"><span class="label">Evidence, not certification</span><p>The GRC module collects evidence, records decisions and tracks workflow against framework catalogs (built-in subsets of NIST 800-53 r5, CSF 2.0 and an AI-governance set, or a full catalog imported as OSCAL JSON). Its per-control status and OSCAL assessment-results export are inputs to an assessment. They are not a certification, attestation or audit result, and the same caveat as in §05 applies. Quanta is also not a SIEM: hunts propose queries that an analyst runs in their own tool and records the result of.</p></div>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f" target="_blank" rel="noopener" data-suite-link="pages">Page-by-Page Reference</a> or <a href="https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b" target="_blank" rel="noopener" data-suite-link="exec">Executive Overview &amp; Solution Brief</a>.</footer>

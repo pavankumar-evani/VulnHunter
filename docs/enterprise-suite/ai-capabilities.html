@@ -125,6 +125,7 @@
     <a href="#architecture">03 · What powers it, and why</a>
     <a href="#boundaries">04 · Where AI should (and shouldn't) be relied on</a>
     <a href="#faq">05 · Why this should reassure a reviewer</a>
+    <a href="#usage">06 · AI usage analytics &amp; what stays deterministic</a>
   </nav>
 
   <main>
@@ -417,6 +418,38 @@ Suggest concrete, specific remediation steps for this finding...</div>
 
       <h3>Why don't the owner suggestions, ATT&amp;CK tags, or compensating-control suggestions appear in this document?</h3>
       <p>Because they're not AI — they're transparent, disclosed keyword/pattern-matching heuristics with their exact reasoning shown on hover, not a model of any kind. This document covers only the surfaces that actually call an LLM (AI Assist, AI Trend Analysis) or a real trained model (ML Insights), plus the deterministic search (Ask Quanta) and the Claude Code subagent pipelines. Keeping that line sharp is deliberate — blurring "heuristic" and "AI" is exactly the kind of overclaiming a procurement reviewer is trained to catch.</p>
+    </section>
+
+    <section id="usage">
+      <h2><span class="num">06</span>AI usage analytics, and what stays deterministic</h2>
+      <p class="section-intro">The sections above cover where Quanta itself uses AI. This one covers a different question: how much AI your organization uses, and whether any of it escaped review. The <strong>AI Usage</strong> page (<code>/ai-usage</code>, admin only) does not call a model; it measures usage reported by other systems.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Capability</th><th>What it does</th><th>Limit worth knowing</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Usage events</strong></td><td>Records counts per event (tokens in and out, cache reads, model, team, application, user) from the Anthropic Usage &amp; Cost Admin API and OpenAI organization usage connectors, from <code>POST /api/ingest/ai-usage</code> and OTLP JSON traces (an API key with scope <code>ai-usage:write</code>), and from Quanta's own AI calls.</td><td><strong>Counts only. Prompt and response text are never stored.</strong> Events are unique per source and event key, so a repeated push does not double-count. The picture is only as complete as the sources feeding it, and the page lists which sources have reported.</td></tr>
+            <tr><td><strong>Cost</strong></td><td>Each figure is labelled reported (the source gave it), estimated (computed from prices the client entered in <code>ai_pricing.yaml</code>, which ships empty) or unknown.</td><td>Unknown cost is counted separately and is never shown as zero.</td></tr>
+            <tr><td><strong>Breakdowns and cache-hit rate</strong></td><td>Totals by model, team, application and day, plus the share of input served from cache.</td><td>Reflects only attributed events; unattributed usage is shown as such.</td></tr>
+            <tr><td><strong>Unusual days</strong></td><td>Flags days whose volume deviates from the recent baseline, with a statistical rule.</td><td>A prompt to look, not a finding of misuse.</td></tr>
+            <tr><td><strong>Budgets</strong></td><td>Dollar and/or token limits per organization, team or application, per day, week or month, with an alert percentage.</td><td>Budgets report status; they do not block calls at the provider.</td></tr>
+            <tr><td><strong>Approved models</strong></td><td>Lists usage of any model outside the approved list in <code>ai_usage_policy.yaml</code>.</td><td>Only as good as the list the client maintains.</td></tr>
+            <tr><td><strong>Shadow-AI discovery</strong></td><td>Matches hostnames in a proxy or DNS export against a list of known AI services (<code>ai_domains.yaml</code>). Each service found becomes an application record, unreviewed until an administrator marks it sanctioned or blocked, with distinct users and request counts.</td><td><strong>Records and reports only; it blocks nothing.</strong> It recognises only services on its list, so a new, unlisted AI tool is not flagged until added.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>What is deliberately not LLM-generated</h3>
+      <p>Several newer features can look like AI output but are deterministic or curated, and none of them calls a model:</p>
+      <ul>
+        <li><strong>Remediation guidance</strong> (<code>remediation/guidance/knowledge.yaml</code>) is curated text, selected by rule for each finding.</li>
+        <li><strong>Threat-model threats</strong> are raised by explicit STRIDE rules, scored by a fixed formula (likelihood x impact; residual = inherent x (1 - 0.7 x control coverage)), and joined to live findings by technique or CWE overlap. They are recomputed on read.</li>
+        <li><strong>Threat hunting</strong>: a hunt is proposed per open CVE that is on the KEV list or has EPSS of 0.5 or more; its queries come from a curated library and are translated to Splunk SPL by a small rule-based translator. Quanta does not run them.</li>
+        <li><strong>Alert triage</strong> ranks alerts using vulnerability context and attaches a runbook chosen by technique, then title keywords. The runbooks are written content.</li>
+        <li><strong>Compensating-control assessment</strong> compares curated MITRE ATT&amp;CK mitigations with the controls recorded for the asset, and says unknown when nothing is recorded.</li>
+        <li><strong>GRC control tests</strong> are threshold checks over live data; too little data gives <code>na</code>, not a pass.</li>
+      </ul>
+      <div class="callout info"><span class="label">Why it matters</span><p>Because these results are rule-based, the same inputs give the same output and each one can be traced to the rule, list or file that produced it. They need no AI spend and fall outside the prompt-injection and spend-cap discussion in §03 and §04.</p></div>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. For the full OWASP LLM Top 10 2026 mapping and the real access-control model these guardrails sit on top of, see <a href="https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c" target="_blank" rel="noopener">RBAC, Multi-Tenancy &amp; Governance</a>. For task-oriented, non-AI how-to answers, see the <a href="https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578" target="_blank" rel="noopener">User &amp; Operations Guide</a>.</footer>

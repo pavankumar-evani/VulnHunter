@@ -117,6 +117,10 @@
     <a href="#aiml">07 · AI/ML vulnerability taxonomy</a>
     <a href="#catalog">08 · Source catalog summary</a>
     <a href="#coverage">09 · Coverage, reachability &amp; SBOM</a>
+    <a href="#appsec-ingest">10 · SARIF, pipeline &amp; coverage ingest</a>
+    <a href="#scantypes">11 · Scan types</a>
+    <a href="#threatmodel">12 · Threat-model engine</a>
+    <a href="#hunting">13 · Hunting &amp; alert triage</a>
   </nav>
 
   <main>
@@ -282,6 +286,7 @@ sequenceDiagram
             <tr><td>Infoblox / Axonius / Active Directory</td><td>C — asset inventory</td><td><span class="chip live">live</span></td></tr>
             <tr><td>Armis</td><td>A — CVE-scoped host/IoT</td><td><span class="chip live">live</span> (CLI ingestion)</td></tr>
             <tr><td>CrowdStrike Falcon</td><td>B — posture/EDR</td><td><span class="chip live">live</span></td></tr>
+            <tr><td>Any SARIF 2.1.0 producer (Semgrep, CodeQL, ZAP, Trivy, Checkov, gitleaks and more)</td><td>Code, web, dependency, IaC, secrets, container</td><td><span class="chip live">live</span> (inbound upload, §10)</td></tr>
             <tr><td>Black Duck · Polaris · BitSight · BishopFox · 15+ more</td><td>Various</td><td><span class="chip ref">reference</span></td></tr>
           </tbody>
         </table>
@@ -297,6 +302,64 @@ sequenceDiagram
         <div class="card"><h4>SBOM-derived blast radius</h4><p><code>remediation/enrichment/sbom.py</code> parses a real CycloneDX SBOM (<code>remediation/sample-data/sbom.json</code>) to show which other components depend on a vulnerable package — the <code>/dependencies</code> page, and (for an asset with at least one finding carrying a resolved <code>dependency.package</code>) a third Impact-score component alongside severity and asset criticality, same additive-only rule as coverage above. <code>remediation-fixer-application</code> (see the Remediation Engine document) generates the upgrade plan from the same data.</p></div>
       </div>
       <div class="callout warn"><span class="label">Manually-curated datasets, not live connectors</span><p>Neither <code>security_controls.yaml</code> nor <code>network_topology.yaml</code> is populated by a firewall/EDR-vendor API call — there is no such connector in this repo today. Same disclosed, honest posture as <code>remediation/sample-data/threat_intel.json</code>: real, usable data structures, hand-maintained until (or unless) a live connector is built for them.</p></div>
+    </section>
+
+    <section id="appsec-ingest">
+      <h2><span class="num">10</span>SARIF, pipeline and coverage ingest</h2>
+      <p class="section-intro">Three inbound adapters that bring application-security results in without a connector per tool. All three produce ordinary findings, so scoring, enrichment, assignment, guidance and the queue treat them like any other.</p>
+      <div class="grid3">
+        <div class="card"><h4>SARIF 2.1.0</h4><p><code>remediation/ingest/sarif.py</code> reads the format Semgrep, CodeQL, SonarQube (export), OWASP ZAP, Trivy, Grype, Checkov, tfsec, KICS, gitleaks, Hadolint, actionlint and many other tools emit (<code>POST /api/ingest/sarif</code>, the admin file import, or <code>quanta-admin import-sarif</code>). Each result becomes a finding with <code>scan_type</code>, <code>location</code> (file and line, or URL), <code>cwe</code>, <code>rule_id</code> and <code>tool</code>. Identity comes from the tool's fingerprint or a hash of rule, file and code, not the line number. Severity is a numeric <code>security-severity</code> when present, otherwise the SARIF level (error High, warning Medium, note Low); a result is never made Critical on level alone. Suppressed results are skipped. A CVE rule id from a dependency tool becomes an SCA finding on an <code>application</code> asset, so the dependency-upgrade path applies.</p></div>
+        <div class="card"><h4>CI/CD pipeline checks</h4><p><code>remediation/scanners/cicd.py</code> (<code>quanta-admin scan-pipelines</code>) applies 15 explicit rules to GitHub Actions workflows, GitLab CI files and Jenkinsfiles, each mapped to an OWASP Top 10 CI/CD risk and a CWE: unpinned third-party actions, <code>pull_request_target</code> that checks out the pull request, untrusted event data in <code>run:</code> scripts, broad token permissions, secrets echoed or written into the file, self-hosted runners reachable from pull requests, and downloads piped into a shell. Output can be Quanta findings or SARIF. It reads the file only: branch protection, approvers and runner settings are outside it, so a clean result means "no file-level weaknesses found", not "the pipeline is secure".</p></div>
+        <div class="card"><h4>Test coverage</h4><p><code>remediation/ingest/coverage.py</code> reads Cobertura XML, JaCoCo XML or lcov (<code>POST /api/ingest/coverage</code>). Coverage is not a vulnerability, so only files whose path suggests security-relevant code (authentication, authorization, sessions, cryptography, validation, payments, uploads, parsers) and that fall below a threshold (60% by default, adjustable) become findings; everything else appears only in the overall summary. The path match is a heuristic on file and folder names, and each finding says so. Entity declarations in a report are refused.</p></div>
+      </div>
+      <div class="callout info"><span class="label">What these are and are not</span><p>Quanta does not run Semgrep, ZAP or any other scanner here; it ingests what your tools already produced. The adapters are unit-tested against hand-written and sample reports, not against a long tail of every tool's real output, so an unusual SARIF producer may need a field mapped. See the Connectors &amp; Adaptors Catalog for the API-key scopes and endpoints.</p></div>
+    </section>
+
+    <section id="scantypes">
+      <h2><span class="num">11</span>Scan types</h2>
+      <p class="section-intro">Every finding carries a scan type describing the methodology that found it. An explicit <code>scan_type</code> on a finding (set by a SARIF upload, a pipeline check or any scanner that knows) wins; otherwise Quanta infers it from the finding's source, asset type and text (<code>remediation/enrichment/scan_type_mapping.py</code>).</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Scan type</th><th>What it covers</th></tr></thead>
+          <tbody>
+            <tr><td><code>infra-vm</code></td><td>Host and infrastructure vulnerability scanning (the default for unclassified assets)</td></tr>
+            <tr><td><code>sca</code></td><td>Vulnerable open-source dependencies, tied to a CVE and a package</td></tr>
+            <tr><td><code>cert-mgmt</code></td><td>Certificates: expiry, weak keys, chain problems</td></tr>
+            <tr><td><code>sast</code></td><td>Static analysis of first-party source code</td></tr>
+            <tr><td><code>dast</code></td><td>Dynamic testing of a running web application or API</td></tr>
+            <tr><td><code>iac</code></td><td>Infrastructure-as-code misconfiguration (Terraform, CloudFormation, Kubernetes manifests)</td></tr>
+            <tr><td><code>secrets</code></td><td>Credentials and keys committed to code or configuration</td></tr>
+            <tr><td><code>runtime</code></td><td>Runtime detection on containers and hosts (Falco-style), usually with no CVE</td></tr>
+            <tr><td><code>ai-ml</code></td><td>AI/ML systems (see §07)</td></tr>
+            <tr><td><code>container</code></td><td>Container image and Dockerfile findings</td></tr>
+            <tr><td><code>cicd</code></td><td>Build-pipeline weaknesses (§10)</td></tr>
+            <tr><td><code>coverage</code></td><td>Under-tested security-relevant code (§10)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The scan type drives the AppSec pages and, with the CWE, asset type and keywords, selects the curated remediation guidance (see the Remediation Engine document). A SARIF tool name that no rule recognizes defaults to <code>sast</code>.</p>
+    </section>
+
+    <section id="threatmodel">
+      <h2><span class="num">12</span>Threat-model engine</h2>
+      <p class="section-intro">A structured way to ask "what could go wrong with this system", joined to the vulnerabilities and controls Quanta already holds. Admin only, on the Threat Models page (<code>remediation/threatmodel/</code>).</p>
+      <div class="grid2">
+        <div class="card"><h4>Model and rules</h4><p>A system is described as components (process, service, datastore, external actor, AI model), data flows and trust zones. <code>rules.py</code> applies 14 explicit STRIDE-per-element rules, each written as a readable condition on the model (for example, a component reachable from a less trusted zone with <code>authn: false</code>). A rule is <strong>confirmed</strong> when the model states the weakness and <strong>unconfirmed</strong> when the model is silent, so it is raised for a person to confirm or dismiss and scored one step lower on likelihood. Threats are computed on read, so an edited model never leaves stale ones.</p></div>
+        <div class="card"><h4>Scoring and the join</h4><p><code>engine.py</code> scores inherent risk as likelihood x impact (1 to 5 each, from the rule), then residual = inherent x (1 - 0.7 x control coverage), where coverage is the share of the rule's mitigating control classes recorded in the controls inventory. Each threat is joined to live findings by ATT&amp;CK technique or CWE overlap and to the recorded controls, so a threat shows the actual open vulnerabilities behind it. Only people's decisions (accepted, mitigated, not applicable) are stored. A starting model can be seeded from the asset inventory.</p></div>
+      </div>
+      <div class="callout warn"><span class="label">Rules, not a model</span><p>Threat-model threats come from explicit rules, not an LLM, so the same model always yields the same threats and every threat traces to a rule and the facts that raised it. The scores are a starting point for a conversation, not a measurement, and the rule set is a general STRIDE set, not exhaustive for any one system.</p></div>
+    </section>
+
+    <section id="hunting">
+      <h2><span class="num">13</span>Hunting engine and alert triage</h2>
+      <p class="section-intro">The "detect" counterpart to the finding queue: the same exposure data, used to decide where to look for signs that something has already happened. Admin only, on the Hunting page (<code>remediation/hunting/</code>).</p>
+      <div class="grid2">
+        <div class="card"><h4>Hunts proposed from exposure</h4><p><code>generate.py</code> proposes one hunt per open CVE that is on the CISA KEV list or has an EPSS score of at least 0.5 and is open on at least one asset. A hunt carries the affected hosts, the ATT&amp;CK techniques Quanta tags for those findings, and a query per detection from <code>library.yaml</code>. A technique with no library entry still produces a hunt, with no queries and a note saying so. A proposed hunt means the exposure makes it worth looking, never that anything happened.</p></div>
+        <div class="card"><h4>Sigma-style library, rendered as SPL</h4><p>The library holds Sigma-style detections for 11 ATT&amp;CK techniques. <code>translate.py</code> renders them as Splunk SPL; it is a small translator for Sigma-style selections, not pySigma, so unusual constructs are not supported. The analyst runs the query in their own tool and records each result and the hunt's outcome in Quanta; closing a hunt requires an outcome. Hunt metrics include ATT&amp;CK coverage of the techniques in the estate's open findings.</p></div>
+        <div class="card"><h4>Alert triage priority</h4><p>Alerts arrive at <code>POST /api/ingest/alerts</code> (key scope <code>soc:write</code>). <code>triage.py</code> ranks them: severity base (Critical 100, High 70, Medium 40, Low 15, Informational 5), plus 30 for an open KEV-listed finding on the host, plus 20 when a finding on the host is tagged with the alert's ATT&amp;CK technique, plus 10 for a high-EPSS finding, plus 10 when the host has no owner. The reasons are listed beside the score. It never changes an alert's own severity or decides it is real, and closing an alert needs a disposition.</p></div>
+        <div class="card"><h4>Runbooks</h4><p>Each alert gets a runbook from <code>runbooks.yaml</code>, chosen by technique first, then by title keywords, else a generic one. Five ship (public-facing application exploitation, privilege escalation, lateral movement, credential access, generic) and your team can edit them.</p></div>
+      </div>
+      <div class="callout warn"><span class="label">Not a SIEM, and it executes nothing</span><p>Quanta does not execute hunt queries, collect logs or detect anything itself. It tells you where exposure justifies looking, gives you the query text, and records what you found. Triage ranking is context for ordering a queue, not a verdict. Neither feature has been exercised against a live Splunk or SIEM tenant.</p></div>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. Continue to <a href="https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c" target="_blank" rel="noopener" data-suite-link="connectors">Connectors &amp; Adaptors Catalog</a> or <a href="https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46" target="_blank" rel="noopener" data-suite-link="remediation">Remediation Engine &amp; Workflows</a>.</footer>
