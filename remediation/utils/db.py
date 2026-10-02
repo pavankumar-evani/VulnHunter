@@ -444,6 +444,30 @@ ai_budgets = Table(
 )
 
 
+# Threat models (remediation/threatmodel/). Threats are computed from the model on read; only reviews are stored.
+threat_models = Table(
+    "threat_models", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False),
+    Column("description", Text, nullable=True),
+    Column("model_json", Text, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    Column("updated_by", String, nullable=True),
+)
+
+threat_reviews = Table(
+    "threat_reviews", metadata,
+    Column("model_id", Integer, primary_key=True),
+    Column("threat_key", String, primary_key=True),
+    Column("status", String, nullable=False),
+    Column("note", Text, nullable=True),
+    Column("reviewer", String, nullable=True),
+    Column("updated_at", String, nullable=False),
+)
+
+
 _SCHEMA_ADVISORY_KEY = 727270001
 
 
@@ -487,7 +511,7 @@ def ensure_schema(engine):
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
-            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets,
+            teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

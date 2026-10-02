@@ -141,6 +141,14 @@ export const api = {
     if (!res.ok) throw new Error((data && data.detail) || res.statusText);
     return data;
   },
+  threatModels: () => request("GET", "/api/threat-models"),
+  threatModel: (id) => request("GET", `/api/threat-models/${id}`),
+  createThreatModel: (body) => request("POST", "/api/threat-models", body),
+  updateThreatModel: (id, body) => request("PUT", `/api/threat-models/${id}`, body),
+  deleteThreatModel: (id) => request("DELETE", `/api/threat-models/${id}`),
+  seedThreatModel: (id, patterns) => request("POST", `/api/threat-models/${id}/seed`, { patterns }),
+  reviewThreat: (id, body) => request("POST", `/api/threat-models/${id}/review`, body),
+  threatRules: () => request("GET", "/api/threat-models/rules"),
   findingLinks: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/links`),
   importScannerFile: async (source, reconcile, file) => {
     const res = await fetch(`/api/connections/import-file?source=${encodeURIComponent(source)}&reconcile=${reconcile ? "true" : "false"}`, { method: "POST", body: file });

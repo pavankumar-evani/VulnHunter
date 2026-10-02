@@ -106,6 +106,8 @@ export const NAV = [
   { group: "Connectors / Adaptors", items: [
     { path: "/connections", label: "Connections", icon: "adaptor",
       tip: "Admin: store your scanner and asset-source credentials (encrypted) and schedule automatic syncs." },
+    { path: "/threat-models", label: "Threat Models", icon: "rules",
+      tip: "Admin: describe a system, get STRIDE threats raised by explicit rules, each joined to the live findings and security controls on its assets." },
     { path: "/ai-usage", label: "AI Usage", icon: "rules",
       tip: "Admin: AI spend and tokens across the organization by team, application and model, budgets, unusual days, and AI tools nobody reviewed." },
     { path: "/controls", label: "Security Controls", icon: "rules",

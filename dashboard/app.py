@@ -54,6 +54,7 @@ from remediation.coordination import worker as job_worker  # noqa: E402
 from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.controls import store as controls_store  # noqa: E402
+from remediation.threatmodel import engine as tm_engine, rules as tm_rules, seed as tm_seed, store as tm_store  # noqa: E402
 from remediation.aiusage import analytics as ai_analytics, discovery as ai_discovery, otlp as ai_otlp, store as ai_store  # noqa: E402
 from remediation.enrichment import client_controls  # noqa: E402
 from remediation.utils import file_sync, secret_files  # noqa: E402
@@ -3413,6 +3414,108 @@ def api_finding_compensating_controls(finding_id: str, user: dict | None = Depen
     """Compensating controls for this finding from the ATT&CK mitigations for the techniques it enables, checked against the
     controls recorded for its asset: which are verified, claimed, absent, or unknown."""
     return _fast_json(client_controls.assess(_visible_finding(finding_id, user)))
+
+
+# --------------------------------------------------------------------------- threat models
+# Systems described as components, data flows and trust zones; STRIDE rules raise threats; each is joined to live findings and the
+# controls inventory (remediation/threatmodel/). A security-team feature: admin only.
+class ThreatModelBody(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    model: dict | None = None
+
+
+class ThreatSeedBody(BaseModel):
+    patterns: list[str] = []
+
+
+class ThreatReviewBody(BaseModel):
+    key: str
+    status: str
+    note: str | None = None
+
+
+def _tm_404(exc):
+    return HTTPException(status_code=404, detail="No such threat model") if isinstance(exc, KeyError) else HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/threat-models/rules")
+def api_threat_rules(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"stride": tm_rules.STRIDE, "component_types": list(tm_rules.COMPONENT_TYPES), "rules": [
+        {k: r[k] for k in ("id", "stride", "applies", "kinds", "title", "controls", "techniques", "cwe", "likelihood", "impact")} for r in tm_rules.RULES]}
+
+
+@app.get("/api/threat-models")
+def api_threat_models(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"models": tm_store.list_models()}
+
+
+@app.post("/api/threat-models")
+def api_create_threat_model(body: ThreatModelBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        rec = tm_store.create(body.name, body.description, body.model, user["email"])
+    except (ValueError, tm_engine.ModelError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "threatmodel.create", rec["name"], {"id": rec["id"]})
+    return {"id": rec["id"]}
+
+
+@app.get("/api/threat-models/{model_id}")
+def api_threat_model(model_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        return _fast_json(tm_store.analyse(model_id, dashboard_data.load_live_queue()))
+    except (KeyError, ValueError) as exc:
+        raise _tm_404(exc) from exc
+
+
+@app.put("/api/threat-models/{model_id}")
+def api_update_threat_model(model_id: int, body: ThreatModelBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        tm_store.update_model(model_id, user["email"], body.name, body.description, body.model)
+    except (KeyError, ValueError, tm_engine.ModelError) as exc:
+        raise _tm_404(exc) from exc
+    activity_log.record_activity(user["email"], "threatmodel.update", str(model_id), {})
+    return {"updated": True}
+
+
+@app.delete("/api/threat-models/{model_id}")
+def api_delete_threat_model(model_id: int, user: dict = Depends(rbac.require_admin)):
+    if not tm_store.delete_model(model_id):
+        raise HTTPException(status_code=404, detail="No such threat model")
+    activity_log.record_activity(user["email"], "threatmodel.delete", str(model_id), {})
+    return {"deleted": True}
+
+
+@app.post("/api/threat-models/{model_id}/seed")
+def api_seed_threat_model(model_id: int, body: ThreatSeedBody, user: dict = Depends(rbac.require_admin)):
+    """Adds draft components (marked inferred) for the assets in the findings, optionally only those matching name patterns.
+    Components already in the model are left alone."""
+    rec = tm_store.get(model_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="No such threat model")
+    draft = tm_seed.from_findings(dashboard_data.load_live_queue(), body.patterns or None)
+    model = rec["model"]
+    have = {c["id"] for c in model.get("components", [])}
+    added = [c for c in draft["components"] if c["id"] not in have]
+    model["components"] = model.get("components", []) + added
+    model["data_flows"] = model.get("data_flows", []) + [f for f in draft["data_flows"] if f["to"] in {c["id"] for c in added} or f["from"] not in have]
+    zones = {z["id"] for z in model.get("trust_zones", [])}
+    model["trust_zones"] = model.get("trust_zones", []) + [z for z in draft["trust_zones"] if z["id"] not in zones]
+    try:
+        tm_store.update_model(model_id, user["email"], model=model)
+    except (ValueError, tm_engine.ModelError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"added": len(added)}
+
+
+@app.post("/api/threat-models/{model_id}/review")
+def api_review_threat(model_id: int, body: ThreatReviewBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        tm_store.set_review(model_id, body.key, body.status, body.note, user["email"])
+    except (KeyError, ValueError) as exc:
+        raise _tm_404(exc) from exc
+    activity_log.record_activity(user["email"], "threatmodel.review", f"{model_id}:{body.key}", {"status": body.status})
+    return {"reviewed": True}
 
 
 # --------------------------------------------------------------------------- AI usage analytics
