@@ -56,5 +56,21 @@ history:
   rule_noise_false_positive_rate: 0.9
 
 siem_evidence:
-  lookback: "-24h"
-  max_queries: 3
+  max_queries: 6
+
+# How far back any search an investigation or hunt runs may look, in days. An investigation does not wander through a year of logs: past this a
+# person must write down why (the request carries a justification, kept in the activity log) and the ceiling is extended_lookback_days.
+max_lookback_days: 90
+extended_lookback_days: 365
+
+# Investigate every new alert as it arrives, locally and for free (no reputation lookup, no SIEM search), so the report is waiting when the analyst
+# opens the alert. Looking outside Quanta still needs a person's confirmation.
+auto_investigate:
+  enabled: true
+  min_severity: Low
+
+# Hunting: when a threat-intelligence report arrives by API, create the hunt for it right away if its relevance is this priority or higher
+# (high, medium, low; blank to turn off). The hunt is only created; its searches run when a person confirms.
+hunting:
+  auto_create_hunt_at_or_above: high
+  max_trial_hits_per_run: 30

@@ -219,6 +219,28 @@ Informational. Quanta ranks the triage queue by the alert's severity plus what i
 vulnerability matching the technique, a high exploitation probability, no recorded owner) and lists the reasons. It never changes the alert's own
 severity and never decides that an alert is real. Closing an alert needs a disposition.
 
+### More inbound endpoints for SOC and security tooling
+
+- `POST /api/ingest/alerts/ocsf` (scope `soc:write`): OCSF Detection Finding events (class 2004) as one object, a list, or `{"events": [...]}`. Maps
+  `finding_info.uid/title/analytic.name/attacks[].technique.uid`, `severity_id`, `device`, `user`, endpoints and file hashes; a repeat is ignored.
+- `POST /api/ingest/alerts` also accepts `rule_name` and `entities` (`host`, `user`, `ips`, `domains`, `hashes`, `urls`) so detection engineering and
+  investigation have something to work on.
+- `POST /api/ingest/threat-intel` (scope `soc:write`): `{"content": "<report text or STIX 2.1 bundle>", "title": "...", "source": "..."}`. The same
+  content is stored once. Returns its relevance to your estate.
+- `POST /api/ingest/sarif?asset=<repository>` now also accepts a SARIF file with no results (a clean scan): it is recorded as evidence that the scan
+  runs. Upload a pipeline-check result with `scan_type=cicd` to evidence the pipeline controls.
+
+A response endpoint you own receives signed requests from SOAR playbooks:
+
+```
+POST <your url>
+X-Quanta-Timestamp: <unix seconds>
+X-Quanta-Signature: sha256=<hex HMAC-SHA256 of "<timestamp>.<body>" with the signing secret>
+{"action": "isolate-host", "target": "WEB-1", "alert_id": 12, "run_id": 3, "playbook": "...", "requested_by": "...", "approved_by": "...", "reason": "..."}
+```
+
+Verify the signature and reject a timestamp more than a few minutes old before acting.
+
 ### Report a ticket's state
 
 ```bash

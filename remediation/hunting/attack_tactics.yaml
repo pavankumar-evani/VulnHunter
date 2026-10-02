@@ -1,0 +1,49 @@
+# ATT&CK technique -> tactic(s), for the techniques that most often appear in alerts. Used to put a tactic next to a technique in an investigation
+# and to order an attack flow. Written from MITRE ATT&CK (attack.mitre.org); a technique can sit under several tactics and all are listed, the first
+# being the one shown. A technique that is not here is shown without a tactic, never with a guessed one. Sub-techniques (T1059.001) use their parent.
+T1059: {name: Command and Scripting Interpreter, tactics: [Execution]}
+T1047: {name: Windows Management Instrumentation, tactics: [Execution]}
+T1053: {name: Scheduled Task/Job, tactics: [Execution, Persistence, Privilege Escalation]}
+T1204: {name: User Execution, tactics: [Execution]}
+T1566: {name: Phishing, tactics: [Initial Access]}
+T1190: {name: Exploit Public-Facing Application, tactics: [Initial Access]}
+T1133: {name: External Remote Services, tactics: [Initial Access, Persistence]}
+T1195: {name: Supply Chain Compromise, tactics: [Initial Access]}
+T1091: {name: Replication Through Removable Media, tactics: [Initial Access, Lateral Movement]}
+T1078: {name: Valid Accounts, tactics: [Initial Access, Persistence, Privilege Escalation, Defense Evasion]}
+T1098: {name: Account Manipulation, tactics: [Persistence]}
+T1136: {name: Create Account, tactics: [Persistence]}
+T1547: {name: Boot or Logon Autostart Execution, tactics: [Persistence, Privilege Escalation]}
+T1068: {name: Exploitation for Privilege Escalation, tactics: [Privilege Escalation]}
+T1548: {name: Abuse Elevation Control Mechanism, tactics: [Privilege Escalation, Defense Evasion]}
+T1055: {name: Process Injection, tactics: [Defense Evasion, Privilege Escalation]}
+T1070: {name: Indicator Removal, tactics: [Defense Evasion]}
+T1027: {name: Obfuscated Files or Information, tactics: [Defense Evasion]}
+T1562: {name: Impair Defenses, tactics: [Defense Evasion]}
+T1218: {name: System Binary Proxy Execution, tactics: [Defense Evasion]}
+T1550: {name: Use Alternate Authentication Material, tactics: [Defense Evasion, Lateral Movement]}
+T1600: {name: Weaken Encryption, tactics: [Defense Evasion]}
+T1003: {name: OS Credential Dumping, tactics: [Credential Access]}
+T1110: {name: Brute Force, tactics: [Credential Access]}
+T1552: {name: Unsecured Credentials, tactics: [Credential Access]}
+T1556: {name: Modify Authentication Process, tactics: [Credential Access, Defense Evasion, Persistence]}
+T1087: {name: Account Discovery, tactics: [Discovery]}
+T1082: {name: System Information Discovery, tactics: [Discovery]}
+T1083: {name: File and Directory Discovery, tactics: [Discovery]}
+T1018: {name: Remote System Discovery, tactics: [Discovery]}
+T1046: {name: Network Service Discovery, tactics: [Discovery]}
+T1526: {name: Cloud Service Discovery, tactics: [Discovery]}
+T1580: {name: Cloud Infrastructure Discovery, tactics: [Discovery]}
+T1021: {name: Remote Services, tactics: [Lateral Movement]}
+T1210: {name: Exploitation of Remote Services, tactics: [Lateral Movement]}
+T1570: {name: Lateral Tool Transfer, tactics: [Lateral Movement]}
+T1005: {name: Data from Local System, tactics: [Collection]}
+T1560: {name: Archive Collected Data, tactics: [Collection]}
+T1071: {name: Application Layer Protocol, tactics: [Command and Control]}
+T1105: {name: Ingress Tool Transfer, tactics: [Command and Control]}
+T1573: {name: Encrypted Channel, tactics: [Command and Control]}
+T1041: {name: Exfiltration Over C2 Channel, tactics: [Exfiltration]}
+T1567: {name: Exfiltration Over Web Service, tactics: [Exfiltration]}
+T1486: {name: Data Encrypted for Impact, tactics: [Impact]}
+T1490: {name: Inhibit System Recovery, tactics: [Impact]}
+T1499: {name: Endpoint Denial of Service, tactics: [Impact]}

@@ -304,7 +304,7 @@ class HuntRunAndVerdictTests(unittest.TestCase):
         self.assertNotIn("<script>alert", page)
         self.assertIn("&lt;script&gt;", page)
         md = verdict.to_markdown(h)
-        self.assertIn("Overall verdict: incomplete", md)
+        self.assertIn("Hunt verdict: incomplete", md)
         self.assertIn(h["queries"][0]["query"], md)
 
 

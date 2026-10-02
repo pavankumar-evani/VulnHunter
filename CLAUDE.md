@@ -600,6 +600,52 @@ not a SIEM: the analyst runs them in their own tool and records each result and 
 `POST /api/ingest/alerts` (key scope `soc:write`); `triage.py` ranks them with vulnerability context and attaches a runbook from `runbooks.yaml`
 (technique, then title keywords, else a generic one). Hunt metrics include ATT&CK coverage of the techniques in the estate's open findings.
 
+**SOC agents** (`remediation/hunting/`, extends the hunting page): `siem_search_connector.py` runs a read-only Splunk search (only `search ...`,
+write/delete/script commands refused, rows capped, slow searches cancelled) for a hunt lead or an alert investigation, only after a person confirms;
+`reputation_connector.py` looks up public indicators (VirusTotal API v3; private addresses never sent). Both are connection types of kind `tool`
+(`splunk-search`, `reputation`; `sync.run` does nothing for a tool). `ocsf.py` maps OCSF Detection Findings (`POST /api/ingest/alerts/ocsf`, key scope
+`soc:write`); `intel.py` extracts CVEs/ATT&CK ids/indicators/actors from text or STIX and scores relevance to the estate (`POST /api/ingest/threat-intel`);
+`verdict.py` gives each hunt lead and the whole hunt a verdict from the result and the analyst's assessment (an unassessed hit is never benign) and
+renders the report; `soc.py` is the L1 investigation (classify, history, indicators, optional SIEM evidence, host context, a weighted-signal verdict of
+likely-true-positive / likely-false-positive / escalate-l2, never a false positive for a Critical alert; thresholds in `config/soc_triage.yaml`);
+`detection.py` is detection engineering (per-rule TP/noise rates over closed alerts, six health tiers, Maintain/Tune/Disable, Sigma before/after
+tuning, ATT&CK coverage, weekly snapshots; thresholds in `config/detection_policy.yaml`). Alerts now carry `rule_name` and `entities`.
+
+**SOAR** (`remediation/soar/`, page `/soar`, admin only; tables `soar_playbooks`, `soar_runs`; policy `config/soar_policy.yaml`): playbooks are validated
+step lists (investigate, enrich-indicators, add-note, update-alert, notify, request-approval, response-action). A response action that changes the
+environment needs an approval step before it (checked on save and again at run time), a different person must approve, dry runs contact nothing, a
+playbook can set an alert investigating but never close it, and on-alert playbooks may only do local or non-destructive things. Response actions are
+signed webhooks (`webhook_connector.py`, HMAC-SHA256 over timestamp.body) to endpoints the customer owns (`response-webhook`, `notify-webhook` tool
+connections); Quanta never acts on a system itself.
+
+**Cyber risk** (`remediation/risk/`, page `/cyber-risk`, admin only; table `risk_scenarios`; `config/risk_policy.yaml`): FAIR-style Monte Carlo (PERT
+frequency and loss, Poisson events, seeded so results repeat) giving ALE, P90/P95, chance over tolerance and appetite, treatment ROI, plus the cyber
+health score (control-test results and detection health, weighted; unmeasured domains are listed, not counted). The inputs are the user's estimates.
+
+**DevSecOps** (`remediation/devsecops/`, page `/devsecops`; tables `scan_runs`, `devsecops_status`, `remediation_factory`): a 27-control library
+(`library.yaml`, mapped to OWASP CI/CD and NIST SSDF, with CI snippets) with per-repository status from scan runs (a clean SARIF scan is recorded and
+counts), pipeline-check findings (failing) and recorded states (never override observation); keyword policy mapping; a code-finding fix queue with a fix
+brief per finding (resolved only by a later scan). `enrichment/zero_day_watch.py` (page `/zero-day-watch`) matches recent CISA KEV additions to the
+vendor/product vocabulary of the estate (name match, not a version check).
+
+**Firewall rules** (`remediation/firewall/`, page `/firewall`; tables `fw_rules`, `fw_requests`; `config/firewall_policy.yaml`): rules from CSV, JSON,
+PAN-OS XML or FortiGate policy text; findings FW001-FW013 (any-any, internet-exposed risky ports, broad service/destination, clear text, no logging,
+unused, stale, shadowed, redundant, no owner, expired); internet exposure; owner recertification (survives re-import while a rule's match is unchanged);
+access requests checked against the rules (already allowed, blocked, needs a rule, risk, auto-approvable) with cycle-time metrics. Zone-specific rules
+decide a request only when it names the zones. Quanta never changes a firewall.
+
+**AI security** (`remediation/aisec/`, page `/ai-security`, admin only; table `ai_assets`): a register of AI systems checked against the OWASP LLM Top 10
+(2025), MCP exposure and governance with explicit rules; an unanswered question is a gap, not a pass; findings can be published to the queue as
+source `ai-security` (asset type `ai-ml-system`, a complete set each time).
+
+**Access governance** (`remediation/iam/`, page `/access-governance`; tables `iam_entitlements`, `iam_roster`, `iam_campaigns`, `iam_review_items`;
+`config/iam_policy.yaml`): entitlement and HR-roster intake; findings IAM001-IAM007 (leavers with access, dormant, unowned, too many privileged systems,
+separation of duties, shared accounts, never used); manager access reviews (a revoke is a recorded decision, the identity team acts); SoD pre-check.
+
+**Capabilities page** (`remediation/capabilities.py`, `config/capabilities.yaml`, page `/capabilities`): five selectable areas (1 vulnerability
+management and DevSecOps, 2 cyber risk, 3 detection/hunting and AI security, 4 L1 SOC with SOAR, 5 other) listing each capability with a live count and
+what to connect when it is empty. Add a capability to the YAML and it appears.
+
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
 `read:findings` / `controls:write` / `ai-usage:write` / `soc:write`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`

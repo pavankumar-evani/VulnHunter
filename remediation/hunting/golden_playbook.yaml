@@ -1,0 +1,58 @@
+# The golden playbook: the searches an investigation runs for each kind of alert, written once, so no analyst writes them case by case and every alert
+# is investigated the same way. Each query is a Splunk SPL template (read-only: the connector refuses anything that writes) with placeholders filled
+# from the alert: {host} {user} {ip} {domain} {hash} {url}. A query is used only when every placeholder it names has a value.
+#
+# Field names (host, user, src_ip, dest_ip, action ...) are common ones; adapt them to your data model. Edit freely; read on every investigation.
+#
+# lookback_days is how far back a query may look. The platform-wide ceiling is `max_lookback_days` in soc_triage.yaml (90 by default): an
+# investigation does not wander through a year of logs. If activity shows up across the whole window, the report says a wider look is worth a person's
+# justification, rather than silently looking wider.
+#
+# `for` says which alerts a query applies to: category names (endpoint, network, identity, cloud, email, other) and/or ATT&CK technique ids. Empty means all.
+
+queries:
+  - name: Other activity on the host
+    for: []
+    needs: [host]
+    lookback_days: 7
+    spl: 'search host="{host}" | stats count by sourcetype | sort - count | head 10'
+  - name: Earlier activity by the user
+    for: []
+    needs: [user]
+    lookback_days: 90
+    spl: 'search user="{user}" | stats count, dc(host) as hosts by action | sort - count | head 10'
+  - name: Where else the address was seen
+    for: []
+    needs: [ip]
+    lookback_days: 90
+    spl: 'search ("{ip}") | stats count, dc(host) as hosts, min(_time) as first_seen, max(_time) as last_seen'
+  - name: Where else the domain was seen
+    for: []
+    needs: [domain]
+    lookback_days: 90
+    spl: 'search ("{domain}") | stats count, dc(host) as hosts'
+  - name: Where else the file hash was seen
+    for: []
+    needs: [hash]
+    lookback_days: 90
+    spl: 'search ("{hash}") | stats count, dc(host) as hosts'
+  - name: Child processes started on the host
+    for: [endpoint, T1059, T1218, T1047]
+    needs: [host]
+    lookback_days: 7
+    spl: 'search host="{host}" (EventCode=4688 OR EventCode=1) | stats count by ParentImage, Image | sort - count | head 15'
+  - name: Failed and successful logons for the user
+    for: [identity, T1110, T1078, T1556]
+    needs: [user]
+    lookback_days: 30
+    spl: 'search user="{user}" (EventCode=4624 OR EventCode=4625) | stats count by EventCode, src_ip | sort - count | head 15'
+  - name: Connections from the host to the address
+    for: [network, T1071, T1105, T1041]
+    needs: [host, ip]
+    lookback_days: 30
+    spl: 'search host="{host}" ("{ip}") | stats count, values(dest_port) as ports by dest_ip'
+  - name: Cloud API calls by the user
+    for: [cloud, T1580, T1526, T1078]
+    needs: [user]
+    lookback_days: 30
+    spl: 'search user="{user}" sourcetype=aws:cloudtrail | stats count by eventName | sort - count | head 15'

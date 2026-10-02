@@ -626,6 +626,7 @@ soc_alerts = Table(
     Column("closed_at", String, nullable=True),
     Column("rule_name", String, nullable=True),
     Column("entities_json", Text, nullable=True),
+    Column("action_taken", String, nullable=True),
     UniqueConstraint("source", "external_id", name="uq_soc_alert_source_ext"),
 )
 
