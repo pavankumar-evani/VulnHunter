@@ -116,6 +116,8 @@ export const NAV = [
       tip: "Newly exploited vulnerabilities (CISA KEV) in products your estate appears to run that no scanner has reported yet. A name match, not a version check." },
     { path: "/firewall", label: "Firewall Rules", icon: "rules",
       tip: "Firewall rules from your exports: broad, unused, shadowed and internet-exposed rules, recertification by owner, and access requests checked against the rules. Quanta never changes a firewall." },
+    { path: "/ai-security", label: "AI Security", icon: "rules",
+      tip: "Admin: your AI systems, what each can do and how it is defended, checked against the OWASP Top 10 for LLM Applications and MCP hygiene; publish the findings to the queue." },
     { path: "/soar", label: "SOAR Playbooks", icon: "rules",
       tip: "Admin: playbooks that investigate, notify and ask your own automation to respond, with a second person approving anything that changes your environment. Dry run first." },
     { path: "/hunting", label: "Hunting & SOC", icon: "rules",

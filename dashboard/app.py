@@ -60,6 +60,7 @@ from remediation.connectors import reputation_connector as hunt_rep, siem_search
 from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
+from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
 from remediation.enrichment import network_reachability as network_reach  # noqa: E402
 from remediation.devsecops import controls as dso_controls, factory as dso_factory  # noqa: E402
@@ -5326,6 +5327,80 @@ def api_firewall_decide(request_id: int, body: FwDecisionBody, user: dict = Depe
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     activity_log.record_activity(user["email"], "firewall.request.decide", str(request_id), {"status": r["status"]})
     return r
+
+
+# ---------------------------------------------------------------- AI security posture
+class AiAssetBody(BaseModel):
+    model_config = {"extra": "allow"}
+    name: str
+    kind: str
+
+
+class AiPublishBody(BaseModel):
+    confirm: bool = False
+
+
+def _ai_meta():
+    return {"kinds": aisec_rules.KINDS, "environments": aisec_rules.ENVIRONMENTS, "hosting": aisec_rules.HOSTING, "scopes": aisec_rules.SCOPES, "provenance": aisec_rules.PROVENANCE,
+            "serialization": aisec_rules.SERIALIZATION, "data_classes": aisec_rules.DATA_CLASSES, "questions": aisec_rules.QUESTIONS, "tri": aisec_rules.TRI}
+
+
+@app.get("/api/ai-security/overview")
+def api_ai_security_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    assets = aisec_store.list_all()
+    return {"assets": assets, "assessment": aisec_store.assess(assets), "meta": _ai_meta()}
+
+
+@app.post("/api/ai-security/assets")
+def api_ai_security_add(body: AiAssetBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        a = aisec_store.save(body.model_dump(), user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "ai-security.asset.save", a["name"], {"kind": a["kind"]})
+    return a
+
+
+@app.put("/api/ai-security/assets/{asset_id}")
+def api_ai_security_update(asset_id: int, body: AiAssetBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        a = aisec_store.save(body.model_dump(), user["email"], asset_id=asset_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such asset") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "ai-security.asset.save", a["name"], {"kind": a["kind"]})
+    return a
+
+
+@app.delete("/api/ai-security/assets/{asset_id}")
+def api_ai_security_delete(asset_id: int, user: dict = Depends(rbac.require_admin)):
+    if not aisec_store.remove(asset_id):
+        raise HTTPException(status_code=404, detail="No such asset")
+    activity_log.record_activity(user["email"], "ai-security.asset.delete", str(asset_id), {})
+    return {"ok": True}
+
+
+@app.post("/api/ai-security/import-discovered")
+def api_ai_security_import(user: dict = Depends(rbac.require_admin)):
+    added = aisec_store.import_discovered(actor=user["email"])
+    activity_log.record_activity(user["email"], "ai-security.import", None, {"added": len(added)})
+    return {"added": added}
+
+
+@app.post("/api/ai-security/publish")
+def api_ai_security_publish(body: AiPublishBody, background: BackgroundTasks, user: dict = Depends(rbac.require_admin)):
+    """Sends the current AI security findings to the main queue (source ai-security). It is the complete set, so findings the record no longer shows are removed."""
+    a = aisec_store.assess(aisec_store.list_all())
+    items = aisec_store.to_queue_items(a["findings"])
+    if not body.confirm:
+        return {"preview_only": True, "findings": len(items), "message": "This replaces the ai-security findings in the main queue with the current set. Send confirm: true to publish."}
+    findings, errors = api_findings.normalise_batch(items)
+    result = findings_merge.merge(findings, "ai-security", reconcile=True)
+    activity_log.record_activity(user["email"], "ai-security.publish", "ai-security", {"findings": len(findings), "rejected": len(errors), **result})
+    if result["added"] or result["updated"]:
+        _enrich_in_background(background)
+    return {"published": len(findings), "rejected": len(errors), **result}
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

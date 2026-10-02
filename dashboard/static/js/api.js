@@ -224,6 +224,12 @@ export const api = {
     if (!res.ok) throw new Error((data && data.detail) || res.statusText);
     return data;
   },
+  aiSecurityOverview: () => request("GET", "/api/ai-security/overview"),
+  aiSecurityAdd: (body) => request("POST", "/api/ai-security/assets", body),
+  aiSecurityUpdate: (id, body) => request("PUT", `/api/ai-security/assets/${id}`, body),
+  aiSecurityDelete: (id) => request("DELETE", `/api/ai-security/assets/${id}`),
+  aiSecurityImport: () => request("POST", "/api/ai-security/import-discovered", {}),
+  aiSecurityPublish: (body) => request("POST", "/api/ai-security/publish", body),
   detectionsOverview: () => request("GET", "/api/detections/overview"),
   detectionsAssess: () => request("POST", "/api/detections/assess", {}),
   detectionsAddRule: (body) => request("POST", "/api/detections/rules", body),

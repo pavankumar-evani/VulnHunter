@@ -796,6 +796,17 @@ fw_requests = Table(
     Column("implemented_at", String, nullable=True),
 )
 
+ai_assets = Table(
+    "ai_assets", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("kind", String, nullable=False),
+    Column("data_json", Text, nullable=False),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    Column("updated_by", String, nullable=True),
+)
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -817,7 +828,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests,
+            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations
