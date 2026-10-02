@@ -48,9 +48,9 @@ class FindingIdLookup(unittest.TestCase):
         self.assertIn("No finding", result["answer"])
         self.assertEqual(result["results"], [])
 
-    def test_falls_back_to_vulnhunt_findings_for_a_code_scan_id(self):
-        vulnhunt = [{"ID": "FIND-2", "Title": "SQL Injection", "Severity": "High"}]
-        result = qe.answer_query("FIND-2", queue_findings=[], vulnhunt_findings=vulnhunt, assets=[])
+    def test_falls_back_to_quanta_scan_findings_for_a_code_scan_id(self):
+        quanta_scan = [{"ID": "FIND-2", "Title": "SQL Injection", "Severity": "High"}]
+        result = qe.answer_query("FIND-2", queue_findings=[], quanta_scan_findings=quanta_scan, assets=[])
         self.assertEqual(result["intent"], "finding_lookup")
         self.assertIn("SQL Injection", result["answer"])
 

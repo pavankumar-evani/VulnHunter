@@ -364,7 +364,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   - **AI model/token governance + Admin Settings page**: new `/admin` page (admin-only,
     both server- and client-gated) covering everything asked for - which real model
     (`sonnet`/`opus`/`fable`, verified real aliases via `claude --help`'s own
-    `--model` flag) every AI Assist/AI Trend Analysis/`/vulnhunt`/`/remediate` call
+    `--model` flag) every AI Assist/AI Trend Analysis/`/quanta-scan`/`/remediate` call
     should use, a real per-user daily token cap actually enforced server-side before a
     call is made (never trusted from the client), real per-user usage/cost (not
     estimated), and read-only system health (SMTP/session-secret/threat-intel status,
@@ -1181,13 +1181,13 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   payload even though it's already 100% JSON-safe data straight from `json.loads()` plus
   arithmetic — profiled at over 1s of pure overhead, avoided by serializing these three
   endpoints' payloads directly with `json.dumps()` (`dashboard/app.py`'s `_fast_json()`)
-  instead of returning a plain dict for FastAPI to re-encode. `load_vulnhunt_data()` (two
+  instead of returning a plain dict for FastAPI to re-encode. `load_quanta_scan_data()` (two
   `git` subprocess spawns per call, now invoked by more pages than before) also gained a
   10-second in-process TTL cache. Combined, warm-cache requests to `/api/queue` dropped
   from ~1.8-3s+ to ~0.15-0.4s in live testing; the very first request after a server
   restart or data regeneration still pays the one-time cache-building cost (~5-6s at the
   current ~8,000-finding scale). New tests: `ContentEnrichedFindingsCache`/
-  `VulnhuntDataCache` in `tests/test_dashboard.py`.
+  `QuantaScanDataCache` in `tests/test_dashboard.py`.
 
 ### Added
 - **Dashboard UX overhaul: navigation/search, real trend filtering, hand-rolled charts,
@@ -1349,7 +1349,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   regex (`\b(unsafe|insecure) (pickle|deserializ)`, previously `unsafe` only) so
   VULN-11's "insecure deserialization" wording - standard OWASP terminology - correctly
   tags as AI Supply Chain Compromise. `/api/ai-vulnerabilities` now combines both the
-  remediation-pipeline findings and `/vulnhunt`'s own SAST findings, so the AI
+  remediation-pipeline findings and `/quanta-scan`'s own SAST findings, so the AI
   Vulnerabilities heat map shows genuine non-zero counts for Prompt Injection, AI Supply
   Chain Compromise, and Excessive Agency - previously honestly zero, now honestly
   non-zero, with every other category still honestly at zero.
@@ -1376,7 +1376,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   by priority for readability - the compact queue table (all `dashboard/data.py` actually
   parses) still covers every finding. AI Vulnerabilities and SAST-side code-scan
   categories (Secrets/Container/API) were deliberately left out of this wave - see the
-  session notes on why (git-branch dependency for `/vulnhunt`'s data source).
+  session notes on why (git-branch dependency for `/quanta-scan`'s data source).
 - **Consolidated Adaptors hub** (`/adaptors`, `dashboard/static/js/pages/adaptors.js`,
   `dashboard/static/js/adaptorCatalog.js`) - replaces four separate "Adaptors — X"
   sidebar groups (Ticketing/SOAR, SIEM, XDR/EDR, Asset Discovery/IPAM, six items total)
@@ -1410,7 +1410,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   shows a full live findings table (priority, clickable ID, SLA, KEV, EPSS, ATT&CK)
   for every infra sub-category combined, and `/appsec` shows the same table scoped to
   its SLA-tracked SCA/DAST findings (SAST/Secrets/Container/API stay card-links into
-  `/vulnhunt`, since raw code-scan findings aren't SLA-tracked queue items by design -
+  `/quanta-scan`, since raw code-scan findings aren't SLA-tracked queue items by design -
   that distinction is called out on the page rather than faking an SLA for them).
   `/ai-vulnerabilities` gets CSV/JSON/MD export of its taxonomy + heat-map counts
   instead (its findings are honestly all zero today, so a findings table there would
@@ -1552,8 +1552,8 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ### Added
 - **Container and API Vulnerabilities as real Security Domains categories**
-  (`dashboard/static/js/pages/vulnhunt.js`, `appsec.js`, `.claude/agents/vuln-scanner.md`).
-  `/vulnhunt`'s category classifier already had the data - the scanner has detected
+  (`dashboard/static/js/pages/quanta-scan.js`, `appsec.js`, `.claude/agents/vuln-scanner.md`).
+  `/quanta-scan`'s category classifier already had the data - the scanner has detected
   Dockerfile/container issues (root user, baked-in secrets, unpinned base images) since
   an earlier wave, they were just fallen through to the generic "Other" bucket (no
   CWE-250 mapping, and no CWE at all for "unpinned base image"). Added `CWE-250 ->
@@ -1706,7 +1706,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   on asset type; surfaced as a "Category" column + filter on the Remediation Queue.
   Dynamic Application Security Testing (DAST) is a documented category with no sample
   finding yet, rather than a fabricated one - see the module docstring. Static
-  Application Security Testing (SAST) is `/vulnhunt`'s own findings by definition,
+  Application Security Testing (SAST) is `/quanta-scan`'s own findings by definition,
   handled separately.
 - **Generic XDR/EDR/SIEM ingestion adapter** (`/api/ingest/generic`,
   `remediation/connectors/generic_connector.py`) — a vendor-agnostic "bring your own
@@ -1898,7 +1898,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   7 Ansible playbooks generated, `REMEDIATION_PLAN.md` produced.
 
 ### Changed
-- Corrected README's stated `/vulnhunt` demo numbers (9 findings / 6 auto-fixed) to match
+- Corrected README's stated `/quanta-scan` demo numbers (9 findings / 6 auto-fixed) to match
   the actual validated scan, after the original estimate (~6 findings / 3-4 auto-fixed)
   was found not to match reality.
 - `vuln-fixer` reworked to stop at `git push` instead of calling `gh pr create` — no
@@ -1918,9 +1918,9 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## 2026-08-03 (initial)
 
 ### Added
-- Initial `/vulnhunt` pipeline scaffold: `vuln-scanner`, `vuln-triage-reporter`,
-  `vuln-fixer` subagents, the `/vulnhunt` slash command, and the intentionally
+- Initial `/quanta-scan` pipeline scaffold: `vuln-scanner`, `vuln-triage-reporter`,
+  `vuln-fixer` subagents, the `/quanta-scan` slash command, and the intentionally
   vulnerable `vulnerable-demo-app/` Flask app (6 planted vulnerabilities plus 3
   Dockerfile-level issues).
-- Validated `/vulnhunt` end-to-end: 9 findings detected, 6 auto-fixed and pushed to
+- Validated `/quanta-scan` end-to-end: 9 findings detected, 6 auto-fixed and pushed to
   `quanta/auto-fixes-20260803`, `SECURITY_REPORT.md` generated.

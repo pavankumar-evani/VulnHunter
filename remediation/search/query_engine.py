@@ -217,9 +217,9 @@ def _strip_markdown_emphasis(text):
     return _MARKDOWN_EMPHASIS_RE.sub(lambda m: m.group(1) or m.group(2), text)
 
 
-def answer_query(query, *, queue_findings, vulnhunt_findings=None, assets=None):
+def answer_query(query, *, queue_findings, quanta_scan_findings=None, assets=None):
     """The main entry point. `queue_findings` is the live remediation queue
-    (dashboard_data.load_live_queue()'s output); `vulnhunt_findings` is the code-scan
+    (dashboard_data.load_live_queue()'s output); `quanta_scan_findings` is the code-scan
     result list (optional - only used for a direct FIND-id lookup that isn't in the
     infra queue); `assets` is /api/assets' row list (optional - only used to ground
     team/owner/asset-name resolution in real values).
@@ -228,7 +228,7 @@ def answer_query(query, *, queue_findings, vulnhunt_findings=None, assets=None):
     "finding_lookup"/"cve_lookup"/"count"/"list"/"asset_lookup"/"faq"/"no_match"/
     "empty". `answer` is always built only from real numbers/facts already computed
     here - never a fabricated sentence."""
-    vulnhunt_findings = vulnhunt_findings or []
+    quanta_scan_findings = quanta_scan_findings or []
     assets = assets or []
     query = (query or "").strip()
     if not query:
@@ -244,7 +244,7 @@ def answer_query(query, *, queue_findings, vulnhunt_findings=None, assets=None):
         fid = id_match.group(0).upper()
         finding = next((f for f in queue_findings if str(f.get("id", "")).upper() == fid), None)
         if not finding:
-            finding = next((f for f in vulnhunt_findings if str(f.get("ID", "")).upper() == fid), None)
+            finding = next((f for f in quanta_scan_findings if str(f.get("ID", "")).upper() == fid), None)
         if finding:
             title = finding.get("title") or finding.get("Title")
             severity = finding.get("severity") or finding.get("Severity")

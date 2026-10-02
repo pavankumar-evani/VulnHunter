@@ -33,7 +33,7 @@ function renderSummary(data) {
       ${kpiLink("/queue?kevOnly=true", data.kev_count, "CISA KEV-listed")}
       ${kpiLink("/queue?highEpssOnly=true", data.high_epss_count, "High EPSS")}
       ${kpiLink("/queue", data.remediation_total, "Infra findings")}
-      ${kpiLink("/vulnhunt", data.vulnhunt_total, "Code vulnerabilities")}
+      ${kpiLink("/quanta-scan", data.quanta_scan_total, "Code vulnerabilities")}
       ${kpiLink("/remediate", data.playbook_count, "Playbooks generated")}
     </div>
     <h2>Top priority findings</h2>

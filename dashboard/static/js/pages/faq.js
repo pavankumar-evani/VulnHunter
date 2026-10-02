@@ -24,7 +24,7 @@ const FAQS = [
     "itself is a Claude Code subagent (model-driven static analysis), not a compiled " +
     "tool - it doesn't need a compiler for whatever language it's scanning."],
   ["Is this agent-based or agentless scanning?",
-    "Code scanning (/vulnhunt) is agentless - it reads source code already in a git " +
+    "Code scanning (/quanta-scan) is agentless - it reads source code already in a git " +
     "repo, nothing is installed on any target. Infrastructure findings come from " +
     "Tenable/Armis, and whether THEY use an agent or an agentless scan is a " +
     "configuration choice made in those tools, not something Quanta re-implements."],
@@ -177,7 +177,7 @@ const FAQS = [
     "Nowhere - everything is local files in this repo (git history, JSON, YAML). " +
     "There's no cloud service and no telemetry."],
   ["How much does a real scan or AI-assist call cost?",
-    "Running /vulnhunt or /remediate for real calls the Claude API and spends usage/" +
+    "Running /quanta-scan or /remediate for real calls the Claude API and spends usage/" +
     "credits, spend-capped via --max-budget-usd (default shown on the Run Pipeline " +
     "page). AI Assist's real (confirmed) calls do the same, at whatever your Claude " +
     "plan's per-request cost is - always preview first, it's free."],

@@ -209,7 +209,7 @@ export async function render(container) {
     <p class="filter-count" style="margin:-4px 0 8px">
       Passed as Claude Code's own real <code>--model</code> flag (verified via
       <code>claude --help</code>) to every AI Assist, AI Trend Analysis, Code Scan
-      (<code>/vulnhunt</code>), and Remediation (<code>/remediate</code>) call this app
+      (<code>/quanta-scan</code>), and Remediation (<code>/remediate</code>) call this app
       makes. "No preference" omits the flag entirely - Claude Code picks its own default.
     </p>
     <form class="run-form" id="model-form">

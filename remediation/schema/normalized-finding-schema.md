@@ -5,7 +5,7 @@ Qualys, CrowdStrike, ServiceNow, etc.) maps its own export format into this one 
 Everything downstream (`remediation-planner`, `remediation-fixer-*`) only ever reads this
 schema — it never needs to know about Tenable CSV columns or Armis JSON fields directly.
 This is the same "read-only scanner / scoped tool" separation-of-concerns idea as the
-`/vulnhunt` pipeline, applied to infra findings instead of source code.
+`/quanta-scan` pipeline, applied to infra findings instead of source code.
 
 ```json
 {

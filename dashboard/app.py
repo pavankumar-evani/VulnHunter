@@ -295,7 +295,7 @@ def _fast_json(payload):
 @app.get("/api/overview")
 def api_overview():
     findings = dashboard_data.load_remediation_findings()
-    vh = dashboard_data.load_vulnhunt_data()
+    vh = dashboard_data.load_quanta_scan_data()
     plan = dashboard_data.load_remediation_plan()
     playbooks = dashboard_data.load_playbooks()
     eligible = [f for f in findings if f.get("remediation_domain")]
@@ -313,7 +313,7 @@ def api_overview():
         "sla": dashboard_data.sla_summary(live_queue),
         "kev_count": dashboard_data.count_kev_listed(findings),
         "high_epss_count": dashboard_data.count_high_epss(findings),
-        "vulnhunt": {"total": vh.get("total", 0), "auto_fixable": vh.get("auto_fixable", 0)},
+        "quanta_scan": {"total": vh.get("total", 0), "auto_fixable": vh.get("auto_fixable", 0)},
         "remediation": {
             "total": len(findings),
             "eligible": len(eligible),
@@ -335,9 +335,9 @@ def api_overview():
     }
 
 
-@app.get("/api/vulnhunt")
-def api_vulnhunt():
-    return dashboard_data.load_vulnhunt_data()
+@app.get("/api/quanta-scan")
+def api_quanta_scan():
+    return dashboard_data.load_quanta_scan_data()
 
 
 @app.get("/api/remediate")
@@ -1674,7 +1674,7 @@ class RunBody(BaseModel):
 def api_run_post(body: RunBody, request: Request):
     if body.pipeline == "scan":
         prompt = cli.scan_prompt(body.path, fix=body.fix_or_generate)
-        pipeline_name = "vulnhunt"
+        pipeline_name = "quanta_scan"
     elif body.pipeline == "remediate":
         prompt = cli.remediate_prompt(generate=body.fix_or_generate, finding_id=body.finding_id)
         pipeline_name = "remediate"
@@ -1728,7 +1728,7 @@ def _find_any_finding(finding_id):
     for f in dashboard_data.load_remediation_findings():
         if f.get("id") == finding_id:
             return f
-    vh = dashboard_data.load_vulnhunt_data()
+    vh = dashboard_data.load_quanta_scan_data()
     for f in vh.get("findings", []):
         if f.get("ID") == finding_id:
             return {
@@ -2554,12 +2554,12 @@ def api_search_ask(body: SearchAskBody):
     rationale. Same no-login-required convention as /api/queue and /api/assets above
     (a read-only query over the same data those already expose without auth)."""
     queue_findings = dashboard_data.load_live_queue()
-    vh = dashboard_data.load_vulnhunt_data()
+    vh = dashboard_data.load_quanta_scan_data()
     _, assets = dashboard_data._load_scored_assets()
     return query_engine.answer_query(
         body.query,
         queue_findings=queue_findings,
-        vulnhunt_findings=vh.get("findings") if vh.get("available") else [],
+        quanta_scan_findings=vh.get("findings") if vh.get("available") else [],
         assets=assets,
     )
 
@@ -2772,20 +2772,20 @@ def api_ai_vulnerabilities():
     MITRE ATLAS cross-reference - see ai_vuln_taxonomy.py's module docstring), plus
     the full taxonomy reference (summary/remediation per category) regardless of
     whether any finding matched it. Checks both pipelines' findings: the remediation
-    queue (Tenable/Armis-style asset scanning - never AI/ML-specific) and /vulnhunt's
+    queue (Tenable/Armis-style asset scanning - never AI/ML-specific) and /quanta-scan's
     own SAST findings, where vulnerable-demo-app/ai_assistant.py's genuinely planted
     AI/ML issues (hardcoded LLM key, insecure model deserialization, prompt injection,
     excessive agency) actually live."""
     remediation_findings = dashboard_data.load_remediation_findings()
-    vh = dashboard_data.load_vulnhunt_data()
-    # vulnhunt findings come from a parsed markdown table (capitalized column names:
+    vh = dashboard_data.load_quanta_scan_data()
+    # quanta_scan findings come from a parsed markdown table (capitalized column names:
     # "Title", not "title") - normalize just the two fields map_finding_to_ai_vuln()
     # actually reads, rather than changing that function's contract for one caller.
-    vulnhunt_findings = [
+    quanta_scan_findings = [
         {"id": f.get("ID"), "title": f.get("Title", ""), "description": ""}
         for f in (vh.get("findings") or [])
     ] if vh.get("available") else []
-    findings = tag_ai_vulnerabilities(remediation_findings + vulnhunt_findings)
+    findings = tag_ai_vulnerabilities(remediation_findings + quanta_scan_findings)
     return {"vulnerabilities": AI_VULNERABILITIES, "heatmap": build_ai_atlas_heatmap(findings)}
 
 
@@ -3044,7 +3044,7 @@ def api_status():
     `status`.
 
     `data_stores` is deliberately computed FIRST, before anything else below - vh's own
-    load_vulnhunt_data() reads activity_log for verification status, and that read (like
+    load_quanta_scan_data() reads activity_log for verification status, and that read (like
     any table read) unconditionally runs ensure_schema() first, which lazily creates the
     shared DB file if it doesn't exist yet. Computing data_stores after that call would
     make every store sharing that physical file (see _db_table_fact's own docstring)
@@ -3057,7 +3057,7 @@ def api_status():
         "activity_log": _db_table_fact(db_module.activity_log),
         "ai_usage_log": _db_table_fact(db_module.ai_usage_log),
     }
-    vh = dashboard_data.load_vulnhunt_data()
+    vh = dashboard_data.load_quanta_scan_data()
     findings, findings_error = _safe_check(dashboard_data.load_remediation_findings, [])
     playbooks, playbooks_error = _safe_check(dashboard_data.load_playbooks, [])
     threat_intel, threat_intel_error = _safe_check(
@@ -3069,8 +3069,8 @@ def api_status():
     return {
         "status": "degraded" if (findings_error or playbooks_error) else "ok",
         "app_version": app.version,
-        "vulnhunt_available": vh.get("available", False),
-        "vulnhunt_findings": vh.get("total", 0),
+        "quanta_scan_available": vh.get("available", False),
+        "quanta_scan_findings": vh.get("total", 0),
         "remediation_findings": len(findings),
         "remediation_findings_error": findings_error,
         "remediation_playbooks": len(playbooks),
@@ -3097,7 +3097,7 @@ def _serve_shell():
 
 
 for _route in (
-    "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
+    "/", "/quanta-scan", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
     "/jira", "/splunk", "/xdr", "/infoblox", "/axonius", "/ai-assist", "/reports", "/support", "/faq",
     "/exceptions", "/assets", "/appsec", "/infrastructure", "/inbox", "/risk", "/ai-vulnerabilities", "/login", "/profile",
     "/adaptors", "/vulnerability-mapping", "/asset-mapping", "/exploit-criteria",

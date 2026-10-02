@@ -1,7 +1,7 @@
 # Quanta Headless CLI
 
 A thin Python wrapper around `claude -p` (Claude Code's non-interactive mode) that lets
-`/vulnhunt` and `/remediate` run from a script, a CI job, or a cron schedule instead of
+`/quanta-scan` and `/remediate` run from a script, a CI job, or a cron schedule instead of
 requiring a human typing into an interactive Claude Code session.
 
 ## Why a wrapper instead of reimplementing the pipelines in Python
@@ -17,7 +17,7 @@ agent's `.md` file once, and both the interactive and headless paths pick it up.
 **Every non-dry-run invocation calls the real Claude API and spends real usage/credits.**
 Use `--dry-run` first to see exactly what would run. A `--max-budget-usd` cap (default
 $2.00) is applied to every real invocation as a safety net, but you are still responsible
-for understanding what a `/vulnhunt --fix` or `/remediate --generate` run costs against
+for understanding what a `/quanta-scan --fix` or `/remediate --generate` run costs against
 your actual Claude plan before running it for real, especially in CI where it might run
 on every push.
 

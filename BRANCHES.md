@@ -27,7 +27,7 @@ exception, see "Keeping this current" at the bottom.
 
 ## claude/vuln-scan-engine
 
-- **Owns**: `.claude/agents/vuln-*.md`, `.claude/commands/vulnhunt.md` — the `/vulnhunt`
+- **Owns**: `.claude/agents/vuln-*.md`, `.claude/commands/quanta-scan.md` — the `/quanta-scan`
   pipeline (scanner, triage-reporter, fixer, verifier).
 - **Scope boundary**: does not touch `remediation/` or `dashboard/`.
 - **Status**: scaffolded 2026-09-04, not yet started.
@@ -65,7 +65,7 @@ open for days while the others drift away from it. The same logic applies to sha
 
 `git branch -a` will also show a few auto-named branches (`claude/epic-driscoll-...`,
 `claude/heuristic-heyrovsky-...`, `claude/loving-germain-...`), an old
-`quanta/auto-fixes-20260803` branch from a prior `/vulnhunt --fix` run, and a couple
+`quanta/auto-fixes-20260803` branch from a prior `/quanta-scan --fix` run, and a couple
 of dependabot branches. These predate this registry and weren't created under the
 scoped-parallel-work scheme above — don't assume anything about what they contain, and
 don't delete any of them without actually checking first.

@@ -27,7 +27,7 @@ pip install -r dashboard/requirements.txt
 ```
 
 (No Node.js/npm needed — the frontend is hand-rolled vanilla JS, no build step. If you
-also want to run the `/vulnhunt` or `/remediate` pipelines directly through Claude Code
+also want to run the `/quanta-scan` or `/remediate` pipelines directly through Claude Code
 rather than just browsing the dashboard, see the root [README.md](../README.md) instead.)
 
 ## 3. Run it
@@ -76,7 +76,7 @@ report (see `remediation/sample-data/` and `SECURITY_REPORT.md`). From there:
 |---|---|
 | Full product story, both pipelines, roadmap | [KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md) |
 | Dashboard architecture, auth, production hardening | [dashboard/README.md](../dashboard/README.md) |
-| Running `/vulnhunt` and `/remediate` via Claude Code | [README.md](../README.md) |
+| Running `/quanta-scan` and `/remediate` via Claude Code | [README.md](../README.md) |
 | Enterprise architecture, pricing, RBAC, connectors, AI, research | [docs/enterprise-suite/hub.html](enterprise-suite/hub.html) |
 | Task-oriented "how do I...?" guide | [docs/USER_GUIDE.md](USER_GUIDE.md) |
 | FAQ | [docs/FAQ.md](FAQ.md) |

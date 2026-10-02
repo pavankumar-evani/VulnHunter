@@ -5,9 +5,9 @@ asset type - Infrastructure Vulnerability Management (Tenable/Armis-style asset
 scanning), Software Composition Analysis (a vulnerable bundled/third-party library),
 or Certificate/TLS Lifecycle Management.
 
-Static Application Security Testing (SAST) is /vulnhunt's own category by definition -
+Static Application Security Testing (SAST) is /quanta-scan's own category by definition -
 those findings live in a fully separate data path (see dashboard/data.py's
-load_vulnhunt_data(), which reads SECURITY_REPORT.md via git history, not
+load_quanta_scan_data(), which reads SECURITY_REPORT.md via git history, not
 normalized-findings.json) and are already implicitly SAST; this module doesn't
 re-tag them.
 

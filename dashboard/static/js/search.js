@@ -2,10 +2,10 @@
 // #modal-root) so it survives client-side page navigation instead of being wiped out
 // by each page's render(). Real, live-as-you-type predictions (debounced, no
 // fabricated suggestions - every result is an actual match against already-loaded real
-// data) across three real sources - Code Scan (/api/vulnhunt), the Remediation Queue
+// data) across three real sources - Code Scan (/api/quanta-scan), the Remediation Queue
 // (/api/queue), and Asset Inventory (/api/assets) - by ID, title, CVE, or asset name,
 // linking each result into the matching page with a `?highlight=<id>` deep link that
-// page scrolls to and highlights (see queue.js/vulnhunt.js), or straight to /assets for
+// page scrolls to and highlights (see queue.js/quanta-scan.js), or straight to /assets for
 // an asset match.
 import { api } from "./api.js";
 import { escapeHtml } from "./dom.js";
@@ -14,14 +14,14 @@ import { icon } from "./icons.js";
 const MAX_RESULTS_PER_SOURCE = 5;
 const CACHE_TTL_MS = 20000;
 
-let cache = null; // { at: Date, vulnhunt: [...], queue: [...], assets: [...] }
+let cache = null; // { at: Date, quanta_scan: [...], queue: [...], assets: [...] }
 
 async function loadIndex() {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache;
-  const [vh, queue, assetsData] = await Promise.all([api.vulnhunt(), api.queue(), api.assetsList()]);
+  const [vh, queue, assetsData] = await Promise.all([api.quanta_scan(), api.queue(), api.assetsList()]);
   cache = {
     at: Date.now(),
-    vulnhunt: vh.available ? vh.findings : [],
+    quanta_scan: vh.available ? vh.findings : [],
     queue: queue.findings,
     assets: assetsData.assets,
   };
@@ -34,11 +34,11 @@ function matches(haystackParts, query) {
 }
 
 function searchResults(index, query) {
-  const codeScan = index.vulnhunt
+  const codeScan = index.quanta_scan
     .filter((f) => matches([f.ID, f.Title, f.CWE, f.File], query))
     .slice(0, MAX_RESULTS_PER_SOURCE)
     .map((f) => ({
-      href: `/vulnhunt?highlight=${encodeURIComponent(f.ID)}`,
+      href: `/quanta-scan?highlight=${encodeURIComponent(f.ID)}`,
       source: "Code Scan", id: f.ID, title: f.Title, tag: f.Severity,
     }));
 

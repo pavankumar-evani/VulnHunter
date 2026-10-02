@@ -25,7 +25,7 @@ export function initPageFooter() {
     root.innerHTML = `
       <div class="page-footer-inner">
         <span>
-          Tracking <strong>${status.vulnhunt_findings}</strong> code finding(s) and
+          Tracking <strong>${status.quanta_scan_findings}</strong> code finding(s) and
           <strong>${status.remediation_findings}</strong> infra/app finding(s) ·
           <strong>${status.remediation_playbooks}</strong> playbook(s) generated
         </span>

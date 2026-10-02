@@ -76,7 +76,7 @@ class UsageLogStore(unittest.TestCase):
 
     def test_unknown_extraction_records_none_total_not_zero(self):
         ai_usage_log.record_usage(
-            "bob@example.com", "vulnhunt", None,
+            "bob@example.com", "quanta_scan", None,
             {"input_tokens": None, "output_tokens": None, "cache_creation_input_tokens": None, "cache_read_input_tokens": None},
             None, False, engine=self.engine,
         )
@@ -86,7 +86,7 @@ class UsageLogStore(unittest.TestCase):
     def test_usage_by_user_aggregates_and_counts_unknown_separately(self):
         ai_usage_log.record_usage("alice@example.com", "ai-assist", "m", {"input_tokens": 100, "output_tokens": 0, "cache_creation_input_tokens": None, "cache_read_input_tokens": None}, 0.01, True, engine=self.engine)
         ai_usage_log.record_usage("alice@example.com", "ai-assist", "m", {"input_tokens": 200, "output_tokens": 0, "cache_creation_input_tokens": None, "cache_read_input_tokens": None}, 0.02, True, engine=self.engine)
-        ai_usage_log.record_usage("alice@example.com", "vulnhunt", None, {"input_tokens": None, "output_tokens": None, "cache_creation_input_tokens": None, "cache_read_input_tokens": None}, None, False, engine=self.engine)
+        ai_usage_log.record_usage("alice@example.com", "quanta_scan", None, {"input_tokens": None, "output_tokens": None, "cache_creation_input_tokens": None, "cache_read_input_tokens": None}, None, False, engine=self.engine)
         by_user = ai_usage_log.usage_by_user(engine=self.engine)
         self.assertEqual(by_user["alice@example.com"]["call_count"], 3)
         self.assertEqual(by_user["alice@example.com"]["total_tokens"], 300)

@@ -431,7 +431,7 @@ function methodologySection(findings, vh) {
   const scaTotal = findings.filter((f) => f.scan_type === "sca").length;
   const secretsTotal = findings.filter((f) => f.scan_type === "secrets").length;
   const appMethodologyData = [
-    { label: "SAST (Code Scan)", value: sastTotal, href: "/vulnhunt" },
+    { label: "SAST (Code Scan)", value: sastTotal, href: "/quanta-scan" },
     { label: "DAST", value: dastTotal, href: "/queue?category=dast" },
     { label: "SCA", value: scaTotal, href: "/queue?category=sca" },
     { label: "Repository Secret Scanning", value: secretsTotal, href: "/queue?category=secrets" },
@@ -676,8 +676,8 @@ function renderBody(data, queue, vh, rankings, assets, teamByAssetName, remediat
     </div>
 
     <div class="kpi-grid">
-      ${kpiLink("/vulnhunt", data.vulnhunt.total || 0, "Code vulnerabilities found")}
-      ${kpiLink("/vulnhunt", data.vulnhunt.auto_fixable || 0, "Auto-fixed on a branch", "kpi-good")}
+      ${kpiLink("/quanta-scan", data.quanta_scan.total || 0, "Code vulnerabilities found")}
+      ${kpiLink("/quanta-scan", data.quanta_scan.auto_fixable || 0, "Auto-fixed on a branch", "kpi-good")}
       ${kpiLink("/queue", data.remediation.total, "Infra findings normalized")}
       ${kpi(data.remediation.eligible, "Auto-remediable today", "kpi-good")}
       ${kpi(data.remediation.manual_only, "Manual-only (no fixer yet)", "kpi-warn")}
@@ -783,7 +783,7 @@ export async function render(container) {
 
   async function load() {
     const [data, queue, vh, assetsData, remediationApprovalsData] = await Promise.all([
-      api.overview(), api.queue(), api.vulnhunt(), api.assetsList(), api.remediationApprovalsList(),
+      api.overview(), api.queue(), api.quanta_scan(), api.assetsList(), api.remediationApprovalsList(),
     ]);
     lastFetched = new Date();
     const { ownerByAssetName, teamByAssetName } = buildOwnerTeamMaps(assetsData.assets);

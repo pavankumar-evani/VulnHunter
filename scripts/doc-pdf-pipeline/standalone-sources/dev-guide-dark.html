@@ -186,7 +186,7 @@
   <!-- ============ 1. Introduction ============ -->
   <section class="doc-section" id="sec-1">
     <h1 class="section-h1">1. Introduction</h1>
-    <p>Quanta is two things sharing one repository: a pair of Claude Code subagent pipelines (&ldquo;/vulnhunt&rdquo; for source-code scanning, &ldquo;/remediate&rdquo; for infrastructure-finding remediation), and a full FastAPI + vanilla-JS dashboard application that reads and drives them. This guide is for anyone who needs to work in the codebase directly &mdash; a new developer, a contractor, or the product's own owner returning after time away &mdash; covering how to get the code, run it, test it, extend it, and the git conventions this specific repository follows.</p>
+    <p>Quanta is two things sharing one repository: a pair of Claude Code subagent pipelines (&ldquo;/quanta-scan&rdquo; for source-code scanning, &ldquo;/remediate&rdquo; for infrastructure-finding remediation), and a full FastAPI + vanilla-JS dashboard application that reads and drives them. This guide is for anyone who needs to work in the codebase directly &mdash; a new developer, a contractor, or the product's own owner returning after time away &mdash; covering how to get the code, run it, test it, extend it, and the git conventions this specific repository follows.</p>
     <p>It assumes basic familiarity with git, Python, and the command line. It does not replace the deeper reference material this repo already ships &mdash; &sect;10 points to each of those documents by name.</p>
   </section>
 
@@ -222,7 +222,7 @@ git worktree remove ../quanta-feature-x   # after merging</code></pre>
         <tr><td class="mono">remediation/schema/</td><td><code>normalized-finding-schema.md</code> &mdash; the single source of truth for every field name in the Finding schema.</td></tr>
         <tr><td class="mono">remediation/config/</td><td>Every admin-editable policy as YAML &mdash; priority weights, SLA windows, remediation policy, risk-scoring weights &mdash; read fresh on every request, never hardcoded.</td></tr>
         <tr><td class="mono">.claude/agents/*.md</td><td>Every subagent's prompt and its tool-access frontmatter &mdash; the actual enforcement point behind &ldquo;never executes against real infrastructure.&rdquo; See &sect;9.</td></tr>
-        <tr><td class="mono">.claude/commands/*.md</td><td>The <code>/vulnhunt</code> and <code>/remediate</code> slash-command orchestrators that sequence the subagents.</td></tr>
+        <tr><td class="mono">.claude/commands/*.md</td><td>The <code>/quanta-scan</code> and <code>/remediate</code> slash-command orchestrators that sequence the subagents.</td></tr>
         <tr><td class="mono">cli/quanta.py</td><td>Headless pipeline runner &mdash; the same entry point the dashboard's <code>/run</code> page calls as a subprocess.</td></tr>
         <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group &mdash; 1,458 tests today, all passing. Hand-rolled fakes, not vendor mock libraries.</td></tr>
         <tr><td class="mono">docs/enterprise-suite/</td><td>Fifteen HTML reference documents (architecture, RBAC, connectors, pricing, etc.), each also published as a shareable page &mdash; see <code>MANIFEST.md</code> for the sync rules.</td></tr>
@@ -262,9 +262,9 @@ git worktree remove ../quanta-feature-x   # after merging</code></pre>
 
     <h2 class="section-h2" id="sec-5-1">5.1 Interactively, inside Claude Code</h2>
     <pre class="codeblock"><code>claude
-/vulnhunt &lt;path-to-target-repo&gt; [--fix]
-/vulnhunt vulnerable-demo-app --fix
-/vulnhunt vulnerable-demo-app --verify VULN-2 quanta/auto-fixes-&lt;branch&gt;
+/quanta-scan &lt;path-to-target-repo&gt; [--fix]
+/quanta-scan vulnerable-demo-app --fix
+/quanta-scan vulnerable-demo-app --verify VULN-2 quanta/auto-fixes-&lt;branch&gt;
 /remediate                     # ingests remediation/sample-data/* by default
 /remediate --generate          # also generates Ansible playbooks</code></pre>
 

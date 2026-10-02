@@ -1,6 +1,6 @@
 # Quanta — User Guide
 
-**How to use this doc:** read this if you're the person actually running `/vulnhunt` or
+**How to use this doc:** read this if you're the person actually running `/quanta-scan` or
 `/remediate` day-to-day — interactively, headlessly, or through the dashboard — and want
 to know what a command does, what a field on screen means, and what's safe to click.
 For *what Quanta is and why it's built this way*, read
@@ -15,8 +15,8 @@ For *what Quanta is and why it's built this way*, read
 
 ## 1. Running the pipelines interactively (inside a Claude Code session)
 
-Quanta has no separate server process for its core pipelines — `/vulnhunt` and
-`/remediate` are Claude Code slash commands (`.claude/commands/vulnhunt.md` and
+Quanta has no separate server process for its core pipelines — `/quanta-scan` and
+`/remediate` are Claude Code slash commands (`.claude/commands/quanta-scan.md` and
 `.claude/commands/remediate.md`) that orchestrate a chain of subagents
 (`.claude/agents/*.md`). You need Claude Code installed and authenticated, and this repo
 as your working directory (subagents are project-scoped — see
@@ -27,11 +27,11 @@ cd <repository-directory>
 claude
 ```
 
-### `/vulnhunt` — code scanning and fixing
+### `/quanta-scan` — code scanning and fixing
 
 ```
-/vulnhunt <path>            # scan + report only
-/vulnhunt <path> --fix      # scan + report, then auto-fix the safe findings
+/quanta-scan <path>            # scan + report only
+/quanta-scan <path> --fix      # scan + report, then auto-fix the safe findings
 ```
 
 - With no `--fix`, this runs `vuln-scanner` → `vuln-triage-reporter` and writes
@@ -109,7 +109,7 @@ python dashboard/app.py
 The dashboard (`dashboard/app.py`) is a FastAPI JSON API (`/api/*`) behind a hand-rolled
 vanilla-JS single-page frontend (`dashboard/static/`) — no Node/npm build step. It is
 **read-mostly** for pipeline output: every page re-reads the real findings/plan
-artifacts on disk (git history for `/vulnhunt`, files under `remediation/` for
+artifacts on disk (git history for `/quanta-scan`, files under `remediation/` for
 `/remediate`) on every request, and there's still no historical trend view across runs.
 A real local SQLite database (`remediation/quanta.db`) backs everything else that
 gets read-modify-write traffic — exceptions, approvals, activity/AI-usage logs, asset
@@ -120,7 +120,7 @@ precise, current split between the two.
 | Page | Route | Purpose |
 |---|---|---|
 | Overview | `/` | KPI summary across both pipelines — SLA breached/at-risk/on-track counts, KEV/EPSS coverage, risk-tier and asset-class breakdown. `[SCREENSHOT: Overview]` |
-| Code Scan | `/vulnhunt` | The `/vulnhunt` findings table, parsed from `SECURITY_REPORT.md`. `[SCREENSHOT: Code Scan]` |
+| Code Scan | `/quanta-scan` | The `/quanta-scan` findings table, parsed from `SECURITY_REPORT.md`. `[SCREENSHOT: Code Scan]` |
 | Remediation Queue | `/queue` | The **live**, re-scored remediation queue — priority, SLA due date/breach status, and MITRE ATT&CK tags, recomputed on every page load from whatever `remediation/config/priority_rules.yaml` currently says. Sortable client-side. `[SCREENSHOT: Queue]` |
 | Remediation Plan | `/remediate` | The **static** snapshot from `REMEDIATION_PLAN.md`, linked to generated playbooks. See [REMEDIATION_WORKFLOWS.md](REMEDIATION_WORKFLOWS.md) for why this and the Queue page are two different (related) things. |
 | Playbook detail | `/playbooks/<filename>` | Full content of one generated Ansible playbook, for review before anyone runs it. `[SCREENSHOT: Playbook detail]` |
@@ -258,7 +258,7 @@ Nothing in this repository ever executes against real infrastructure automatical
 This distinction gets asked about often enough to spell out precisely, because
 "agent" means two different things in this repo depending on which half you mean.
 
-**`/vulnhunt`'s code scanning is agentless in the security-tooling sense.** It is static
+**`/quanta-scan`'s code scanning is agentless in the security-tooling sense.** It is static
 analysis of source code already sitting in a git repository or working directory —
 `vuln-scanner` uses `Read`/`Grep`/`Glob`/`Bash` to read files and search patterns. Nothing
 is installed on, or connects to, any target system to run this scan; there is no runtime
@@ -289,7 +289,7 @@ scanning deployment mode. See [AI_COMMANDS.md](AI_COMMANDS.md) for what each one
 ## 8. Using the global search bar
 
 A search box sits in the topbar on every page (`dashboard/static/js/search.js`) —
-type at least 2 characters and it searches Code Scan (`/api/vulnhunt`) and the
+type at least 2 characters and it searches Code Scan (`/api/quanta-scan`) and the
 Remediation Queue (`/api/queue`) findings by ID, title, CVE, or asset name, showing up
 to 5 matches per source in a dropdown. Click a result and it deep-links you to the
 matching page with `?highlight=<id>` in the URL, which scrolls to and highlights that

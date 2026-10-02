@@ -23,7 +23,7 @@ class _StubDataModule:
     def load_remediation_findings(self):
         return [{"id": "FIND-1"}, {"id": "FIND-2"}]
 
-    def load_vulnhunt_data(self):
+    def load_quanta_scan_data(self):
         return {"available": True, "total": 9, "auto_fixable": 6}
 
     def load_remediation_plan(self):
@@ -73,10 +73,10 @@ class GenerateReportData(unittest.TestCase):
         self.assertEqual(data["kev_count"], 1)
         self.assertEqual(data["high_epss_count"], 1)
 
-    def test_pulls_vulnhunt_and_remediation_totals(self):
+    def test_pulls_quanta_scan_and_remediation_totals(self):
         data = reports.generate_report_data("weekly", self.stub)
-        self.assertEqual(data["vulnhunt_total"], 9)
-        self.assertEqual(data["vulnhunt_auto_fixable"], 6)
+        self.assertEqual(data["quanta_scan_total"], 9)
+        self.assertEqual(data["quanta_scan_auto_fixable"], 6)
         self.assertEqual(data["remediation_total"], 2)
         self.assertEqual(data["playbook_count"], 1)
 
@@ -87,7 +87,7 @@ class GenerateReportData(unittest.TestCase):
         ]
         stub = SimpleNamespace(
             load_remediation_findings=lambda: [],
-            load_vulnhunt_data=lambda: {"available": False},
+            load_quanta_scan_data=lambda: {"available": False},
             load_remediation_plan=lambda: {"available": False, "risk_tier_counts": {}},
             load_playbooks=lambda: [],
             load_live_queue=lambda: many,
@@ -153,7 +153,7 @@ class RealArtifactIntegration(unittest.TestCase):
     def test_generate_report_data_against_real_artifacts(self):
         data = reports.generate_report_data("weekly", self.dashboard_data)
         self.assertGreaterEqual(data["remediation_total"], 7440)
-        self.assertEqual(data["vulnhunt_total"], 18)
+        self.assertEqual(data["quanta_scan_total"], 18)
         self.assertLessEqual(len(data["top_priority_findings"]), 5)
 
     def test_render_report_html_against_real_artifacts(self):

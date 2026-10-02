@@ -32,7 +32,7 @@ Open a ticket from the in-app **Support** page (`/support`, sign-in required), t
 *Something isn't working*. Tickets are stored in your deployment's own database, visible
 only to you and your administrators, and never sent to a public tracker. Include:
 
-- **Which pipeline** — `/vulnhunt`, `/remediate`, or both.
+- **Which pipeline** — `/quanta-scan`, `/remediate`, or both.
 - **Which component** — e.g. `vuln-scanner`, `remediation-planner`,
   `remediation-fixer-windows`, the dashboard, the headless CLI, a specific connector, or
   a generated artifact.

@@ -1,5 +1,5 @@
 """
-Tests for remediation/audit/record_verification.py - the /vulnhunt --verify pipeline
+Tests for remediation/audit/record_verification.py - the /quanta-scan --verify pipeline
 step's real activity-log write. Same in-memory-engine pattern as test_activity_log.py.
 """
 import sys
@@ -26,7 +26,7 @@ class RecordVerification(unittest.TestCase):
             "VULN-3", "quanta/auto-fixes-20260901", "resolved", "SQLi pattern no longer present",
             engine=self.engine,
         )
-        self.assertEqual(entry["action"], "vulnhunt.verify")
+        self.assertEqual(entry["action"], "quanta_scan.verify")
         self.assertEqual(entry["target"], "VULN-3")
         self.assertEqual(entry["details"]["branch"], "quanta/auto-fixes-20260901")
         self.assertEqual(entry["details"]["status"], "resolved")
@@ -40,7 +40,7 @@ class RecordVerification(unittest.TestCase):
 
     def test_default_actor_identifies_the_pipeline(self):
         entry = record_verification.record_verification("VULN-1", "branch-x", "still-present", engine=self.engine)
-        self.assertEqual(entry["actor"], "vulnhunt-verify")
+        self.assertEqual(entry["actor"], "quanta-scan-verify")
 
 
 if __name__ == "__main__":

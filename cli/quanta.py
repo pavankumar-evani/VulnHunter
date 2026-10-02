@@ -90,16 +90,16 @@ def build_command(
 
 
 def scan_prompt(path, fix=False):
-    return f"/vulnhunt {path}" + (" --fix" if fix else "")
+    return f"/quanta-scan {path}" + (" --fix" if fix else "")
 
 
 def verify_prompt(path, finding_id, branch):
-    """Re-verifies one already-fixed /vulnhunt finding against the branch vuln-fixer
+    """Re-verifies one already-fixed /quanta-scan finding against the branch vuln-fixer
     pushed for it, reading <path>/SECURITY_REPORT.md to reconstruct the finding rather
-    than needing a fresh scan (see .claude/commands/vulnhunt.md's own `--verify`
-    handling) - the /vulnhunt-side counterpart to remediate_prompt()'s `finding_id`
+    than needing a fresh scan (see .claude/commands/quanta-scan.md's own `--verify`
+    handling) - the /quanta-scan-side counterpart to remediate_prompt()'s `finding_id`
     short-circuit above."""
-    return f"/vulnhunt {path} --verify {finding_id} {branch}"
+    return f"/quanta-scan {path} --verify {finding_id} {branch}"
 
 
 def remediate_prompt(generate=False, finding_id=None):
@@ -189,7 +189,7 @@ def run(prompt, pipeline_name, dry_run=False, on_result=None, **build_kwargs):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="quanta",
-        description="Headless CLI wrapper for Quanta's /vulnhunt and /remediate pipelines.",
+        description="Headless CLI wrapper for Quanta's /quanta-scan and /remediate pipelines.",
     )
     parser.add_argument("--dry-run", action="store_true",
                          help="Print the command that would run, without calling the API.")
@@ -202,7 +202,7 @@ def main(argv=None):
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    scan_parser = subparsers.add_parser("scan", help="Run /vulnhunt against a target path.")
+    scan_parser = subparsers.add_parser("scan", help="Run /quanta-scan against a target path.")
     scan_parser.add_argument("path", help="Path to the target repo/directory to scan.")
     scan_parser.add_argument("--fix", action="store_true", help="Also auto-fix safe findings.")
 
@@ -223,7 +223,7 @@ def main(argv=None):
 
     if args.command == "scan":
         prompt = scan_prompt(args.path, fix=args.fix)
-        return run(prompt, "vulnhunt", dry_run=args.dry_run, **build_kwargs)
+        return run(prompt, "quanta_scan", dry_run=args.dry_run, **build_kwargs)
     elif args.command == "remediate":
         prompt = remediate_prompt(generate=args.generate, finding_id=args.finding_id)
         return run(prompt, "remediate", dry_run=args.dry_run, **build_kwargs)

@@ -110,7 +110,7 @@ export const CONNECTORS = [
   { key: "polaris", label: "Polaris (Synopsys)", category: "Application Security Testing (SAST/SCA)", iconName: "scan", status: "reference",
     blurb: "Cloud-based static analysis (SAST) platform.",
     authMethod: "API token (Bearer) against the Polaris Software Integrity Platform REST API",
-    integrationShape: "Pull: query the issues API for a project's latest analysis run, normalize into SAST findings - a parallel data source to /vulnhunt's own scan output, not a replacement.",
+    integrationShape: "Pull: query the issues API for a project's latest analysis run, normalize into SAST findings - a parallel data source to /quanta-scan's own scan output, not a replacement.",
     dataFlow: "Findings only (source-code SAST)." },
   { key: "sonarqube", label: "SonarQube", category: "Application Security Testing (SAST/SCA)", iconName: "scan", status: "reference",
     blurb: "Widely-deployed open-source-and-commercial static analysis platform.",

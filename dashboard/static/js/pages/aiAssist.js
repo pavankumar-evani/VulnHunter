@@ -5,9 +5,9 @@ import { enhanceSelect } from "../searchableSelect.js";
 export const title = "AI Assist";
 
 async function loadFindingOptions() {
-  const [remediate, vulnhunt] = await Promise.all([api.remediate(), api.vulnhunt()]);
+  const [remediate, quanta_scan] = await Promise.all([api.remediate(), api.quanta_scan()]);
   const remediationOptions = remediate.findings.map((f) => ({ id: f.id, label: `${f.id} - ${f.title}` }));
-  const codeOptions = (vulnhunt.available ? vulnhunt.findings : []).map((f) => ({ id: f.ID, label: `${f.ID} - ${f.Title}` }));
+  const codeOptions = (quanta_scan.available ? quanta_scan.findings : []).map((f) => ({ id: f.ID, label: `${f.ID} - ${f.Title}` }));
   return [...remediationOptions, ...codeOptions];
 }
 

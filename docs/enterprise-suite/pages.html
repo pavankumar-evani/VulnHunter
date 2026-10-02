@@ -129,7 +129,7 @@
       <div class="table-wrap"><table>
         <thead><tr><th>Route</th><th>Page</th><th>Purpose</th><th>Key fields shown</th></tr></thead>
         <tbody>
-          <tr><td>/vulnhunt</td><td>Code Scan Results</td><td>SAST results viewer</td><td class="col-fields">ID, Title, Severity, Category, CWE, File, Auto-fixable?</td></tr>
+          <tr><td>/quanta-scan</td><td>Code Scan Results</td><td>SAST results viewer</td><td class="col-fields">ID, Title, Severity, Category, CWE, File, Auto-fixable?</td></tr>
           <tr><td>/remediate</td><td>Remediation Plan (snapshot)</td><td>Point-in-time plan</td><td class="col-fields">ID, Asset, CVE, Severity, Action Type, Automation Target, Risk Tier, KEV, EPSS, Playbook link</td></tr>
           <tr><td>/queue</td><td>Live Remediation Queue</td><td>Main, live re-scored queue</td><td class="col-fields">SLA breached/at-risk/on-track; Priority, ID, Asset, Owner, Team, CVE, KEV, EPSS, SLA Due, Change Type, Cadence</td></tr>
           <tr><td>/remediation-approvals</td><td>Remediation Approvals</td><td>Human approve/reject gate</td><td class="col-fields">Needs-approval table (Priority, Title, Change Type, Next Window); Approvals table (Status, Decision, Rollback Plan)</td></tr>
@@ -214,7 +214,7 @@
           <tr><td>/support</td><td>Support</td><td>In-app helpdesk: open a ticket (bug, question, feature, access), track replies; admins triage the queue, assign, resolve, and optionally escalate to the vendor by email. Stored in the deployment's own database</td></tr>
           <tr><td>/faq</td><td>FAQ</td><td>~29 honest-disclosure Q&amp;A items on product scope</td></tr>
           <tr><td>/reports</td><td>Reports</td><td>Generate a shareable snapshot report; schedule recurring emails</td></tr>
-          <tr><td>/run</td><td>Run a Pipeline</td><td>Trigger /vulnhunt or /remediate directly, with a spend cap and confirm gate</td></tr>
+          <tr><td>/run</td><td>Run a Pipeline</td><td>Trigger /quanta-scan or /remediate directly, with a spend cap and confirm gate</td></tr>
           <tr><td>/inbox</td><td>Inbox</td><td>System-generated notifications (SLA breach, KEV, expiring exceptions)</td></tr>
         </tbody>
       </table></div>

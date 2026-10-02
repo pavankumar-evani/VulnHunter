@@ -1,11 +1,11 @@
 """
-Test suite for Quanta's two pipelines (/vulnhunt and /remediate).
+Test suite for Quanta's two pipelines (/quanta-scan and /remediate).
 
 This does NOT invoke the Claude Code subagents directly (they only run inside
 an interactive Claude Code session). Instead it validates the real artifacts
 those agents produced during the documented validation run: the git history
 (master = vulnerable baseline, quanta/auto-fixes-<ts> = the fix branch)
-for /vulnhunt, and the files under remediation/output/ + REMEDIATION_PLAN.md
+for /quanta-scan, and the files under remediation/output/ + REMEDIATION_PLAN.md
 for /remediate. That makes this both a regression suite (re-run it after any
 prompt/agent edit to catch drift) and the test evidence for the hackathon
 report.
@@ -37,11 +37,11 @@ def find_fix_branch():
         cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
     )
     branches = [b.strip().lstrip("* ").strip() for b in result.stdout.splitlines() if b.strip()]
-    assert branches, "no quanta/auto-fixes-* branch found - has /vulnhunt --fix been run?"
+    assert branches, "no quanta/auto-fixes-* branch found - has /quanta-scan --fix been run?"
     return branches[0]
 
 
-class VulnHuntScannerFindsRealVulnerabilities(unittest.TestCase):
+class QuantaScanScannerFindsRealVulnerabilities(unittest.TestCase):
     """The vulnerable baseline (master) actually contains what the demo claims it does."""
 
     @classmethod
@@ -71,8 +71,8 @@ class VulnHuntScannerFindsRealVulnerabilities(unittest.TestCase):
         self.assertRegex(self.dockerfile, r'ENV STRIPE_API_KEY="sk_live_')
 
 
-class VulnHuntScannerFindsRealAiAndApiVulnerabilities(unittest.TestCase):
-    """Same rule as VulnHuntScannerFindsRealVulnerabilities, for the 2 fixture files
+class QuantaScanScannerFindsRealAiAndApiVulnerabilities(unittest.TestCase):
+    """Same rule as QuantaScanScannerFindsRealVulnerabilities, for the 2 fixture files
     added later (ai_assistant.py, admin_api.py) that back VULN-10 through VULN-18."""
 
     @classmethod
@@ -105,7 +105,7 @@ class VulnHuntScannerFindsRealAiAndApiVulnerabilities(unittest.TestCase):
         self.assertIn("_apply_updates_to_user(user_id, updates)  # e.g.", self.admin_api)
 
 
-class VulnHuntFixerAppliesOnlyApprovedFixes(unittest.TestCase):
+class QuantaScanFixerAppliesOnlyApprovedFixes(unittest.TestCase):
     """The fix branch actually fixes the 6 auto-fixable findings and leaves the rest alone."""
 
     @classmethod
@@ -148,8 +148,8 @@ class VulnHuntFixerAppliesOnlyApprovedFixes(unittest.TestCase):
         compile(self.app_py, "app.py", "exec")
 
 
-class VulnHuntFixerAppliesAiAndApiFixes(unittest.TestCase):
-    """Same rule as VulnHuntFixerAppliesOnlyApprovedFixes, for the 5 auto-fixable
+class QuantaScanFixerAppliesAiAndApiFixes(unittest.TestCase):
+    """Same rule as QuantaScanFixerAppliesOnlyApprovedFixes, for the 5 auto-fixable
     findings in ai_assistant.py/admin_api.py (VULN-10, 14, 15, 17, 18) - and the 4
     manual-review findings in those same 2 files (VULN-11, 12, 13, 16) that must stay
     untouched."""
@@ -198,7 +198,7 @@ class VulnHuntFixerAppliesAiAndApiFixes(unittest.TestCase):
         compile(self.admin_api, "admin_api.py", "exec")
 
 
-class VulnHuntReportIsAccurate(unittest.TestCase):
+class QuantaScanReportIsAccurate(unittest.TestCase):
     """Covers the original 9 findings (app.py/Dockerfile) plus 9 more added later from
     two more vulnerable fixture files, ai_assistant.py (AI/ML) and admin_api.py
     (secrets/API-authorization) - see vulnerable-demo-app/SECURITY_REPORT.md's own

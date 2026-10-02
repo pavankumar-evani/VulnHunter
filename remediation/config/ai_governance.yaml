@@ -1,5 +1,5 @@
 # AI model + token governance policy - which model every real Claude Code invocation
-# this app makes (ai-assist, ai-trend-analysis, the /vulnhunt and /remediate pipelines)
+# this app makes (ai-assist, ai-trend-analysis, the /quanta-scan and /remediate pipelines)
 # is asked to use, and an optional daily per-user token/cost cap. Edited by an admin via
 # the Admin Settings page (dashboard/app.py's /api/admin/ai-governance); takes effect
 # immediately on the next real AI call - no restart needed.

@@ -13,7 +13,7 @@ This environment has no Java, Go, PHP, or Node/npm runtime available (see
 quanta-project's environment notes) - so nothing here compiles, executes, or lints
 the sample vulnerable code, and nothing here claims the vuln-scanner subagent was
 actually invoked against these fixtures. Doing that requires a live Claude Code session
-running the /vulnhunt pipeline - the same caveat documented in tests/test_connectors.py
+running the /quanta-scan pipeline - the same caveat documented in tests/test_connectors.py
 for the Tenable/Armis connectors being built against vendor docs rather than verified
 against a live tenant.
 """

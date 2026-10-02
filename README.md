@@ -8,8 +8,8 @@ and across enterprise infrastructure — and fixes the safe ones automatically.*
 
 An independent, self-directed project. Two pipelines, one philosophy:
 
-- **`/vulnhunt`** — scan a codebase, report findings, auto-fix the safe ones. See
-  [below](#what-vulnhunt-does).
+- **`/quanta-scan`** — scan a codebase, report findings, auto-fix the safe ones. See
+  [below](#what-quanta_scan-does).
 - **`/remediate`** — ingest vulnerability/asset-risk data from Tenable, Armis, and manual
   threat intel, normalize it, plan remediation by risk tier, and generate reviewable
   fix automation for supported asset classes. See [Remediation Engine](#remediation-engine-remediate).
@@ -34,9 +34,9 @@ for infrastructure: a vulnerability management program can generate thousands of
 across Tenable, Armis, and analyst threat intel, and turning each one into an actual fix
 across Windows, Unix, network, and IoT/OT assets is almost entirely manual today.
 
-## What `/vulnhunt` does
+## What `/quanta-scan` does
 
-One command — `/vulnhunt <path>` — runs a 3-stage agent pipeline:
+One command — `/quanta-scan <path>` — runs a 3-stage agent pipeline:
 
 1. **Scan** — a read-only subagent (`vuln-scanner`) statically analyzes the target repo
    for injection flaws, hardcoded secrets, insecure config, risky dependencies, and
@@ -56,7 +56,7 @@ cannot introduce new ones.
 ## Architecture
 
 ```
-/vulnhunt <path> [--fix]        (slash command, orchestrates the pipeline)
+/quanta-scan <path> [--fix]        (slash command, orchestrates the pipeline)
         │
         ▼
   vuln-scanner            Read, Grep, Glob, Bash        → JSON findings
@@ -83,10 +83,10 @@ against on stage.
 ```bash
 # 1. Point Quanta at the vulnerable demo app
 claude
-/vulnhunt vulnerable-demo-app
+/quanta-scan vulnerable-demo-app
 
 # 2. Review SECURITY_REPORT.md, then let it auto-fix the safe findings
-/vulnhunt vulnerable-demo-app --fix
+/quanta-scan vulnerable-demo-app --fix
 ```
 
 Expected result: 18 findings detected in seconds (9 Critical, 6 High, 2 Medium, 1 Low),
@@ -286,7 +286,7 @@ docstring for exactly what it does and doesn't claim.
 │   │   ├── remediation-fixer-windows.md
 │   │   └── remediation-fixer-unix.md
 │   └── commands/
-│       ├── vulnhunt.md
+│       ├── quanta-scan.md
 │       └── remediate.md
 ├── cli/
 │   ├── quanta.py            # headless CLI: run either pipeline without an
@@ -311,7 +311,7 @@ docstring for exactly what it does and doesn't claim.
 │   │                           #   approve, auto-expire, revoke)
 │   ├── inventory/               # asset inventory aggregation + editable ownership
 │   └── output/                 # normalized findings + generated playbooks land here
-├── vulnerable-demo-app/        # intentionally vulnerable Flask app for the /vulnhunt demo
+├── vulnerable-demo-app/        # intentionally vulnerable Flask app for the /quanta-scan demo
 │   ├── app.py
 │   ├── requirements.txt
 │   ├── Dockerfile

@@ -3,7 +3,7 @@ import { escapeHtml } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
 import { paginate, paginationHtml, wirePagination, DEFAULT_PAGE_SIZE } from "../pagination.js";
 
-export const title = "/vulnhunt — Code Scan Results";
+export const title = "/quanta-scan — Code Scan Results";
 
 const EXPORT_COLUMNS = [
   { label: "ID", value: (f) => f.ID },
@@ -47,11 +47,11 @@ export function categoryFor(cwe, file) {
   return "Other";
 }
 
-// verification is null until a real `/vulnhunt <path> --verify <ID> <branch>` run has
+// verification is null until a real `/quanta-scan <path> --verify <ID> <branch>` run has
 // logged an outcome (remediation/audit/record_verification.py) - "not yet verified" is
 // the honest default, never implied as "verified" just because a fix branch exists.
 function verificationBadgeHtml(verification) {
-  if (!verification) return `<span class="muted" title="No /vulnhunt --verify run has checked this finding yet">Not yet verified</span>`;
+  if (!verification) return `<span class="muted" title="No /quanta-scan --verify run has checked this finding yet">Not yet verified</span>`;
   const label = { resolved: "Resolved", "still-present": "Still present", inconclusive: "Inconclusive" }[verification.status] || verification.status;
   const badgeClass = { resolved: "badge-auto_approvable", "still-present": "badge-critical", inconclusive: "badge-medium" }[verification.status] || "badge-medium";
   return `<span class="badge ${badgeClass}" title="${escapeHtml(verification.detail || "")}">${escapeHtml(label)}</span>`;
@@ -74,11 +74,11 @@ function rowHtml(f) {
 }
 
 export async function render(container) {
-  const vh = await api.vulnhunt();
+  const vh = await api.quanta_scan();
 
   if (!vh.available) {
     container.innerHTML = `<p class="empty-state">
-      No scan results found yet. Run <code>/vulnhunt &lt;path&gt; --fix</code> in Claude Code,
+      No scan results found yet. Run <code>/quanta-scan &lt;path&gt; --fix</code> in Claude Code,
       or use the <a href="/run" data-link>Run Pipeline</a> page.
     </p>`;
     return;
@@ -86,7 +86,7 @@ export async function render(container) {
 
   const findings = vh.findings.map((f) => ({ ...f, _category: categoryFor(f.CWE, f.File) }));
   const categories = [...new Set(findings.map((f) => f._category))].sort();
-  // A nav deep-link (e.g. /vulnhunt?category=Secrets from the Security Domains menu) can
+  // A nav deep-link (e.g. /quanta-scan?category=Secrets from the Security Domains menu) can
   // preselect the category filter on load.
   const requestedCategory = new URLSearchParams(window.location.search).get("category");
   const filters = { severity: "all", category: categories.includes(requestedCategory) ? requestedCategory : "all" };

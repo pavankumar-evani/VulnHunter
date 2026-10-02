@@ -174,9 +174,9 @@
               <td>scikit-learn <code>IsolationForest</code> anomaly detection per asset type, <code>KMeans</code> risk-archetype clustering, and TF-IDF + cosine-similarity "similar findings" search — fit fresh, at request time, against this app's real data.</td>
             </tr>
             <tr>
-              <td><strong><code>/vulnhunt</code> pipeline</strong></td>
+              <td><strong><code>/quanta-scan</code> pipeline</strong></td>
               <td><span class="kind-tag agent">Subagents</span></td>
-              <td>Sidebar → Operations → Run Pipeline (<code>/run</code>, "/vulnhunt (code scan)"), or the <code>/vulnhunt</code> slash command</td>
+              <td>Sidebar → Operations → Run Pipeline (<code>/run</code>, "/quanta-scan (code scan)"), or the <code>/quanta-scan</code> slash command</td>
               <td>Scans a codebase for real vulnerability classes, writes a ranked Markdown report, and — only if asked — drafts mechanical fixes on a new branch for a human to turn into a pull request.</td>
             </tr>
             <tr>
@@ -237,11 +237,11 @@
         <li>Read the callout at the top of the page before treating any number here as a decision: it never replaces the deterministic Remediation Policy or Priority Rules engines.</li>
       </ol>
 
-      <h3>Running <code>/vulnhunt</code> and <code>/remediate</code></h3>
+      <h3>Running <code>/quanta-scan</code> and <code>/remediate</code></h3>
       <p>There are three real ways to trigger either pipeline, depending on who's asking:</p>
       <ol class="steps">
-        <li><strong>From the dashboard:</strong> Sidebar → Operations → Run Pipeline. Pick a pipeline ("/vulnhunt (code scan)" or "/remediate (infra remediation)"), a target path (scan only), whether to also apply fixes / generate playbooks, and a max spend cap in USD (defaults to $2.00, admin-adjustable up to $500). Leave confirm unchecked for a free dry run; check it and submit to actually run it — admin session required, and the result lands in the audit log table on the same page.</li>
-        <li><strong>From a Claude Code session, directly:</strong> type <code>/vulnhunt &lt;path&gt; [--fix]</code> or <code>/remediate [--generate] [--finding-id FIND-N]</code> in this repo. Same subagents, same guardrails, no dashboard involved — the developer-facing path.</li>
+        <li><strong>From the dashboard:</strong> Sidebar → Operations → Run Pipeline. Pick a pipeline ("/quanta-scan (code scan)" or "/remediate (infra remediation)"), a target path (scan only), whether to also apply fixes / generate playbooks, and a max spend cap in USD (defaults to $2.00, admin-adjustable up to $500). Leave confirm unchecked for a free dry run; check it and submit to actually run it — admin session required, and the result lands in the audit log table on the same page.</li>
+        <li><strong>From a Claude Code session, directly:</strong> type <code>/quanta-scan &lt;path&gt; [--fix]</code> or <code>/remediate [--generate] [--finding-id FIND-N]</code> in this repo. Same subagents, same guardrails, no dashboard involved — the developer-facing path.</li>
         <li><strong>For one already-approved finding:</strong> Remediation Approvals page → "Trigger Remediation" on an approved row. This skips re-ingestion entirely and calls just the one fixer subagent matching that finding's domain.</li>
       </ol>
     </section>
@@ -251,7 +251,7 @@
       <p class="section-intro">The recurring idea underneath every surface above: an AI or subagent is trusted with exactly the tools its one job needs, never more — and every action that could spend money or touch a real system stops for an explicit, server-verified confirmation first.</p>
 
       <h3>The subagent pipelines, tool by tool</h3>
-      <p><code>/vulnhunt</code> — a scanner that structurally cannot write, a reporter that structurally cannot scan, and a fixer that can only ever propose a branch:</p>
+      <p><code>/quanta-scan</code> — a scanner that structurally cannot write, a reporter that structurally cannot scan, and a fixer that can only ever propose a branch:</p>
       <div class="pipeline">
         <div class="pipeline-step">
           <div class="pname">vuln-scanner</div>
@@ -328,7 +328,7 @@
           <thead><tr><th>Route</th><th>Who sets the cap</th><th>Cap</th><th>Enforced</th></tr></thead>
           <tbody>
             <tr><td>AI Assist / AI Trend Analysis</td><td>Nobody — fixed</td><td class="mono">$1.00 per call</td><td>Passed as the real <code>claude</code> CLI's own <code>--max-budget-usd</code> flag on every real call, with no client-supplied override field at all</td></tr>
-            <tr><td>Run Pipeline (<code>/vulnhunt</code>, <code>/remediate</code>)</td><td>Admin, per run</td><td class="mono">$2.00 default, up to $500</td><td>Server-validated numeric range — this field used to flow straight from an unchecked text input into a subprocess argument</td></tr>
+            <tr><td>Run Pipeline (<code>/quanta-scan</code>, <code>/remediate</code>)</td><td>Admin, per run</td><td class="mono">$2.00 default, up to $500</td><td>Server-validated numeric range — this field used to flow straight from an unchecked text input into a subprocess argument</td></tr>
             <tr><td>Every real AI spend, app-wide</td><td>Admin, per user (Admin Settings → AI Governance)</td><td class="mono">Daily token ceiling, unlimited by default</td><td>Checked server-side before any route above is allowed to spend anything; returns HTTP 429 with the real used/limit numbers once hit</td></tr>
           </tbody>
         </table>

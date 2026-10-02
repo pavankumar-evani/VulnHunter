@@ -18,7 +18,7 @@ Those three act on the *asset* (an OS package, a device's compensating controls)
 one acts on a *library dependency* declared in an application's own SBOM
 (`remediation/enrichment/sbom.py`, `remediation/sample-data/sbom.json`) — the fix is a
 version bump to a real, safe release, not an OS-level patch. Unlike a first-party code
-bug (which `vuln-fixer` on the `/vulnhunt` side of this repo can safely generate an
+bug (which `vuln-fixer` on the `/quanta-scan` side of this repo can safely generate an
 actual diff for, since it can read and reason about the surrounding application code),
 a dependency upgrade's real risk is a *transitive breaking change* this subagent has no
 way to test — it doesn't have the project's build tooling, its test suite, or (crucially)

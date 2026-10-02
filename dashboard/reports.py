@@ -22,7 +22,7 @@ VALID_PERIODS = ("daily", "weekly", "monthly", "quarterly", "half-yearly", "year
 # scan_type_mapping.py) - "all" is the whole landscape, anything else scopes a report to
 # that one sub-domain. "sast" is deliberately excluded, same reason scan_type_mapping.py
 # excludes it from QUEUE_SCAN_TYPES: /queue (and therefore this report) never tags a
-# finding "sast" - those live only in the separate /vulnhunt data path, which a scoped
+# finding "sast" - those live only in the separate /quanta-scan data path, which a scoped
 # (sub-domain/team) report can't meaningfully include (see the scope_note below).
 VALID_SCOPES = ("all", "infra-vm", "sca", "cert-mgmt", "dast", "iac", "secrets", "runtime", "ai-ml")
 
@@ -77,7 +77,7 @@ def generate_report_data(period, data_module, scope="all", team=None):
         for f in scoped[:5]
     ]
 
-    vh = data_module.load_vulnhunt_data() if is_landscape_wide else {"total": 0, "auto_fixable": 0}
+    vh = data_module.load_quanta_scan_data() if is_landscape_wide else {"total": 0, "auto_fixable": 0}
     plan = data_module.load_remediation_plan() if is_landscape_wide else {}
     playbooks = data_module.load_playbooks() if is_landscape_wide else []
 
@@ -100,8 +100,8 @@ def generate_report_data(period, data_module, scope="all", team=None):
         "sla": sla,
         "kev_count": data_module.count_kev_listed(scoped),
         "high_epss_count": data_module.count_high_epss(scoped),
-        "vulnhunt_total": vh.get("total", 0),
-        "vulnhunt_auto_fixable": vh.get("auto_fixable", 0),
+        "quanta_scan_total": vh.get("total", 0),
+        "quanta_scan_auto_fixable": vh.get("auto_fixable", 0),
         "remediation_total": len(scoped),
         "playbook_count": len(playbooks),
         "risk_tier_counts": plan.get("risk_tier_counts", {}),
@@ -177,7 +177,7 @@ def render_report_html(report):
     <div class="kpi"><div class="n">{report["kev_count"]}</div><div class="l">CISA KEV-listed</div></div>
     <div class="kpi"><div class="n">{report["high_epss_count"]}</div><div class="l">High EPSS</div></div>
     <div class="kpi"><div class="n">{report["remediation_total"]}</div><div class="l">Infra findings</div></div>
-    <div class="kpi"><div class="n">{report["vulnhunt_total"]}</div><div class="l">Code vulnerabilities</div></div>
+    <div class="kpi"><div class="n">{report["quanta_scan_total"]}</div><div class="l">Code vulnerabilities</div></div>
     <div class="kpi"><div class="n">{report["playbook_count"]}</div><div class="l">Playbooks generated</div></div>
   </div>
 
@@ -214,7 +214,7 @@ def render_report_text(report):
         f"CISA KEV-listed: {report['kev_count']}",
         f"High EPSS: {report['high_epss_count']}",
         f"Findings in scope: {report['remediation_total']}",
-        f"Code vulnerabilities (landscape-wide only): {report['vulnhunt_total']}",
+        f"Code vulnerabilities (landscape-wide only): {report['quanta_scan_total']}",
         f"Playbooks generated (landscape-wide only): {report['playbook_count']}",
         "",
         "Top priority findings:",

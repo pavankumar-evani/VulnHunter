@@ -160,7 +160,7 @@ findings the scanner has already been detecting since an earlier wave (Dockerfil
 issues: running as root, secrets baked into image layers, unpinned base image tags) -
 they were just falling into a generic "Other" bucket because "no CWE" (unpinned base
 image has none) or an unmapped CWE (CWE-250 for running as root) didn't match the
-category lookup in `dashboard/static/js/pages/vulnhunt.js`. That's fixed, so this
+category lookup in `dashboard/static/js/pages/quanta-scan.js`. That's fixed, so this
 category shows real findings today. **API Vulnerabilities** is newly-added detection
 guidance in `.claude/agents/vuln-scanner.md` (missing authentication on a route,
 wildcard CORS, mass assignment) for scans going forward - the category and its CWE
@@ -427,7 +427,7 @@ It calls the real Claude API, which costs real money against your Claude usage/p
 `cli/quanta.py` applies a `--max-budget-usd` spend cap (default `$2.00`) to every real
 invocation as a safety net, but that default is not a guarantee it fits your budget or
 your plan's actual pricing — you're responsible for understanding what a
-`/vulnhunt --fix` or `/remediate --generate` run costs before running it unattended (e.g.
+`/quanta-scan --fix` or `/remediate --generate` run costs before running it unattended (e.g.
 on every CI push). Always run `--dry-run` first to see exactly what would execute without
 spending anything. Full detail: [cli/README.md](../cli/README.md)'s "Cost warning"
 section.

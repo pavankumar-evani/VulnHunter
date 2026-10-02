@@ -22,7 +22,7 @@ into `remediation/quanta.db` (gitignored, created on first run either way) - see
 this is NOT (yet)" below for which stores this covers. Safe to skip on a repeat run; the
 script no-ops if there's nothing left to migrate.
 
-It reads directly from the repo it's run in: git history (for `/vulnhunt`'s
+It reads directly from the repo it's run in: git history (for `/quanta-scan`'s
 `SECURITY_REPORT.md`, via the `quanta/auto-fixes-*` branch) and files under
 `remediation/` (for `/remediate`'s `normalized-findings.json`, `REMEDIATION_PLAN.md`, and
 generated playbooks). If those artifacts don't exist yet, the relevant pages show an
@@ -33,7 +33,7 @@ empty state with instructions instead of erroring.
 - **`dashboard/app.py`** — a FastAPI app with two kinds of routes:
   - `/api/*` — the JSON API. This is the only thing the frontend talks to, and the only
     thing worth testing from Python (see Testing below).
-  - Everything else (`/`, `/vulnhunt`, `/remediate`, `/queue`, `/priority-rules`,
+  - Everything else (`/`, `/quanta-scan`, `/remediate`, `/queue`, `/priority-rules`,
     `/servicenow`, `/run`, `/playbooks/{filename}`, and any unrecognized path) serves the
     exact same file: `dashboard/static/index.html`. This is what makes it a single-page
     app — there's no server-side templating left at all.
@@ -133,7 +133,7 @@ empty state with instructions instead of erroring.
 | `/infrastructure` | Infrastructure Vulnerabilities hub - rolls up OS/Network/Network Security/Cloud/OS Applications/Infrastructure-as-Code/Runtime counts (`remediation/enrichment/infra_classification.py`) with links into each pre-filtered `/queue` view; a severity bar chart and sub-category pie chart (`charts.js`, hand-rolled SVG, no dependency), plus a date-range filter (by real first-seen date, honestly caveated - see the FAQ) on the findings table below. OT-IoT is deliberately excluded here - see `/ot-vulnerabilities` |
 | `/ot-vulnerabilities` | OT Vulnerabilities hub - the one dedicated home for `infra_category="ot"` findings (Operational Technology/IoT devices), same shape as the other Security Domains hubs: total-vulnerabilities KPI, severity/device-type/team/priority/aging charts, top-5 rankings, AI trend analysis, and the full findings table |
 | `/queue?category=infra-vm` / `?category=dast` / `?category=sca` / `?category=cert-mgmt` | The Security Domains menu's deep links into `/queue`, pre-filtered by category |
-| `/vulnhunt` / `/vulnhunt?category=Secrets` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category; also serves as the SAST and Secrets Management nav entries |
+| `/quanta-scan` / `/quanta-scan?category=Secrets` | Code scan findings table (from `SECURITY_REPORT.md`), filterable by severity and CWE-derived category; also serves as the SAST and Secrets Management nav entries |
 | `/queue` | The *live*, re-scored remediation queue (priority/SLA/KEV/EPSS/ATT&CK/Owner/Team), sortable and filterable client-side (priority, asset type, category, infra sub-category, KEV-only, date range by real first-seen date), the (demo) tenant switcher applies here, live-refreshed every 20s, per-row "Ask AI" link, CSV/JSON/MD export. Also accepts `?cve=`/`?title=`/`?asset=` deep-links from the Vulnerability/Asset Mapping dashboards for pre-filtered drill-down |
 | `/remediate` | The *static* remediation plan snapshot (from `REMEDIATION_PLAN.md`), linked to generated playbooks, filterable by risk tier and automation target, CSV/JSON/MD export |
 | `/playbooks/<filename>` | Full content of one generated Ansible playbook |

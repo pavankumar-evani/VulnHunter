@@ -1,7 +1,7 @@
 // Application Security hub: a single landing page that rolls up the AppSec-specific
 // finding categories (SAST, DAST, SCA, Secrets-in-code, Container, API) into one view
 // with a count and a deep link into each's real, pre-filtered page - rather than making
-// a user hunt across /vulnhunt and /queue to answer "what does our application security
+// a user hunt across /quanta-scan and /queue to answer "what does our application security
 // posture look like."
 // Infrastructure Vulnerability Management and Certificate/TLS findings are deliberately
 // NOT rolled up here - those are asset/network-facing categories, not application security
@@ -9,7 +9,7 @@
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
 import { icon } from "../icons.js";
-import { categoryFor } from "./vulnhunt.js";
+import { categoryFor } from "./quanta-scan.js";
 import {
   findingsTableHtml, wireFindingsTable, findingsFilterBarHtml, applyFindingsFilters, wireFindingsFilterBar,
 } from "../findingsTable.js";
@@ -46,7 +46,7 @@ function domainCard({ href, iconName, label, count, note }) {
 
 export async function render(container) {
   container.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const [vh, queue, assetsData] = await Promise.all([api.vulnhunt(), api.queue(), api.assetsList()]);
+  const [vh, queue, assetsData] = await Promise.all([api.quanta_scan(), api.queue(), api.assetsList()]);
   const { ownerByAssetName, teamByAssetName, environmentByAssetName } = buildOwnerTeamMaps(assetsData.assets);
 
   const sastFindings = vh.available ? vh.findings : [];
@@ -77,13 +77,13 @@ export async function render(container) {
   const sastAsSeverity = sastFindings.map((f) => ({ severity: f.Severity }));
 
   const breakdownSubgroups = [
-    { label: "SAST — Code Scan", findings: sastAsSeverity, href: "/vulnhunt" },
+    { label: "SAST — Code Scan", findings: sastAsSeverity, href: "/quanta-scan" },
     { label: "DAST — Dynamic Testing", findings: dastFindings, href: "/queue?category=dast" },
     { label: "SCA — Software Composition", findings: scaFindings, href: "/queue?category=sca" },
-    { label: "Secrets Management", findings: secretsMgmtFindings, href: "/vulnhunt?category=Secrets" },
+    { label: "Secrets Management", findings: secretsMgmtFindings, href: "/quanta-scan?category=Secrets" },
     { label: "Secret Scanning (Repository)", findings: repoSecretsFindings, href: "/queue?category=secrets" },
-    { label: "Container Vulnerabilities", findings: containerFindings, href: "/vulnhunt?category=Container" },
-    { label: "API Vulnerabilities", findings: apiFindings, href: "/vulnhunt?category=API" },
+    { label: "Container Vulnerabilities", findings: containerFindings, href: "/quanta-scan?category=Container" },
+    { label: "API Vulnerabilities", findings: apiFindings, href: "/quanta-scan?category=API" },
   ];
   // Honest total: SAST's own count already includes the Secrets/Container/API
   // subsets above (categoryFor() sub-classifies a SAST finding, it doesn't create a
@@ -112,8 +112,8 @@ export async function render(container) {
 
     <div class="domain-card-grid">
       ${domainCard({
-        href: "/vulnhunt", iconName: "scan", label: "SAST — Code Scan", count: sastTotal,
-        note: vh.available ? "Source-code findings from the last /vulnhunt run." : "No scan results yet.",
+        href: "/quanta-scan", iconName: "scan", label: "SAST — Code Scan", count: sastTotal,
+        note: vh.available ? "Source-code findings from the last /quanta-scan run." : "No scan results yet.",
       })}
       ${domainCard({
         href: "/queue?category=dast", iconName: "dast", label: "DAST — Dynamic Testing", count: dastTotal,
@@ -124,7 +124,7 @@ export async function render(container) {
         note: "Vulnerable third-party / bundled library findings.",
       })}
       ${domainCard({
-        href: "/vulnhunt?category=Secrets", iconName: "secrets", label: "Secrets Management", count: secretsTotal,
+        href: "/quanta-scan?category=Secrets", iconName: "secrets", label: "Secrets Management", count: secretsTotal,
         note: "Hardcoded credentials/keys found in source (CWE-798).",
       })}
       ${domainCard({
@@ -132,18 +132,18 @@ export async function render(container) {
         note: "GitHub/GitLab secret-scanning alerts on committed repository files - a different data path than Secrets Management above.",
       })}
       ${domainCard({
-        href: "/vulnhunt?category=Container", iconName: "container", label: "Container Vulnerabilities (build-time)", count: containerTotal,
+        href: "/quanta-scan?category=Container", iconName: "container", label: "Container Vulnerabilities (build-time)", count: containerTotal,
         note: "Static Dockerfile/base-image issues from code scanning - root user, baked-in secrets, unpinned tags. Different from Container/Host Runtime Security on the Infrastructure Vulnerabilities hub, which is real-time behavioral detection on a running container/host, not static file analysis.",
       })}
       ${domainCard({
-        href: "/vulnhunt?category=API", iconName: "api", label: "API Vulnerabilities", count: apiTotal,
+        href: "/quanta-scan?category=API", iconName: "api", label: "API Vulnerabilities", count: apiTotal,
         note: apiTotal ? "Missing auth, permissive CORS, or mass-assignment findings." : "No sample API-security finding yet - see the FAQ.",
       })}
     </div>
 
     <div class="callout">
       This is a rollup view, not a separate data source - every count above comes straight
-      from <code>/api/vulnhunt</code> and <code>/api/queue</code>, the same data the Code
+      from <code>/api/quanta-scan</code> and <code>/api/queue</code>, the same data the Code
       Scan and Remediation Queue pages already show. Click any card to jump to the
       pre-filtered underlying view.
     </div>
@@ -205,7 +205,7 @@ export async function render(container) {
     <h2 style="margin-top:28px">SCA, DAST, and Repository Secret Scanning findings (SLA-tracked)</h2>
     <p class="subtitle">
       SAST, Secrets Management, Container, and API findings come from source-code
-      scanning (<a href="/vulnhunt" data-link>Code Scan Results</a>) and aren't
+      scanning (<a href="/quanta-scan" data-link>Code Scan Results</a>) and aren't
       SLA-tracked queue items by design - see the callout there. SCA, DAST, and
       repository secret-scanning findings are, so they get the same live findings
       table as the Remediation Queue.

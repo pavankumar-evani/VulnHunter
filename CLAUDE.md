@@ -19,7 +19,7 @@ Quanta started as a Claude Code **extension** — two slash commands plus seven 
 subagents, no runnable application. It has since grown a second, much larger half on top:
 a real, deployable web application. Both halves are real and current today:
 
-- **The pipelines** — `/vulnhunt` and `/remediate`, orchestrating 11 subagents total
+- **The pipelines** — `/quanta-scan` and `/remediate`, orchestrating 11 subagents total
   (4 + 7) via markdown prompt/config files under `.claude/`. No build system or package
   manifest of their own. See "Architecture: the 3-stage subagent pipeline" and
   "Architecture: the remediation engine" below.
@@ -60,10 +60,10 @@ python dashboard/app.py                      # https://127.0.0.1:5050 (auto-gene
 
 # The two pipelines, interactively inside Claude Code
 claude
-/vulnhunt <path-to-target-repo> [--fix]
-/vulnhunt vulnerable-demo-app         # scan+report only
-/vulnhunt vulnerable-demo-app --fix   # scan+report, then auto-fix and push a branch
-/vulnhunt vulnerable-demo-app --verify VULN-2 quanta/auto-fixes-<branch>  # re-check one fix
+/quanta-scan <path-to-target-repo> [--fix]
+/quanta-scan vulnerable-demo-app         # scan+report only
+/quanta-scan vulnerable-demo-app --fix   # scan+report, then auto-fix and push a branch
+/quanta-scan vulnerable-demo-app --verify VULN-2 quanta/auto-fixes-<branch>  # re-check one fix
 /remediate                            # ingests remediation/sample-data/* by default
 /remediate --generate                 # also generates Ansible playbooks for auto-remediable findings
 
@@ -88,7 +88,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 Modifying the pipelines themselves means editing `.claude/agents/*.md` or
 `.claude/commands/*.md` directly and re-running the relevant command against
-`vulnerable-demo-app/` (for `/vulnhunt`) or `remediation/sample-data/` (for `/remediate`)
+`vulnerable-demo-app/` (for `/quanta-scan`) or `remediation/sample-data/` (for `/remediate`)
 to see the effect — there's no separate build or lint step for that half of the repo. The
 dashboard and `remediation/` Python modules are ordinary Python: edit, then re-run
 `python dashboard/app.py` or the relevant `tests/test_*.py` file to see the effect.
@@ -325,7 +325,7 @@ shared-function edit can silently break a sibling page that wasn't the focus of 
 
 ## Architecture: the 3-stage subagent pipeline (+ optional verification)
 
-`/vulnhunt` (`.claude/commands/vulnhunt.md`) is the orchestrator. It parses `$ARGUMENTS`
+`/quanta-scan` (`.claude/commands/quanta-scan.md`) is the orchestrator. It parses `$ARGUMENTS`
 for a target path (default: cwd) and an optional `--fix` flag, then sequences three
 subagents strictly in order, each with **deliberately scoped tool access** — this scoping
 is the core design idea of the project, not an incidental detail:
@@ -357,11 +357,11 @@ that branch out into the working tree), and returns a `resolved`/`still-present`
 `inconclusive` verdict — closing the loop `vuln-fixer` otherwise leaves open (it pushes a
 branch and stops; nothing before this re-confirmed the fix actually worked). The
 orchestrator logs the verdict via `remediation/audit/record_verification.py` to the real
-activity log, and the dashboard's `/vulnhunt` page shows it as a "Verified" column,
+activity log, and the dashboard's `/quanta-scan` page shows it as a "Verified" column,
 defaulting to "Not yet verified" — never implied as verified just because a fix branch
 exists.
 
-The chat output from `/vulnhunt` stays a short summary (counts by severity, auto-fixable
+The chat output from `/quanta-scan` stays a short summary (counts by severity, auto-fixable
 count); full detail always lives in `SECURITY_REPORT.md`, never dumped into the
 conversation.
 
@@ -389,7 +389,7 @@ widen an agent's tool access to "make it easier," since the narrow scope is the 
 ## Architecture: the remediation engine (`/remediate`)
 
 `/remediate` (`.claude/commands/remediate.md`) orchestrates **seven** subagents, same
-scoped-tool-access philosophy as `/vulnhunt`:
+scoped-tool-access philosophy as `/quanta-scan`:
 
 1. **`vuln-ingest-normalizer`** (tools: `Read, Glob, Write`) parses Tenable CSV, Armis
    JSON, and threat-intel JSON exports into one common schema — see
@@ -458,7 +458,7 @@ project stays artifact-generation-only.
 
 ## The demo app (`vulnerable-demo-app/`)
 
-Six labeled, intentional vulnerabilities used as the `/vulnhunt` scoring/demo baseline — if
+Six labeled, intentional vulnerabilities used as the `/quanta-scan` scoring/demo baseline — if
 you modify this app, keep the vuln count and CWE labels in its docstring/comments
 accurate, since the README's "expected result" (9 findings, 6 auto-fixed) depends on them:
 
@@ -537,8 +537,8 @@ to a public issue tracker: they can describe the customer's environment.
 ## Naming
 
 The product name is **Quanta** everywhere: UI, documents, env vars (`QUANTA_*`),
-`cli/quanta.py`, `remediation/quanta.db`, the `quanta_session` cookie and the
-`*@quanta.local` demo accounts. It was renamed from its earlier working name; do not
-reintroduce the old name. Two things still carry it because they live outside the code:
-the repository folder / GitHub repository name, and the `/vulnhunt` slash command
-(a verb, kept to avoid breaking muscle memory and every doc that cites it).
+`cli/quanta.py`, `remediation/quanta.db`, the `quanta_session` cookie, the
+`*@quanta.local` demo accounts, and the code-scan slash command `/quanta-scan`
+(`/remediate` is unchanged). It was renamed from an earlier working name; do not
+reintroduce that name. Only the repository folder and GitHub repository name still carry
+it, because they live outside the code.

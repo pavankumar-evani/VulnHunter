@@ -18,12 +18,12 @@ Both commands are Claude Code custom slash commands, discovered automatically wh
 Claude Code session starts with this repo as the working directory. Each orchestrates a
 chain of subagents via the `Task` tool — neither implements scanning/fixing logic itself.
 
-### `/vulnhunt`
+### `/quanta-scan`
 
-Source: [`.claude/commands/vulnhunt.md`](../.claude/commands/vulnhunt.md)
+Source: [`.claude/commands/quanta-scan.md`](../.claude/commands/quanta-scan.md)
 
 ```
-/vulnhunt [path-to-target-repo] [--fix]
+/quanta-scan [path-to-target-repo] [--fix]
 ```
 
 - `allowed-tools: Task, Read, Bash`
@@ -67,9 +67,9 @@ or approximated. All eight run on `model: sonnet`.
 
 | Agent | Pipeline | Tools | Purpose |
 |---|---|---|---|
-| [`vuln-scanner`](../.claude/agents/vuln-scanner.md) | `/vulnhunt` | `Read, Grep, Glob, Bash` | Statically scans a codebase for injection flaws, hardcoded secrets, auth/crypto weaknesses, insecure config, risky dependencies, and unsafe Docker practices across Python, JavaScript/TypeScript, Java, Go, PHP, and Perl. Read-only by design — no `Edit`/`Write` in its tool list, so it is architecturally incapable of modifying anything it scans. Outputs a structured JSON findings array. |
-| [`vuln-triage-reporter`](../.claude/agents/vuln-triage-reporter.md) | `/vulnhunt` | `Write` | Takes the raw JSON findings and writes `SECURITY_REPORT.md` — a ranked, plain-English report. `Write`-only: it cannot re-scan code or "helpfully" fix anything, only organize and communicate what it's given. |
-| [`vuln-fixer`](../.claude/agents/vuln-fixer.md) | `/vulnhunt` | `Read, Edit, Write, Bash` | Applies fixes only for findings marked `auto_fixable: true` (parameterizing SQL, moving secrets to env vars, dropping container root, etc.). Git workflow is always new-branch → commit → push; never commits to `main`, and stops with a clear manual-step message if the push fails rather than silently giving up. |
+| [`vuln-scanner`](../.claude/agents/vuln-scanner.md) | `/quanta-scan` | `Read, Grep, Glob, Bash` | Statically scans a codebase for injection flaws, hardcoded secrets, auth/crypto weaknesses, insecure config, risky dependencies, and unsafe Docker practices across Python, JavaScript/TypeScript, Java, Go, PHP, and Perl. Read-only by design — no `Edit`/`Write` in its tool list, so it is architecturally incapable of modifying anything it scans. Outputs a structured JSON findings array. |
+| [`vuln-triage-reporter`](../.claude/agents/vuln-triage-reporter.md) | `/quanta-scan` | `Write` | Takes the raw JSON findings and writes `SECURITY_REPORT.md` — a ranked, plain-English report. `Write`-only: it cannot re-scan code or "helpfully" fix anything, only organize and communicate what it's given. |
+| [`vuln-fixer`](../.claude/agents/vuln-fixer.md) | `/quanta-scan` | `Read, Edit, Write, Bash` | Applies fixes only for findings marked `auto_fixable: true` (parameterizing SQL, moving secrets to env vars, dropping container root, etc.). Git workflow is always new-branch → commit → push; never commits to `main`, and stops with a clear manual-step message if the push fails rather than silently giving up. |
 | [`vuln-ingest-normalizer`](../.claude/agents/vuln-ingest-normalizer.md) | `/remediate` | `Read, Glob, Write` | Parses Tenable CSV, Armis JSON, and manual threat-intel JSON into one common Finding schema (`remediation/schema/normalized-finding-schema.md`), assigning stable sequential `FIND-N` IDs and classifying each finding's `asset.type`. Does not assess risk or plan fixes — format translation only. |
 | [`threat-intel-enricher`](../.claude/agents/threat-intel-enricher.md) | `/remediate` | `Read, Write, Bash` | Runs `remediation/enrichment/kev_epss.py` via Bash to attach real CISA KEV and FIRST.org EPSS data to every finding with a CVE. If the script fails (e.g. no network), it reports that plainly rather than fabricating KEV/EPSS values. Does not assess remediation risk tiers or priority itself. |
 | [`remediation-planner`](../.claude/agents/remediation-planner.md) | `/remediate` | `Read, Write` | Assigns each finding an `action_type`, `automation_target`, `risk_tier` (`auto-approvable`/`needs-change-approval`/`manual-only`), `rollback_plan`, and threat-intel-aware `priority`. Writes `REMEDIATION_PLAN.md`. Writes no scripts or playbooks itself and never touches infrastructure. |
@@ -91,7 +91,7 @@ python cli/quanta.py [--dry-run] [--claude-bin PATH] [--max-budget-usd N] [--per
 python cli/quanta.py [--dry-run] [--claude-bin PATH] [--max-budget-usd N] [--permission-mode MODE] remediate [--generate]
 ```
 
-- `scan` and `remediate` are the two subcommands, mapping 1:1 to `/vulnhunt` and
+- `scan` and `remediate` are the two subcommands, mapping 1:1 to `/quanta-scan` and
   `/remediate`. `cli/quanta.py` constructs and runs the equivalent `claude -p "..."`
   invocation — it is a wrapper, not a reimplementation, so the prompts in
   `.claude/agents/*.md`/`.claude/commands/*.md` remain the single source of truth for
@@ -132,7 +132,7 @@ by `dashboard/ai_assist.py`'s pure `build_ai_assist_prompt(finding, action)` fun
 remediation steps), or `summarize` (executive-summary-length blurb) - each maps to a
 different instruction appended to the same finding context (ID, title, asset, CVE,
 severity, description). `finding_id` accepts either a `/remediate` finding (`FIND-N`) or a
-`/vulnhunt` code-scan finding (`VULN-N`) - the endpoint looks up either dataset. A
+`/quanta-scan` code-scan finding (`VULN-N`) - the endpoint looks up either dataset. A
 finding_id that doesn't exist returns `404`; an unrecognized `action` returns `400`.
 
 The `/ai-assist` page in the dashboard wraps this: pick a finding and an action, preview

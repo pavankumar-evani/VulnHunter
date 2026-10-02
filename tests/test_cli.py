@@ -20,18 +20,18 @@ import quanta as cli  # noqa: E402
 
 class PromptConstruction(unittest.TestCase):
     def test_scan_prompt_without_fix(self):
-        self.assertEqual(cli.scan_prompt("vulnerable-demo-app"), "/vulnhunt vulnerable-demo-app")
+        self.assertEqual(cli.scan_prompt("vulnerable-demo-app"), "/quanta-scan vulnerable-demo-app")
 
     def test_scan_prompt_with_fix(self):
         self.assertEqual(
             cli.scan_prompt("vulnerable-demo-app", fix=True),
-            "/vulnhunt vulnerable-demo-app --fix",
+            "/quanta-scan vulnerable-demo-app --fix",
         )
 
     def test_verify_prompt(self):
         self.assertEqual(
             cli.verify_prompt("vulnerable-demo-app", "VULN-3", "quanta/auto-fixes-20260901"),
-            "/vulnhunt vulnerable-demo-app --verify VULN-3 quanta/auto-fixes-20260901",
+            "/quanta-scan vulnerable-demo-app --verify VULN-3 quanta/auto-fixes-20260901",
         )
 
     def test_remediate_prompt_without_generate(self):
@@ -52,47 +52,47 @@ class PromptConstruction(unittest.TestCase):
 
 class CommandConstruction(unittest.TestCase):
     def test_build_command_includes_print_and_prompt(self):
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude")
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude")
         self.assertEqual(cmd[0], "claude")
         self.assertIn("-p", cmd)
-        self.assertIn("/vulnhunt foo", cmd)
+        self.assertIn("/quanta-scan foo", cmd)
 
     def test_build_command_defaults_to_json_output(self):
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude")
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude")
         self.assertIn("--output-format", cmd)
         self.assertEqual(cmd[cmd.index("--output-format") + 1], "json")
 
     def test_build_command_includes_permission_mode(self):
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude", permission_mode="acceptEdits")
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude", permission_mode="acceptEdits")
         self.assertIn("--permission-mode", cmd)
         self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "acceptEdits")
 
     def test_build_command_includes_max_budget(self):
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude", max_budget_usd="5.00")
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude", max_budget_usd="5.00")
         self.assertIn("--max-budget-usd", cmd)
         self.assertEqual(cmd[cmd.index("--max-budget-usd") + 1], "5.00")
 
     def test_build_command_omits_flags_when_falsy(self):
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude",
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude",
                                  permission_mode=None, allowed_tools=None, max_budget_usd=None)
         self.assertNotIn("--permission-mode", cmd)
         self.assertNotIn("--allowedTools", cmd)
         self.assertNotIn("--max-budget-usd", cmd)
 
     def test_build_command_includes_model_when_set(self):
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude", model="sonnet")
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude", model="sonnet")
         idx = cmd.index("--model")
         self.assertEqual(cmd[idx + 1], "sonnet")
 
     def test_build_command_omits_model_flag_when_not_set(self):
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude", model=None)
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude", model=None)
         self.assertNotIn("--model", cmd)
 
     def test_build_command_never_includes_dangerous_skip_permissions(self):
         """Regression guard: this wrapper must never default to bypassing permission
         checks entirely - that flag exists in the underlying CLI but this project's
         default posture is scoped tool allowlists, not a blanket bypass."""
-        cmd = cli.build_command("/vulnhunt foo", claude_bin="claude")
+        cmd = cli.build_command("/quanta-scan foo", claude_bin="claude")
         joined = " ".join(cmd)
         self.assertNotIn("dangerously-skip-permissions", joined)
 
@@ -123,7 +123,7 @@ class DryRunEndToEnd(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0)
         self.assertIn("Would run:", result.stdout)
-        self.assertIn("/vulnhunt vulnerable-demo-app", result.stdout)
+        self.assertIn("/quanta-scan vulnerable-demo-app", result.stdout)
 
     def test_dry_run_remediate_with_generate(self):
         result = subprocess.run(
@@ -143,7 +143,7 @@ class RunFunctionOnResultCallback(unittest.TestCase):
     def test_dry_run_never_invokes_on_result(self):
         calls = []
         exit_code = cli.run(
-            "/vulnhunt foo", "vulnhunt", dry_run=True, on_result=lambda result: calls.append(result),
+            "/quanta-scan foo", "quanta_scan", dry_run=True, on_result=lambda result: calls.append(result),
             claude_bin="claude",
         )
         self.assertEqual(exit_code, 0)
@@ -153,7 +153,7 @@ class RunFunctionOnResultCallback(unittest.TestCase):
         calls = []
         with unittest.mock.patch.object(cli, "find_claude_binary", side_effect=cli.ClaudeBinaryNotFound("nope")):
             exit_code = cli.run(
-                "/vulnhunt foo", "vulnhunt", dry_run=False, on_result=lambda result: calls.append(result),
+                "/quanta-scan foo", "quanta_scan", dry_run=False, on_result=lambda result: calls.append(result),
             )
         self.assertEqual(exit_code, 127)
         self.assertEqual(calls, [])

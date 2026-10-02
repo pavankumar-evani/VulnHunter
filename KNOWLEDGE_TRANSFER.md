@@ -21,7 +21,7 @@ independent, self-directed project. It adds two slash-command pipelines to Claud
 
 | Pipeline | What it does | Status |
 |---|---|---|
-| **`/vulnhunt`** | Scans source code for vulnerabilities, writes a ranked report, auto-fixes the safe findings on a branch | Built, validated, PR-ready |
+| **`/quanta-scan`** | Scans source code for vulnerabilities, writes a ranked report, auto-fixes the safe findings on a branch | Built, validated, PR-ready |
 | **`/remediate`** | Ingests vulnerability findings from Tenable, Armis, and threat intel; normalizes them; plans remediation by risk; generates reviewable Ansible playbooks for Windows/Unix servers | Built, validated, PR-ready |
 
 Both are implemented as Claude Code **subagents** (`.claude/agents/*.md`) orchestrated by
@@ -70,7 +70,7 @@ devices, Unix servers, network routing/switching, and network security devices �
 of manual remediation effort, is there an AI-based remediation solution that can help?"*
 
 `/remediate` is the direct answer to that question, built to the same safety standard as
-`/vulnhunt`.
+`/quanta-scan`.
 
 ---
 
@@ -117,7 +117,7 @@ and it's enforced by Claude Code itself, not by infrastructure the project has t
 
 ### 3.4 Why extend into infrastructure remediation
 
-`/vulnhunt` alone answers "can an agent fix code vulnerabilities safely." The natural
+`/quanta-scan` alone answers "can an agent fix code vulnerabilities safely." The natural
 next question — and the one that came up mid-hackathon — was whether the same pattern
 generalizes to the much messier, much higher-stakes world of enterprise infrastructure
 vulnerability management. `/remediate` is that generalization: same philosophy
@@ -130,10 +130,10 @@ IoT/OT devices instead of a single demo app's source files.
 
 ## 4. Product / Solution Details
 
-### 4.1 `/vulnhunt` — Code Scanning & Fixing Pipeline
+### 4.1 `/quanta-scan` — Code Scanning & Fixing Pipeline
 
 ```
-/vulnhunt <path> [--fix]
+/quanta-scan <path> [--fix]
         │
         ▼
   vuln-scanner            Read, Grep, Glob, Bash        → JSON findings
@@ -285,7 +285,7 @@ by construction, not by policy:
 
 | Audience | How they'd use this |
 |---|---|
-| **Security engineers / AppSec teams** | Point `/vulnhunt` at a real codebase to get a fast baseline scan + auto-fix PR for the mechanical findings, freeing review time for the ones that need judgment. |
+| **Security engineers / AppSec teams** | Point `/quanta-scan` at a real codebase to get a fast baseline scan + auto-fix PR for the mechanical findings, freeing review time for the ones that need judgment. |
 | **Vulnerability management / SOC teams** | Point `/remediate` at real Tenable/Armis exports (swap in live API pulls — see [§9 Roadmap](#9-roadmap)) to turn a raw finding backlog into a prioritized, risk-tiered remediation queue with ready-to-review fix automation. |
 | **Platform/DevOps teams** | Use the generated Ansible playbooks as a starting point for an existing Ansible Tower/AWX pipeline, rather than writing remediation playbooks from scratch for every CVE. |
 | **Hackathon judges / reviewers** | This document + [README.md](README.md) + [deliverables/](deliverables/) for the full pitch; [§12](#12-troubleshooting--things-that-tripped-us-up) for an honest account of what broke and how it was fixed. |
@@ -315,22 +315,22 @@ claude
 Claude Code auto-discovers the subagents and commands under `.claude/` the moment you
 start a session with this directory as the working directory. If you're on the
 `feature/remediation-engine` branch, both pipelines are present; `master` currently only
-has `/vulnhunt`.
+has `/quanta-scan`.
 
-### Step 2: Run `/vulnhunt` (scan + report only)
+### Step 2: Run `/quanta-scan` (scan + report only)
 
 ```
-/vulnhunt vulnerable-demo-app
+/quanta-scan vulnerable-demo-app
 ```
 
 This runs `vuln-scanner` → `vuln-triage-reporter` and writes
 `vulnerable-demo-app/SECURITY_REPORT.md`. Read that file — it's the full ranked report
 with plain-English impact per finding.
 
-### Step 3: Run `/vulnhunt` with auto-fix
+### Step 3: Run `/quanta-scan` with auto-fix
 
 ```
-/vulnhunt vulnerable-demo-app --fix
+/quanta-scan vulnerable-demo-app --fix
 ```
 
 This additionally runs `vuln-fixer`, which creates a new branch (named
@@ -378,7 +378,7 @@ python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 33 tests validate the real artifacts described above (reading git history for the
-`/vulnhunt` branches, and the generated files for `/remediate`) — not mocked agent
+`/quanta-scan` branches, and the generated files for `/remediate`) — not mocked agent
 behavior. Expect `OK` with 0 failures; `tests/test_results.txt` has a captured run. Re-run
 this after editing any `.claude/agents/*.md` or `.claude/commands/*.md` file to catch
 drift.
@@ -447,16 +447,16 @@ for network devices or IoT/OT. To add one:
 .
 ├── .claude/
 │   ├── agents/
-│   │   ├── vuln-scanner.md               /vulnhunt: read-only code scanner
-│   │   ├── vuln-triage-reporter.md       /vulnhunt: write-only report generator
-│   │   ├── vuln-fixer.md                 /vulnhunt: fixes + branch/push
+│   │   ├── vuln-scanner.md               /quanta-scan: read-only code scanner
+│   │   ├── vuln-triage-reporter.md       /quanta-scan: write-only report generator
+│   │   ├── vuln-fixer.md                 /quanta-scan: fixes + branch/push
 │   │   ├── vuln-ingest-normalizer.md     /remediate: multi-source ingestion
 │   │   ├── threat-intel-enricher.md      /remediate: live CISA KEV + EPSS enrichment
 │   │   ├── remediation-planner.md        /remediate: risk-tiered, threat-intel-aware planning
 │   │   ├── remediation-fixer-windows.md  /remediate: Windows Ansible playbooks
 │   │   └── remediation-fixer-unix.md     /remediate: Unix Ansible playbooks
 │   └── commands/
-│       ├── vulnhunt.md                   orchestrates the code pipeline
+│       ├── quanta-scan.md                   orchestrates the code pipeline
 │       └── remediate.md                  orchestrates the infra pipeline
 ├── .github/
 │   ├── workflows/ci.yml       runs the full test suite on every push/PR
@@ -503,7 +503,7 @@ for network devices or IoT/OT. To add one:
 │   │                      internal/external-facing classification - see /assets, /risk -
 │   │                      + cmdb_import.py, bulk owner/team import from a CMDB CSV export
 │   └── output/            normalized findings + generated playbooks (generated, not hand-written)
-├── vulnerable-demo-app/   intentionally vulnerable Flask app — /vulnhunt's scan target
+├── vulnerable-demo-app/   intentionally vulnerable Flask app — /quanta-scan's scan target
 ├── vulnerable-demo-multilang/  intentionally vulnerable Java/JS/Go/PHP/Perl fixtures -
 │                          prove vuln-scanner.md's per-language detection guidance (static
 │                          text-consistency only, see §11.1 - no Java/Go/PHP/Node runtime
@@ -598,9 +598,9 @@ failing if network is unavailable).
 
 | Test class | What it checks | Count |
 |---|---|---|
-| `VulnHuntScannerFindsRealVulnerabilities` | The vulnerable baseline genuinely contains the claimed flaws | 7 |
-| `VulnHuntFixerAppliesOnlyApprovedFixes` | The fix branch fixes exactly the auto-fixable findings, nothing else | 8 |
-| `VulnHuntReportIsAccurate` | `SECURITY_REPORT.md`'s stated numbers match reality | 3 |
+| `QuantaScanScannerFindsRealVulnerabilities` | The vulnerable baseline genuinely contains the claimed flaws | 7 |
+| `QuantaScanFixerAppliesOnlyApprovedFixes` | The fix branch fixes exactly the auto-fixable findings, nothing else | 8 |
+| `QuantaScanReportIsAccurate` | `SECURITY_REPORT.md`'s stated numbers match reality | 3 |
 | `RemediationNormalizedFindingsAreWellFormed` | Schema correctness, asset classification, no fabricated CVEs | 7 |
 | `RemediationPlanIsConsistentWithFindings` | Every finding is accounted for in the plan | 2 |
 | `RemediationPlaybooksMatchThePlan` | Generated playbooks exactly match automatable findings | 5 |
@@ -749,7 +749,7 @@ What a real buyer's security architect will actually ask for. Some of this is no
   §11.1 for the environment constraints that shaped this and why Java/Go/PHP/Node
   weren't used for the platform itself.
 - **Multi-language code-scanning coverage** (`.claude/agents/vuln-scanner.md`) — the
-  `/vulnhunt` scanner's detection guidance now explicitly covers JavaScript/TypeScript,
+  `/quanta-scan` scanner's detection guidance now explicitly covers JavaScript/TypeScript,
   Java, Go, PHP, and Perl idioms (not just Python), each with real fixture files under
   `vulnerable-demo-multilang/`. See §11.1 for why this — not rewriting the platform
   itself in each language — is where "polyglot" actually adds product value.
@@ -957,7 +957,7 @@ throughout §9-10).
   `vulnerable-demo-multilang/`, `tests/test_multilang_scanner_patterns.py`) — a real
   commercial vulnerability scanner (Semgrep, Snyk, CodeQL) differentiates on how many
   *target* languages it can find vulnerabilities in, not what language it's written in.
-  `/vulnhunt`'s detection guidance now explicitly covers idiomatic vulnerable patterns in
+  `/quanta-scan`'s detection guidance now explicitly covers idiomatic vulnerable patterns in
   JavaScript/TypeScript, Java, Go, PHP, and Perl (SQL injection via string-concatenated
   queries, insecure deserialization, LFI/RFI, command injection via `exec`/backticks,
   etc.), each backed by a small, realistic, intentionally-vulnerable fixture file. This
@@ -965,7 +965,7 @@ throughout §9-10).
   genuinely buildable and testable here — 31 tests statically verify the fixtures and the
   scanner's documented patterns stay consistent with each other. **What this is NOT**: a
   claim that the scanner was actually run against these fixtures inside a live Claude Code
-  session (that requires an interactive run, same as `/vulnhunt`'s original Python
+  session (that requires an interactive run, same as `/quanta-scan`'s original Python
   results) — the tests check text/pattern consistency, not live detection output.
 - **Dashboard rewrite: Flask+Jinja2 → FastAPI + vanilla-JS SPA** — this is the "modern
   JS interface" part of the ask, done honestly: a real single-page app (client-side
@@ -1188,7 +1188,7 @@ Qualys was in that same "declined for now" list at the time, but has since been 
 ## 14. Appendix
 
 - **Branches:** `master` (code pipeline scaffold), `quanta/auto-fixes-20260803`
-  (validated `/vulnhunt --fix` output), `feature/remediation-engine` (the `/remediate`
+  (validated `/quanta-scan --fix` output), `feature/remediation-engine` (the `/remediate`
   pipeline, test suite, and this document)
 - **Deliverables:** [`deliverables/Quanta_Hackathon_Deck.pptx`](deliverables/Quanta_Hackathon_Deck.pptx),
   [`deliverables/Quanta_Project_Report.docx`](deliverables/Quanta_Project_Report.docx)

@@ -1,7 +1,7 @@
 # Automated dependency version-bump PRs for Quanta's real product dependencies.
 #
 # Deliberately does NOT cover vulnerable-demo-app/ or vulnerable-demo-multilang/ -
-# those directories are intentionally vulnerable, planted fixtures for /vulnhunt to
+# those directories are intentionally vulnerable, planted fixtures for /quanta-scan to
 # scan and demonstrate the pipeline against (see README.md and SECURITY.md). An
 # automated PR bumping their pinned-old dependencies would break the demo's purpose,
 # not fix a real issue. Note this config only controls automated version-bump PRs -

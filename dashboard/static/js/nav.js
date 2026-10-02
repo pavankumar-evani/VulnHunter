@@ -43,8 +43,8 @@ export const NAV = [
       tip: "Real findings naming classical RSA/ECDSA/Diffie-Hellman crypto or a legacy TLS/cipher weakness - a post-quantum migration inventory against real NIST FIPS 203/204/205 + NIST IR 8547 guidance." },
   ] },
   { group: "Remediation Engine", items: [
-    { path: "/vulnhunt", label: "Code Scan", icon: "scan",
-      tip: "Source-code findings from /vulnhunt - agentless static analysis, no target install." },
+    { path: "/quanta-scan", label: "Code Scan", icon: "scan",
+      tip: "Source-code findings from /quanta-scan - agentless static analysis, no target install." },
     { path: "/queue", label: "Remediation Queue", icon: "queue",
       tip: "The live, re-scored queue - priority, SLA, KEV/EPSS, and ATT&CK tags per finding." },
     { path: "/remediate", label: "Remediation Plan", icon: "plan",
@@ -109,7 +109,7 @@ export const NAV = [
   ] },
   { group: "Operations", items: [
     { path: "/run", label: "Run Pipeline", icon: "run",
-      tip: "Trigger /vulnhunt or /remediate - dry-run preview by default." },
+      tip: "Trigger /quanta-scan or /remediate - dry-run preview by default." },
     { path: "/reports", label: "Reports", icon: "reports",
       tip: "Generate a shareable KPI/SLA/coverage report snapshot." },
   ] },

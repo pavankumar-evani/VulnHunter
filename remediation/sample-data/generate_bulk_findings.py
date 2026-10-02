@@ -514,7 +514,7 @@ DEFAULT_DEVICE_TYPE = "Embedded/IoT Device"
 
 # Real, well-established CWE/OWASP vulnerability classes for DAST - these are
 # deliberately not CVE-numbered (see module docstring): a runtime finding against your
-# own web app doesn't get a public CVE, same reasoning /vulnhunt's own SAST findings
+# own web app doesn't get a public CVE, same reasoning /quanta-scan's own SAST findings
 # already document for their CWE-based categorization.
 DAST_CLASSES = [
     ("CWE-79", "Reflected Cross-Site Scripting (XSS)",

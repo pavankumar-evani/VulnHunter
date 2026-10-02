@@ -145,7 +145,7 @@
             <tr><td><span class="fieldname">kev_count</span></td><td>In-scope findings CISA's Known Exploited Vulnerabilities catalog confirms as actively exploited right now.</td></tr>
             <tr><td><span class="fieldname">high_epss_count</span></td><td>In-scope findings with a live FIRST.org EPSS exploitation-probability score ≥ 50%.</td></tr>
             <tr><td><span class="fieldname">remediation_total</span></td><td>Count of infrastructure/application findings in scope (the live queue, filtered).</td></tr>
-            <tr><td><span class="fieldname">vulnhunt_total</span></td><td>Code-scan (SAST) total from <code>SECURITY_REPORT.md</code> — landscape-wide only; reads as 0 the moment a scope or team filter is applied (see the callout below).</td></tr>
+            <tr><td><span class="fieldname">quanta_scan_total</span></td><td>Code-scan (SAST) total from <code>SECURITY_REPORT.md</code> — landscape-wide only; reads as 0 the moment a scope or team filter is applied (see the callout below).</td></tr>
             <tr><td><span class="fieldname">playbook_count</span></td><td>Real generated Ansible playbooks sitting in <code>remediation/output/</code> — landscape-wide only.</td></tr>
             <tr><td><span class="fieldname">risk_tier_counts</span></td><td>The static <code>REMEDIATION_PLAN.md</code> snapshot's auto-approvable / needs-change-approval / manual-only breakdown — landscape-wide only.</td></tr>
             <tr><td><span class="fieldname">asset_type_breakdown</span></td><td>In-scope findings grouped by asset type (OS, network, IoT, application, certificate, …), sorted by count descending.</td></tr>
@@ -160,7 +160,7 @@
         <p>Pass a <code>scope</code> (e.g. <code>dast</code>) or <code>team</code> filter and the report honestly says so via a <code>scope_note</code>: code-scan/SAST findings have no scan-type or team association in that data path, and <code>REMEDIATION_PLAN.md</code>'s risk-tier snapshot and playbook count are whole-pipeline artifacts that can't be filtered this way. Both zero out rather than silently mislead — a scoped report is real, just narrower.</p>
       </div>
 
-      <p style="font-size:0.85rem;color:var(--muted)">One field is computed but not yet surfaced anywhere: <span class="fieldname">vulnhunt_auto_fixable</span> is present in the raw JSON response but isn't rendered in either the downloadable HTML report or the on-screen summary today — a real, minor gap between what's computed and what's displayed.</p>
+      <p style="font-size:0.85rem;color:var(--muted)">One field is computed but not yet surfaced anywhere: <span class="fieldname">quanta_scan_auto_fixable</span> is present in the raw JSON response but isn't rendered in either the downloadable HTML report or the on-screen summary today — a real, minor gap between what's computed and what's displayed.</p>
     </section>
 
     <section id="generate">

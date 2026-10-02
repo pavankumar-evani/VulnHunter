@@ -1,5 +1,5 @@
 """
-Reads Quanta's real generated artifacts (git history for /vulnhunt, files under
+Reads Quanta's real generated artifacts (git history for /quanta-scan, files under
 remediation/ for /remediate) and shapes them for the dashboard templates.
 
 Deliberately has no pipeline logic of its own - it only parses what vuln-triage-reporter
@@ -108,8 +108,8 @@ def parse_markdown_table(markdown_text, heading):
     return header, rows
 
 
-_VULNHUNT_DATA_CACHE = {"data": None, "expires_at": 0.0}
-_VULNHUNT_DATA_CACHE_TTL_SECONDS = 10  # see load_vulnhunt_data()'s own docstring for why
+_QUANTA_SCAN_DATA_CACHE = {"data": None, "expires_at": 0.0}
+_QUANTA_SCAN_DATA_CACHE_TTL_SECONDS = 10  # see load_quanta_scan_data()'s own docstring for why
 
 _SCORED_ASSETS_CACHE = {"key": None, "assets": None, "expires_at": 0.0}
 # Both TTLs below are backstops only, not the correctness mechanism - each cache key
@@ -125,7 +125,7 @@ _LIVE_QUEUE_CACHE = {"key": None, "queue": None, "expires_at": 0.0}
 _LIVE_QUEUE_CACHE_TTL_SECONDS = 30
 
 
-def _compute_vulnhunt_data():
+def _compute_quanta_scan_data():
     branch = _find_fix_branch()
     if not branch:
         return {"available": False}
@@ -137,11 +137,11 @@ def _compute_vulnhunt_data():
     header, rows = parse_markdown_table(report, "Summary")
     findings = [dict(zip(header, row)) for row in rows]
 
-    # /vulnhunt --verify's own outcome, real and logged to the activity log by
+    # /quanta-scan --verify's own outcome, real and logged to the activity log by
     # remediation/audit/record_verification.py - list_activity() returns newest-first,
     # so the first entry seen per finding ID is its most recent verification.
     verification_by_id = {}
-    for entry in activity_log.list_activity(action="vulnhunt.verify"):
+    for entry in activity_log.list_activity(action="quanta_scan.verify"):
         finding_id = entry.get("target")
         if finding_id and finding_id not in verification_by_id:
             verification_by_id[finding_id] = entry["details"]
@@ -159,20 +159,20 @@ def _compute_vulnhunt_data():
     }
 
 
-def load_vulnhunt_data():
+def load_quanta_scan_data():
     """Cached for a short TTL (in-process, not persisted) - profiled at ~0.4s per call
     (two `git` subprocess spawns: branch discovery + `git show`), and now several
     dashboard pages call this on every navigation (Overview, AppSec), not just
-    /vulnhunt itself. The underlying data only changes when a new commit lands on the
+    /quanta-scan itself. The underlying data only changes when a new commit lands on the
     real fix branch - a rare event in a demo - so a few seconds of staleness is a
     non-issue, and it makes repeat navigation genuinely fast instead of re-spawning
     git on every click."""
     now = time.monotonic()
-    if _VULNHUNT_DATA_CACHE["data"] is not None and now < _VULNHUNT_DATA_CACHE["expires_at"]:
-        return _VULNHUNT_DATA_CACHE["data"]
-    data = _compute_vulnhunt_data()
-    _VULNHUNT_DATA_CACHE["data"] = data
-    _VULNHUNT_DATA_CACHE["expires_at"] = now + _VULNHUNT_DATA_CACHE_TTL_SECONDS
+    if _QUANTA_SCAN_DATA_CACHE["data"] is not None and now < _QUANTA_SCAN_DATA_CACHE["expires_at"]:
+        return _QUANTA_SCAN_DATA_CACHE["data"]
+    data = _compute_quanta_scan_data()
+    _QUANTA_SCAN_DATA_CACHE["data"] = data
+    _QUANTA_SCAN_DATA_CACHE["expires_at"] = now + _QUANTA_SCAN_DATA_CACHE_TTL_SECONDS
     return data
 
 

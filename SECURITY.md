@@ -21,7 +21,7 @@ We aim to acknowledge reports within 5 business days.
 ## Scope Notes
 
 - **`vulnerable-demo-app/`** is *intentionally* vulnerable and exists solely as a scan
-  target for `/vulnhunt`. Findings against it are expected, not a security report.
+  target for `/quanta-scan`. Findings against it are expected, not a security report.
 - **`remediation/sample-data/`** contains fabricated Tenable/Armis/threat-intel exports
   for demo purposes. Hostnames, IPs, and device names are fictional. Referenced CVE IDs
   are real public CVEs used only to make remediation guidance realistic — no exploit code

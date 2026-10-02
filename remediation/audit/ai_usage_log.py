@@ -1,6 +1,6 @@
 """
 A real, append-only log of every actual Claude API call this app makes (the
-/vulnhunt and /remediate pipelines via cli/quanta.py, plus AI Assist and AI Trend
+/quanta-scan and /remediate pipelines via cli/quanta.py, plus AI Assist and AI Trend
 Analysis via dashboard/app.py) - who made it, which model, and (best-effort) how many
 tokens/what it cost - so an admin can see real per-user usage instead of no visibility
 at all, and so a configured per-user daily token limit (see
@@ -101,7 +101,7 @@ def _load_all(engine=None):
 def record_usage(actor, route, model, usage, total_cost_usd, extraction_ok, engine=None, as_of=None):
     """Appends one real AI-call usage record and returns it (with its real DB-assigned
     id). `route` is a short, machine-readable label for which feature made the call
-    (e.g. "ai-assist", "ai-trend-analysis", "vulnhunt", "remediate").
+    (e.g. "ai-assist", "ai-trend-analysis", "quanta_scan", "remediate").
 
     No FileLock here - see activity_log.py's record_activity() for the exact same
     reasoning: a single INSERT relying on a real DB autoincrement id has no

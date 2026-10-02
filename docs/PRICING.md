@@ -97,7 +97,7 @@ OT/IoT findings from existing sources - not a replacement for deep OT-protocol n
 monitoring (Claroty/Dragos/Nozomi Networks, quote-only); designed to sit alongside one.
 
 **Application Security Module** — $9,000/year, up to 25 applications/repositories
-(add-on to any tier). Includes SAST via `/vulnhunt` with real auto-fix (`vuln-fixer`
+(add-on to any tier). Includes SAST via `/quanta-scan` with real auto-fix (`vuln-fixer`
 opens an actual git branch + PR) - a capability Checkmarx/Veracode don't ship natively.
 Also ingests DAST/SCA/Secrets/Container findings (no automated fixer for these yet -
 same disclosed gap as network devices, a real roadmap item). Additional apps:

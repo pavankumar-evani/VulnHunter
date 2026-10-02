@@ -192,12 +192,12 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
     """These mirror tests/test_pipeline_artifacts.py's expectations - the dashboard's
     parser must agree with the pipeline's own test suite about what the artifacts say."""
 
-    def test_vulnhunt_data_matches_known_totals(self):
+    def test_quanta_scan_data_matches_known_totals(self):
         """9 original findings (app.py/Dockerfile) + 9 more added later from
         ai_assistant.py (AI/ML) and admin_api.py (secrets/API-authorization) = 18 at
         time of writing; 11 of those 18 are auto-fixable (see
         vulnerable-demo-app/SECURITY_REPORT.md's remediation plan)."""
-        vh = dashboard_data.load_vulnhunt_data()
+        vh = dashboard_data.load_quanta_scan_data()
         self.assertTrue(vh["available"])
         self.assertEqual(vh["total"], 18)
         self.assertEqual(vh["auto_fixable"], 11)
@@ -306,7 +306,7 @@ class DataLayerReadsRealArtifacts(unittest.TestCase):
         """Regression guard for the subprocess-encoding bug: git output must be decoded
         as UTF-8, not the platform default, or characters like em-dash corrupt into
         mojibake ('â€”')."""
-        vh = dashboard_data.load_vulnhunt_data()
+        vh = dashboard_data.load_quanta_scan_data()
         self.assertNotIn("â€”", vh["title"])
         plan = dashboard_data.load_remediation_plan()
         self.assertNotIn("â€”", plan["title"])
@@ -355,32 +355,32 @@ class ContentEnrichedFindingsCache(unittest.TestCase):
         self.assertTrue(all("exception" in f for f in findings))
 
 
-class VulnhuntDataCache(unittest.TestCase):
-    """load_vulnhunt_data() is profiled at ~0.4s per call (two `git` subprocess
+class QuantaScanDataCache(unittest.TestCase):
+    """load_quanta_scan_data() is profiled at ~0.4s per call (two `git` subprocess
     spawns) - cached for a short in-process TTL since several pages now call it on
-    every navigation, not just /vulnhunt itself."""
+    every navigation, not just /quanta-scan itself."""
 
     def setUp(self):
-        dashboard_data._VULNHUNT_DATA_CACHE["data"] = None
-        dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+        dashboard_data._QUANTA_SCAN_DATA_CACHE["data"] = None
+        dashboard_data._QUANTA_SCAN_DATA_CACHE["expires_at"] = 0.0
 
     def tearDown(self):
-        dashboard_data._VULNHUNT_DATA_CACHE["data"] = None
-        dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+        dashboard_data._QUANTA_SCAN_DATA_CACHE["data"] = None
+        dashboard_data._QUANTA_SCAN_DATA_CACHE["expires_at"] = 0.0
 
     def test_second_call_within_ttl_does_not_recompute(self):
-        with patch.object(dashboard_data, "_compute_vulnhunt_data",
-                           wraps=dashboard_data._compute_vulnhunt_data) as mock_compute:
-            dashboard_data.load_vulnhunt_data()
-            dashboard_data.load_vulnhunt_data()
+        with patch.object(dashboard_data, "_compute_quanta_scan_data",
+                           wraps=dashboard_data._compute_quanta_scan_data) as mock_compute:
+            dashboard_data.load_quanta_scan_data()
+            dashboard_data.load_quanta_scan_data()
             self.assertEqual(mock_compute.call_count, 1)
 
     def test_call_after_ttl_expiry_recomputes(self):
-        with patch.object(dashboard_data, "_compute_vulnhunt_data",
-                           wraps=dashboard_data._compute_vulnhunt_data) as mock_compute:
-            dashboard_data.load_vulnhunt_data()
-            dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0  # force expiry
-            dashboard_data.load_vulnhunt_data()
+        with patch.object(dashboard_data, "_compute_quanta_scan_data",
+                           wraps=dashboard_data._compute_quanta_scan_data) as mock_compute:
+            dashboard_data.load_quanta_scan_data()
+            dashboard_data._QUANTA_SCAN_DATA_CACHE["expires_at"] = 0.0  # force expiry
+            dashboard_data.load_quanta_scan_data()
             self.assertEqual(mock_compute.call_count, 2)
 
 
@@ -389,8 +389,8 @@ class ApiOverview(unittest.TestCase):
         resp = client.get("/api/overview")
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertEqual(payload["vulnhunt"]["total"], 18)
-        self.assertEqual(payload["vulnhunt"]["auto_fixable"], 11)
+        self.assertEqual(payload["quanta_scan"]["total"], 18)
+        self.assertEqual(payload["quanta_scan"]["auto_fixable"], 11)
         self.assertGreaterEqual(payload["remediation"]["total"], 8096)
         self.assertEqual(payload["playbook_count"], 7)
         self.assertGreaterEqual(payload["kev_count"], 112)
@@ -528,9 +528,9 @@ class ApiQuantumReadiness(unittest.TestCase):
         self.assertEqual(ir8547["disallowed_by"], 2035)
 
 
-class ApiVulnhunt(unittest.TestCase):
+class ApiQuantaScan(unittest.TestCase):
     def test_lists_all_eighteen_findings(self):
-        resp = client.get("/api/vulnhunt")
+        resp = client.get("/api/quanta-scan")
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertTrue(payload["available"])
@@ -538,7 +538,7 @@ class ApiVulnhunt(unittest.TestCase):
         self.assertEqual(ids, {f"VULN-{i}" for i in range(1, 19)})
 
     def test_unverified_finding_has_no_verification(self):
-        resp = client.get("/api/vulnhunt")
+        resp = client.get("/api/quanta-scan")
         payload = resp.json()
         vuln1 = next(f for f in payload["findings"] if f["ID"] == "VULN-1")
         self.assertIsNone(vuln1["verification"])
@@ -548,21 +548,21 @@ class ApiVulnhunt(unittest.TestCase):
         # exercises that exact real write, not a mocked stand-in, same as every other
         # real-DB-backed test in this module (see setUpModule()'s module-wide
         # _patch_db_engine()).
-        dashboard_data._VULNHUNT_DATA_CACHE["data"] = None  # force a fresh read past the TTL cache
-        dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+        dashboard_data._QUANTA_SCAN_DATA_CACHE["data"] = None  # force a fresh read past the TTL cache
+        dashboard_data._QUANTA_SCAN_DATA_CACHE["expires_at"] = 0.0
         activity_log.record_activity(
-            "vulnhunt-verify", "vulnhunt.verify", "VULN-2",
+            "quanta-scan-verify", "quanta_scan.verify", "VULN-2",
             {"branch": "quanta/auto-fixes-test", "status": "resolved", "detail": "confirmed fixed"},
         )
         try:
-            resp = client.get("/api/vulnhunt")
+            resp = client.get("/api/quanta-scan")
             payload = resp.json()
             vuln2 = next(f for f in payload["findings"] if f["ID"] == "VULN-2")
             self.assertEqual(vuln2["verification"]["status"], "resolved")
             self.assertEqual(vuln2["verification"]["detail"], "confirmed fixed")
         finally:
-            dashboard_data._VULNHUNT_DATA_CACHE["data"] = None
-            dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
+            dashboard_data._QUANTA_SCAN_DATA_CACHE["data"] = None
+            dashboard_data._QUANTA_SCAN_DATA_CACHE["expires_at"] = 0.0
 
 
 class ApiRemediate(unittest.TestCase):
@@ -759,7 +759,7 @@ class ApiStatus(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["vulnhunt_findings"], 18)
+        self.assertEqual(payload["quanta_scan_findings"], 18)
         self.assertGreaterEqual(payload["remediation_findings"], 7440)
         self.assertEqual(payload["app_version"], fastapi_app.version)
 
@@ -794,7 +794,7 @@ class ApiStatus(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             missing_engine = create_engine(f"sqlite:///{Path(tmpdir) / 'does-not-exist.db'}")
             try:
-                # /api/status also calls load_vulnhunt_data(), which - whenever a real
+                # /api/status also calls load_quanta_scan_data(), which - whenever a real
                 # quanta/auto-fixes-* branch exists (it does in this repo; CI checks
                 # one out on purpose, see ci.yml) - reads activity_log.list_activity()
                 # for verification history. That read calls ensure_schema() on the SAME
@@ -802,7 +802,7 @@ class ApiStatus(unittest.TestCase):
                 # get to checking "exists" below, defeating this test's whole premise.
                 # Stub it out so this test only observes the untouched missing_engine.
                 with patch.object(db_module, "get_engine", return_value=missing_engine), \
-                        patch.object(dashboard_data, "load_vulnhunt_data", return_value={"available": False}):
+                        patch.object(dashboard_data, "load_quanta_scan_data", return_value={"available": False}):
                     resp = client.get("/api/status")
             finally:
                 missing_engine.dispose()
@@ -2244,7 +2244,7 @@ class ApiReports(unittest.TestCase):
         payload = resp.json()
         self.assertEqual(payload["period"], "weekly")
         self.assertGreaterEqual(payload["remediation_total"], 7440)
-        self.assertEqual(payload["vulnhunt_total"], 18)
+        self.assertEqual(payload["quanta_scan_total"], 18)
 
     def test_invalid_period_is_rejected(self):
         resp = client.get("/api/reports/generate", params={"period": "fortnightly"})
@@ -3135,7 +3135,7 @@ class HtmlShellRoutesServeTheSpaShell(unittest.TestCase):
     (and only the shell - no server-side templating), not what it renders to."""
 
     SHELL_ROUTES = [
-        "/", "/vulnhunt", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
+        "/", "/quanta-scan", "/remediate", "/run", "/queue", "/priority-rules", "/servicenow",
         "/jira", "/splunk", "/xdr", "/ai-assist", "/reports", "/support", "/faq",
         "/exceptions", "/assets", "/appsec", "/inbox", "/risk", "/login", "/profile",
         "/adaptors", "/infoblox", "/axonius", "/infrastructure", "/ai-vulnerabilities",

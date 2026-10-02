@@ -3,10 +3,10 @@
 ## Why?
 
 ## Which pipeline/component does this touch?
-- [ ] `/vulnhunt` (`vuln-scanner` / `vuln-triage-reporter` / `vuln-fixer`)
+- [ ] `/quanta-scan` (`vuln-scanner` / `vuln-triage-reporter` / `vuln-fixer`)
 - [ ] `/remediate` (`vuln-ingest-normalizer` / `remediation-planner` /
       `remediation-fixer-windows` / `remediation-fixer-unix`)
-- [ ] `vulnerable-demo-app/` (the `/vulnhunt` scan target)
+- [ ] `vulnerable-demo-app/` (the `/quanta-scan` scan target)
 - [ ] `remediation/sample-data/` or `remediation/schema/`
 - [ ] Tests, docs, deliverables, or CI only
 

@@ -23,11 +23,11 @@ export async function render(container) {
     <form class="run-form" id="run-form">
       <label>Pipeline
         <select name="pipeline">
-          <option value="scan">/vulnhunt (code scan)</option>
+          <option value="scan">/quanta-scan (code scan)</option>
           <option value="remediate">/remediate (infra remediation)</option>
         </select>
       </label>
-      <label>Target path (only used for /vulnhunt)
+      <label>Target path (only used for /quanta-scan)
         <input type="text" name="path" value="vulnerable-demo-app"></label>
       <label class="checkbox-label">
         <input type="checkbox" name="fix_or_generate">

@@ -60,7 +60,7 @@ and — with one deliberate exception — they never call a real external API. T
 exception: `test_enrichment.py`'s `LiveSmokeTest` calls the real, free, public CISA KEV
 feed and FIRST.org EPSS API (safe: no auth, no cost, and it skips itself rather than
 failing if the network is unavailable). Everything else validates the real artifacts
-those agents/scripts produced — git history for `/vulnhunt`, generated files for
+those agents/scripts produced — git history for `/quanta-scan`, generated files for
 `/remediate` — which is what makes this both real regression coverage and honest test
 evidence rather than a mocked demo.
 
@@ -70,11 +70,11 @@ evidence rather than a mocked demo.
 
 | Suite | Test class | Test cases | Result |
 |---|---|---|---|
-| `/vulnhunt` scan | `VulnHuntScannerFindsRealVulnerabilities` | TC-SCAN-01 – 07 | 7/7 PASS |
-| `/vulnhunt` scan (AI/API fixtures) | `VulnHuntScannerFindsRealAiAndApiVulnerabilities` | TC-SCAN-08 – 15 | 8/8 PASS |
-| `/vulnhunt` fix | `VulnHuntFixerAppliesOnlyApprovedFixes` | TC-FIX-01 – 08 | 8/8 PASS |
-| `/vulnhunt` fix (AI/API fixtures) | `VulnHuntFixerAppliesAiAndApiFixes` | TC-FIX-09 – 15 | 7/7 PASS |
-| `/vulnhunt` report | `VulnHuntReportIsAccurate` | TC-RPT-01 – 03 | 3/3 PASS |
+| `/quanta-scan` scan | `QuantaScanScannerFindsRealVulnerabilities` | TC-SCAN-01 – 07 | 7/7 PASS |
+| `/quanta-scan` scan (AI/API fixtures) | `QuantaScanScannerFindsRealAiAndApiVulnerabilities` | TC-SCAN-08 – 15 | 8/8 PASS |
+| `/quanta-scan` fix | `QuantaScanFixerAppliesOnlyApprovedFixes` | TC-FIX-01 – 08 | 8/8 PASS |
+| `/quanta-scan` fix (AI/API fixtures) | `QuantaScanFixerAppliesAiAndApiFixes` | TC-FIX-09 – 15 | 7/7 PASS |
+| `/quanta-scan` report | `QuantaScanReportIsAccurate` | TC-RPT-01 – 03 | 3/3 PASS |
 | `/remediate` normalize | `RemediationNormalizedFindingsAreWellFormed` | TC-NORM-01 – 09 | 9/9 PASS |
 | `/remediate` plan | `RemediationPlanIsConsistentWithFindings` | TC-PLAN-01 – 02 | 2/2 PASS |
 | `/remediate` playbooks | `RemediationPlaybooksMatchThePlan` | TC-PB-01 – 05 | 5/5 PASS |
@@ -84,7 +84,7 @@ evidence rather than a mocked demo.
 | CLI end-to-end dry-run | `DryRunEndToEnd` | TC-CLI-12 – 13 | 2/2 PASS |
 | Dashboard data layer | `DataLayerReadsRealArtifacts` | TC-DASH-01 – 08 | 8/8 PASS |
 | Dashboard `/api/overview` | `ApiOverview` | TC-DASH-09 | 1/1 PASS |
-| Dashboard `/api/vulnhunt` | `ApiVulnhunt` | TC-DASH-10 | 1/1 PASS |
+| Dashboard `/api/quanta-scan` | `ApiQuantaScan` | TC-DASH-10 | 1/1 PASS |
 | Dashboard `/api/remediate` | `ApiRemediate` | TC-DASH-11 | 1/1 PASS |
 | Dashboard `/api/playbooks/{filename}` | `ApiPlaybookDetail` | TC-DASH-12 – 13 | 2/2 PASS |
 | Dashboard `/api/run` | `ApiRunPipeline` | TC-DASH-14 – 16 | 3/3 PASS |
@@ -185,7 +185,7 @@ evidence rather than a mocked demo.
 
 ---
 
-## Suite 1: `/vulnhunt` scanner finds real vulnerabilities
+## Suite 1: `/quanta-scan` scanner finds real vulnerabilities
 
 **Purpose:** prove the vulnerable baseline (`master` branch) genuinely contains the flaws
 the demo claims (9 in `app.py`/`Dockerfile`, plus 9 more added later in `ai_assistant.py`/
@@ -218,12 +218,12 @@ vulnerable baseline genuinely contains these too, not just the original app.py/D
 
 ---
 
-## Suite 2: `/vulnhunt` fixer applies only approved fixes
+## Suite 2: `/quanta-scan` fixer applies only approved fixes
 
 **Purpose:** prove the fix branch fixed exactly the 6 findings marked `auto_fixable: true`,
 touched nothing else, and didn't break the file.
 **Preconditions (all TC-FIX):** a `quanta/auto-fixes-*` branch exists (created by a
-`/vulnhunt --fix` run).
+`/quanta-scan --fix` run).
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
@@ -250,7 +250,7 @@ findings in those same 2 files (VULN-11, 12, 13, 16) that must stay untouched.
 
 ---
 
-## Suite 3: `/vulnhunt` report is accurate
+## Suite 3: `/quanta-scan` report is accurate
 
 **Purpose:** prove `SECURITY_REPORT.md`'s headline numbers match what was actually found/fixed —
 a report that overstates or understates its own results is worse than no report. Covers
@@ -334,11 +334,11 @@ without ever calling the real Claude API in a test.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
-| TC-CLI-01 | `scan_prompt` without `--fix` | Call `scan_prompt("vulnerable-demo-app")` | Returns `"/vulnhunt vulnerable-demo-app"` | Matches | PASS |
+| TC-CLI-01 | `scan_prompt` without `--fix` | Call `scan_prompt("vulnerable-demo-app")` | Returns `"/quanta-scan vulnerable-demo-app"` | Matches | PASS |
 | TC-CLI-02 | `scan_prompt` with `--fix` | Call with `fix=True` | Returns the prompt with `--fix` appended | Matches | PASS |
 | TC-CLI-03 | `remediate_prompt` without `--generate` | Call `remediate_prompt()` | Returns `"/remediate"` | Matches | PASS |
 | TC-CLI-04 | `remediate_prompt` with `--generate` | Call with `generate=True` | Returns the prompt with `--generate` appended | Matches | PASS |
-| TC-CLI-05 | Command includes `-p` and the prompt | `build_command("/vulnhunt foo", claude_bin="claude")` | `-p` and the prompt string both present | Present | PASS |
+| TC-CLI-05 | Command includes `-p` and the prompt | `build_command("/quanta-scan foo", claude_bin="claude")` | `-p` and the prompt string both present | Present | PASS |
 | TC-CLI-06 | Defaults to JSON output format | Same as above | `--output-format json` present | Present | PASS |
 | TC-CLI-07 | Includes the permission mode | Pass `permission_mode="acceptEdits"` | `--permission-mode acceptEdits` present | Present | PASS |
 | TC-CLI-08 | Includes the max-budget cap | Pass `max_budget_usd="5.00"` | `--max-budget-usd 5.00` present | Present | PASS |
@@ -372,7 +372,7 @@ HTML for substrings; the actual client-side rendering (sidebar nav, tables, KPI 
 client-side sort, forms) was verified live in a browser during development (see
 KNOWLEDGE_TRANSFER.md), not by this Python suite, which cannot execute JavaScript.
 **Preconditions (all TC-DASH):** `dashboard/app.py`'s FastAPI app and `dashboard/data.py`
-importable; the real pipeline artifacts (vulnhunt findings, remediation findings/plan,
+importable; the real pipeline artifacts (quanta_scan findings, remediation findings/plan,
 playbooks) present on disk; `remediation/config/priority_rules.yaml` present. All
 requests go through FastAPI's `TestClient` (Starlette's in-process ASGI test client) — no
 real HTTP server, no network, no Claude API or ServiceNow calls. TC-DASH-20–22
@@ -413,7 +413,7 @@ test-for-test.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
-| TC-DASH-01 | `/vulnhunt` data matches known totals | Call `load_vulnhunt_data()` | `total == 18`, `auto_fixable == 11` | Matches | PASS |
+| TC-DASH-01 | `/quanta-scan` data matches known totals | Call `load_quanta_scan_data()` | `total == 18`, `auto_fixable == 11` | Matches | PASS |
 | TC-DASH-02 | Remediation findings count matches (floor, not exact - grows as real bulk data is added) | Call `load_remediation_findings()` | `len(findings) >= 8096` | Matches | PASS |
 | TC-DASH-03 | Remediation plan queue count matches | Call `load_remediation_plan()` | `len(queue) == 14` | Matches | PASS |
 | TC-DASH-04 | Risk tier counts are structurally consistent | Same as above | Every tier (`auto-approvable`/`needs-change-approval`/`manual-only`) present and non-zero; sum of all three equals the full queue length | Matches | PASS |
@@ -421,15 +421,15 @@ test-for-test.
 | TC-DASH-06 | KEV-listed / high-EPSS counts match live-verified data | Call `count_kev_listed()` / `count_high_epss()` | 7 KEV-listed, 8 with EPSS ≥ 50% | Matches | PASS |
 | TC-DASH-07 | Asset-type breakdown covers all 6 categories | Call `asset_type_breakdown()` | Counts sum to 14; all 6 asset types present (including `application`, `certificate`) | Matches | PASS |
 | TC-DASH-08 | No mojibake in parsed text (regression guard) | Check `vh["title"]` and `plan["title"]` for the mojibake pattern `â€"` | Pattern absent from both | Absent | PASS |
-| TC-DASH-09 | `/api/overview` returns combined dashboard shape and known counts | `GET /api/overview` | HTTP 200; `vulnhunt.total==18`, `vulnhunt.auto_fixable==11`, `remediation.total>=8096`, `playbook_count==7`, `kev_count>=112`, `high_epss_count>=253`; `sla` has `breached`/`at_risk`/`on_track`; `asset_type_breakdown` includes `windows-server`/`unix-server`/`application`/`certificate` | Matches | PASS |
-| TC-DASH-10 | `/api/vulnhunt` lists all 18 findings | `GET /api/vulnhunt` | HTTP 200; `available` true; finding IDs equal exactly `VULN-1`...`VULN-18` | Matches | PASS |
+| TC-DASH-09 | `/api/overview` returns combined dashboard shape and known counts | `GET /api/overview` | HTTP 200; `quanta_scan.total==18`, `quanta_scan.auto_fixable==11`, `remediation.total>=8096`, `playbook_count==7`, `kev_count>=112`, `high_epss_count>=253`; `sla` has `breached`/`at_risk`/`on_track`; `asset_type_breakdown` includes `windows-server`/`unix-server`/`application`/`certificate` | Matches | PASS |
+| TC-DASH-10 | `/api/quanta-scan` lists all 18 findings | `GET /api/quanta-scan` | HTTP 200; `available` true; finding IDs equal exactly `VULN-1`...`VULN-18` | Matches | PASS |
 | TC-DASH-11 | `/api/remediate` lists all findings, the full plan queue, and playbook links | `GET /api/remediate` | HTTP 200; `findings` has >=8096 entries; plan queue IDs equal exactly `FIND-1`...`FIND-N` for the real N; `playbooks_by_finding` has 7 entries | Matches | PASS |
 | TC-DASH-12 | `/api/playbooks/{filename}` matches the real playbook file's contents | `GET /api/playbooks/FIND-4-sudo-baron-samedit-patch.yml`; independently read the same file from disk and check for `"CHANGE APPROVAL REQUIRED"` | HTTP 200; `finding_id=="FIND-4"`; `needs_approval` equals whatever the raw file actually contains | Matches | PASS |
 | TC-DASH-13 | Unknown playbook returns 404 | `GET /api/playbooks/does-not-exist.yml` | HTTP 404 (negative test) | 404 | PASS |
 | TC-DASH-14 | `GET /api/run` returns default budget and audit-log shape | `GET /api/run` | HTTP 200; response includes `default_budget`; `audit_log` is a list | Matches | PASS |
 | TC-DASH-15 | Dry-run POST never calls the real API (critical safety test) | `POST /api/run` with `pipeline=scan`, `path=vulnerable-demo-app`, `max_budget_usd=2.00`, `confirm` omitted | HTTP 200; `dry_run` true; `message` contains `"Dry run only"` | Matches | PASS |
 | TC-DASH-16 | Unknown pipeline name is rejected | `POST /api/run` with `pipeline="not-a-real-pipeline"` | HTTP 400 (negative test) | 400 | PASS |
-| TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `vulnhunt_findings: 18`, `remediation_findings >= 8096` | Matches | PASS |
+| TC-DASH-17 | `/api/status` returns correct counts | `GET /api/status` | JSON with `status: ok`, `quanta_scan_findings: 18`, `remediation_findings >= 8096` | Matches | PASS |
 | TC-DASH-18 | Live queue lists all findings sorted by priority | `GET /api/queue` | HTTP 200; finding IDs equal exactly `FIND-1`...`FIND-N` for the real N; priorities sorted highest-first (Critical > High > Medium > Low) | Matches | PASS |
 | TC-DASH-19 | Live queue shows SLA breach status and ATT&CK tags | `GET /api/queue` | At least one finding has `sla.breached` true; `T1210` (PrintNightmare/Log4Shell-style RCE) appears among the findings' `attack_techniques` | Matches | PASS |
 | TC-DASH-107 | Overview's SLA/priority definitions panel reads the real, currently-configured priority rules | `GET /api/overview` | Response includes a `priority_rules` object with `sla_days`/`priority_thresholds` for all 4 tiers (Critical/High/Medium/Low), plus `kev_override`/`epss_escalation` objects | Matches | PASS |
@@ -454,7 +454,7 @@ test-for-test.
 | TC-DASH-36 | Unknown action returns 400 | `POST /api/ai-assist` with `finding_id="FIND-1"`, `action="delete_everything"` | HTTP 400 (negative test) | 400 | PASS |
 | TC-DASH-37 | `confirm=true` calls the real binary exactly once | `POST /api/ai-assist` with `confirm=true`, with `app.cli.find_claude_binary` and `app.subprocess.run` mocked to return a successful result | HTTP 200; `dry_run` false; `response` equals the mocked stdout; mocked `subprocess.run` called exactly once | Matches | PASS |
 | TC-DASH-38 | `confirm=true` surfaces a failed call as 502 | Same as above but the mocked `subprocess.run` result has `returncode=1` | HTTP 502 | 502 | PASS |
-| TC-DASH-39 | `/api/reports/generate` returns real computed KPIs | `GET /api/reports/generate?period=weekly` | HTTP 200; `period=="weekly"`, `remediation.total>=8096`, `vulnhunt_total==18` | Matches | PASS |
+| TC-DASH-39 | `/api/reports/generate` returns real computed KPIs | `GET /api/reports/generate?period=weekly` | HTTP 200; `period=="weekly"`, `remediation.total>=8096`, `quanta_scan_total==18` | Matches | PASS |
 | TC-DASH-40 | Invalid report period is rejected | `GET /api/reports/generate?period=fortnightly` | HTTP 400 (negative test) | 400 | PASS |
 | TC-DASH-41 | HTML report is served inline by default | `GET /api/reports/generate.html?period=daily` | HTTP 200; `content-type` contains `text/html`; no `content-disposition` header; body contains `"Daily Security Report"` | Matches | PASS |
 | TC-DASH-42 | HTML report download sets `Content-Disposition` | `GET /api/reports/generate.html?period=monthly&download=true` | `content-disposition` contains `"attachment"` and `"quanta-monthly-report.html"` | Matches | PASS |
@@ -577,7 +577,7 @@ follows.
 | TC-REPORTGEN-02 | Every documented period is accepted | Loop over `reports.VALID_PERIODS` (`daily`/`weekly`/`monthly`/`quarterly`/`half-yearly`/`yearly`), generating data for each | Each result's `data["period"]` equals the period passed in | Matches | PASS |
 | TC-REPORTGEN-03 | SLA summary is pulled from the data module | `generate_report_data("weekly", stub)` where the stub's `sla_summary` returns `{"breached": 1, "at_risk": 0, "on_track": 1}` | `data["sla"]` equals that exact dict | Matches | PASS |
 | TC-REPORTGEN-04 | KEV and EPSS counts are pulled from the data module | Same stub call | `data["kev_count"] == 1`, `data["high_epss_count"] == 1` | Matches | PASS |
-| TC-REPORTGEN-05 | VulnHunt and remediation totals are pulled correctly | Same stub call | `data["vulnhunt_total"] == 9`, `data["vulnhunt_auto_fixable"] == 6`, `data["remediation_total"] == 2`, `data["playbook_count"] == 1` | Matches | PASS |
+| TC-REPORTGEN-05 | QuantaScan and remediation totals are pulled correctly | Same stub call | `data["quanta_scan_total"] == 9`, `data["quanta_scan_auto_fixable"] == 6`, `data["remediation_total"] == 2`, `data["playbook_count"] == 1` | Matches | PASS |
 | TC-REPORTGEN-06 | Top-priority findings are capped at 5 | Stub `load_live_queue()` returns 20 findings | `len(data["top_priority_findings"]) == 5` | Matches | PASS |
 | TC-REPORTGEN-07 | `generated_at` is present and looks like an ISO timestamp | `generate_report_data("weekly", stub)` | `data["generated_at"]` matches `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}` | Matches | PASS |
 | TC-REPORTGEN-08 | Renders a valid-looking HTML document | `render_report_html(data)` for a `"monthly"` report | Output starts with `"<!doctype html>"` and contains `"</html>"` | Matches | PASS |
@@ -585,7 +585,7 @@ follows.
 | TC-REPORTGEN-10 | No-persistence caveat is included | Same monthly report | Output contains `"no persistence layer"` | Matches | PASS |
 | TC-REPORTGEN-11 | KPI numbers are included | Same monthly report (stub's breached/kev_count/high_epss all `1`) | Output contains `">1<"` | Matches | PASS |
 | TC-REPORTGEN-12 | HTML in a finding title is escaped, not injected (XSS guard) | Render with `top_priority_findings` containing a title of `"<script>alert(1)</script>"` | Output does NOT contain the raw `<script>alert(1)</script>`; contains the escaped `"&lt;script&gt;"` | Matches | PASS |
-| TC-REPORTGEN-13 | `generate_report_data` against the real dashboard data module | `generate_report_data("weekly", dashboard_data)` against the real, imported `dashboard/data.py` | `remediation_total >= 8096`, `vulnhunt_total == 18`, `len(top_priority_findings) <= 5` | Matches | PASS |
+| TC-REPORTGEN-13 | `generate_report_data` against the real dashboard data module | `generate_report_data("weekly", dashboard_data)` against the real, imported `dashboard/data.py` | `remediation_total >= 8096`, `quanta_scan_total == 18`, `len(top_priority_findings) <= 5` | Matches | PASS |
 | TC-REPORTGEN-14 | `render_report_html` against real artifacts | `render_report_html(generate_report_data("yearly", dashboard_data))` | Output contains `"Yearly Security Report"` | Matches | PASS |
 
 ---
@@ -741,7 +741,7 @@ importable; pure, in-memory functions only, no fixture files or network required
 results — this environment has no Java, Go, PHP, or Node/npm runtime available, so
 nothing in this suite compiles, executes, or lints the sample vulnerable code, and
 nothing here claims the `vuln-scanner` subagent was actually invoked against these
-fixtures (doing that requires a live Claude Code session running the `/vulnhunt`
+fixtures (doing that requires a live Claude Code session running the `/quanta-scan`
 pipeline, the same caveat documented for the Tenable/Armis connectors being built against
 vendor docs rather than a live tenant). Instead, the suite proves two things stay in
 sync: (1) each new fixture file under `vulnerable-demo-multilang/` genuinely contains the
