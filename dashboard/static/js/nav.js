@@ -114,6 +114,8 @@ export const NAV = [
       tip: "The controls a secure delivery pipeline needs, where each repository stands from uploaded scans and pipeline checks, a policy-to-control check, and the code fix queue." },
     { path: "/zero-day-watch", label: "Zero-day Watch", icon: "rules",
       tip: "Newly exploited vulnerabilities (CISA KEV) in products your estate appears to run that no scanner has reported yet. A name match, not a version check." },
+    { path: "/firewall", label: "Firewall Rules", icon: "rules",
+      tip: "Firewall rules from your exports: broad, unused, shadowed and internet-exposed rules, recertification by owner, and access requests checked against the rules. Quanta never changes a firewall." },
     { path: "/soar", label: "SOAR Playbooks", icon: "rules",
       tip: "Admin: playbooks that investigate, notify and ask your own automation to respond, with a second person approving anything that changes your environment. Dry run first." },
     { path: "/hunting", label: "Hunting & SOC", icon: "rules",

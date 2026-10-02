@@ -1,0 +1,33 @@
+# Firewall rule analysis and recertification (remediation/firewall/). Every list and number here is yours to change.
+
+# Ports whose exposure to "any" source is a finding (management, remote access, file sharing, and databases).
+risky_ports:
+  22: SSH
+  23: Telnet
+  135: RPC
+  139: NetBIOS
+  445: SMB
+  1433: SQL Server
+  1521: Oracle
+  3306: MySQL
+  3389: RDP
+  5432: PostgreSQL
+  5900: VNC
+  5985: WinRM
+  5986: WinRM (TLS)
+  6379: Redis
+  9200: Elasticsearch
+  27017: MongoDB
+# Ports that carry credentials or data in clear text.
+cleartext_ports: {21: FTP, 23: Telnet, 69: TFTP, 513: rlogin, 514: rsh/syslog, 110: POP3, 143: IMAP}
+
+unused_days: 90                  # an allow rule with no hits for this long is a candidate to remove
+disabled_stale_days: 90          # a disabled rule left in place this long should be deleted
+recertify_every_days: 365        # each allow rule is re-confirmed by its owner this often
+recertify_grace_days: 30         # how long after the due date before a rule counts as overdue
+
+# What a change request may be approved without a human review: specific, time-bound and low-risk. Everything else goes to a reviewer.
+request:
+  auto_approve_max_days: 30
+  auto_approve_max_sources: 5
+  never_auto_approve_ports: [22, 23, 135, 139, 445, 1433, 3389, 5900, 5985, 5986]

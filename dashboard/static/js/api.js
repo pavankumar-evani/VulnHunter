@@ -211,6 +211,19 @@ export const api = {
   devsecopsQueue: (body) => request("POST", "/api/devsecops/factory/queue", body),
   devsecopsUpdateItem: (id, body) => request("PUT", `/api/devsecops/factory/${encodeURIComponent(id)}`, body),
   zeroDayWatch: (days) => request("GET", `/api/zero-day-watch?days=${days}`),
+  firewallOverview: () => request("GET", "/api/firewall/overview"),
+  firewallDeleteDevice: (d) => request("DELETE", `/api/firewall/devices/${encodeURIComponent(d)}`),
+  firewallCertify: (body) => request("POST", "/api/firewall/certify", body),
+  firewallRequests: () => request("GET", "/api/firewall/requests"),
+  firewallRequest: (body) => request("POST", "/api/firewall/requests", body),
+  firewallDecide: (id, body) => request("POST", `/api/firewall/requests/${id}/decide`, body),
+  firewallImport: async (device, format, text) => {
+    const res = await fetch(`/api/firewall/import?device=${encodeURIComponent(device)}&format=${encodeURIComponent(format || "")}`, { method: "POST", body: text });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
   detectionsOverview: () => request("GET", "/api/detections/overview"),
   detectionsAssess: () => request("POST", "/api/detections/assess", {}),
   detectionsAddRule: (body) => request("POST", "/api/detections/rules", body),

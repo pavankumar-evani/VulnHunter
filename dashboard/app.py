@@ -60,6 +60,8 @@ from remediation.connectors import reputation_connector as hunt_rep, siem_search
 from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
+from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
+from remediation.enrichment import network_reachability as network_reach  # noqa: E402
 from remediation.devsecops import controls as dso_controls, factory as dso_factory  # noqa: E402
 from remediation.enrichment import sbom as sbom_mod, zero_day_watch as zero_day  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
@@ -5215,6 +5217,115 @@ def api_zero_day_watch(days: int = 30, user: dict = Depends(rbac.require_login))
     except Exception:  # noqa: BLE001 - the SBOM is optional
         comps = []
     return zero_day.watch(catalog, dashboard_data.load_live_queue(), comps, days)
+
+
+# ---------------------------------------------------------------- firewall rules management
+class FwCertifyBody(BaseModel):
+    device: str
+    key: str
+    decision: str
+    note: str = ""
+
+
+class FwRequestBody(BaseModel):
+    sources: list[str]
+    destinations: list[str]
+    services: list[str]
+    days: int | None = None
+    justification: str
+    src_zone: str | None = None
+    dst_zone: str | None = None
+
+
+class FwDecisionBody(BaseModel):
+    status: str
+    note: str = ""
+
+
+def _fw_topology():
+    try:
+        return network_reach.load_topology()
+    except Exception:  # noqa: BLE001 - topology is optional context
+        return None
+
+
+@app.post("/api/firewall/import")
+async def api_firewall_import(request: Request, device: str, format: str = "", user: dict = Depends(rbac.require_admin)):
+    """A firewall's rules as the request body: CSV, JSON, PAN-OS configuration XML or FortiGate policy text. Replaces that device's rules."""
+    raw = (await request.body()).decode("utf-8", "replace")
+    if len(raw) > 30_000_000:
+        raise HTTPException(status_code=413, detail="The file is too large (limit 30 MB)")
+    try:
+        out = fw_store.import_rules(device, raw, format or None, user["email"])
+    except fw_model.RuleFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "firewall.import", device, {k: out[k] for k in ("format", "rules", "added", "removed")})
+    return out
+
+
+@app.get("/api/firewall/overview")
+def api_firewall_overview(device: str | None = None, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    rs = fw_store.rules(device)
+    f = fw_analysis.analyse(rs)
+    return {"summary": fw_analysis.summary(rs, f), "findings": f[:500], "exposure": fw_analysis.exposure(rs), "recert": fw_store.recert_status(rs),
+            "devices": fw_store.devices(), "requests": fw_store.request_metrics(fw_store.list_requests())}
+
+
+@app.get("/api/firewall/rules")
+def api_firewall_rules(device: str | None = None, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"rules": fw_store.rules(device)}
+
+
+@app.delete("/api/firewall/devices/{device}")
+def api_firewall_delete_device(device: str, user: dict = Depends(rbac.require_admin)):
+    if not fw_store.delete_device(device):
+        raise HTTPException(status_code=404, detail="No such device")
+    activity_log.record_activity(user["email"], "firewall.delete", device, {})
+    return {"ok": True}
+
+
+@app.post("/api/firewall/certify")
+def api_firewall_certify(body: FwCertifyBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        fw_store.certify(body.device, body.key, body.decision, body.note, user["email"])
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such rule") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "firewall.certify", f"{body.device}:{body.key}", {"decision": body.decision})
+    return {"ok": True}
+
+
+@app.post("/api/firewall/requests")
+def api_firewall_request(body: FwRequestBody, user: dict = Depends(rbac.require_login)):
+    """Anyone signed in can ask for access. The request is checked against the rules Quanta holds when it is submitted."""
+    try:
+        r = fw_store.submit_request(user["email"], body.sources, body.destinations, body.services, body.days, body.justification, fw_store.rules(), topology=_fw_topology(),
+                                  src_zone=body.src_zone, dst_zone=body.dst_zone)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "firewall.request", str(r["id"]), {"verdict": r["check"]["verdict"], "risk": r["check"]["risk"]})
+    return r
+
+
+@app.get("/api/firewall/requests")
+def api_firewall_requests(user: dict = Depends(rbac.require_login)):
+    rs = fw_store.list_requests()
+    if user.get("role") != "admin":
+        rs = [r for r in rs if r["requester"] == user["email"]]
+    return {"requests": rs, "metrics": fw_store.request_metrics(rs)}
+
+
+@app.post("/api/firewall/requests/{request_id}/decide")
+def api_firewall_decide(request_id: int, body: FwDecisionBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = fw_store.decide_request(request_id, body.status, user["email"], body.note)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such request") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "firewall.request.decide", str(request_id), {"status": r["status"]})
+    return r
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
