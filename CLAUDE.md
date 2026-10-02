@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,540 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 1,567 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,540 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,567 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -523,6 +523,19 @@ assign up to 2,000, status, auto-route from asset ownership, history) and `analy
 `/api/admin/teams*`. Pages: `/assignments`, `/ownership`, `/admin/people`. States:
 assigned / team_only / unowned; work status open / in_progress / blocked / resolved.
 An assignment's team overrides the asset's team. Ownership routes require login.
+
+## Remediation safety, verification and rollout
+
+Three deterministic layers wrap the LLM fixers. `remediation/validation/playbook_lint.py`
+lints every generated playbook (header, real rollback, approval gate, YAML shape, no literal
+credentials, no `hosts: all`; warnings for missing pre/post checks and raw shell) and
+`/api/remediation-approvals/{id}/approve` refuses a playbook that fails. `remediation/
+verification/closed_loop.py` reads the next scan to mark triggered remediations verified /
+still-present / awaiting-rescan (evidence, not proof; surfaced on the Approvals page and at
+`/api/remediation-verification`), and builds the per-remediation evidence pack. Rollout rings
+(`rollout_profiles` in `remediation_policy.yaml`, resolved into each policy as
+`rollout_rings`) stage a fix canary, pilot, broad. See `docs/AGENTIC_REMEDIATION_ROADMAP.md`
+and `docs/DEPLOYMENT_ARCHITECTURE.md` (Dockerfile, compose, `QUANTA_DATABASE_URL`).
 
 ## Support tickets
 

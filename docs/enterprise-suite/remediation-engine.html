@@ -107,6 +107,7 @@
     <a href="#policy">05 · Remediation policy engine</a>
     <a href="#boundary">06 · The execution boundary</a>
     <a href="#tracks">07 · Four remediation tracks</a>
+    <a href="#gates">08 · Safety gates &amp; proof</a>
   </nav>
 
   <main>
@@ -195,6 +196,18 @@
         <div class="card"><h4>Why OT gets a different artifact shape, not just a different template</h4><p>NIST SP 800-82 (OT security guidance) treats direct automated patching as the exception in industrial environments, not the default — many OT devices can't be safely rebooted mid-production, some have no reachable network path at all, and an unplanned change to a safety-critical controller risks physical harm, not just downtime. <code>remediation-fixer-ot</code> reflects that directly: it never generates a config/patch script, only a recommendation for IT security and OT/plant operations to act on together.</p></div>
         <div class="card"><h4>Why the SCA fixer follows the Ansible pattern, not vuln-fixer's</h4><p><code>remediation-fixer-application</code> has only <code>Read, Write</code> tools — no <code>Bash</code>, no git access — unlike <code>vuln-fixer</code>. A dependency bump's real risk is a transitive breaking change this subagent has no way to test (no build tooling, no test suite), so it generates the upgrade <em>plan</em> a developer executes through their own normal PR workflow, the same artifact-only posture as the Ansible/OT fixers, not a diff pretending to already be validated.</p></div>
         <div class="card"><h4>Closing the loop: post-fix verification</h4><p>Only the SAST track has this today: <code>vuln-verifier</code> (part of the Vulnerability Finding Engine document's <code>/quanta-scan</code> pipeline, triggered by <code>--verify FINDING-ID BRANCH</code>) re-checks a fixed finding against its fix branch from a fresh read and logs a real resolved/still-present/inconclusive verdict — closing the gap where a fixer's own report was previously the only signal a fix worked. The three <code>/remediate</code>-side tracks don't have an equivalent re-check yet.</p></div>
+      </div>
+    </section>
+
+    
+    <section id="gates">
+      <h2><span class="num">08</span>Safety gates, staged rollout and proof</h2>
+      <p class="section-intro">Three deterministic layers wrap the model-written fixers, so a reviewer gets a mechanical answer before they are asked to decide.</p>
+      <div class="grid2">
+        <div class="card"><h4>Playbook safety lint</h4><p>Every generated playbook is checked for a named finding, a stated risk tier, a real rollback procedure, the change-approval gate where the tier requires it, valid YAML structure, no literal credentials and no <code>hosts: all</code>. Warnings flag a missing pre-change check, a missing post-change verification, raw shell use and silenced failures. An approval is refused while any error stands.</p></div>
+        <div class="card"><h4>Staged rollout rings</h4><p>The remediation policy resolves a ring plan per finding: canary, pilot, then broad, with a soak period between rings (an emergency profile for actively exploited findings). Generated playbooks take a <code>rollout_ring</code> variable so no single run can touch every host. Quanta still executes nothing; whoever runs the playbook honors the rings.</p></div>
+        <div class="card"><h4>Closed-loop verification</h4><p>After a remediation is triggered, the next scan decides: verified (no longer reported), still present, or awaiting rescan. "Verified" is evidence, not proof, because an asset leaving scan scope looks the same, and the interface says so.</p></div>
+        <div class="card"><h4>Evidence and metrics</h4><p>An evidence pack bundles the finding, the approval trail, the reviewed artifact with its lint result and the outcome. Outcome metrics report real request-to-approval and request-to-trigger times and the fix-hold rate, and return no value rather than an estimate when there is no data.</p></div>
       </div>
     </section>
 
