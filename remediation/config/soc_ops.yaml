@@ -1,0 +1,63 @@
+# Security operations: tiers and queues, priority and service levels, escalation and case rules. ITIL-style incident handling applied to security alerts.
+# Everything is read live; edit and the next request sees it.
+
+# Tiers. A case sits in the queue of its tier. An analyst belongs to one tier and works that queue (and may take work from queues below theirs).
+tiers:
+  1:
+    name: Level 1 - triage
+    queue: L1
+    purpose: First look at every case. Confirm or dismiss, gather the obvious evidence, escalate what needs depth.
+    may_resolve_as: [false-positive, benign, duplicate, insufficient-data, true-positive]
+  2:
+    name: Level 2 - investigation
+    queue: L2
+    purpose: Deeper investigation, scoping, containment recommendation, hand-off to response.
+    may_resolve_as: [false-positive, benign, duplicate, insufficient-data, true-positive, accepted-risk]
+  3:
+    name: Level 3 - response and threat hunting
+    queue: L3
+    purpose: Major incidents, malware and forensic analysis, detection fixes, hunts that follow from the case.
+    may_resolve_as: [false-positive, benign, duplicate, insufficient-data, true-positive, accepted-risk]
+
+# Priority = impact x urgency (ITIL). Impact is how far it reaches; urgency comes from the alert's severity. Product -> priority by the first threshold met.
+impact_weights: {single: 1, multiple: 2, widespread: 3}
+urgency_weights: {Informational: 1, Low: 1, Medium: 2, High: 3, Critical: 4}
+priority_thresholds:
+  - {priority: P1, min_score: 9}
+  - {priority: P2, min_score: 6}
+  - {priority: P3, min_score: 3}
+  - {priority: P4, min_score: 0}
+# Impact is worked out from the assets in the case: one host or user is single, 2 to 5 multiple, more than 5 widespread, and a privileged account
+# or a known-exploited vulnerability on an involved host raises it one step. A person can set it by hand.
+impact_multiple_hosts: 2
+impact_widespread_hosts: 6
+
+# Service levels in minutes, by priority. ack = a person has acknowledged the case; resolve = the case is resolved; pickup = after an escalation, the higher
+# tier has taken the case.
+targets:
+  P1: {ack_minutes: 15,  resolve_minutes: 240,  pickup_minutes: 15}
+  P2: {ack_minutes: 30,  resolve_minutes: 480,  pickup_minutes: 30}
+  P3: {ack_minutes: 120, resolve_minutes: 1440, pickup_minutes: 120}
+  P4: {ack_minutes: 480, resolve_minutes: 4320, pickup_minutes: 480}
+at_risk_threshold: 0.8
+
+# Escalation. Functional: an analyst escalates to the next tier with a hand-off note. Hierarchical: when a clock is breached the case is flagged, and
+# when its resolve clock runs out in a tier it moves up automatically (once per tier), with an event saying why.
+escalation:
+  auto_escalate_on_resolve_breach: true
+  max_tier: 3
+  # A written summary is required to escalate, resolve or close, so the next person never starts cold.
+  require_summary_on: [escalate, resolve, close]
+  min_summary_chars: 20
+
+# Open a case automatically from an alert's investigation (needs auto-investigate on, in soc_triage.yaml). The case goes to the L1 queue.
+auto_case:
+  enabled: true
+  verdicts: [likely-true-positive, escalate-l2]
+  min_severity: Medium
+  max_per_hour: 30
+
+resolution_codes: [true-positive, false-positive, benign, duplicate, insufficient-data, accepted-risk]
+
+# Analysts open at once before the assignment suggestion starts preferring someone else.
+max_open_per_analyst: 15

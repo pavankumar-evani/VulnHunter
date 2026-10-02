@@ -124,6 +124,8 @@ export const NAV = [
       tip: "Leavers with access, dormant and unowned accounts, separation-of-duties conflicts, and manager access reviews. Quanta records decisions; your identity team removes the access." },
     { path: "/soar", label: "SOAR Playbooks", icon: "rules",
       tip: "Admin: playbooks that investigate, notify and ask your own automation to respond, with a second person approving anything that changes your environment. Dry run first." },
+    { path: "/soc", label: "SOC Operations", icon: "rules",
+      tip: "Admin: cases in L1, L2 and L3 queues with priority, service-level clocks, escalation with hand-off notes, case summaries, log investigation, technique identification and SOC metrics." },
     { path: "/hunting", label: "Hunting & SOC", icon: "rules",
       tip: "Admin: hunts proposed from known-exploited vulnerabilities in your estate, a hunt workspace, and alert triage with vulnerability context and runbooks. Not a SIEM." },
     { path: "/threat-models", label: "Threat Models", icon: "rules",

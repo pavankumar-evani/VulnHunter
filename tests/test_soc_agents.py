@@ -676,7 +676,9 @@ class SocApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/soc/alerts/999/investigation").status_code, 404)
         self.assertEqual(self.client.post("/api/soc/alerts/999/investigate", json={}).status_code, 404)
         # applying a verdict stays a separate, human step
-        self.assertEqual(self.client.get(f"/api/soc/alerts/{aid}").json()["status"], "new")
+        # an escalate-L2 verdict on a High alert opens a case automatically, which marks the alert investigating; it is never closed by the investigation
+        self.assertEqual(self.client.get(f"/api/soc/alerts/{aid}").json()["status"], "investigating")
+        self.assertEqual(local.json()["case_id"], self.client.get("/api/soc/cases").json()["cases"][0]["id"])
 
     def test_detection_engineering_flow(self):
         self.login("admin@t.local")

@@ -630,6 +630,80 @@ soc_alerts = Table(
     UniqueConstraint("source", "external_id", name="uq_soc_alert_source_ext"),
 )
 
+soc_cases = Table(
+    "soc_cases", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("title", String, nullable=False),
+    Column("severity", String, nullable=False),
+    Column("impact", String, nullable=False),  # single | multiple | widespread
+    Column("priority", String, nullable=False),  # P1..P4
+    Column("tier", Integer, nullable=False),  # 1 | 2 | 3: the queue the case sits in
+    Column("status", String, nullable=False),  # new | in_progress | pending | escalated | resolved | closed
+    Column("assignee", String, nullable=True),
+    Column("resolution", String, nullable=True),
+    Column("summary", Text, nullable=True),  # the running summary note; rewritten on hand-off and at resolution
+    Column("techniques_json", Text, nullable=False),
+    Column("entities_json", Text, nullable=False),
+    Column("assets_json", Text, nullable=False),
+    Column("recommendation", String, nullable=True),  # what the system recommended on opening: the verdict, kept to measure accuracy
+    Column("source", String, nullable=False),  # manual | auto | alert
+    Column("reopen_count", Integer, nullable=False, default=0),
+    Column("escalation_count", Integer, nullable=False, default=0),
+    Column("auto_escalated_tiers_json", Text, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("acknowledged_at", String, nullable=True),
+    Column("tier_since", String, nullable=False),  # when the case entered its current tier
+    Column("picked_up_at", String, nullable=True),  # when the current tier took it
+    Column("resolved_at", String, nullable=True),
+    Column("closed_at", String, nullable=True),
+    Column("updated_at", String, nullable=False),
+)
+
+soc_case_events = Table(
+    "soc_case_events", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("case_id", Integer, nullable=False, index=True),
+    Column("kind", String, nullable=False),  # opened | note | assigned | acknowledged | escalated | auto_escalated | resolved | closed | reopened | alert_linked | priority | evidence
+    Column("actor", String, nullable=True),
+    Column("body", Text, nullable=True),
+    Column("data_json", Text, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
+soc_case_alerts = Table(
+    "soc_case_alerts", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("case_id", Integer, nullable=False, index=True),
+    Column("alert_id", Integer, nullable=False),
+    Column("linked_at", String, nullable=False),
+    UniqueConstraint("case_id", "alert_id", name="uq_soc_case_alert"),
+)
+
+detection_usecases = Table(
+    "detection_usecases", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("key", String, nullable=False, unique=True),
+    Column("kind", String, nullable=False),
+    Column("title", String, nullable=False),
+    Column("status", String, nullable=False),
+    Column("note", Text, nullable=True),
+    Column("ai_suggestion", Text, nullable=True),
+    Column("data_json", Text, nullable=False),
+    Column("decided_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+soc_analysts = Table(
+    "soc_analysts", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("email", String, nullable=False, unique=True),
+    Column("tier", Integer, nullable=False),
+    Column("active", Integer, nullable=False, default=1),
+    Column("created_at", String, nullable=False),
+)
+
 threat_intel_reports = Table(
     "threat_intel_reports", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -878,7 +952,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
+            hunts, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations
