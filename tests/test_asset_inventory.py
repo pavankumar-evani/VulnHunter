@@ -1,7 +1,7 @@
 """
 Tests for remediation/inventory/asset_inventory.py - aggregating findings into a
 per-asset inventory view, plus the editable ownership store. Ownership tests use an
-isolated temp DB (never the real, shared remediation/vulnhunter.db).
+isolated temp DB (never the real, shared remediation/quanta.db).
 """
 import sys
 import tempfile

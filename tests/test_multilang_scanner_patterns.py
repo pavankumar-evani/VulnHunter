@@ -10,7 +10,7 @@ technique keyword for that language. Together these prove the fixtures and the
 documentation are internally consistent with each other.
 
 This environment has no Java, Go, PHP, or Node/npm runtime available (see
-vulnhunter-project's environment notes) - so nothing here compiles, executes, or lints
+quanta-project's environment notes) - so nothing here compiles, executes, or lints
 the sample vulnerable code, and nothing here claims the vuln-scanner subagent was
 actually invoked against these fixtures. Doing that requires a live Claude Code session
 running the /vulnhunt pipeline - the same caveat documented in tests/test_connectors.py

@@ -1,7 +1,7 @@
 """
 Tests for remediation/audit/activity_log.py - the unified, append-only "who did what,
 to what, and when" feed every admin mutation in this app also writes to. Every test
-uses a fresh in-memory SQLite engine (never the real, shared remediation/vulnhunter.db).
+uses a fresh in-memory SQLite engine (never the real, shared remediation/quanta.db).
 """
 import sys
 import threading

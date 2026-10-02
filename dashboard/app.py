@@ -7,7 +7,7 @@ what a production version would add on top of this.
 Run with: python dashboard/app.py
 Then open https://127.0.0.1:5050 (first run auto-generates a local HTTPS cert - your
 browser will show a one-time trust warning for it; see dashboard/README.md's "HTTPS"
-section for why and how to get past it, or VULNHUNTER_DISABLE_TLS=true to disable).
+section for why and how to get past it, or QUANTA_DISABLE_TLS=true to disable).
 """
 import asyncio
 import datetime
@@ -35,7 +35,7 @@ import ai_assist  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
 import reports  # noqa: E402
-import vulnhunter as cli  # noqa: E402
+import quanta as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
@@ -116,12 +116,12 @@ async def _no_cache_static_assets(request: Request, call_next):
 # unthrottled - the single most-exposed route in this app to a caller hammering it.
 # Module-level singletons (not per-request) so counts actually accumulate across calls.
 _GLOBAL_API_RATE_LIMITER = rate_limit.RateLimiter(
-    max_requests=int(os.environ.get("VULNHUNTER_RATE_LIMIT_MAX", "300")),
-    window_seconds=int(os.environ.get("VULNHUNTER_RATE_LIMIT_WINDOW_SECONDS", "60")),
+    max_requests=int(os.environ.get("QUANTA_RATE_LIMIT_MAX", "300")),
+    window_seconds=int(os.environ.get("QUANTA_RATE_LIMIT_WINDOW_SECONDS", "60")),
 )
 _GENERIC_INGEST_RATE_LIMITER = rate_limit.RateLimiter(
-    max_requests=int(os.environ.get("VULNHUNTER_INGEST_RATE_LIMIT_MAX", "20")),
-    window_seconds=int(os.environ.get("VULNHUNTER_INGEST_RATE_LIMIT_WINDOW_SECONDS", "60")),
+    max_requests=int(os.environ.get("QUANTA_INGEST_RATE_LIMIT_MAX", "20")),
+    window_seconds=int(os.environ.get("QUANTA_INGEST_RATE_LIMIT_WINDOW_SECONDS", "60")),
 )
 
 
@@ -158,7 +158,7 @@ async def _rate_limit_api(request: Request, call_next):
 def _csp_enabled():
     # Same read-fresh-from-env convention as _require_login_for_reads_enabled() below,
     # for the same reason (tests toggle it with patch.dict(os.environ, ...)).
-    return os.environ.get("VULNHUNTER_ENABLE_CSP", "").strip().lower() in ("1", "true", "yes")
+    return os.environ.get("QUANTA_ENABLE_CSP", "").strip().lower() in ("1", "true", "yes")
 
 
 @app.middleware("http")
@@ -173,8 +173,8 @@ async def _security_headers(request: Request, call_next):
     server (`python dashboard/app.py`), and becomes real protection the moment a real
     deployment puts this behind TLS (see dashboard/README.md's "HTTPS" section for the
     recommended reverse-proxy setup) without needing a second flag to turn it on.
-    Content-Security-Policy is opt-in (VULNHUNTER_ENABLE_CSP=true, same off-by-default
-    convention as VULNHUNTER_REQUIRE_LOGIN_FOR_READS just below) rather than
+    Content-Security-Policy is opt-in (QUANTA_ENABLE_CSP=true, same off-by-default
+    convention as QUANTA_REQUIRE_LOGIN_FOR_READS just below) rather than
     unconditional: this codebase's own inline `style="..."` attributes (see
     login.js/logout.js and others) need `style-src 'unsafe-inline'` to keep rendering,
     and a CSP is the one header here that fails closed - shipping it on by default and
@@ -200,7 +200,7 @@ async def _security_headers(request: Request, call_next):
 
 
 # Every /api/* route the login flow itself needs BEFORE a session exists - must stay
-# reachable with no session even when VULNHUNTER_REQUIRE_LOGIN_FOR_READS is on, or
+# reachable with no session even when QUANTA_REQUIRE_LOGIN_FOR_READS is on, or
 # nobody could ever log in. Deliberately narrow: /api/auth/change-password and
 # /api/directory/status are informational/mutation routes that already require (or
 # can safely require) a real session, so they're not exempted here.
@@ -214,7 +214,7 @@ def _require_login_for_reads_enabled():
     # Read fresh from the environment on every call (not cached at import time) so
     # tests can toggle this with patch.dict(os.environ, ...) without reloading the
     # whole app module.
-    return os.environ.get("VULNHUNTER_REQUIRE_LOGIN_FOR_READS", "").strip().lower() in ("1", "true", "yes")
+    return os.environ.get("QUANTA_REQUIRE_LOGIN_FOR_READS", "").strip().lower() in ("1", "true", "yes")
 
 
 @app.middleware("http")
@@ -222,7 +222,7 @@ async def _require_login_for_api_reads(request: Request, call_next):
     """Opt-in, OFF by default - see dashboard/README.md's "What this is NOT (yet)":
     every GET/read API route is intentionally public in this MVP, by deliberate,
     disclosed choice (see KNOWLEDGE_TRANSFER.md §13.1). Set
-    VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true for a real deployment that needs to close
+    QUANTA_REQUIRE_LOGIN_FOR_READS=true for a real deployment that needs to close
     that gap: every /api/* route then requires a valid session except the login flow
     itself (_AUTH_FLOW_PATHS above). This is one middleware, not ~100 individual route
     changes - it closes both "anonymous reads see everything" AND "an anonymous
@@ -230,7 +230,7 @@ async def _require_login_for_api_reads(request: Request, call_next):
     touching a single existing route signature or the large existing test suite that
     calls these routes with no session (that suite exercises the OFF/default state,
     which is unaffected). See rbac.validate_production_requirements() - this flag also
-    requires a real, stable VULNHUNTER_SESSION_SECRET, checked at startup."""
+    requires a real, stable QUANTA_SESSION_SECRET, checked at startup."""
     if (_require_login_for_reads_enabled() and request.url.path.startswith("/api/")
             and request.url.path not in _AUTH_FLOW_PATHS
             and rbac.get_current_user(request) is None):
@@ -1284,7 +1284,7 @@ def api_prismacloud_fetch(body: PrismaCloudFetchBody, request: Request):
                    f"(remediation/connectors/live_data_store.py). Like the generic ingest adapter's own "
                    f"output, this is deliberately not auto-merged into the live queue - see "
                    f"docs/INTEGRATIONS.md.",
-        "written_to": "remediation/vulnhunter.db (source=prismacloud)",
+        "written_to": "remediation/quanta.db (source=prismacloud)",
         "count": len(findings),
     }
 
@@ -1346,7 +1346,7 @@ def api_cortex_xsiam_fetch(body: CortexXsiamFetchBody, request: Request):
                    f"(remediation/connectors/live_data_store.py). Like the generic ingest adapter's own "
                    f"output, this is deliberately not auto-merged into the live queue - see "
                    f"docs/INTEGRATIONS.md.",
-        "written_to": "remediation/vulnhunter.db (source=cortex-xsiam)",
+        "written_to": "remediation/quanta.db (source=cortex-xsiam)",
         "count": len(findings),
     }
 
@@ -1662,7 +1662,7 @@ class RunBody(BaseModel):
             raise ValueError(f"max_budget_usd must be between 0 and 500, got {parsed}")
         return value
     # Scopes a "remediate" run to one already-approved finding instead of the full
-    # batch pipeline - see cli/vulnhunter.py's remediate_prompt() and
+    # batch pipeline - see cli/quanta.py's remediate_prompt() and
     # .claude/commands/remediate.md's own --finding-id handling. Used by the
     # "Trigger Remediation" button on an approved finding in
     # dashboard/static/js/pages/remediationApprovals.js.
@@ -1816,7 +1816,7 @@ def api_ai_assist(body: AiAssistBody, request: Request):
     """Same dry-run-preview-by-default / explicit-confirm-to-spend pattern as /api/run
     and /api/servicenow/send: without confirm, this only builds and returns the prompt
     text, at zero cost. With confirm, it calls the real `claude` CLI (same binary
-    discovery as cli/vulnhunter.py) and spends real API usage/credits.
+    discovery as cli/quanta.py) and spends real API usage/credits.
 
     Guardrail (OWASP LLM Top 10 2026 #2/#3 - sensitive info disclosure / excessive
     permissions via inconsistent authorization): the confirm-gated real API call was
@@ -2357,7 +2357,7 @@ def api_generate_report_html(period: str = "weekly", scope: str = "all", team: s
     html_body = reports.render_report_html(data)
     headers = {}
     if download:
-        headers["Content-Disposition"] = f'attachment; filename="vulnhunter-{period}-report.html"'
+        headers["Content-Disposition"] = f'attachment; filename="quanta-{period}-report.html"'
     return HTMLResponse(content=html_body, headers=headers)
 
 
@@ -2701,7 +2701,7 @@ def api_ingest_generic(body: GenericIngestBody):
     Deliberately does NOT merge into remediation/output/normalized-findings.json or
     the live queue - consistent with how live Tenable/Armis connector output also
     isn't auto-merged (see KNOWLEDGE_TRANSFER.md); it writes to the shared
-    remediation/vulnhunter.db (see remediation/connectors/live_data_store.py), same
+    remediation/quanta.db (see remediation/connectors/live_data_store.py), same
     "pending review, not auto-merged" status as those.
 
     Deliberately NOT gated behind session login, unlike the mutation routes below -
@@ -2950,7 +2950,7 @@ def api_status():
         "remediation_findings_error": findings_error,
         "remediation_playbooks": len(playbooks),
         "smtp_configured": email_sender.is_configured(),
-        "session_secret_configured": bool(os.environ.get("VULNHUNTER_SESSION_SECRET")),
+        "session_secret_configured": bool(os.environ.get("QUANTA_SESSION_SECRET")),
         "threat_intel": threat_intel,
         "uptime_seconds": round(time.monotonic() - _PROCESS_STARTED_AT, 1),
         "notification_scheduler_alive": _scheduler_task is not None and not _scheduler_task.done(),
@@ -3026,7 +3026,7 @@ def _ensure_dev_tls_cert(certs_dir):
     except (subprocess.SubprocessError, OSError) as exc:
         print(f"Could not auto-generate a local HTTPS cert (openssl unavailable or failed: {exc}) "
               f"- falling back to plain HTTP for this run. See dashboard/README.md's \"HTTPS\" "
-              f"section for the manual command, or set VULNHUNTER_DISABLE_TLS=true to silence this.")
+              f"section for the manual command, or set QUANTA_DISABLE_TLS=true to silence this.")
         return None, None
     print(f"Generated a new local self-signed HTTPS cert at {certs_dir} (one-time - every future run reuses it).")
     return str(keyfile), str(certfile)
@@ -3042,14 +3042,14 @@ if __name__ == "__main__":
     # in practice, so this app doesn't ask you to remember it.
     #
     # Set SSL_KEYFILE/SSL_CERTFILE explicitly to use a different cert instead (e.g. a
-    # real CA-issued one for a real deployment). Set VULNHUNTER_DISABLE_TLS=true to
+    # real CA-issued one for a real deployment). Set QUANTA_DISABLE_TLS=true to
     # serve plain HTTP unconditionally - the one real reason to do that is a
     # reverse-proxy deployment that already terminates TLS in front of this process
     # (see dashboard/README.md's nginx/Let's Encrypt example); never disable this for a
     # deployment reachable from anywhere but 127.0.0.1.
     ssl_keyfile = os.environ.get("SSL_KEYFILE")
     ssl_certfile = os.environ.get("SSL_CERTFILE")
-    disable_tls = os.environ.get("VULNHUNTER_DISABLE_TLS", "").strip().lower() in ("1", "true", "yes")
+    disable_tls = os.environ.get("QUANTA_DISABLE_TLS", "").strip().lower() in ("1", "true", "yes")
 
     if not ssl_keyfile and not ssl_certfile and not disable_tls:
         ssl_keyfile, ssl_certfile = _ensure_dev_tls_cert(Path(__file__).resolve().parent / "certs")
@@ -3060,7 +3060,7 @@ if __name__ == "__main__":
               f"dashboard/README.md's \"HTTPS\" section for exactly what that warning means and how "
               f"to get past it).")
     elif disable_tls:
-        print("HTTPS disabled via VULNHUNTER_DISABLE_TLS - serving plain HTTP. Only do this behind a "
+        print("HTTPS disabled via QUANTA_DISABLE_TLS - serving plain HTTP. Only do this behind a "
               "reverse proxy that already terminates TLS.")
 
     uvicorn.run(

@@ -39,7 +39,7 @@ touch findings marked `auto_fixable: false` — list them as "needs manual revie
 
 No `gh` CLI dependency — this only needs `git`, which is always available.
 
-1. Create a new branch: `git checkout -b vulnhunter/auto-fixes-<short-timestamp>`
+1. Create a new branch: `git checkout -b quanta/auto-fixes-<short-timestamp>`
 2. Apply the fixes.
 3. Stage and commit with a clear message, e.g.:
    `git commit -am "security: auto-fix N vulnerabilities (SQLi, hardcoded secrets)"`

@@ -174,7 +174,7 @@ export async function render(container) {
       : infraFindings;
     wireFindingsTable(container, filteredFindings, {
       exportGroupId: "infra-hub",
-      filenameBase: "vulnhunter-infrastructure-vulnerabilities",
+      filenameBase: "quanta-infrastructure-vulnerabilities",
       ownerByAssetName, teamByAssetName, environmentByAssetName,
     });
   }

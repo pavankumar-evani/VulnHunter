@@ -1,5 +1,5 @@
 """
-Tests for cli/vulnhunter.py's command-construction logic.
+Tests for cli/quanta.py's command-construction logic.
 
 These deliberately never invoke the real `claude` binary or the network - that would
 spend real API usage/credits on every CI run, which is not acceptable for a test suite.
@@ -15,7 +15,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "cli"))
 
-import vulnhunter as cli  # noqa: E402
+import quanta as cli  # noqa: E402
 
 
 class PromptConstruction(unittest.TestCase):
@@ -30,8 +30,8 @@ class PromptConstruction(unittest.TestCase):
 
     def test_verify_prompt(self):
         self.assertEqual(
-            cli.verify_prompt("vulnerable-demo-app", "VULN-3", "vulnhunter/auto-fixes-20260901"),
-            "/vulnhunt vulnerable-demo-app --verify VULN-3 vulnhunter/auto-fixes-20260901",
+            cli.verify_prompt("vulnerable-demo-app", "VULN-3", "quanta/auto-fixes-20260901"),
+            "/vulnhunt vulnerable-demo-app --verify VULN-3 quanta/auto-fixes-20260901",
         )
 
     def test_remediate_prompt_without_generate(self):
@@ -117,7 +117,7 @@ class DryRunEndToEnd(unittest.TestCase):
 
     def test_dry_run_scan_prints_command_without_calling_api(self):
         result = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "cli" / "vulnhunter.py"),
+            [sys.executable, str(REPO_ROOT / "cli" / "quanta.py"),
              "--dry-run", "scan", "vulnerable-demo-app"],
             capture_output=True, text=True, encoding="utf-8", cwd=REPO_ROOT,
         )
@@ -127,7 +127,7 @@ class DryRunEndToEnd(unittest.TestCase):
 
     def test_dry_run_remediate_with_generate(self):
         result = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "cli" / "vulnhunter.py"),
+            [sys.executable, str(REPO_ROOT / "cli" / "quanta.py"),
              "--dry-run", "remediate", "--generate"],
             capture_output=True, text=True, encoding="utf-8", cwd=REPO_ROOT,
         )

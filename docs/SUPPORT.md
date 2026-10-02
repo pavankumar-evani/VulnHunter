@@ -36,7 +36,7 @@ Open a GitHub issue on this repository using the **Bug report** template
   `remediation-fixer-windows`, the dashboard, the headless CLI, a specific connector, or
   a generated artifact.
 - **The exact command you ran** — the slash command with arguments, the
-  `cli/vulnhunter.py` invocation, or the dashboard action, including any flags
+  `cli/quanta.py` invocation, or the dashboard action, including any flags
   (`--fix`, `--generate`, `--dry-run`, etc.).
 - **Full error output or unexpected result** — paste the relevant section of
   `SECURITY_REPORT.md`, `REMEDIATION_PLAN.md`, a generated playbook, dashboard response,

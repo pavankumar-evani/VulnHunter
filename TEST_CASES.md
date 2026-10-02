@@ -222,7 +222,7 @@ vulnerable baseline genuinely contains these too, not just the original app.py/D
 
 **Purpose:** prove the fix branch fixed exactly the 6 findings marked `auto_fixable: true`,
 touched nothing else, and didn't break the file.
-**Preconditions (all TC-FIX):** a `vulnhunter/auto-fixes-*` branch exists (created by a
+**Preconditions (all TC-FIX):** a `quanta/auto-fixes-*` branch exists (created by a
 `/vulnhunt --fix` run).
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
@@ -326,7 +326,7 @@ secret slipping into demo data or generated output, regardless of which stage pr
 
 ---
 
-## Suite 8: Headless CLI (`cli/vulnhunter.py`)
+## Suite 8: Headless CLI (`cli/quanta.py`)
 
 **Purpose:** prove the CLI wrapper constructs the right `claude -p` invocation and never
 silently defaults to something riskier (a permission bypass) or costlier than intended,
@@ -345,8 +345,8 @@ without ever calling the real Claude API in a test.
 | TC-CLI-09 | Falsy args are omitted, not passed empty | Pass `permission_mode=None, allowed_tools=None, max_budget_usd=None` | None of those 3 flags appear at all | All 3 absent | PASS |
 | TC-CLI-10 | Never defaults to a full permission bypass | Build a command with default args | `dangerously-skip-permissions` never appears | Absent | PASS |
 | TC-CLI-11 | `CLAUDE_BIN` env var takes priority | Set `CLAUDE_BIN`, call `find_claude_binary()` | Returns the env var's value, not a PATH-discovered binary | Matches | PASS |
-| TC-CLI-12 | Dry-run `scan` subprocess call | Run `python cli/vulnhunter.py --dry-run scan vulnerable-demo-app` as a real subprocess | Exit 0; stdout contains `"Would run:"` and the prompt; no API call made | Matches | PASS |
-| TC-CLI-13 | Dry-run `remediate --generate` subprocess call | Run `python cli/vulnhunter.py --dry-run remediate --generate` | Exit 0; stdout contains `"/remediate --generate"` | Matches | PASS |
+| TC-CLI-12 | Dry-run `scan` subprocess call | Run `python cli/quanta.py --dry-run scan vulnerable-demo-app` as a real subprocess | Exit 0; stdout contains `"Would run:"` and the prompt; no API call made | Matches | PASS |
+| TC-CLI-13 | Dry-run `remediate --generate` subprocess call | Run `python cli/quanta.py --dry-run remediate --generate` | Exit 0; stdout contains `"/remediate --generate"` | Matches | PASS |
 
 ## Suite 9: Web Dashboard (`dashboard/`)
 
@@ -457,7 +457,7 @@ test-for-test.
 | TC-DASH-39 | `/api/reports/generate` returns real computed KPIs | `GET /api/reports/generate?period=weekly` | HTTP 200; `period=="weekly"`, `remediation.total>=8096`, `vulnhunt_total==18` | Matches | PASS |
 | TC-DASH-40 | Invalid report period is rejected | `GET /api/reports/generate?period=fortnightly` | HTTP 400 (negative test) | 400 | PASS |
 | TC-DASH-41 | HTML report is served inline by default | `GET /api/reports/generate.html?period=daily` | HTTP 200; `content-type` contains `text/html`; no `content-disposition` header; body contains `"Daily Security Report"` | Matches | PASS |
-| TC-DASH-42 | HTML report download sets `Content-Disposition` | `GET /api/reports/generate.html?period=monthly&download=true` | `content-disposition` contains `"attachment"` and `"vulnhunter-monthly-report.html"` | Matches | PASS |
+| TC-DASH-42 | HTML report download sets `Content-Disposition` | `GET /api/reports/generate.html?period=monthly&download=true` | `content-disposition` contains `"attachment"` and `"quanta-monthly-report.html"` | Matches | PASS |
 | TC-DASH-43 | Listing exceptions against an empty store returns an empty list | `GET /api/exceptions` (against a temp exceptions store) | HTTP 200; `exceptions == []` | Matches | PASS |
 | TC-DASH-44 | Creating then listing shows the new exception with its computed status | `POST /api/exceptions` with `finding_id="FIND-7"`, a reason, `requested_by`/`approved_by`, `expires_on="2099-01-01"`; then `GET /api/exceptions` | Create returns HTTP 200 with `finding_id=="FIND-7"`; list has exactly 1 entry with `computed_status=="active"` | Matches | PASS |
 | TC-DASH-45 | Creating with a past expiry date is rejected | `POST /api/exceptions` with `expires_on="2020-01-01"` | HTTP 400 (negative test) | 400 | PASS |
@@ -919,8 +919,8 @@ does and doesn't prove (never exercised against a real ServiceNow instance).
 | TC-SNOW-06 | `create_incident` and `build_incident_body` produce the same shape | Compare the body actually POSTed vs. the pure-function output | Identical dicts (regression guard for the refactor) | Matches | PASS |
 | TC-SNOW-07 | Finds an existing incident by `correlation_id` | Mock a matching query result | Returns that incident record | Matches | PASS |
 | TC-SNOW-08 | Returns `None` when nothing found | Mock an empty query result | `None` returned | Matches | PASS |
-| TC-SNOW-09 | Creates a new incident when none exists | Mock empty lookup + successful POST | `_vulnhunter_status == "created"` | Matches | PASS |
-| TC-SNOW-10 | Skips creation when an incident already exists | Mock a matching lookup | `_vulnhunter_status == "already_existed"`, POST never called | Matches | PASS |
+| TC-SNOW-09 | Creates a new incident when none exists | Mock empty lookup + successful POST | `_quanta_status == "created"` | Matches | PASS |
+| TC-SNOW-10 | Skips creation when an incident already exists | Mock a matching lookup | `_quanta_status == "already_existed"`, POST never called | Matches | PASS |
 | TC-SNOW-11 | `skip_if_exists=False` always creates, skips the lookup | Call with that flag | GET (lookup) never called, POST called once | Matches | PASS |
 | TC-SNOW-12 | Incident body includes KEV/EPSS context | Create an incident for a KEV-listed, high-EPSS finding | Description mentions "KEV-listed" and "EPSS score" | Matches | PASS |
 | TC-SNOW-13 | Severity maps to urgency/impact correctly | Create an incident for a Critical finding | `urgency == "1"`, `impact == "1"` | Matches | PASS |
@@ -949,8 +949,8 @@ temporary `users.json` file passed explicitly via `path=...`, never the real, sh
 `dashboard/auth/users.json`; `SessionCookies` tests (TC-AUTH-06–11) use a fixed,
 test-only secret, never any real deployment secret. TC-AUTH-22 (`RealSeedFileIsValid`)
 instead calls `load_users()` with no `path` override, against the real, shipped
-`users.json` (the two demo accounts: `admin@vulnhunter.local`, role `admin`;
-`analyst@vulnhunter.local`, role `user`). `OidcFlow` tests (TC-AUTH-26–30) mock
+`users.json` (the two demo accounts: `admin@quanta.local`, role `admin`;
+`analyst@quanta.local`, role `user`). `OidcFlow` tests (TC-AUTH-26–30) mock
 `requests`-shaped session objects passed explicitly as `session=...`, so no real network
 call or real identity provider is ever contacted; `OidcConfiguration` tests
 (TC-AUTH-23–25) patch `os.environ` directly and restore it in `tearDown`.
@@ -1031,7 +1031,7 @@ Atlassian's documentation — see
 [remediation/connectors/README.md](remediation/connectors/README.md) for what this does
 and doesn't prove (never exercised against a real Jira Cloud site). Jira has no
 built-in correlation-id field the way ServiceNow's Table API does, so this connector
-uses a `vulnhunter-{finding_id}` label as its idempotency key instead — searched for via
+uses a `quanta-{finding_id}` label as its idempotency key instead — searched for via
 JQL before create, and stamped onto every issue it creates — which is a genuinely
 different mechanism from ServiceNow's `correlation_id` field lookup, not just a
 renamed copy of it. The issue description is also built as a minimal Atlassian Document
@@ -1045,20 +1045,20 @@ without live credentials.
 
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
-| TC-JIRA-01 | `build_issue_body` builds the correct body with no network calls | Call `build_issue_body(SAMPLE_FINDING, "PROJ")` directly | `fields.project.key=="PROJ"`; `fields.summary` contains `"FIND-1"`; `fields.labels == ["vulnhunter-FIND-1"]` | Matches | PASS |
+| TC-JIRA-01 | `build_issue_body` builds the correct body with no network calls | Call `build_issue_body(SAMPLE_FINDING, "PROJ")` directly | `fields.project.key=="PROJ"`; `fields.summary` contains `"FIND-1"`; `fields.labels == ["quanta-FIND-1"]` | Matches | PASS |
 | TC-JIRA-02 | `create_issue` and `build_issue_body` produce the same shape (regression guard) | Mock `session.get`→`{"issues": []}`, `session.post`→a created issue; call `conn.create_issue(SAMPLE_FINDING)`; compare the posted JSON body to `build_issue_body(SAMPLE_FINDING, "PROJ")` | Identical dicts (the refactor that extracted `build_issue_body` must not have changed what `create_issue` actually sends) | Matches | PASS |
 | TC-JIRA-03 | Description is a valid minimal ADF doc | Inspect `build_issue_body(...)["fields"]["description"]` | `type=="doc"`, `version==1`; `content[0].type=="paragraph"`; its `content[0].type=="text"` with a string `text` value | Matches | PASS |
 | TC-JIRA-04 | Description text includes KEV and EPSS context | Extract the ADF text node from the built body | Text contains `"KEV-listed"`, `"EPSS score"`, and `"CVE-2021-34527"` | Matches | PASS |
 | TC-JIRA-05 | Issue type defaults to Bug | `build_issue_body(SAMPLE_FINDING, "PROJ")` with no `issue_type` override | `fields.issuetype.name == "Bug"` | Matches | PASS |
 | TC-JIRA-06 | Issue type can be overridden | `build_issue_body(SAMPLE_FINDING, "PROJ", issue_type="Task")` | `fields.issuetype.name == "Task"` | Matches | PASS |
-| TC-JIRA-07 | Label is used as the idempotency key, distinct per finding | Build bodies for `SAMPLE_FINDING` (`FIND-1`) and a copy with `id="FIND-2"` | Labels equal `["vulnhunter-FIND-1"]` and `["vulnhunter-FIND-2"]` respectively | Matches | PASS |
+| TC-JIRA-07 | Label is used as the idempotency key, distinct per finding | Build bodies for `SAMPLE_FINDING` (`FIND-1`) and a copy with `id="FIND-2"` | Labels equal `["quanta-FIND-1"]` and `["quanta-FIND-2"]` respectively | Matches | PASS |
 | TC-JIRA-08 | Session gets HTTP Basic auth configured | Construct `JiraConnector(url, "e@acme.com", "tok1", "PROJ", session=mock)` | `session.auth == ("e@acme.com", "tok1")` | Matches | PASS |
 | TC-JIRA-09 | Base URL stored and trailing slash stripped | Construct with `base_url="https://acme.atlassian.net/"` | `conn.base_url == "https://acme.atlassian.net"` | Matches | PASS |
 | TC-JIRA-10 | Project key stored on the connector | Construct with `project_key="PROJ"` | `conn.project_key == "PROJ"` | Matches | PASS |
-| TC-JIRA-11 | Finds an existing issue by its label via JQL | Mock `session.get`→`{"issues": [{"id": "10000", "key": "PROJ-1"}]}`; call `conn.find_existing_issue("FIND-1")` | Returns the issue with `key=="PROJ-1"`; the GET's `params["jql"]` contains `"vulnhunter-FIND-1"` | Matches | PASS |
+| TC-JIRA-11 | Finds an existing issue by its label via JQL | Mock `session.get`→`{"issues": [{"id": "10000", "key": "PROJ-1"}]}`; call `conn.find_existing_issue("FIND-1")` | Returns the issue with `key=="PROJ-1"`; the GET's `params["jql"]` contains `"quanta-FIND-1"` | Matches | PASS |
 | TC-JIRA-12 | Returns `None` when nothing is found | Mock `session.get`→`{"issues": []}`; call `find_existing_issue("FIND-999")` | `None` returned | Matches | PASS |
-| TC-JIRA-13 | Creates a new issue when none exists | Mock empty lookup + successful POST (`key="PROJ-2"`); call `conn.create_issue(SAMPLE_FINDING)` | `_vulnhunter_status == "created"`, `key == "PROJ-2"` | Matches | PASS |
-| TC-JIRA-14 | Skips creation when an issue already exists | Mock a matching lookup; call `create_issue(SAMPLE_FINDING)` | `_vulnhunter_status == "already_existed"`; `session.post` never called | Matches | PASS |
+| TC-JIRA-13 | Creates a new issue when none exists | Mock empty lookup + successful POST (`key="PROJ-2"`); call `conn.create_issue(SAMPLE_FINDING)` | `_quanta_status == "created"`, `key == "PROJ-2"` | Matches | PASS |
+| TC-JIRA-14 | Skips creation when an issue already exists | Mock a matching lookup; call `create_issue(SAMPLE_FINDING)` | `_quanta_status == "already_existed"`; `session.post` never called | Matches | PASS |
 | TC-JIRA-15 | `skip_if_exists=False` always creates, skipping the lookup | Call `create_issue(SAMPLE_FINDING, skip_if_exists=False)` | `session.get` never called (no existence check performed); `session.post` called exactly once | Matches | PASS |
 | TC-JIRA-16 | Raises on an unexpected response shape | Mock POST response `{"unexpected": "shape"}` (no `key`) | `JiraError` raised | Raised | PASS |
 | TC-JIRA-17 | `create_issue` posts to the correct issue endpoint | Call `create_issue(SAMPLE_FINDING)`; inspect the POST URL | Equals `"https://acme.atlassian.net/rest/api/3/issue"` | Matches | PASS |
@@ -1093,17 +1093,17 @@ ServiceNow's pure body-builder tests.
 | TC ID | Test Case | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|
 | TC-SPLUNK-01 | Event wraps the full finding, not a hand-picked subset | `build_hec_event(SAMPLE_FINDING)` | `event["event"] == SAMPLE_FINDING` | Matches | PASS |
-| TC-SPLUNK-02 | Default sourcetype | `build_hec_event(SAMPLE_FINDING)` with no override | `event["sourcetype"] == "vulnhunter:finding"` | Matches | PASS |
+| TC-SPLUNK-02 | Default sourcetype | `build_hec_event(SAMPLE_FINDING)` with no override | `event["sourcetype"] == "quanta:finding"` | Matches | PASS |
 | TC-SPLUNK-03 | Custom sourcetype can be passed through | `build_hec_event(SAMPLE_FINDING, sourcetype="custom:type")` | `event["sourcetype"] == "custom:type"` | Matches | PASS |
 | TC-SPLUNK-04 | Index key is omitted when none is given | `build_hec_event(SAMPLE_FINDING)` with no `index` | `"index"` not in `event` | Matches | PASS |
-| TC-SPLUNK-05 | Index key is included when given | `build_hec_event(SAMPLE_FINDING, index="vulnhunter_findings")` | `event["index"] == "vulnhunter_findings"` | Matches | PASS |
+| TC-SPLUNK-05 | Index key is included when given | `build_hec_event(SAMPLE_FINDING, index="quanta_findings")` | `event["index"] == "quanta_findings"` | Matches | PASS |
 | TC-SPLUNK-06 | Event time is derived from `last_seen` | `build_hec_event(SAMPLE_FINDING)` where `last_seen=="2026-08-02"` | `event["time"]` equals `datetime(2026,8,2,tzinfo=UTC).timestamp()` | Matches | PASS |
 | TC-SPLUNK-07 | Time defaults to now when `last_seen` is missing | Build from a finding with the `last_seen` key removed entirely, bracketed by `time.time()` before/after | `event["time"]` falls between the before/after bounds | Matches | PASS |
 | TC-SPLUNK-08 | Time defaults to now when `last_seen` is unparseable | Build with `last_seen="not-a-date"`, bracketed by `time.time()` before/after | `event["time"]` falls between the before/after bounds (falls back to now rather than raising) | Matches | PASS |
 | TC-SPLUNK-09 | Session gets the HEC token auth header | Construct `SplunkConnector(hec_url, "hec-tok-1", session=mock)` | `session.headers["Authorization"] == "Splunk hec-tok-1"` | Matches | PASS |
 | TC-SPLUNK-10 | HEC URL stored as given | Construct with `hec_url="https://splunk:8088/services/collector/event"` | `conn.hec_url` equals that exact URL, unmodified | Matches | PASS |
 | TC-SPLUNK-11 | `send_event` posts to the HEC URL | Mock POST→`{"text": "Success", "code": 0}`; call `conn.send_event(SAMPLE_FINDING)` | POST called with that exact HEC URL | Matches | PASS |
-| TC-SPLUNK-12 | `send_event`'s body matches `build_hec_event`'s output | Call `conn.send_event(SAMPLE_FINDING, sourcetype="vulnhunter:finding", index="idx1")` | Posted JSON body equals `build_hec_event(SAMPLE_FINDING, sourcetype="vulnhunter:finding", index="idx1")` | Matches | PASS |
+| TC-SPLUNK-12 | `send_event`'s body matches `build_hec_event`'s output | Call `conn.send_event(SAMPLE_FINDING, sourcetype="quanta:finding", index="idx1")` | Posted JSON body equals `build_hec_event(SAMPLE_FINDING, sourcetype="quanta:finding", index="idx1")` | Matches | PASS |
 | TC-SPLUNK-13 | `send_event` returns the parsed HEC response | Mock POST→`{"text": "Success", "code": 0}` | `send_event(...)` returns that dict unchanged | Matches | PASS |
 | TC-SPLUNK-14 | `send_event` raises on an HTTP error | Mock response's `raise_for_status` to raise `Exception("500 Server Error")` | Exception propagates out of `send_event` | Raised | PASS |
 | TC-SPLUNK-15 | `send_event` raises on an unexpected response shape | Mock POST→`{"unexpected": "shape"}` (no `text` key) | `SplunkHECError` raised | Raised | PASS |
@@ -1477,7 +1477,7 @@ test suite that never catches anything is less convincing than one with a track 
    decodes `git show`'s UTF-8 output using the platform's default codec, which is
    `cp1252` on Windows — silently corrupting any non-ASCII byte sequence. Fixed by
    adding `encoding="utf-8"` to every `subprocess.run` call that reads git or CLI output
-   across `dashboard/data.py`, `cli/vulnhunter.py`, `tests/test_pipeline_artifacts.py`,
+   across `dashboard/data.py`, `cli/quanta.py`, `tests/test_pipeline_artifacts.py`,
    and `tests/test_cli.py`. TC-DASH-06 now guards against a regression.
 5. **An actual infinite loop**, caught by the test suite itself hanging instead of
    finishing: `TenableConnector.poll_export_status`'s original timeout logic tracked

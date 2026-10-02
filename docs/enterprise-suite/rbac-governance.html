@@ -117,7 +117,7 @@
           </tbody>
         </table>
       </div>
-      <div class="callout warn"><span class="label">The one gap worth knowing before a real rollout</span><p>Every read (<code>GET</code>) route is public by default in this MVP — team-scoping included, meaning it's bypassable by an anonymous request unless <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code> is explicitly set. This is a disclosed, deliberate MVP default, not an oversight — but it means "team scoping" today protects against an authenticated user browsing outside their lane, not against an anonymous one.</p></div>
+      <div class="callout warn"><span class="label">The one gap worth knowing before a real rollout</span><p>Every read (<code>GET</code>) route is public by default in this MVP — team-scoping included, meaning it's bypassable by an anonymous request unless <code>QUANTA_REQUIRE_LOGIN_FOR_READS=true</code> is explicitly set. This is a disclosed, deliberate MVP default, not an oversight — but it means "team scoping" today protects against an authenticated user browsing outside their lane, not against an anonymous one.</p></div>
     </section>
 
     <section id="tenant">

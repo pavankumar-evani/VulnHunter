@@ -286,7 +286,7 @@ export async function render(container) {
   wireExportButtons(container, "ml-anomalies", {
     getRows: () => (groupFilter === "all" ? anomaliesAll : anomaliesAll.filter((a) => a.groupLabel === groupFilter)),
     columns: ANOMALY_EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-ml-anomalous-assets",
+    filenameBase: "quanta-ml-anomalous-assets",
   });
   wireColumnPicker(container, "ml-anomalies", (visible) => {
     visibleColumns = visible;

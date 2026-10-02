@@ -1,10 +1,10 @@
-# VulnHunter — Session Snapshot
+# Quanta — Session Snapshot
 
 **Written 2026-09-04.** This is a portability document, not architecture reference —
 [CLAUDE.md](CLAUDE.md) is the timeless "what this repo is" file and stays the primary
 source for that. This file exists so that starting Claude Code in a **brand-new
 account**, possibly on a **different machine**, and pointing it at
-`git clone https://github.com/pavankumar-evani/VulnHunter.git` reproduces full continuity
+a clone of the project repository reproduces full continuity
 with this project — including decisions and conventions that live only in a prior
 session's own memory files, not in the code itself, and would otherwise have to be
 re-discovered (some of them the hard way — see the pipeline gotchas below).
@@ -14,8 +14,8 @@ anything.** It's short. Skipping it costs more time than reading it does.
 
 ## 1. Who owns this, and the one fact that must never regress
 
-VulnHunter is an **independent commercial product**, owned solely by the user
-(pavankumar-evani on GitHub), operating as **"VulnHunter Development LLC."** It has no
+Quanta is an **independent commercial product**, owned solely by the user
+(pavankumar-evani on GitHub), operating as **"Quanta."** It has no
 current affiliation with Deloitte. An earlier phase of this project *did* originate
 inside Deloitte (a hackathon), and a large, deliberate cleanup pass already stripped
 Deloitte branding, placeholder domains (`corp.deloitte.local`), CODEOWNERS references,
@@ -32,12 +32,12 @@ capabilities — see `remediation/enrichment/`) was inspired by a **confidential
 transcript** describing a different, real commercial platform, a real client engagement,
 and real people. None of that — names, client, product — has ever been written into this
 repo, and it must stay that way: describe any future capability by what it does for
-VulnHunter, never by where the idea traces back to.
+Quanta, never by where the idea traces back to.
 
 ## 2. Repo, environment, and what's already durable
 
-- **Repo**: `https://github.com/pavankumar-evani/VulnHunter`, branch `master`.
-- **This session's working copy**: `C:\Users\pavane\OneDrive - Deloitte (O365D)\Desktop\Claud workspace\vulnhunter-project`
+- **Repo**: the project's private repository (its GitHub name still predates the rename), branch `master`.
+- **This session's working copy**: `C:\Users\pavane\OneDrive - Deloitte (O365D)\Desktop\Claud workspaceulnhunter-project`
   on Windows. The `OneDrive - Deloitte (O365D)` folder name is just this user's personal
   OneDrive path from their employer-issued laptop — it is **not** a sign of any project
   affiliation with Deloitte (see §1); don't read anything into it, and don't be surprised

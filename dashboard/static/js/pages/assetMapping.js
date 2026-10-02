@@ -146,12 +146,12 @@ export async function render(container) {
   wireExportButtons(container, "asset-mapping", {
     getRows: () => groups,
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-asset-mapping",
+    filenameBase: "quanta-asset-mapping",
   });
   wireExportButtons(container, "subnet-mapping", {
     getRows: () => subnetGroups,
     columns: SUBNET_EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-subnet-mapping",
+    filenameBase: "quanta-subnet-mapping",
   });
 
   container.querySelector("#mapping-view-select").addEventListener("change", (event) => {

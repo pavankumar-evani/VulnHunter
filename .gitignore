@@ -5,7 +5,7 @@ vulnerable-demo-app/.env
 *.pyc
 
 # CLI audit logs are runtime output (may include scan results) - not source, don't commit
-.vulnhunter/
+.quanta/
 
 # Live-fetched Tenable/Armis data is real vulnerability data about real infrastructure -
 # never commit it, unlike the fabricated remediation/sample-data/
@@ -18,7 +18,7 @@ remediation/sample-data/bulk/_nvd_cache/
 
 # Real activity audit log (remediation/audit/activity_log.py) - runtime output from
 # actually using the app (who did what, when), not seed/reference data - same reasoning
-# as .vulnhunter/ above. The activity_log.py module itself is still committed.
+# as .quanta/ above. The activity_log.py module itself is still committed.
 remediation/audit/activity_log.json
 
 # Real AI-call usage log (remediation/audit/ai_usage_log.py) - same reasoning as
@@ -28,7 +28,7 @@ remediation/audit/ai_usage_log.json
 # Real SQLite DB (remediation/utils/db.py) - first stores migrated onto it are
 # alert_state/schedule_state, replacing their now-removed JSON files below. Runtime
 # output, not source, same reasoning as the JSON state files above.
-remediation/vulnhunter.db
+remediation/quanta.db
 
 # Local dev TLS cert/key (see dashboard/README.md's "HTTPS" section) - a private key
 # must never be committed, self-signed or not.

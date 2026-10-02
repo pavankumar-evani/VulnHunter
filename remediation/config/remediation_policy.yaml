@@ -191,7 +191,7 @@ policies:
     downtime_expected: false
     communication_template: "Scheduled cloud remediation for $asset_name: $title ($cve). Window: $window_day $window_start-$window_end $timezone. Applied via your cloud provider's own change process (Terraform/console/CLI) - approved by $approved_by."
     pam_backend: "aws-sts-assume-role"
-    pam_credential_path: "arn:aws:iam::ACCOUNT_ID:role/VulnHunterRemediationRole"
+    pam_credential_path: "arn:aws:iam::ACCOUNT_ID:role/QuantaRemediationRole"
 
   # OS Applications (end-user-installed apps on managed devices, e.g. browsers, PDF
   # readers) - mirrors `endpoint` exactly: same SCCM-managed weekly cycle, since these

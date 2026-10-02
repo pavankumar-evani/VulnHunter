@@ -113,7 +113,7 @@ const FAQS = [
   ["Is there a login now? What are the demo credentials?",
     "Yes - a real local login MVP, not a placeholder. Two demo accounts ship in the " +
     "seed file (intentionally public, since it's a demo seed, not a real secret): " +
-    "admin@vulnhunter.local / ChangeMe123! (admin) and analyst@vulnhunter.local / " +
+    "admin@quanta.local / ChangeMe123! (admin) and analyst@quanta.local / " +
     "ChangeMe123! (user). There's also real OpenID Connect (SSO) client code, but it " +
     "stays inert - the \"Sign in with SSO\" button won't even appear - unless a real " +
     "identity provider is configured. See dashboard/README.md's Authentication section " +

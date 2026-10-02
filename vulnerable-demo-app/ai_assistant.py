@@ -1,6 +1,6 @@
 """
 VulnShop AI Assistant - a deliberately vulnerable AI/ML feature bolted onto VulnShop,
-used ONLY to test VulnHunter's AI/ML detection guidance. DO NOT deploy this anywhere.
+used ONLY to test Quanta's AI/ML detection guidance. DO NOT deploy this anywhere.
 
 Planted vulnerabilities (for scoring / demo reference):
   10. Hardcoded LLM API key                          -> CWE-798

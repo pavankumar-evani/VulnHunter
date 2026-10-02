@@ -5,7 +5,7 @@ Tests for the live Axonius cyber asset management connector
 Every HTTP interaction is mocked - these tests never touch the network or require real
 API credentials. They verify: correct api-key/api-secret header construction, correct
 /api/devices request body (pagination), correct mapping from Axonius's documented
-(flattened-assumption) device shape into VulnHunter's shared asset-record shape
+(flattened-assumption) device shape into Quanta's shared asset-record shape
 (including IP/MAC list-vs-scalar extraction and the os_type -> asset.type mapping), and
 defensive handling of an empty/missing-field response so it doesn't crash.
 

@@ -1,5 +1,5 @@
 """
-VulnShop - a deliberately vulnerable demo app used ONLY to test VulnHunter.
+VulnShop - a deliberately vulnerable demo app used ONLY to test Quanta.
 DO NOT deploy this anywhere. It contains intentional security flaws for
 demonstration purposes in a Claude Code hackathon.
 

@@ -5,7 +5,7 @@ Every HTTP interaction is mocked - these tests never touch the network or requir
 API credentials. They verify: x-xdr-auth-id/Authorization header construction, the
 get_incidents request shape (including the status filter and search_from/search_to
 paging window), severity mapping (including the info->Low collapse), the epoch-ms ->
-ISO-date conversion, and correct normalization into VulnHunter's Finding schema
+ISO-date conversion, and correct normalization into Quanta's Finding schema
 (including the deliberate cve/cvss/kev/epss=None, id=None, and asset.type="unknown"
 properties - see the module docstring).
 

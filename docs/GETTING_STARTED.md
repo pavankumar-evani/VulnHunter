@@ -50,8 +50,8 @@ anything up first:
 
 | Email | Password | Role |
 |---|---|---|
-| `admin@vulnhunter.local` | `ChangeMe123!` | Admin |
-| `analyst@vulnhunter.local` | `ChangeMe123!` | User |
+| `admin@quanta.local` | `ChangeMe123!` | Admin |
+| `analyst@quanta.local` | `ChangeMe123!` | User |
 
 These are intentionally public demo credentials, not real secrets — change or remove
 them (`dashboard/auth/users.json`) before pointing this at anything real. See

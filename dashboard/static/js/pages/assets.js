@@ -324,7 +324,7 @@ export async function render(container) {
   wireExportButtons(container, "assets", {
     getRows: () => assets,
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-asset-inventory",
+    filenameBase: "quanta-asset-inventory",
   });
   wireColumnPicker(container, "assets", (visible) => {
     visibleColumnsState = visible;

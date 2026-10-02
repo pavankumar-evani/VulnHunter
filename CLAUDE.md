@@ -25,7 +25,7 @@ a real, deployable web application. Both halves are real and current today:
   "Architecture: the remediation engine" below.
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
-  connectors and 3 push connectors, a headless CLI (`cli/vulnhunter.py`) that drives either
+  connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
   pipeline non-interactively, and a Python `unittest` suite of 1,523 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
@@ -56,22 +56,22 @@ pip install -r dashboard/requirements.txt
 python dashboard/app.py                      # https://127.0.0.1:5050 (auto-generates a
                                               # local HTTPS cert on first run - see
                                               # dashboard/README.md's "HTTPS" section)
-# (.claude/launch.json config name: "vulnhunter-dashboard")
+# (.claude/launch.json config name: "quanta-dashboard")
 
 # The two pipelines, interactively inside Claude Code
 claude
 /vulnhunt <path-to-target-repo> [--fix]
 /vulnhunt vulnerable-demo-app         # scan+report only
 /vulnhunt vulnerable-demo-app --fix   # scan+report, then auto-fix and push a branch
-/vulnhunt vulnerable-demo-app --verify VULN-2 vulnhunter/auto-fixes-<branch>  # re-check one fix
+/vulnhunt vulnerable-demo-app --verify VULN-2 quanta/auto-fixes-<branch>  # re-check one fix
 /remediate                            # ingests remediation/sample-data/* by default
 /remediate --generate                 # also generates Ansible playbooks for auto-remediable findings
 
 # The same two pipelines, headless (CI/cron/the dashboard's own /run page) - see cli/README.md
-python cli/vulnhunter.py --dry-run scan vulnerable-demo-app --fix   # preview only, no spend
-python cli/vulnhunter.py scan vulnerable-demo-app --fix             # real run, spends API usage
-python cli/vulnhunter.py --dry-run remediate --generate
-python cli/vulnhunter.py remediate --generate
+python cli/quanta.py --dry-run scan vulnerable-demo-app --fix   # preview only, no spend
+python cli/quanta.py scan vulnerable-demo-app --fix             # real run, spends API usage
+python cli/quanta.py --dry-run remediate --generate
+python cli/quanta.py remediate --generate
 
 # The demo app standalone (for manual verification - never deploy this anywhere reachable)
 cd vulnerable-demo-app
@@ -104,7 +104,7 @@ scheduler state, and pending live-data adapter output) now live in a real local 
 database instead — see "Data & storage" below. Judgment-heavy work (classification,
 playbook drafting) is delegated to the
 same Claude Code subagents the pipelines use, invoked as a subprocess exactly the way
-`cli/vulnhunter.py` does it — the dashboard's `/run` page is a thin UI over that same CLI
+`cli/quanta.py` does it — the dashboard's `/run` page is a thin UI over that same CLI
 entry point (same dry-run default, same confirm gate, same budget cap), not a separate
 implementation.
 
@@ -114,7 +114,7 @@ Every request passes through three middlewares, in order: (1) a static no-cache 
 an edited JS/CSS file is never served stale; (2) secure response headers
 (`X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`,
 `Permissions-Policy` always on; a full `Content-Security-Policy` is opt-in via
-`VULNHUNTER_ENABLE_CSP=true`); (3) an opt-in require-login-for-reads gate, off by default
+`QUANTA_ENABLE_CSP=true`); (3) an opt-in require-login-for-reads gate, off by default
 (see "Authentication & RBAC" below). Routes are two kinds: `/api/*` (the JSON API — the
 only thing the frontend calls, and the only thing worth testing from Python) and
 everything else, which all serve the same `dashboard/static/index.html` shell.
@@ -155,7 +155,7 @@ The files most worth knowing:
 | `REMEDIATION_PLAN.md` | Point-in-time snapshot written by `remediation-planner` — risk tier, action type, rollback plan per finding |
 | `remediation/output/*.yml` | Generated Ansible playbooks, one per remediable finding |
 | `remediation/config/*.yaml` | Every admin-editable policy — priority weights, SLA windows, remediation policy, risk/exposure scoring, exploit-criteria rules, alerting, report schedules, AI governance, plus two hand-maintained datasets: `security_controls.yaml` (per-asset firewall rules + EDR policy state) and `network_topology.yaml` (per-asset hop path to the internet) — both ship empty, feeding `remediation/enrichment/control_coverage.py` and `network_reachability.py` respectively |
-| `remediation/vulnhunter.db` | Shared local SQLite database (gitignored) — see below |
+| `remediation/quanta.db` | Shared local SQLite database (gitignored) — see below |
 | `remediation/live-data/*` | Raw CSV/XML exports written by a CVE-scoped connector's Fetch action (Tenable/Qualys/OpenVAS), before ingestion via `/remediate` |
 | `remediation/sample-data/sbom.json` | A hand-authored CycloneDX SBOM — the input `remediation/enrichment/sbom.py` computes dependency blast radius from, and `vuln-ingest-normalizer` cross-references to populate a finding's `dependency` field |
 
@@ -215,10 +215,10 @@ provider is configured. Full detail (every env var, every edge case) is in
 
 - **Passwords**: PBKDF2-HMAC-SHA256, stdlib only (`dashboard/auth/passwords.py`).
 - **Sessions**: an HMAC-signed cookie (`dashboard/auth/sessions.py`), stdlib only. Set
-  `VULNHUNTER_SESSION_SECRET` to a real, stable value before any real deployment — without
+  `QUANTA_SESSION_SECRET` to a real, stable value before any real deployment — without
   it, a random per-process secret means every session is invalidated on restart.
 - **Users**: `dashboard/auth/users.json`, a real, editable, committed seed file with two
-  demo accounts (`admin@vulnhunter.local`, role admin; `analyst@vulnhunter.local`, role
+  demo accounts (`admin@quanta.local`, role admin; `analyst@quanta.local`, role
   user; both `ChangeMe123!`) — not a real user-management system; use OIDC/SSO for a real
   deployment instead.
 - **OIDC (SSO)**: `dashboard/auth/oidc.py`, a real Authorization Code + PKCE flow. The
@@ -233,8 +233,8 @@ provider is configured. Full detail (every env var, every edge case) is in
   read-only roles).
 - **Reads are public by default.** Every state-changing route is gated per-route with an
   explicit RBAC dependency, but every `GET`/`/api/*` read route returns real data with no
-  login at all (`curl`, etc.) unless `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true` is set —
-  which itself requires a real, stable `VULNHUNTER_SESSION_SECRET` or the app refuses to
+  login at all (`curl`, etc.) unless `QUANTA_REQUIRE_LOGIN_FOR_READS=true` is set —
+  which itself requires a real, stable `QUANTA_SESSION_SECRET` or the app refuses to
   start. This was a deliberate choice, made explicitly, to narrow the gap in an opt-in way
   rather than close it by default and break the ~50 existing test call sites/assumptions
   built on today's open-reads behavior — closing it fully is a real, one-line change for
@@ -344,7 +344,7 @@ is the core design idea of the project, not an incidental detail:
    the user confirms after seeing the report). It acts *only* on findings marked
    `auto_fixable: true`, re-reads each file immediately before editing (line numbers from
    the scan may be stale), and follows a fixed git workflow: new branch
-   `vulnhunter/auto-fixes-<timestamp>` → commit referencing finding IDs → `git push`,
+   `quanta/auto-fixes-<timestamp>` → commit referencing finding IDs → `git push`,
    surfacing the PR-creation URL GitHub prints in the push output. No `gh` CLI dependency
    — opening the actual PR is a manual click in the browser or VS Code afterward. If push
    fails, it must stop and tell the user the manual step rather than failing silently.
@@ -526,7 +526,9 @@ An assignment's team overrides the asset's team. Ownership routes require login.
 
 ## Naming
 
-The customer-facing product name is **Quanta** (renamed from VulnHunter). Internal
-identifiers deliberately keep the old name for now: `VULNHUNTER_*` env vars, `cli/vulnhunter.py`,
-`remediation/vulnhunter.db`, the `vulnhunter_session` cookie, `*@vulnhunter.local` demo accounts,
-and the repository folder. Do not reintroduce "VulnHunter" in UI or customer documents.
+The product name is **Quanta** everywhere: UI, documents, env vars (`QUANTA_*`),
+`cli/quanta.py`, `remediation/quanta.db`, the `quanta_session` cookie and the
+`*@quanta.local` demo accounts. It was renamed from its earlier working name; do not
+reintroduce the old name. Two things still carry it because they live outside the code:
+the repository folder / GitHub repository name, and the `/vulnhunt` slash command
+(a verb, kept to avoid breaking muscle memory and every doc that cites it).

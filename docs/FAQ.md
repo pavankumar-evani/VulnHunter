@@ -42,7 +42,7 @@ No, by construction, not by policy. Specifics:
   something a human (or your org's existing approved automation platform, e.g. Ansible
   Tower/AWX) reviews and runs. Nothing in this repo has execution reach to real
   infrastructure at all.
-- The headless CLI (`cli/vulnhunter.py`) and the dashboard's `/run` and `/servicenow`
+- The headless CLI (`cli/quanta.py`) and the dashboard's `/run` and `/servicenow`
   forms default to dry-run/preview; spending real API usage or sending a real ServiceNow
   ticket requires an explicit flag or confirm checkbox.
 
@@ -273,7 +273,7 @@ email/password against `dashboard/auth/users.json` (PBKDF2-HMAC-SHA256 hashing,
 HMAC-signed session cookie), and `/profile` shows the logged-in user's name/email/role
 with a change-password form and logout. Two demo accounts ship in the seed file, and
 they're intentionally public since it's a demo seed file, not a real secret:
-`admin@vulnhunter.local` / `ChangeMe123!` (role: admin) and `analyst@vulnhunter.local` /
+`admin@quanta.local` / `ChangeMe123!` (role: admin) and `analyst@quanta.local` /
 `ChangeMe123!` (role: user). Change or remove them before any real deployment. There's
 also real, working OpenID Connect (OIDC) Authorization Code + PKCE client code
 (`dashboard/auth/oidc.py`) for real single sign-on — but it stays **inert** (the
@@ -411,11 +411,11 @@ JSON/`.yml`) plus one local database. There is no cloud service and no telemetry
 - Dashboard record stores (exceptions, remediation approvals, activity/AI-usage logs,
   asset ownership, user accounts, notification-scheduler state, and pending
   generic-ingest/Prisma Cloud/Cortex XSIAM findings): a local SQLite database,
-  `remediation/vulnhunter.db` — gitignored, see `remediation/utils/db.py`.
+  `remediation/quanta.db` — gitignored, see `remediation/utils/db.py`.
 - Live connector output (if you use real Tenable/Qualys/OpenVAS credentials):
   `remediation/live-data/` — gitignored, since it's real vulnerability data about real
   infrastructure and must never be committed.
-- CLI audit logs: `.vulnhunter/logs/*.json` — gitignored.
+- CLI audit logs: `.quanta/logs/*.json` — gitignored.
 - The only network calls anything in this repo makes on your behalf are: the real Claude
   API (when you actually run a pipeline, not on `--dry-run`), CISA's KEV feed and
   FIRST.org's EPSS API (free, no-auth, during `/remediate`'s enrichment stage), and
@@ -424,7 +424,7 @@ JSON/`.yml`) plus one local database. There is no cloud service and no telemetry
 ### How much does running a real scan cost?
 
 It calls the real Claude API, which costs real money against your Claude usage/plan.
-`cli/vulnhunter.py` applies a `--max-budget-usd` spend cap (default `$2.00`) to every real
+`cli/quanta.py` applies a `--max-budget-usd` spend cap (default `$2.00`) to every real
 invocation as a safety net, but that default is not a guarantee it fits your budget or
 your plan's actual pricing — you're responsible for understanding what a
 `/vulnhunt --fix` or `/remediate --generate` run costs before running it unattended (e.g.

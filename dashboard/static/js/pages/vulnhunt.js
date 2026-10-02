@@ -159,7 +159,7 @@ export async function render(container) {
   wireExportButtons(container, "scan", {
     getRows: () => currentFiltered,
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-code-scan",
+    filenameBase: "quanta-code-scan",
   });
 
   // Scrolls to and marks the finding a global-search result linked to (?highlight=<id>).

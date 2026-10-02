@@ -50,5 +50,5 @@ export function initPageFooter() {
   }
 
   render();
-  window.addEventListener("vulnhunter-auth-changed", render);
+  window.addEventListener("quanta-auth-changed", render);
 }

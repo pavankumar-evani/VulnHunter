@@ -23,12 +23,12 @@ class RecordVerification(unittest.TestCase):
 
     def test_resolved_status_round_trips(self):
         entry = record_verification.record_verification(
-            "VULN-3", "vulnhunter/auto-fixes-20260901", "resolved", "SQLi pattern no longer present",
+            "VULN-3", "quanta/auto-fixes-20260901", "resolved", "SQLi pattern no longer present",
             engine=self.engine,
         )
         self.assertEqual(entry["action"], "vulnhunt.verify")
         self.assertEqual(entry["target"], "VULN-3")
-        self.assertEqual(entry["details"]["branch"], "vulnhunter/auto-fixes-20260901")
+        self.assertEqual(entry["details"]["branch"], "quanta/auto-fixes-20260901")
         self.assertEqual(entry["details"]["status"], "resolved")
         logged = activity_log.list_activity(self.engine)
         self.assertEqual(logged, [entry])

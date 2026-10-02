@@ -8,7 +8,7 @@
 // screens.
 import { escapeHtml } from "./dom.js";
 
-const STORAGE_PREFIX = "vulnhunter-columns:";
+const STORAGE_PREFIX = "quanta-columns:";
 
 // `columns` is [{id, label, defaultVisible}] - defaultVisible defaults to true, so a
 // caller only needs to mark the ones that should start hidden.

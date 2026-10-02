@@ -1,5 +1,5 @@
 /*
- * VulnService - a deliberately vulnerable demo class used ONLY to test VulnHunter's
+ * VulnService - a deliberately vulnerable demo class used ONLY to test Quanta's
  * multi-language scanner coverage. DO NOT deploy this anywhere. It contains intentional
  * security flaws for demonstration purposes only.
  *

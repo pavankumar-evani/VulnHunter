@@ -3,13 +3,13 @@ Jira Cloud connector - creates an Issue per finding, idempotently, keyed off a l
 
 Implements Atlassian Jira Cloud's documented REST API v3:
   - Auth: HTTP Basic with an Atlassian account email + API token.
-  - GET  /rest/api/3/search        (jql=labels = "vulnhunter-<finding_id>")
+  - GET  /rest/api/3/search        (jql=labels = "quanta-<finding_id>")
   - POST /rest/api/3/issue         ({"fields": {...}})
 
 Reference: https://developer.atlassian.com/cloud/jira/platform/rest/v3/
 
 Jira has no built-in correlation-id field the way ServiceNow's Table API does, so this
-connector uses a `vulnhunter-{finding_id}` label as the idempotency key instead: it's
+connector uses a `quanta-{finding_id}` label as the idempotency key instead: it's
 searched for before create, and every created issue is tagged with it.
 
 Like the Tenable/Armis/ServiceNow connectors, this was built against Jira Cloud's
@@ -31,7 +31,7 @@ class JiraError(RuntimeError):
 
 
 def _idempotency_label(finding_id):
-    return f"vulnhunter-{finding_id}"
+    return f"quanta-{finding_id}"
 
 
 def build_issue_body(finding, project_key, issue_type=DEFAULT_ISSUE_TYPE):
@@ -98,7 +98,7 @@ class JiraConnector:
 
     def find_existing_issue(self, finding_id):
         """Looks up an issue already created for this finding, keyed by the
-        `vulnhunter-{finding_id}` label - prevents creating a duplicate ticket every
+        `quanta-{finding_id}` label - prevents creating a duplicate ticket every
         time the pipeline re-runs against the same finding."""
         def _do_get():
             resp = self.session.get(
@@ -121,7 +121,7 @@ class JiraConnector:
         if skip_if_exists:
             existing = self.find_existing_issue(finding_id)
             if existing:
-                return {**existing, "_vulnhunter_status": "already_existed"}
+                return {**existing, "_quanta_status": "already_existed"}
 
         body = build_issue_body(finding, self.project_key)
 
@@ -133,7 +133,7 @@ class JiraConnector:
         result = retry_with_backoff(_do_post, retryable_exceptions=_RETRYABLE_EXCEPTIONS)
         if not result.get("key"):
             raise JiraError(f"Unexpected create-issue response shape: {result!r}")
-        return {**result, "_vulnhunter_status": "created"}
+        return {**result, "_quanta_status": "created"}
 
     def create_issues_for_findings(self, findings, skip_if_exists=True):
         """Creates (or finds existing) issues for a whole findings list. Returns a
@@ -145,7 +145,7 @@ class JiraConnector:
                 issue = self.create_issue(f, skip_if_exists=skip_if_exists)
                 results.append({
                     "finding_id": f["id"],
-                    "status": issue.get("_vulnhunter_status", "created"),
+                    "status": issue.get("_quanta_status", "created"),
                     "issue_key": issue.get("key"),
                     "error": None,
                 })

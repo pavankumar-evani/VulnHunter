@@ -8,7 +8,7 @@
 // within a row is a real, bounded interaction; letting a chart migrate to an unrelated
 // section would raise "does the wrong data now sit under the wrong heading" questions
 // this feature doesn't need to answer.
-const STORAGE_PREFIX = "vulnhunter-chart-order:";
+const STORAGE_PREFIX = "quanta-chart-order:";
 
 function loadAllOrders(pageKey) {
   try {

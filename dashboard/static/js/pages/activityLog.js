@@ -177,6 +177,6 @@ export async function render(container) {
   wireExportButtons(container, "activity-log", {
     getRows: () => currentSlice(),
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-activity-log",
+    filenameBase: "quanta-activity-log",
   });
 }

@@ -184,7 +184,7 @@ def mark_staging_validated(approval_id, validated_by, engine=None, as_of=None, l
 def mark_remediation_triggered(approval_id, actor=None, engine=None, as_of=None, lock_path=None):
     """Marks an already-approved finding's real playbook as generated on demand (the
     dashboard's "Trigger Remediation" button, backed by /api/run scoped to one finding -
-    see cli/vulnhunter.py's remediate_prompt(finding_id=...)). Only ever moves an
+    see cli/quanta.py's remediate_prompt(finding_id=...)). Only ever moves an
     approval FROM "approved" - a pending or rejected approval can't be triggered, and
     raises ValueError rather than silently overwriting a decision that hasn't
     happened yet. This never means the playbook was executed against real

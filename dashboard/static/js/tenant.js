@@ -6,7 +6,7 @@
 // tenancy boundary.
 import { escapeHtml } from "./dom.js";
 
-const KEY = "vulnhunter_tenant";
+const KEY = "quanta_tenant";
 
 // `initials`/`avatarColor` render a generated placeholder avatar (like GitHub/Slack
 // show for an org with no uploaded logo) rather than a fabricated real company logo -

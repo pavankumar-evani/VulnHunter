@@ -289,7 +289,7 @@ docstring for exactly what it does and doesn't claim.
 │       ├── vulnhunt.md
 │       └── remediate.md
 ├── cli/
-│   ├── vulnhunter.py            # headless CLI: run either pipeline without an
+│   ├── quanta.py            # headless CLI: run either pipeline without an
 │   │                            #   interactive session (see cli/README.md)
 │   └── README.md
 ├── dashboard/

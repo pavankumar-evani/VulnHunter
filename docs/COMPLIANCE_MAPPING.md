@@ -36,8 +36,8 @@ the [docs/README.md](README.md) index.
 
 | TSC Category | Existing capability it conceptually relates to | Where it lives |
 |---|---|---|
-| **Security (Common Criteria)** | Least-privilege tool scoping (see Protect, above) as an access-control concept; a timestamped audit record of every real (non-dry-run) pipeline invocation, including the exact command and full stdout/stderr | `.claude/agents/*.md`; `cli/vulnhunter.py`'s `.vulnhunter/logs/<timestamp>-<pipeline>.json` audit records |
-| **Confidentiality** | Live connector credentials are read from environment variables only, never passed as CLI arguments (so they don't leak into shell history/process listings); real vulnerability data pulled from live tenants (`remediation/live-data/`) and CLI audit logs (`.vulnhunter/logs/`) are gitignored, never committed | `remediation/connectors/README.md`'s setup instructions; `.gitignore` |
+| **Security (Common Criteria)** | Least-privilege tool scoping (see Protect, above) as an access-control concept; a timestamped audit record of every real (non-dry-run) pipeline invocation, including the exact command and full stdout/stderr | `.claude/agents/*.md`; `cli/quanta.py`'s `.quanta/logs/<timestamp>-<pipeline>.json` audit records |
+| **Confidentiality** | Live connector credentials are read from environment variables only, never passed as CLI arguments (so they don't leak into shell history/process listings); real vulnerability data pulled from live tenants (`remediation/live-data/`) and CLI audit logs (`.quanta/logs/`) are gitignored, never committed | `remediation/connectors/README.md`'s setup instructions; `.gitignore` |
 
 **None of the above is a control that has been tested, audited, or attested to by any
 third party.** It is a map of "this exists and points in that direction," not evidence
@@ -97,7 +97,7 @@ this document:
   Authorization Code + PKCE SSO client that stays inert until a real provider's
   credentials are configured, plus a simple admin/non-admin role with server-side
   team-scoped queries for non-admins. Two real gaps remain: every read (`GET`) route is
-  public by default unless `VULNHUNTER_REQUIRE_LOGIN_FOR_READS` is explicitly set, and
+  public by default unless `QUANTA_REQUIRE_LOGIN_FOR_READS` is explicitly set, and
   there is no true multi-tenant data boundary — the MSSP "tenant view" is a client-side
   filter over one shared dataset, not server-side isolation. A real compliance program
   needs both of those closed, not an authentication layer built from zero. See

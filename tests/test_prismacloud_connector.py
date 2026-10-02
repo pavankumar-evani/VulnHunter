@@ -4,7 +4,7 @@ Tests for the live Prisma Cloud connector (remediation/connectors/prismacloud_co
 Every HTTP interaction is mocked - these tests never touch the network or require real
 API credentials. They verify: the login/token-exchange flow and x-redlock-auth header
 construction, the alert-search request shape, severity mapping, and correct normalization
-into VulnHunter's Finding schema (including the deliberate cve/cvss/kev/epss=None and
+into Quanta's Finding schema (including the deliberate cve/cvss/kev/epss=None and
 id=None properties - see the module docstring).
 
 These do NOT prove the connector works against a real Prisma Cloud tenant - only that it

@@ -1,7 +1,7 @@
 """
 Tests for remediation/exceptions/store.py - the vulnerability exception (risk-
 acceptance/waiver) workflow. Every test uses a fresh in-memory SQLite engine (never the
-real, shared remediation/vulnhunter.db) so the suite never mutates real data.
+real, shared remediation/quanta.db) so the suite never mutates real data.
 """
 import datetime
 import sys

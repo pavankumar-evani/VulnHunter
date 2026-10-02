@@ -9,7 +9,7 @@ import { escapeHtml } from "./dom.js";
 import { icon } from "./icons.js";
 import { getCurrentUser } from "./auth.js";
 
-const DISMISS_KEY = "vulnhunter-tip-dismissed";
+const DISMISS_KEY = "quanta-tip-dismissed";
 
 // Plain, precise date - not a relative "Xm ago" (dom.js's timeAgo() only makes sense
 // for values that are fresh within minutes; this can honestly be days/weeks old).
@@ -83,5 +83,5 @@ export function initThreatTip() {
   render();
   // Re-checks after login (so the tip appears without a full reload) and clears it
   // on logout (a stale queue-derived tip has no business surviving past sign-out).
-  window.addEventListener("vulnhunter-auth-changed", render);
+  window.addEventListener("quanta-auth-changed", render);
 }

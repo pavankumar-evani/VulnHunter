@@ -312,9 +312,9 @@ class PamVarsSnippet(unittest.TestCase):
         self.assertIsNone(pam_vars_snippet("none", None))
 
     def test_aws_sts_assume_role_backend_references_real_module_and_role_arn(self):
-        snippet = pam_vars_snippet("aws-sts-assume-role", "arn:aws:iam::123456789012:role/VulnHunterRemediationRole")
+        snippet = pam_vars_snippet("aws-sts-assume-role", "arn:aws:iam::123456789012:role/QuantaRemediationRole")
         self.assertIn("amazon.aws.sts_assume_role", snippet)
-        self.assertIn("arn:aws:iam::123456789012:role/VulnHunterRemediationRole", snippet)
+        self.assertIn("arn:aws:iam::123456789012:role/QuantaRemediationRole", snippet)
 
     def test_azure_managed_identity_backend_references_real_collection_and_target(self):
         snippet = pam_vars_snippet("azure-managed-identity", "/subscriptions/xxx/resourceGroups/rg1")
@@ -323,9 +323,9 @@ class PamVarsSnippet(unittest.TestCase):
         self.assertIn("/subscriptions/xxx/resourceGroups/rg1", snippet)
 
     def test_gcp_workload_identity_backend_references_real_collection_and_service_account(self):
-        snippet = pam_vars_snippet("gcp-workload-identity", "vulnhunter@project.iam.gserviceaccount.com")
+        snippet = pam_vars_snippet("gcp-workload-identity", "quanta@project.iam.gserviceaccount.com")
         self.assertIn("google.cloud", snippet)
-        self.assertIn("vulnhunter@project.iam.gserviceaccount.com", snippet)
+        self.assertIn("quanta@project.iam.gserviceaccount.com", snippet)
 
 
 # Every real infra_category/scan_type value this app's own taxonomy produces (see

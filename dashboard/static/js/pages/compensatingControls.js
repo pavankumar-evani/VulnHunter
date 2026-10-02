@@ -246,7 +246,7 @@ export async function render(container) {
   wireExportButtons(container, "compensating-controls", {
     getRows: () => rows,
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-compensating-controls",
+    filenameBase: "quanta-compensating-controls",
   });
   wireColumnPicker(container, "compensating-controls", (visible) => {
     visibleColumns = visible;

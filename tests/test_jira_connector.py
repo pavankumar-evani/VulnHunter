@@ -44,7 +44,7 @@ class BuildIssueBodyPureFunction(unittest.TestCase):
         body = build_issue_body(SAMPLE_FINDING, "PROJ")
         self.assertEqual(body["fields"]["project"]["key"], "PROJ")
         self.assertIn("FIND-1", body["fields"]["summary"])
-        self.assertEqual(body["fields"]["labels"], ["vulnhunter-FIND-1"])
+        self.assertEqual(body["fields"]["labels"], ["quanta-FIND-1"])
 
     def test_create_issue_and_build_issue_body_produce_same_shape(self):
         """Regression guard: the refactor that extracted build_issue_body must not
@@ -86,8 +86,8 @@ class BuildIssueBodyPureFunction(unittest.TestCase):
 
     def test_label_used_as_idempotency_key_across_findings(self):
         other = {**SAMPLE_FINDING, "id": "FIND-2"}
-        self.assertEqual(build_issue_body(SAMPLE_FINDING, "PROJ")["fields"]["labels"], ["vulnhunter-FIND-1"])
-        self.assertEqual(build_issue_body(other, "PROJ")["fields"]["labels"], ["vulnhunter-FIND-2"])
+        self.assertEqual(build_issue_body(SAMPLE_FINDING, "PROJ")["fields"]["labels"], ["quanta-FIND-1"])
+        self.assertEqual(build_issue_body(other, "PROJ")["fields"]["labels"], ["quanta-FIND-2"])
 
 
 class AuthAndConstruction(unittest.TestCase):
@@ -116,7 +116,7 @@ class FindExistingIssue(unittest.TestCase):
         existing = conn.find_existing_issue("FIND-1")
         self.assertEqual(existing["key"], "PROJ-1")
         params = session.get.call_args.kwargs["params"]
-        self.assertIn("vulnhunter-FIND-1", params["jql"])
+        self.assertIn("quanta-FIND-1", params["jql"])
 
     def test_returns_none_when_nothing_found(self):
         session = MagicMock()
@@ -133,7 +133,7 @@ class CreateIssue(unittest.TestCase):
         conn = JiraConnector("https://acme.atlassian.net", "e@acme.com", "tok", "PROJ", session=session)
 
         result = conn.create_issue(SAMPLE_FINDING)
-        self.assertEqual(result["_vulnhunter_status"], "created")
+        self.assertEqual(result["_quanta_status"], "created")
         self.assertEqual(result["key"], "PROJ-2")
 
     def test_skips_creation_when_issue_already_exists(self):
@@ -142,7 +142,7 @@ class CreateIssue(unittest.TestCase):
         conn = JiraConnector("https://acme.atlassian.net", "e@acme.com", "tok", "PROJ", session=session)
 
         result = conn.create_issue(SAMPLE_FINDING)
-        self.assertEqual(result["_vulnhunter_status"], "already_existed")
+        self.assertEqual(result["_quanta_status"], "already_existed")
         session.post.assert_not_called()
 
     def test_skip_if_exists_false_always_creates(self):

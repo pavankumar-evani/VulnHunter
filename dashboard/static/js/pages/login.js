@@ -62,7 +62,7 @@ export async function render(container) {
     try {
       const result = await api.authLogin(form.email.value.trim(), form.password.value);
       setCurrentUser(result.user);
-      window.dispatchEvent(new CustomEvent("vulnhunter-auth-changed"));
+      window.dispatchEvent(new CustomEvent("quanta-auth-changed"));
       goHome();
     } catch (err) {
       flash(err.message || "Login failed", "error");

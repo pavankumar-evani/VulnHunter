@@ -212,7 +212,7 @@ flowchart LR
         </table>
       </div>
 
-      <div class="callout warn"><span class="label">Read this before a production rollout</span><p>Every read (<code>GET</code>) route is public by default. Every state-changing route (<code>POST</code>) is gated per-route with an explicit RBAC dependency. Set <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code> to close the read gap — it requires a real, stable <code>VULNHUNTER_SESSION_SECRET</code> as a precondition (checked at startup). Independently, set <code>VULNHUNTER_PRODUCTION=true</code> to enforce that same real-secret requirement unconditionally, even on a deployment that leaves the read gap open — the two flags are separate axes, not one gating the other.</p></div>
+      <div class="callout warn"><span class="label">Read this before a production rollout</span><p>Every read (<code>GET</code>) route is public by default. Every state-changing route (<code>POST</code>) is gated per-route with an explicit RBAC dependency. Set <code>QUANTA_REQUIRE_LOGIN_FOR_READS=true</code> to close the read gap — it requires a real, stable <code>QUANTA_SESSION_SECRET</code> as a precondition (checked at startup). Independently, set <code>QUANTA_PRODUCTION=true</code> to enforce that same real-secret requirement unconditionally, even on a deployment that leaves the read gap open — the two flags are separate axes, not one gating the other.</p></div>
     </section>
 
     <section id="storage">
@@ -226,7 +226,7 @@ flowchart LR
             <tr><td class="mono">remediation/output/normalized-findings.json</td><td>Every finding, in the one common schema (§4) — the system of record.</td></tr>
             <tr><td class="mono">REMEDIATION_PLAN.md</td><td>A point-in-time snapshot: risk tier, action type, rollback plan per finding, written by the <code>remediation-planner</code> subagent.</td></tr>
             <tr><td class="mono">remediation/output/*.yml</td><td>Generated Ansible playbooks, one per remediable finding.</td></tr>
-            <tr><td class="mono">remediation/vulnhunter.db</td><td>Shared local SQLite database (gitignored) — approvals, exceptions, activity/AI-usage logs, asset ownership, user accounts, notification-scheduler dedup state, and pending live-data adapter output all live here now, one table each.</td></tr>
+            <tr><td class="mono">remediation/quanta.db</td><td>Shared local SQLite database (gitignored) — approvals, exceptions, activity/AI-usage logs, asset ownership, user accounts, notification-scheduler dedup state, and pending live-data adapter output all live here now, one table each.</td></tr>
             <tr><td class="mono">remediation/config/*.yaml</td><td>Every admin-editable policy: priority weights, SLA windows, remediation policy per asset domain, risk-scoring weights, exposure-score weights.</td></tr>
             <tr><td class="mono">remediation/live-data/*</td><td>Raw CSV/XML exports written by a CVE-scoped connector's Fetch action (Tenable/Qualys/OpenVAS) before ingestion via <code>/remediate</code>.</td></tr>
           </tbody>
@@ -320,7 +320,7 @@ flowchart LR
       <h2><span class="num">06</span>Security architecture</h2>
 
       <h3>Authentication &amp; sessions</h3>
-      <p>Local email/password accounts, hashed with PBKDF2-HMAC-SHA256. Sessions are a signed cookie (<code>vulnhunter_session</code>) verified against <code>VULNHUNTER_SESSION_SECRET</code>. Optional OIDC/SSO support exists and is exposed on the login page only when a real provider's <code>OIDC_ISSUER</code>/<code>OIDC_CLIENT_ID</code>/<code>OIDC_CLIENT_SECRET</code> are configured — otherwise the button is simply absent, not stubbed.</p>
+      <p>Local email/password accounts, hashed with PBKDF2-HMAC-SHA256. Sessions are a signed cookie (<code>quanta_session</code>) verified against <code>QUANTA_SESSION_SECRET</code>. Optional OIDC/SSO support exists and is exposed on the login page only when a real provider's <code>OIDC_ISSUER</code>/<code>OIDC_CLIENT_ID</code>/<code>OIDC_CLIENT_SECRET</code> are configured — otherwise the button is simply absent, not stubbed.</p>
 
       <h3>Roles &amp; team scoping — the real model, not an idealized one</h3>
       <p>This is intentionally simple: one boolean, <strong>admin</strong> or not. Every mutation route requires at minimum a logged-in session; most require <code>role == "admin"</code> outright. A second, independent axis — <strong>team</strong> — narrows which findings and approvals a non-admin user's own queries return, enforced server-side per request. There is no granular permission matrix (no separate "analyst," "approver," "read-only" roles) — see the RBAC, Multi-Tenancy &amp; Governance document for what this means in practice and its honestly-disclosed limits.</p>
@@ -337,7 +337,7 @@ flowchart LR
             <tr><td class="mono">X-Frame-Options</td><td class="mono">DENY</td><td>Yes</td></tr>
             <tr><td class="mono">Referrer-Policy</td><td class="mono">strict-origin-when-cross-origin</td><td>Yes</td></tr>
             <tr><td class="mono">Permissions-Policy</td><td class="mono">geolocation=(), microphone=(), camera=()</td><td>Yes</td></tr>
-            <tr><td class="mono">Content-Security-Policy</td><td class="mono">default-src 'self'; script-src 'self'; ...</td><td>No — <code>VULNHUNTER_ENABLE_CSP=true</code></td></tr>
+            <tr><td class="mono">Content-Security-Policy</td><td class="mono">default-src 'self'; script-src 'self'; ...</td><td>No — <code>QUANTA_ENABLE_CSP=true</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -358,7 +358,7 @@ flowchart LR
       <p class="section-intro">Every enterprise reference in this suite says plainly where the product is today versus where a production rollout would need to invest further. Reused consistently across all eight documents:</p>
       <div class="grid2">
         <div class="card"><h4>Single-tenant, single-node</h4><p>A real local SQLite database now backs the record stores, but it's one file on one machine with no per-tenant data boundary. The MSSP "tenant switcher" in the UI is an illustrative client-side filter over one shared dataset — not real per-tenant isolation. See the RBAC/Governance document.</p></div>
-        <div class="card"><h4>Reads are public by default</h4><p>Every GET route is open unless <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS</code> is explicitly set — a deliberate MVP default, not a bug, but one to close before a real rollout.</p></div>
+        <div class="card"><h4>Reads are public by default</h4><p>Every GET route is open unless <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> is explicitly set — a deliberate MVP default, not a bug, but one to close before a real rollout.</p></div>
         <div class="card"><h4>Synchronous pipeline execution</h4><p>A pipeline run blocks the request that started it. A production deployment needs a real job queue behind long-running operations (scans, large-tenant exports).</p></div>
         <div class="card"><h4>No historical trend storage</h4><p>Every chart is a live, current-moment snapshot — there is no daily-snapshot table yet, so "trend over time" views are honestly absent rather than faked.</p></div>
       </div>

@@ -22,7 +22,7 @@ from sqlalchemy import Boolean, Column, Float, Integer, MetaData, String, Table,
 
 from remediation.utils.file_lock import FileLock
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "vulnhunter.db"
+DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "quanta.db"
 # Real, on-disk lock guarding schema creation specifically (see ensure_schema below) -
 # separate from every store module's own per-record lock, since two DIFFERENT stores'
 # very first calls (each holding only their own lock) could otherwise still race on

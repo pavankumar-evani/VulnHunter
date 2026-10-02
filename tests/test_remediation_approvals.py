@@ -1,7 +1,7 @@
 """
 Tests for remediation/remediation_approvals/store.py - the human-in-the-loop
 approve/reject workflow for normal/emergency change-type findings. Every test uses a
-fresh in-memory SQLite engine (never the real, shared remediation/vulnhunter.db) so the
+fresh in-memory SQLite engine (never the real, shared remediation/quanta.db) so the
 suite never mutates real data - same pattern as test_exceptions_store.py.
 """
 import datetime

@@ -53,7 +53,7 @@ class BuildHecEventPureFunction(unittest.TestCase):
 
     def test_default_sourcetype(self):
         event = build_hec_event(SAMPLE_FINDING)
-        self.assertEqual(event["sourcetype"], "vulnhunter:finding")
+        self.assertEqual(event["sourcetype"], "quanta:finding")
 
     def test_custom_sourcetype(self):
         event = build_hec_event(SAMPLE_FINDING, sourcetype="custom:type")
@@ -64,8 +64,8 @@ class BuildHecEventPureFunction(unittest.TestCase):
         self.assertNotIn("index", event)
 
     def test_index_included_when_given(self):
-        event = build_hec_event(SAMPLE_FINDING, index="vulnhunter_findings")
-        self.assertEqual(event["index"], "vulnhunter_findings")
+        event = build_hec_event(SAMPLE_FINDING, index="quanta_findings")
+        self.assertEqual(event["index"], "quanta_findings")
 
     def test_time_derived_from_last_seen(self):
         event = build_hec_event(SAMPLE_FINDING)
@@ -119,9 +119,9 @@ class SendEvent(unittest.TestCase):
         conn, session = self._connector()
         session.post.return_value = fake_response({"text": "Success", "code": 0})
 
-        conn.send_event(SAMPLE_FINDING, sourcetype="vulnhunter:finding", index="idx1")
+        conn.send_event(SAMPLE_FINDING, sourcetype="quanta:finding", index="idx1")
         sent_body = session.post.call_args.kwargs["json"]
-        self.assertEqual(sent_body, build_hec_event(SAMPLE_FINDING, sourcetype="vulnhunter:finding", index="idx1"))
+        self.assertEqual(sent_body, build_hec_event(SAMPLE_FINDING, sourcetype="quanta:finding", index="idx1"))
 
     def test_send_event_returns_parsed_response(self):
         conn, session = self._connector()

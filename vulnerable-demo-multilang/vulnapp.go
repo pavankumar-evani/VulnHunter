@@ -1,5 +1,5 @@
 // vulnapp.go - a deliberately vulnerable demo net/http service used ONLY to test
-// VulnHunter's multi-language scanner coverage. DO NOT deploy this anywhere. It
+// Quanta's multi-language scanner coverage. DO NOT deploy this anywhere. It
 // contains intentional security flaws for demonstration purposes only.
 //
 // Planted vulnerabilities (for scoring / demo reference):

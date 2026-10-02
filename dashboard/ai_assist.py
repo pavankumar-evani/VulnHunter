@@ -2,7 +2,7 @@
 AI-assist prompt construction for the dashboard's /api/ai-assist endpoint.
 
 Deliberately has no subprocess/network code of its own - dashboard/app.py owns actually
-invoking the real `claude` CLI (reusing cli/vulnhunter.py's binary-discovery logic), the
+invoking the real `claude` CLI (reusing cli/quanta.py's binary-discovery logic), the
 same dry-run-preview-by-default / explicit-confirm-to-spend pattern as /api/run and
 /api/servicenow/send. This module only builds the prompt text, so it's testable without
 ever touching a subprocess or spending API usage.

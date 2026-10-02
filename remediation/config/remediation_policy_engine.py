@@ -199,7 +199,7 @@ def pam_vars_snippet(pam_backend, credential_path):
             "  - name: Assume the remediation role via AWS STS\n"
             "    amazon.aws.sts_assume_role:\n"
             f"      role_arn: \"{credential_path}\"\n"
-            "      role_session_name: \"vulnhunter-remediation\"\n"
+            "      role_session_name: \"quanta-remediation\"\n"
             "    register: assumed_role\n"
             "    no_log: true\n"
         )

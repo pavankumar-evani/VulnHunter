@@ -76,7 +76,7 @@ Return ONLY a JSON object, no prose, no markdown fences:
 ```json
 {
   "finding_id": "VULN-3",
-  "branch": "vulnhunter/auto-fixes-20260901",
+  "branch": "quanta/auto-fixes-20260901",
   "status": "resolved",
   "detail": "cursor.execute() now uses a parameterized '?' placeholder with user_id passed as a tuple argument, confirmed on the target branch."
 }

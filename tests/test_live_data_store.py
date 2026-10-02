@@ -2,7 +2,7 @@
 Tests for remediation/connectors/live_data_store.py - the shared store for
 "pending, not-yet-merged" adapter output (generic webhook ingest, PrismaCloud/Cortex
 XSIAM fetch). Every test uses a fresh in-memory SQLite engine (never the real, shared
-remediation/vulnhunter.db).
+remediation/quanta.db).
 """
 import sys
 import unittest

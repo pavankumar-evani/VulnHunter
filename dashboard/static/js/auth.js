@@ -72,12 +72,12 @@ export function initAccountChip() {
       dropdown.hidden = true;
       await api.authLogout();
       setCurrentUser(null);
-      window.dispatchEvent(new CustomEvent("vulnhunter-auth-changed"));
+      window.dispatchEvent(new CustomEvent("quanta-auth-changed"));
       window.history.pushState({}, "", "/logout");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
   }
 
   render();
-  window.addEventListener("vulnhunter-auth-changed", render);
+  window.addEventListener("quanta-auth-changed", render);
 }

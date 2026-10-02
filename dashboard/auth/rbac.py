@@ -10,19 +10,19 @@ from fastapi import HTTPException, Request
 
 from . import sessions
 
-SESSION_COOKIE_NAME = "vulnhunter_session"
+SESSION_COOKIE_NAME = "quanta_session"
 
-_env_secret = os.environ.get("VULNHUNTER_SESSION_SECRET")
+_env_secret = os.environ.get("QUANTA_SESSION_SECRET")
 if _env_secret:
     SESSION_SECRET = _env_secret
 else:
     # No real secret configured - generate one for this process only. This keeps the
     # dashboard usable out of the box, but every session is invalidated on restart, and
     # multiple worker processes would each mint incompatible cookies. Set
-    # VULNHUNTER_SESSION_SECRET to a real, stable secret before any real deployment.
+    # QUANTA_SESSION_SECRET to a real, stable secret before any real deployment.
     SESSION_SECRET = secrets.token_hex(32)
     print(
-        "WARNING: VULNHUNTER_SESSION_SECRET is not set - using a random secret "
+        "WARNING: QUANTA_SESSION_SECRET is not set - using a random secret "
         "generated for this process only. Set it to a real, stable value before any "
         "real deployment (see dashboard/README.md).",
     )
@@ -66,33 +66,33 @@ def _env_flag(name):
 
 def validate_production_requirements():
     """Raises RuntimeError if either of two things is true without a real
-    VULNHUNTER_SESSION_SECRET configured:
+    QUANTA_SESSION_SECRET configured:
 
-    1. VULNHUNTER_REQUIRE_LOGIN_FOR_READS (dashboard/app.py's opt-in "close the
+    1. QUANTA_REQUIRE_LOGIN_FOR_READS (dashboard/app.py's opt-in "close the
        anonymous-read gap" middleware) is on - running that combination would log
        every user out on every restart (or mint incompatible cookies across multiple
        worker processes, see SESSION_SECRET's own comment above), defeating the point
        of requiring login everywhere.
-    2. VULNHUNTER_PRODUCTION is on - an explicit, opt-in "this is a real deployment"
-       flag independent of VULNHUNTER_REQUIRE_LOGIN_FOR_READS. Before this flag
-       existed, a deployment that left VULNHUNTER_REQUIRE_LOGIN_FOR_READS at its
+    2. QUANTA_PRODUCTION is on - an explicit, opt-in "this is a real deployment"
+       flag independent of QUANTA_REQUIRE_LOGIN_FOR_READS. Before this flag
+       existed, a deployment that left QUANTA_REQUIRE_LOGIN_FOR_READS at its
        (correct, documented) default of off got *no* enforcement on the secret at
        all - only the startup warning SESSION_SECRET's own module-level code already
-       prints. VULNHUNTER_PRODUCTION lets an operator say "enforce this regardless of
+       prints. QUANTA_PRODUCTION lets an operator say "enforce this regardless of
        whether I've also opted into the reads gate" rather than the secret
        requirement being implicitly tied to a second, unrelated flag.
 
     Called from app.py's startup event (not at import time here), so a test can
     exercise this directly with controlled env vars rather than needing to reload
     this whole module."""
-    require_login_for_reads = _env_flag("VULNHUNTER_REQUIRE_LOGIN_FOR_READS")
-    production = _env_flag("VULNHUNTER_PRODUCTION")
-    if (require_login_for_reads or production) and not os.environ.get("VULNHUNTER_SESSION_SECRET"):
-        trigger = "VULNHUNTER_REQUIRE_LOGIN_FOR_READS" if require_login_for_reads else "VULNHUNTER_PRODUCTION"
+    require_login_for_reads = _env_flag("QUANTA_REQUIRE_LOGIN_FOR_READS")
+    production = _env_flag("QUANTA_PRODUCTION")
+    if (require_login_for_reads or production) and not os.environ.get("QUANTA_SESSION_SECRET"):
+        trigger = "QUANTA_REQUIRE_LOGIN_FOR_READS" if require_login_for_reads else "QUANTA_PRODUCTION"
         raise RuntimeError(
-            f"{trigger} is set but VULNHUNTER_SESSION_SECRET is not - refusing to "
+            f"{trigger} is set but QUANTA_SESSION_SECRET is not - refusing to "
             "start. Running without a stable session secret would log every user out "
             "on the next restart (and mint incompatible cookies across multiple "
-            "worker processes). Set a real, stable VULNHUNTER_SESSION_SECRET first - "
+            "worker processes). Set a real, stable QUANTA_SESSION_SECRET first - "
             "see dashboard/README.md.",
         )

@@ -121,7 +121,7 @@ export async function render(container) {
   wireExportButtons(container, "plan", {
     getRows: () => currentFiltered,
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-remediation-plan",
+    filenameBase: "quanta-remediation-plan",
   });
 
   container.querySelector("#f-risk-tier").addEventListener("change", (e) => { filters.riskTier = e.target.value; page = 1; renderRows(); });

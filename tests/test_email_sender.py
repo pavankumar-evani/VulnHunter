@@ -14,7 +14,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from remediation.notifications import email_sender  # noqa: E402
 
-_CONFIGURED_ENV = {"SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587", "SMTP_FROM_ADDRESS": "vulnhunter@example.com"}
+_CONFIGURED_ENV = {"SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587", "SMTP_FROM_ADDRESS": "quanta@example.com"}
 
 
 class IsConfigured(unittest.TestCase):
@@ -42,7 +42,7 @@ class IsConfigured(unittest.TestCase):
 class FromAddress(unittest.TestCase):
     def test_returns_configured_from_address(self):
         with patch.dict("os.environ", _CONFIGURED_ENV):
-            self.assertEqual(email_sender.from_address(), "vulnhunter@example.com")
+            self.assertEqual(email_sender.from_address(), "quanta@example.com")
 
 
 class SendEmail(unittest.TestCase):
@@ -69,7 +69,7 @@ class SendEmail(unittest.TestCase):
                 mock_client.send_message.assert_called_once()
                 sent_msg = mock_client.send_message.call_args[0][0]
                 self.assertEqual(sent_msg["Subject"], "Test Subject")
-                self.assertEqual(sent_msg["From"], "vulnhunter@example.com")
+                self.assertEqual(sent_msg["From"], "quanta@example.com")
                 self.assertEqual(sent_msg["To"], "to@example.com")
 
     def test_skips_starttls_when_disabled(self):

@@ -39,7 +39,7 @@ async function doIdleLogout() {
   dismissWarning();
   await api.authLogout().catch(() => {});
   setCurrentUser(null);
-  window.dispatchEvent(new CustomEvent("vulnhunter-auth-changed"));
+  window.dispatchEvent(new CustomEvent("quanta-auth-changed"));
   window.history.pushState({}, "", "/logout?reason=idle");
   window.dispatchEvent(new PopStateEvent("popstate"));
 }

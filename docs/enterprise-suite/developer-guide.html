@@ -119,7 +119,7 @@
           <tr><td class="mono">remediation/schema/</td><td>The normalized Finding schema documentation — the single source of truth for field names</td></tr>
           <tr><td class="mono">remediation/output/, live-data/</td><td>Generated artifacts and raw connector exports (gitignored where noted)</td></tr>
           <tr><td class="mono">.claude/agents/*.md</td><td>Every subagent's prompt + tool-access frontmatter — the actual enforcement point of the safety model</td></tr>
-          <tr><td class="mono">cli/vulnhunter.py</td><td>Headless pipeline runner — the same entry point the dashboard's <code>/run</code> page calls</td></tr>
+          <tr><td class="mono">cli/quanta.py</td><td>Headless pipeline runner — the same entry point the dashboard's <code>/run</code> page calls</td></tr>
           <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group — see §5</td></tr>
         </tbody>
       </table></div>
@@ -183,10 +183,10 @@
     <section id="cli">
       <h2><span class="num">06</span>CLI usage</h2>
       <div class="codeblock"><pre><span class="c"># Preview only - never calls the API</span>
-python cli/vulnhunter.py /vulnhunt ./target --dry-run
+python cli/quanta.py /vulnhunt ./target --dry-run
 
 <span class="c"># Real run, explicit spend cap (default $2.00)</span>
-python cli/vulnhunter.py /remediate --generate --max-budget-usd 5.00</pre></div>
+python cli/quanta.py /remediate --generate --max-budget-usd 5.00</pre></div>
       <p>The dashboard's <code>/run</code> page is a thin UI over this exact same entry point — same dry-run default, same confirm gate, same budget cap.</p>
     </section>
 
@@ -224,7 +224,7 @@ curl -k https://127.0.0.1:5050/api/status</pre></div>
           <tr><td class="mono">data_stores</td><td>Per-store <code>exists</code> / <code>last_modified</code> / <code>record_count</code> for four of the tables in the gitignored local SQLite database (exceptions, remediation approvals, activity log, AI usage log) — a corrupt/unreadable table reports its own error string instead of taking down the whole check.</td></tr>
         </tbody>
       </table></div>
-      <div class="callout info"><span class="label">Auth is conditional, not absent</span><p><code>/api/status</code> is open with no session by default, same as every other read route in this MVP. If a deployment sets <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code>, this route is <strong>not</strong> in the small allow-list of routes the login flow itself needs (<code>/api/auth/*</code>) — so it starts requiring a valid session too. Account for that in your uptime monitor's own auth if that flag is on.</p></div>
+      <div class="callout info"><span class="label">Auth is conditional, not absent</span><p><code>/api/status</code> is open with no session by default, same as every other read route in this MVP. If a deployment sets <code>QUANTA_REQUIRE_LOGIN_FOR_READS=true</code>, this route is <strong>not</strong> in the small allow-list of routes the login flow itself needs (<code>/api/auth/*</code>) — so it starts requiring a valid session too. Account for that in your uptime monitor's own auth if that flag is on.</p></div>
       <p>There is no separate <code>/health</code>, <code>/api/health</code>, or <code>/api/version</code> route — <code>/api/status</code> is the one real health surface, and it already covers version. For a check outside this endpoint: the notification scheduler's own due-check logic is independently callable on demand via <code>POST /api/notification-settings/run-checks-now</code>, useful for confirming that background loop is actually reachable rather than only trusting <code>notification_scheduler_alive</code>.</p>
     </section>
 

@@ -1,7 +1,7 @@
 """
 Tests for remediation/assignments - finding assignment, team records, auto-routing,
 and ownership analytics. Every test uses a fresh in-memory SQLite engine (never the
-real, shared remediation/vulnhunter.db), same pattern as test_remediation_approvals.py.
+real, shared remediation/quanta.db), same pattern as test_remediation_approvals.py.
 """
 import datetime
 import sys

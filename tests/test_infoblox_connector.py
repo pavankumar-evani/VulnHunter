@@ -4,7 +4,7 @@ Tests for the live Infoblox NIOS WAPI connector (remediation/connectors/infoblox
 Every HTTP interaction is mocked - these tests never touch the network or require real
 API credentials. They verify: correct Basic-auth session construction, correct WAPI
 endpoint URL/params construction, correct mapping from Infoblox's documented
-record:host response shape into VulnHunter's shared asset-record shape (including IP
+record:host response shape into Quanta's shared asset-record shape (including IP
 extraction and the honest "mac/type unknown" handling), and defensive handling of an
 empty/missing-field response so it doesn't crash.
 

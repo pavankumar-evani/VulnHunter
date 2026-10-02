@@ -106,7 +106,7 @@ class CreateIncident(unittest.TestCase):
         conn = ServiceNowConnector("mycompany", "u", "p", session=session)
 
         result = conn.create_incident(SAMPLE_FINDING)
-        self.assertEqual(result["_vulnhunter_status"], "created")
+        self.assertEqual(result["_quanta_status"], "created")
         self.assertEqual(result["number"], "INC0010002")
 
     def test_skips_creation_when_incident_already_exists(self):
@@ -115,7 +115,7 @@ class CreateIncident(unittest.TestCase):
         conn = ServiceNowConnector("mycompany", "u", "p", session=session)
 
         result = conn.create_incident(SAMPLE_FINDING)
-        self.assertEqual(result["_vulnhunter_status"], "already_existed")
+        self.assertEqual(result["_quanta_status"], "already_existed")
         session.post.assert_not_called()
 
     def test_skip_if_exists_false_always_creates(self):

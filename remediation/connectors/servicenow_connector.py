@@ -97,7 +97,7 @@ class ServiceNowConnector:
         if skip_if_exists:
             existing = self.find_existing_incident(finding_id)
             if existing:
-                return {**existing, "_vulnhunter_status": "already_existed"}
+                return {**existing, "_quanta_status": "already_existed"}
 
         body = build_incident_body(finding)
 
@@ -110,7 +110,7 @@ class ServiceNowConnector:
         result = data.get("result")
         if not result:
             raise ServiceNowError(f"Unexpected create-incident response shape: {data!r}")
-        return {**result, "_vulnhunter_status": "created"}
+        return {**result, "_quanta_status": "created"}
 
     def create_incidents_for_findings(self, findings, skip_if_exists=True):
         """Creates (or finds existing) incidents for a whole findings list. Returns a
@@ -122,7 +122,7 @@ class ServiceNowConnector:
                 incident = self.create_incident(f, skip_if_exists=skip_if_exists)
                 results.append({
                     "finding_id": f["id"],
-                    "status": incident.get("_vulnhunter_status", "created"),
+                    "status": incident.get("_quanta_status", "created"),
                     "incident_number": incident.get("number"),
                     "error": None,
                 })

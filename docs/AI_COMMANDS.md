@@ -84,15 +84,15 @@ for the full design rationale.
 
 ---
 
-## 3. Headless CLI (`cli/vulnhunter.py`)
+## 3. Headless CLI (`cli/quanta.py`)
 
 ```bash
-python cli/vulnhunter.py [--dry-run] [--claude-bin PATH] [--max-budget-usd N] [--permission-mode MODE] scan <path> [--fix]
-python cli/vulnhunter.py [--dry-run] [--claude-bin PATH] [--max-budget-usd N] [--permission-mode MODE] remediate [--generate]
+python cli/quanta.py [--dry-run] [--claude-bin PATH] [--max-budget-usd N] [--permission-mode MODE] scan <path> [--fix]
+python cli/quanta.py [--dry-run] [--claude-bin PATH] [--max-budget-usd N] [--permission-mode MODE] remediate [--generate]
 ```
 
 - `scan` and `remediate` are the two subcommands, mapping 1:1 to `/vulnhunt` and
-  `/remediate`. `cli/vulnhunter.py` constructs and runs the equivalent `claude -p "..."`
+  `/remediate`. `cli/quanta.py` constructs and runs the equivalent `claude -p "..."`
   invocation — it is a wrapper, not a reimplementation, so the prompts in
   `.claude/agents/*.md`/`.claude/commands/*.md` remain the single source of truth for
   both the interactive and headless paths.
@@ -124,7 +124,7 @@ by `dashboard/ai_assist.py`'s pure `build_ai_assist_prompt(finding, action)` fun
 {"dry_run": true, "prompt": "Finding FIND-12: ...", "message": "Preview only ..."}
 
 // Response when confirm is true - calls the real `claude` CLI (same binary
-// discovery as cli/vulnhunter.py) and spends real API usage/credits
+// discovery as cli/quanta.py) and spends real API usage/credits
 {"dry_run": false, "prompt": "Finding FIND-12: ...", "response": "The AI's plain-text reply"}
 ```
 

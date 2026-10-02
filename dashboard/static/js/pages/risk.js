@@ -229,7 +229,7 @@ export async function render(container) {
   wireExportButtons(container, "top-assets", {
     getRows: () => topCritical,
     columns: ASSET_EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-top-assets",
+    filenameBase: "quanta-top-assets",
   });
   wireTopRankings(container, "risk-hub", rankings);
   wireChartLinks(container);

@@ -13,7 +13,7 @@ Modules:
   stdlib only) - a from-scratch alternative to Starlette's `SessionMiddleware`
   (which depends on the third-party `itsdangerous` package).
 - `users.py` - the local user store (one row per account in the shared
-  `remediation/vulnhunter.db` SQLite database - see `remediation/utils/db.py`) and
+  `remediation/quanta.db` SQLite database - see `remediation/utils/db.py`) and
   login verification.
 - `oidc.py` - a real OpenID Connect Authorization Code + PKCE client, built against
   the OIDC discovery/token/userinfo spec. Functional but inert unless real provider

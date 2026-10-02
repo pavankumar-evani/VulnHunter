@@ -18,12 +18,12 @@ python dashboard/app.py
 ```
 
 The migration step carries the one seeded example in `remediation/exceptions/exceptions.json`
-into `remediation/vulnhunter.db` (gitignored, created on first run either way) - see "What
+into `remediation/quanta.db` (gitignored, created on first run either way) - see "What
 this is NOT (yet)" below for which stores this covers. Safe to skip on a repeat run; the
 script no-ops if there's nothing left to migrate.
 
 It reads directly from the repo it's run in: git history (for `/vulnhunt`'s
-`SECURITY_REPORT.md`, via the `vulnhunter/auto-fixes-*` branch) and files under
+`SECURITY_REPORT.md`, via the `quanta/auto-fixes-*` branch) and files under
 `remediation/` (for `/remediate`'s `normalized-findings.json`, `REMEDIATION_PLAN.md`, and
 generated playbooks). If those artifacts don't exist yet, the relevant pages show an
 empty state with instructions instead of erroring.
@@ -181,7 +181,7 @@ docstrings for the full design. Summary:
   stdlib only (`hashlib.pbkdf2_hmac`) - no `bcrypt`/`passlib` dependency added.
 - **Sessions**: a from-scratch HMAC-signed cookie (`dashboard/auth/sessions.py`), stdlib
   only - a lighter alternative to Starlette's `SessionMiddleware`, which depends on the
-  third-party `itsdangerous` package. Set `VULNHUNTER_SESSION_SECRET` to a real, stable
+  third-party `itsdangerous` package. Set `QUANTA_SESSION_SECRET` to a real, stable
   value before any real deployment; without it, a random per-process secret is used and
   every session is invalidated on restart (a startup warning says so).
 - **Users**: one row per account in the shared SQLite database (see
@@ -238,16 +238,16 @@ docstrings for the full design. Summary:
   also redirects an unauthenticated browser to `/login` for every page (not just gated
   ones) for a coherent UX - but that's a UX gate, not the real security boundary on its
   own; see below for what actually closes it.
-- **Closing the anonymous-read gap**: set `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true` to
+- **Closing the anonymous-read gap**: set `QUANTA_REQUIRE_LOGIN_FOR_READS=true` to
   require a valid session on every `/api/*` route (the login flow itself stays
   reachable) - one middleware (`dashboard/app.py`'s `_require_login_for_api_reads`),
   not a change to any individual route, so it doesn't touch the large existing test
   suite that exercises the (still-default) open-reads behavior. This also closes the
   one real caveat on per-team filtering: without it, an anonymous request bypasses
   `_scope_to_team()` the same way it bypasses everything else. Requires a real
-  `VULNHUNTER_SESSION_SECRET` too (below) - the app refuses to start otherwise, since
+  `QUANTA_SESSION_SECRET` too (below) - the app refuses to start otherwise, since
   gating every read while sessions reset on every restart would lock everyone out.
-- **`VULNHUNTER_SESSION_SECRET`**: set this to a real, random, stable value before any
+- **`QUANTA_SESSION_SECRET`**: set this to a real, random, stable value before any
   real deployment (`python -c "import secrets; print(secrets.token_hex(32))"` generates
   one) - without it, a random secret is generated fresh per process, so every session is
   invalidated on restart and multiple worker processes mint incompatible cookies.
@@ -280,7 +280,7 @@ docstrings for the full design. Summary:
 
   **To turn HTTPS off** (the one real reason: a reverse-proxy deployment that already
   terminates TLS in front of this process - see the nginx example just below), set
-  `VULNHUNTER_DISABLE_TLS=true`. To point at a different cert instead of the
+  `QUANTA_DISABLE_TLS=true`. To point at a different cert instead of the
   auto-generated one (e.g. a real CA-issued cert), set `SSL_KEYFILE`/`SSL_CERTFILE`
   explicitly - either one being set skips the auto-generation entirely.
 
@@ -324,20 +324,20 @@ docstrings for the full design. Summary:
   uvicorn app:app --host 127.0.0.1 --port 5050 --workers 4
   ```
   Note this sidesteps the HTTPS-by-default behavior entirely, not just via
-  `VULNHUNTER_DISABLE_TLS`: that env var (and the auto-generated cert) only exist inside
+  `QUANTA_DISABLE_TLS`: that env var (and the auto-generated cert) only exist inside
   `dashboard/app.py`'s own `if __name__ == "__main__":` block, which `python
   dashboard/app.py` runs and a direct `uvicorn app:app` invocation never reaches -
   uvicorn's own CLI has no TLS enabled unless you pass its own `--ssl-keyfile`/
   `--ssl-certfile` flags, which the command above deliberately doesn't, since nginx is
   the one terminating TLS here.
   Multiple `--workers` is safe for this app's own session mechanism as long as
-  `VULNHUNTER_SESSION_SECRET` is a real, shared, stable value (see above) - the signed-
+  `QUANTA_SESSION_SECRET` is a real, shared, stable value (see above) - the signed-
   cookie design has no server-side session state to fall out of sync between workers.
 
 **Demo credentials** (intentionally public - this is a demo seed file, not a real
 secret; change or remove before any real deployment):
-- `admin@vulnhunter.local` / `ChangeMe123!` (role: admin)
-- `analyst@vulnhunter.local` / `ChangeMe123!` (role: user)
+- `admin@quanta.local` / `ChangeMe123!` (role: admin)
+- `analyst@quanta.local` / `ChangeMe123!` (role: user)
 
 ## CMDB import (Asset Inventory)
 
@@ -432,7 +432,7 @@ output or historical trends:
   owner/team/facing/environment/network-info store), `users` (`auth/users.py`), and
   `live_data_findings` (the generic-ingest/Prisma Cloud/Cortex XSIAM adapters' pending
   output, via `remediation/connectors/live_data_store.py`) all live in a real, local
-  SQLite database (`remediation/vulnhunter.db`, gitignored - see
+  SQLite database (`remediation/quanta.db`, gitignored - see
   `remediation/utils/db.py`), accessed through SQLAlchemy Core so a future move to
   Postgres for real multi-tenancy is a connection-string change, not a rewrite.
   `scripts/migrate_json_to_db.py` is the one-time, idempotent migration that carried

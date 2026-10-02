@@ -36,7 +36,7 @@ from sqlalchemy import create_engine, delete, insert  # noqa: E402
 import app as dashboard_app_module  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
-import vulnhunter as cli  # noqa: E402
+import quanta as cli  # noqa: E402
 from app import app as fastapi_app  # noqa: E402
 from auth import rbac as rbac_module  # noqa: E402
 from auth import users as auth_users  # noqa: E402
@@ -111,7 +111,7 @@ def setUpModule():
     # decisions, login attempts) also writes to the real, shared activity log and AI
     # usage log (see remediation/audit/) unless redirected, and exceptions/approvals/
     # asset-ownership/user-account routes called with no more specific per-class
-    # override (below) would otherwise hit the real, shared remediation/vulnhunter.db
+    # override (below) would otherwise hit the real, shared remediation/quanta.db
     # too - one module-wide patch here (rather than repeating it in every affected
     # test class) keeps this suite from ever touching real data. _patch_db_engine()
     # already seeds TEST_ADMIN_EMAIL/TEST_USER_EMAIL into the fresh engine itself, so
@@ -552,7 +552,7 @@ class ApiVulnhunt(unittest.TestCase):
         dashboard_data._VULNHUNT_DATA_CACHE["expires_at"] = 0.0
         activity_log.record_activity(
             "vulnhunt-verify", "vulnhunt.verify", "VULN-2",
-            {"branch": "vulnhunter/auto-fixes-test", "status": "resolved", "detail": "confirmed fixed"},
+            {"branch": "quanta/auto-fixes-test", "status": "resolved", "detail": "confirmed fixed"},
         )
         try:
             resp = client.get("/api/vulnhunt")
@@ -795,7 +795,7 @@ class ApiStatus(unittest.TestCase):
             missing_engine = create_engine(f"sqlite:///{Path(tmpdir) / 'does-not-exist.db'}")
             try:
                 # /api/status also calls load_vulnhunt_data(), which - whenever a real
-                # vulnhunter/auto-fixes-* branch exists (it does in this repo; CI checks
+                # quanta/auto-fixes-* branch exists (it does in this repo; CI checks
                 # one out on purpose, see ci.yml) - reads activity_log.list_activity()
                 # for verification history. That read calls ensure_schema() on the SAME
                 # patched engine, which would lazily create the DB file before we ever
@@ -1314,7 +1314,7 @@ class ApiSplunk(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         previews = resp.json()["previews"]
         self.assertEqual({p["finding_id"] for p in previews}, {f"FIND-{i}" for i in range(1, len(previews) + 1)})
-        self.assertEqual(previews[0]["body"]["sourcetype"], "vulnhunter:finding")
+        self.assertEqual(previews[0]["body"]["sourcetype"], "quanta:finding")
 
     def test_send_without_confirm_never_touches_the_network(self):
         """Mirrors /api/servicenow/send's dry-run guarantee: submitting without confirm
@@ -1958,7 +1958,7 @@ class ApiTeamScopedRbac(unittest.TestCase):
     of them) so this class's own team assignment can't leak into any other test.
     Exceptions/remediation-approvals tests use their own isolated temp DB, same
     pattern as ApiExceptions/ApiRemediationApprovals, so this class never mutates the
-    real, shared remediation/vulnhunter.db.
+    real, shared remediation/quanta.db.
 
     Asset ownership and user accounts now live in that same shared DB - each test
     method gets a brand-new, empty one (see setUp, and _patch_db_engine()'s own
@@ -2105,14 +2105,14 @@ class ApiTeamScopedRbac(unittest.TestCase):
 
 
 class RequireLoginForReadsMiddleware(unittest.TestCase):
-    """VULNHUNTER_REQUIRE_LOGIN_FOR_READS - the opt-in, off-by-default middleware that
+    """QUANTA_REQUIRE_LOGIN_FOR_READS - the opt-in, off-by-default middleware that
     closes the "anonymous reads see everything" gap for a real deployment. Off is the
     default and is exercised by literally every other test in this file that reads
     /api/queue, /api/assets, etc. without a session; this class exercises the ON
     state specifically."""
 
     def setUp(self):
-        self.patcher = patch.dict(os.environ, {"VULNHUNTER_REQUIRE_LOGIN_FOR_READS": "true"})
+        self.patcher = patch.dict(os.environ, {"QUANTA_REQUIRE_LOGIN_FOR_READS": "true"})
         self.patcher.start()
 
     def tearDown(self):
@@ -2184,7 +2184,7 @@ class SecurityHeadersMiddleware(unittest.TestCase):
         self.assertNotIn("Content-Security-Policy", resp.headers)
 
     def test_csp_present_when_opted_in(self):
-        with patch.dict(os.environ, {"VULNHUNTER_ENABLE_CSP": "true"}):
+        with patch.dict(os.environ, {"QUANTA_ENABLE_CSP": "true"}):
             resp = client.get("/api/status")
         csp = resp.headers.get("Content-Security-Policy", "")
         self.assertIn("default-src 'self'", csp)
@@ -2261,12 +2261,12 @@ class ApiReports(unittest.TestCase):
         resp = client.get("/api/reports/generate.html", params={"period": "monthly", "download": "true"})
         self.assertEqual(resp.status_code, 200)
         self.assertIn("attachment", resp.headers["content-disposition"])
-        self.assertIn("vulnhunter-monthly-report.html", resp.headers["content-disposition"])
+        self.assertIn("quanta-monthly-report.html", resp.headers["content-disposition"])
 
 
 class ApiExceptions(unittest.TestCase):
     """Every test here uses an isolated temp DB (via patching db_module.get_engine) so
-    the suite never mutates the real, shared remediation/vulnhunter.db."""
+    the suite never mutates the real, shared remediation/quanta.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -2407,7 +2407,7 @@ class ApiDirectoryStatus(unittest.TestCase):
 
 class ApiRemediationApprovals(unittest.TestCase):
     """Every test here uses an isolated temp DB (via patching db_module.get_engine) so
-    the suite never mutates the real, shared remediation/vulnhunter.db. AD_SERVER/
+    the suite never mutates the real, shared remediation/quanta.db. AD_SERVER/
     AD_BASE_DN are never set in this test process, so every approve() call here exercises
     the honest "AD not configured" branch - the ldap3-mocked branch is covered directly
     in test_ad_directory.py."""
@@ -2641,7 +2641,7 @@ class ApiActivityLog(unittest.TestCase):
 
 class ApiAssets(unittest.TestCase):
     """Every test here uses an isolated temp DB so the suite never mutates the real,
-    shared remediation/vulnhunter.db."""
+    shared remediation/quanta.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -2875,7 +2875,7 @@ class ApiSearchAsk(unittest.TestCase):
 class ApiAssetPolicy(unittest.TestCase):
     """Every test here uses a temporary rules file (via patching DEFAULT_RULES_PATH)
     plus an isolated temp DB, so the suite never mutates the real, shipped
-    asset_policy_rules.yaml or the real, shared remediation/vulnhunter.db."""
+    asset_policy_rules.yaml or the real, shared remediation/quanta.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -3003,7 +3003,7 @@ class ApiAiVulnerabilities(unittest.TestCase):
 class ApiIngestGeneric(unittest.TestCase):
     """The vendor-agnostic ingestion webhook. Writes to the shared SQLite database
     (see remediation/connectors/live_data_store.py) - uses an isolated temp DB so this
-    suite never mutates the real, shared remediation/vulnhunter.db."""
+    suite never mutates the real, shared remediation/quanta.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -3065,7 +3065,7 @@ class ApiNotifications(unittest.TestCase):
     queue/exceptions/ingestion state - not person-to-person messages. Exception- and
     ingestion-derived notifications use an isolated temp DB (same pattern as
     ApiExceptions/ApiIngestGeneric) so this suite never touches the real, shared
-    remediation/vulnhunter.db."""
+    remediation/quanta.db."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -3274,10 +3274,10 @@ class ApiNotificationSettings(unittest.TestCase):
         self.assertIsNone(resp.json()["from_address"])
 
     def test_status_reports_configured_when_env_vars_set(self):
-        with patch.dict("os.environ", {"SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587", "SMTP_FROM_ADDRESS": "vulnhunter@example.com"}):
+        with patch.dict("os.environ", {"SMTP_HOST": "smtp.example.com", "SMTP_PORT": "587", "SMTP_FROM_ADDRESS": "quanta@example.com"}):
             resp = client.get("/api/notification-settings/status")
         self.assertTrue(resp.json()["smtp_configured"])
-        self.assertEqual(resp.json()["from_address"], "vulnhunter@example.com")
+        self.assertEqual(resp.json()["from_address"], "quanta@example.com")
 
     def test_preview_report_needs_no_login(self):
         resp = client.post("/api/notification-settings/preview", json={"kind": "report", "period": "weekly"})

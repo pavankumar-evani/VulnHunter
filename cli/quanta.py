@@ -14,8 +14,8 @@ IMPORTANT: every invocation here calls the real Claude API and spends real usage
 Nothing in this module runs automatically - see cli/README.md before using it for real.
 
 Usage:
-    python cli/vulnhunter.py scan <path> [--fix] [--dry-run]
-    python cli/vulnhunter.py remediate [--generate] [--finding-id FIND-N] [--dry-run]
+    python cli/quanta.py scan <path> [--fix] [--dry-run]
+    python cli/quanta.py remediate [--generate] [--finding-id FIND-N] [--dry-run]
 """
 import argparse
 import datetime
@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LOG_DIR = REPO_ROOT / ".vulnhunter" / "logs"
+LOG_DIR = REPO_ROOT / ".quanta" / "logs"
 
 DEFAULT_PERMISSION_MODE = "acceptEdits"
 DEFAULT_ALLOWED_TOOLS = "Read Grep Glob Bash Edit Write"
@@ -188,7 +188,7 @@ def run(prompt, pipeline_name, dry_run=False, on_result=None, **build_kwargs):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="vulnhunter",
+        prog="quanta",
         description="Headless CLI wrapper for Quanta's /vulnhunt and /remediate pipelines.",
     )
     parser.add_argument("--dry-run", action="store_true",

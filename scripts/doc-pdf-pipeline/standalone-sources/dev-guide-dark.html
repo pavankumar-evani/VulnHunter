@@ -199,9 +199,9 @@ cd <repository-directory></code></pre>
 
     <h2 class="section-h2" id="sec-2-1">2.1 Working across multiple sessions in parallel</h2>
     <p>This repository is regularly worked on by more than one Claude Code session at once, each in its own git worktree &mdash; a second working directory attached to the same repository, on its own branch, without needing a second clone:</p>
-    <pre class="codeblock"><code>git worktree add ../vulnhunter-feature-x -b feature-x
+    <pre class="codeblock"><code>git worktree add ../quanta-feature-x -b feature-x
 git worktree list          # see every active worktree
-git worktree remove ../vulnhunter-feature-x   # after merging</code></pre>
+git worktree remove ../quanta-feature-x   # after merging</code></pre>
     <div class="callout">
       <span class="label">Before pushing</span>
       <p>Always git fetch origin master and check for divergence before pushing to master &mdash; with more than one session or contributor active, origin/master moves. On a non-fast-forward rejection, fetch and inspect what changed (git show / git diff) before merging; don't force-push.</p>
@@ -223,7 +223,7 @@ git worktree remove ../vulnhunter-feature-x   # after merging</code></pre>
         <tr><td class="mono">remediation/config/</td><td>Every admin-editable policy as YAML &mdash; priority weights, SLA windows, remediation policy, risk-scoring weights &mdash; read fresh on every request, never hardcoded.</td></tr>
         <tr><td class="mono">.claude/agents/*.md</td><td>Every subagent's prompt and its tool-access frontmatter &mdash; the actual enforcement point behind &ldquo;never executes against real infrastructure.&rdquo; See &sect;9.</td></tr>
         <tr><td class="mono">.claude/commands/*.md</td><td>The <code>/vulnhunt</code> and <code>/remediate</code> slash-command orchestrators that sequence the subagents.</td></tr>
-        <tr><td class="mono">cli/vulnhunter.py</td><td>Headless pipeline runner &mdash; the same entry point the dashboard's <code>/run</code> page calls as a subprocess.</td></tr>
+        <tr><td class="mono">cli/quanta.py</td><td>Headless pipeline runner &mdash; the same entry point the dashboard's <code>/run</code> page calls as a subprocess.</td></tr>
         <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group &mdash; 1,458 tests today, all passing. Hand-rolled fakes, not vendor mock libraries.</td></tr>
         <tr><td class="mono">docs/enterprise-suite/</td><td>Fifteen HTML reference documents (architecture, RBAC, connectors, pricing, etc.), each also published as a shareable page &mdash; see <code>MANIFEST.md</code> for the sync rules.</td></tr>
       </tbody>
@@ -241,15 +241,15 @@ git worktree remove ../vulnhunter-feature-x   # after merging</code></pre>
     </ol>
     <div class="callout">
       <span class="label">HTTPS is on by default</span>
-      <p>The first run auto-generates a local self-signed certificate into dashboard/certs/ and serves HTTPS from then on &mdash; your browser will show a one-time &ldquo;not private&rdquo; warning, which is expected for a self-signed cert. Click through it (Advanced &rarr; Proceed in Chrome/Edge), or install dashboard/certs/cert.pem into your OS's trusted-root store once to make the warning disappear permanently. Set VULNHUNTER_DISABLE_TLS=true before running the command above to fall back to plain HTTP instead.</p>
+      <p>The first run auto-generates a local self-signed certificate into dashboard/certs/ and serves HTTPS from then on &mdash; your browser will show a one-time &ldquo;not private&rdquo; warning, which is expected for a self-signed cert. Click through it (Advanced &rarr; Proceed in Chrome/Edge), or install dashboard/certs/cert.pem into your OS's trusted-root store once to make the warning disappear permanently. Set QUANTA_DISABLE_TLS=true before running the command above to fall back to plain HTTP instead.</p>
     </div>
     <p>Two seed accounts ship with the repository (see dashboard/auth/users.json) so the app is usable immediately:</p>
     <div class="table-wrap">
     <table>
       <thead><tr><th>Email</th><th>Password</th><th>Role</th></tr></thead>
       <tbody>
-        <tr><td class="mono">admin@vulnhunter.local</td><td class="mono">ChangeMe123!</td><td>Admin</td></tr>
-        <tr><td class="mono">analyst@vulnhunter.local</td><td class="mono">ChangeMe123!</td><td>User</td></tr>
+        <tr><td class="mono">admin@quanta.local</td><td class="mono">ChangeMe123!</td><td>Admin</td></tr>
+        <tr><td class="mono">analyst@quanta.local</td><td class="mono">ChangeMe123!</td><td>User</td></tr>
       </tbody>
     </table>
     </div>
@@ -264,15 +264,15 @@ git worktree remove ../vulnhunter-feature-x   # after merging</code></pre>
     <pre class="codeblock"><code>claude
 /vulnhunt &lt;path-to-target-repo&gt; [--fix]
 /vulnhunt vulnerable-demo-app --fix
-/vulnhunt vulnerable-demo-app --verify VULN-2 vulnhunter/auto-fixes-&lt;branch&gt;
+/vulnhunt vulnerable-demo-app --verify VULN-2 quanta/auto-fixes-&lt;branch&gt;
 /remediate                     # ingests remediation/sample-data/* by default
 /remediate --generate          # also generates Ansible playbooks</code></pre>
 
     <h2 class="section-h2" id="sec-5-2">5.2 Headless &mdash; CI, cron, or the dashboard's own Run Pipeline page</h2>
-    <pre class="codeblock"><code>python cli/vulnhunter.py --dry-run scan vulnerable-demo-app --fix   # preview only, no spend
-python cli/vulnhunter.py scan vulnerable-demo-app --fix             # real run, spends API usage
-python cli/vulnhunter.py --dry-run remediate --generate
-python cli/vulnhunter.py remediate --generate</code></pre>
+    <pre class="codeblock"><code>python cli/quanta.py --dry-run scan vulnerable-demo-app --fix   # preview only, no spend
+python cli/quanta.py scan vulnerable-demo-app --fix             # real run, spends API usage
+python cli/quanta.py --dry-run remediate --generate
+python cli/quanta.py remediate --generate</code></pre>
     <p>The dashboard's own /run page is a thin UI over this exact same entry point &mdash; same dry-run default, same confirm gate, same budget cap (default $2.00, admin-adjustable up to $500).</p>
   </section>
 
@@ -397,8 +397,8 @@ data table.</code></pre>
 pip install -r dashboard/requirements.txt
 python dashboard/app.py                 # https://127.0.0.1:5050
 python -m unittest discover -s tests -p "test_*.py"
-python cli/vulnhunter.py --dry-run scan &lt;path&gt; --fix
-python cli/vulnhunter.py --dry-run remediate --generate
+python cli/quanta.py --dry-run scan &lt;path&gt; --fix
+python cli/quanta.py --dry-run remediate --generate
 gh pr create --title "..." --body "..."</code></pre>
   </section>
 

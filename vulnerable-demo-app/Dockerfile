@@ -1,4 +1,4 @@
-# VulnShop demo Dockerfile — intentionally contains bad practices for VulnHunter to catch:
+# VulnShop demo Dockerfile — intentionally contains bad practices for Quanta to catch:
 #   - runs as root (no USER directive)              -> CWE-250
 #   - secret baked into image via ENV                -> CWE-798
 #   - uses an old, unpinned base image tag            -> supply chain risk

@@ -1,6 +1,6 @@
 """
 A real, append-only log of every actual Claude API call this app makes (the
-/vulnhunt and /remediate pipelines via cli/vulnhunter.py, plus AI Assist and AI Trend
+/vulnhunt and /remediate pipelines via cli/quanta.py, plus AI Assist and AI Trend
 Analysis via dashboard/app.py) - who made it, which model, and (best-effort) how many
 tokens/what it cost - so an admin can see real per-user usage instead of no visibility
 at all, and so a configured per-user daily token limit (see

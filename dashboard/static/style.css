@@ -738,7 +738,7 @@ a.notif-item:hover { background: var(--bg); }
   .lifecycle-arrow { display: none; }
 }
 
-/* --- Ask Quanta (askVulnhunter.js) - example-query quick-fill buttons --- */
+/* --- Ask Quanta (askQuanta.js) - example-query quick-fill buttons --- */
 .ask-examples { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .ask-examples .link-button { font-size: 0.85rem; }
 

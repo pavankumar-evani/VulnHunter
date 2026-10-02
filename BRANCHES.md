@@ -53,7 +53,7 @@ exception, see "Keeping this current" at the bottom.
 ## Not a good fit for a long-lived parallel branch
 
 **The database layer** (`remediation/utils/db.py`, migration scripts, and
-`remediation/vulnhunter.db`'s schema) is cross-cutting — the dashboard, every connector,
+`remediation/quanta.db`'s schema) is cross-cutting — the dashboard, every connector,
 and the remediation engine all read and write through it. A long-running parallel branch
 here is *more* likely to collide with the others, not less, precisely because almost
 everything else touches it indirectly. If it needs a change, do it as a small, fast,
@@ -65,7 +65,7 @@ open for days while the others drift away from it. The same logic applies to sha
 
 `git branch -a` will also show a few auto-named branches (`claude/epic-driscoll-...`,
 `claude/heuristic-heyrovsky-...`, `claude/loving-germain-...`), an old
-`vulnhunter/auto-fixes-20260803` branch from a prior `/vulnhunt --fix` run, and a couple
+`quanta/auto-fixes-20260803` branch from a prior `/vulnhunt --fix` run, and a couple
 of dependabot branches. These predate this registry and weren't created under the
 scoped-parallel-work scheme above — don't assume anything about what they contain, and
 don't delete any of them without actually checking first.

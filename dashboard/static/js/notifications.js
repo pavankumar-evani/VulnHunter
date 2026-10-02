@@ -9,7 +9,7 @@ import { api } from "./api.js";
 import { escapeHtml } from "./dom.js";
 import { icon } from "./icons.js";
 
-const READ_KEY = "vulnhunter_read_notifications";
+const READ_KEY = "quanta_read_notifications";
 const CACHE_TTL_MS = 20000;
 const READ_CHANGED_EVENT = "notifications-read-changed";
 

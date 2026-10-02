@@ -25,14 +25,14 @@ on every push.
 
 ```bash
 # Preview the command without spending anything
-python cli/vulnhunter.py --dry-run scan vulnerable-demo-app --fix
+python cli/quanta.py --dry-run scan vulnerable-demo-app --fix
 
 # Actually run it (spends API usage)
-python cli/vulnhunter.py scan vulnerable-demo-app --fix
+python cli/quanta.py scan vulnerable-demo-app --fix
 
 # Same for the remediation pipeline
-python cli/vulnhunter.py --dry-run remediate --generate
-python cli/vulnhunter.py remediate --generate
+python cli/quanta.py --dry-run remediate --generate
+python cli/quanta.py remediate --generate
 ```
 
 ## Options
@@ -55,7 +55,7 @@ python cli/vulnhunter.py remediate --generate
 ## Audit logging
 
 Every real (non-dry-run) invocation writes a timestamped JSON record to
-`.vulnhunter/logs/<timestamp>-<pipeline>.json` containing the exact command run and its
+`.quanta/logs/<timestamp>-<pipeline>.json` containing the exact command run and its
 full stdout/stderr. This directory is gitignored (it's runtime output, and may contain
 scan results) — it's the seed of the audit trail a real deployment needs; see
 [KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md)'s commercialization roadmap for what a

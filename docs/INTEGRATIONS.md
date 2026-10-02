@@ -190,7 +190,7 @@ available while building it.
 
 Creates an Issue per finding via Jira Cloud's documented REST API v3 (HTTP Basic auth
 with an Atlassian account email + API token). Jira has no built-in correlation-id field
-the way ServiceNow's Table API does, so idempotency is keyed off a `vulnhunter-<finding_id>`
+the way ServiceNow's Table API does, so idempotency is keyed off a `quanta-<finding_id>`
 label instead: `find_existing_issue()` searches for that label via JQL before creating,
 and every created issue is tagged with it, so re-running the connector against the same
 findings doesn't create duplicate tickets. The issue description is built as a minimal,

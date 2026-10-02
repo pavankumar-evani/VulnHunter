@@ -1,6 +1,6 @@
 """
 VulnShop Admin API - a deliberately vulnerable internal-admin surface bolted onto
-VulnShop, used ONLY to test VulnHunter's Secrets/API-authorization detection guidance.
+VulnShop, used ONLY to test Quanta's Secrets/API-authorization detection guidance.
 DO NOT deploy this anywhere.
 
 Planted vulnerabilities (for scoring / demo reference):

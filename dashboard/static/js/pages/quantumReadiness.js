@@ -155,7 +155,7 @@ export async function render(container) {
   wireExportButtons(container, "quantum-readiness", {
     getRows: () => (categoryFilter === "all" ? findings : findings.filter((f) => f.quantum_readiness.category === categoryFilter)),
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-quantum-readiness",
+    filenameBase: "quanta-quantum-readiness",
   });
   container.addEventListener("click", (e) => {
     const btn = e.target.closest(".finding-id-link");

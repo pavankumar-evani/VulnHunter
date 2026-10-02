@@ -320,7 +320,7 @@ export async function render(container) {
   wireExportButtons(container, "exceptions", {
     getRows: () => (groupFilter === "all" ? exceptionsAll : exceptionsAll.filter((e) => e.groupLabel === groupFilter)),
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-exceptions",
+    filenameBase: "quanta-exceptions",
   });
 
   renderExceptionRows();

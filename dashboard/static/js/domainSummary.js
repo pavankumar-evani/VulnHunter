@@ -359,11 +359,11 @@ export function wireTopRankings(container, idPrefix, { vulnGroups, assetGroups }
   wireExportButtons(container, `${idPrefix}-vulns`, {
     getRows: () => vulnGroups,
     columns: VULN_COLUMNS,
-    filenameBase: `vulnhunter-${idPrefix}-top-vulnerabilities`,
+    filenameBase: `quanta-${idPrefix}-top-vulnerabilities`,
   });
   wireExportButtons(container, `${idPrefix}-assets`, {
     getRows: () => assetGroups,
     columns: ASSET_COLUMNS,
-    filenameBase: `vulnhunter-${idPrefix}-top-assets`,
+    filenameBase: `quanta-${idPrefix}-top-assets`,
   });
 }

@@ -1,7 +1,7 @@
 """
 Tests for remediation/audit/ai_usage_log.py - the real per-call AI usage/cost log and
 its server-side daily-limit check. Storage tests use a fresh in-memory SQLite engine
-(never the real, shared remediation/vulnhunter.db).
+(never the real, shared remediation/quanta.db).
 """
 import datetime
 import sys

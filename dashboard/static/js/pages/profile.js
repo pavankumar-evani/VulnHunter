@@ -73,7 +73,7 @@ export async function render(container) {
   container.querySelector("#logout-button").addEventListener("click", async () => {
     await api.authLogout();
     setCurrentUser(null);
-    window.dispatchEvent(new CustomEvent("vulnhunter-auth-changed"));
+    window.dispatchEvent(new CustomEvent("quanta-auth-changed"));
     window.history.pushState({}, "", "/logout");
     window.dispatchEvent(new PopStateEvent("popstate"));
   });

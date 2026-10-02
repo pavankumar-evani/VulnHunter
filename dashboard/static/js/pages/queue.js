@@ -536,7 +536,7 @@ export async function render(container) {
     wireExportButtons(container, "queue", {
       getRows: () => sortFindings(currentSlice(), sort.key, sort.dir),
       columns: EXPORT_COLUMNS,
-      filenameBase: "vulnhunter-remediation-queue",
+      filenameBase: "quanta-remediation-queue",
     });
     wireColumnPicker(container, "queue", (visible) => {
       visibleColumns = visible;

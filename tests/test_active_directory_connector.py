@@ -9,7 +9,7 @@ They verify: connection ownership/unbind semantics, the test-connection search s
 the computer-object search filter/attributes, safe attribute extraction (including a
 missing/None attribute not crashing), OS-string-based type inference, the
 userAccountControl ACCOUNTDISABLE-bit decode, and correct normalization into
-VulnHunter's shared asset shape.
+Quanta's shared asset shape.
 
 These do NOT prove the connector works against a real Active Directory domain
 controller - only that it behaves correctly against objects shaped like AD's public

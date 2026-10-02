@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FIX_BRANCH_PREFIX = "vulnhunter/auto-fixes-"
+FIX_BRANCH_PREFIX = "quanta/auto-fixes-"
 
 sys.path.insert(0, str(REPO_ROOT))
 from remediation.config import priority_engine  # noqa: E402
@@ -864,9 +864,9 @@ def load_activity_insights():
 
 
 def load_cli_audit_log_summaries():
-    """Recent runs of cli/vulnhunter.py, if any have been run for real (dry-run doesn't
+    """Recent runs of cli/quanta.py, if any have been run for real (dry-run doesn't
     write logs). Returns newest-first, summary fields only (not full stdout/stderr)."""
-    log_dir = REPO_ROOT / ".vulnhunter" / "logs"
+    log_dir = REPO_ROOT / ".quanta" / "logs"
     if not log_dir.exists():
         return []
     entries = []

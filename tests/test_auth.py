@@ -2,7 +2,7 @@
 Tests for dashboard/auth/ - password hashing, signed-cookie sessions, the local user
 store, and the OIDC client. User-store tests use an isolated in-memory (or, for the
 concurrency test, temp on-disk) SQLite engine - never the real, shared
-remediation/vulnhunter.db. The OIDC client is tested entirely against mocked HTTP (no
+remediation/quanta.db. The OIDC client is tested entirely against mocked HTTP (no
 network, no real identity provider) - same pattern as the Tenable/Armis/ServiceNow/
 Jira/Splunk/CrowdStrike connector tests.
 """
@@ -345,15 +345,15 @@ class OidcFlow(unittest.TestCase):
 
 class ProductionRequirementsValidation(unittest.TestCase):
     """rbac.validate_production_requirements() - the startup check that refuses to
-    run VULNHUNTER_REQUIRE_LOGIN_FOR_READS or VULNHUNTER_PRODUCTION without a real,
+    run QUANTA_REQUIRE_LOGIN_FOR_READS or QUANTA_PRODUCTION without a real,
     stable session secret."""
 
     def setUp(self):
         self.patcher = patch.dict("os.environ", {}, clear=False)
         self.patcher.start()
-        os.environ.pop("VULNHUNTER_REQUIRE_LOGIN_FOR_READS", None)
-        os.environ.pop("VULNHUNTER_PRODUCTION", None)
-        os.environ.pop("VULNHUNTER_SESSION_SECRET", None)
+        os.environ.pop("QUANTA_REQUIRE_LOGIN_FOR_READS", None)
+        os.environ.pop("QUANTA_PRODUCTION", None)
+        os.environ.pop("QUANTA_SESSION_SECRET", None)
 
     def tearDown(self):
         self.patcher.stop()
@@ -362,53 +362,53 @@ class ProductionRequirementsValidation(unittest.TestCase):
         rbac.validate_production_requirements()  # must not raise
 
     def test_raises_when_the_reads_flag_is_on_with_no_real_secret(self):
-        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "true"
+        os.environ["QUANTA_REQUIRE_LOGIN_FOR_READS"] = "true"
         with self.assertRaises(RuntimeError):
             rbac.validate_production_requirements()
 
     def test_passes_when_the_reads_flag_is_on_with_a_real_secret(self):
-        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "true"
-        os.environ["VULNHUNTER_SESSION_SECRET"] = "a-real-stable-secret"
+        os.environ["QUANTA_REQUIRE_LOGIN_FOR_READS"] = "true"
+        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret"
         rbac.validate_production_requirements()  # must not raise
 
     def test_flag_value_is_case_insensitive(self):
-        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "TRUE"
+        os.environ["QUANTA_REQUIRE_LOGIN_FOR_READS"] = "TRUE"
         with self.assertRaises(RuntimeError):
             rbac.validate_production_requirements()
 
     def test_flag_set_to_a_falsy_looking_string_does_not_enable_it(self):
-        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "false"
+        os.environ["QUANTA_REQUIRE_LOGIN_FOR_READS"] = "false"
         rbac.validate_production_requirements()  # must not raise
 
     def test_raises_when_production_flag_is_on_with_no_real_secret_even_if_reads_flag_is_off(self):
         """The real gap this flag closes: before it existed, a deployment that never
-        set VULNHUNTER_REQUIRE_LOGIN_FOR_READS (the documented default) got zero
+        set QUANTA_REQUIRE_LOGIN_FOR_READS (the documented default) got zero
         enforcement on the secret, no matter how clearly it declared itself a real
         deployment."""
-        os.environ["VULNHUNTER_PRODUCTION"] = "true"
+        os.environ["QUANTA_PRODUCTION"] = "true"
         with self.assertRaises(RuntimeError):
             rbac.validate_production_requirements()
 
     def test_passes_when_production_flag_is_on_with_a_real_secret(self):
-        os.environ["VULNHUNTER_PRODUCTION"] = "true"
-        os.environ["VULNHUNTER_SESSION_SECRET"] = "a-real-stable-secret"
+        os.environ["QUANTA_PRODUCTION"] = "true"
+        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret"
         rbac.validate_production_requirements()  # must not raise
 
     def test_production_flag_value_is_case_insensitive(self):
-        os.environ["VULNHUNTER_PRODUCTION"] = "TRUE"
+        os.environ["QUANTA_PRODUCTION"] = "TRUE"
         with self.assertRaises(RuntimeError):
             rbac.validate_production_requirements()
 
     def test_production_flag_set_to_a_falsy_looking_string_does_not_enable_it(self):
-        os.environ["VULNHUNTER_PRODUCTION"] = "false"
+        os.environ["QUANTA_PRODUCTION"] = "false"
         rbac.validate_production_requirements()  # must not raise
 
     def test_either_flag_alone_is_enough_to_require_a_real_secret(self):
-        os.environ["VULNHUNTER_REQUIRE_LOGIN_FOR_READS"] = "true"
-        os.environ["VULNHUNTER_PRODUCTION"] = "true"
+        os.environ["QUANTA_REQUIRE_LOGIN_FOR_READS"] = "true"
+        os.environ["QUANTA_PRODUCTION"] = "true"
         with self.assertRaises(RuntimeError):
             rbac.validate_production_requirements()
-        os.environ["VULNHUNTER_SESSION_SECRET"] = "a-real-stable-secret"
+        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret"
         rbac.validate_production_requirements()  # must not raise, one real secret covers both
 
 

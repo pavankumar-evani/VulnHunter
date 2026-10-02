@@ -15,8 +15,8 @@ import { icon } from "./icons.js";
 import { escapeHtml } from "./dom.js";
 import { glossaryHtml } from "./glossary.js";
 
-const WIDTH_KEY = "vulnhunter-insights-width";
-const COLLAPSED_KEY = "vulnhunter-insights-collapsed";
+const WIDTH_KEY = "quanta-insights-width";
+const COLLAPSED_KEY = "quanta-insights-collapsed";
 const DEFAULT_WIDTH = 300;
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 480;

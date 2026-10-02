@@ -132,6 +132,6 @@ export async function render(container) {
   wireExportButtons(container, "ai-vuln", {
     getRows: () => exportRows,
     columns: EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-ai-vulnerabilities",
+    filenameBase: "quanta-ai-vulnerabilities",
   });
 }

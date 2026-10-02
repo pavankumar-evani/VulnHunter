@@ -159,7 +159,7 @@ explicitly left for a human, with a stated reason.
 **Validated result** (against the included `vulnerable-demo-app/`): 18 findings (9
 Critical, 6 High, 2 Medium, 1 Low) — the original 9 in `app.py`/`Dockerfile` plus 9 more
 added later in `ai_assistant.py` (AI/ML) and `admin_api.py` (secrets/API-authorization) —
-11 auto-fixed on branch `vulnhunter/auto-fixes-20260803`, 7 flagged for manual review.
+11 auto-fixed on branch `quanta/auto-fixes-20260803`, 7 flagged for manual review.
 See `vulnerable-demo-app/SECURITY_REPORT.md` on that branch for the full generated report.
 
 ### 4.2 `/remediate` — Infrastructure Remediation Pipeline
@@ -334,7 +334,7 @@ with plain-English impact per finding.
 ```
 
 This additionally runs `vuln-fixer`, which creates a new branch (named
-`vulnhunter/auto-fixes-<timestamp>`), applies the mechanical fixes, commits, and pushes.
+`quanta/auto-fixes-<timestamp>`), applies the mechanical fixes, commits, and pushes.
 It prints the PR-creation URL GitHub returns on push — open that link (or use VS Code's
 Source Control panel) to actually open the PR; this pipeline deliberately has no `gh` CLI
 dependency, so opening the PR itself is a manual, one-click step.
@@ -386,13 +386,13 @@ drift.
 ### Step 8: Run it headlessly (CI/automation, no interactive session)
 
 ```bash
-python cli/vulnhunter.py --dry-run scan vulnerable-demo-app --fix   # preview only
-python cli/vulnhunter.py scan vulnerable-demo-app --fix              # spends real API usage
-python cli/vulnhunter.py --dry-run remediate --generate
-python cli/vulnhunter.py remediate --generate
+python cli/quanta.py --dry-run scan vulnerable-demo-app --fix   # preview only
+python cli/quanta.py scan vulnerable-demo-app --fix              # spends real API usage
+python cli/quanta.py --dry-run remediate --generate
+python cli/quanta.py remediate --generate
 ```
 
-`cli/vulnhunter.py` is a thin wrapper around `claude -p` (Claude Code's non-interactive
+`cli/quanta.py` is a thin wrapper around `claude -p` (Claude Code's non-interactive
 mode) — it doesn't reimplement any pipeline logic, it just removes the requirement for a
 human to be typing into a live session, which is what makes this usable from CI, cron, or
 any other automation. **Every non-dry-run invocation spends real Claude API usage** — see
@@ -415,7 +415,7 @@ remediation queue linked to generated playbooks, and a `/run` page that wraps th
 above (dry-run by default, same cost posture). See [dashboard/README.md](dashboard/README.md)
 for the full page list and — importantly — what this MVP still doesn't close before
 considering exposing it beyond localhost: every read route stays open with no session at
-all unless an operator sets `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true` (auth/RBAC are
+all unless an operator sets `QUANTA_REQUIRE_LOGIN_FOR_READS=true` (auth/RBAC are
 otherwise real — see [§9](#9-roadmap--path-to-commercial-grade) item 6 and
 [§13.1](#131-the-rbac-scope-decision-gate-mutations-not-reads)), and there's still no job
 queue for long-running pipeline runs.
@@ -462,7 +462,7 @@ for network devices or IoT/OT. To add one:
 │   ├── workflows/ci.yml       runs the full test suite on every push/PR
 │   ├── CODEOWNERS, ISSUE_TEMPLATE/, PULL_REQUEST_TEMPLATE.md
 ├── cli/
-│   ├── vulnhunter.py          headless CLI wrapper around `claude -p` (no API calls
+│   ├── quanta.py          headless CLI wrapper around `claude -p` (no API calls
 │   │                          from the prompt logic itself - see cli/README.md)
 │   └── README.md              usage, cost warning, binary discovery order
 ├── dashboard/
@@ -635,7 +635,7 @@ push/PR, `CODEOWNERS`, issue/PR templates, `CHANGELOG.md`, README badges.
 
 Usable by someone who isn't running Claude Code interactively:
 
-1. **Headless CLI (`cli/vulnhunter.py`)** ✅ Done — wraps `claude -p` so either pipeline
+1. **Headless CLI (`cli/quanta.py`)** ✅ Done — wraps `claude -p` so either pipeline
    runs from a script/CI/cron without a human in an interactive session, without
    duplicating any prompt logic. Every real invocation spends API usage/credits — see
    [cli/README.md](cli/README.md).
@@ -646,7 +646,7 @@ Usable by someone who isn't running Claude Code interactively:
    [dashboard/README.md](dashboard/README.md) for why this architecture rather than a
    Node/React build (§11.1 has the fuller environment-constraint reasoning), and what
    this MVP still doesn't fully close: reads stay open by default unless an operator
-   opts into `VULNHUNTER_REQUIRE_LOGIN_FOR_READS` (auth/RBAC are otherwise real now —
+   opts into `QUANTA_REQUIRE_LOGIN_FOR_READS` (auth/RBAC are otherwise real now —
    see item 6 below and §13.1), and there's still no job queue or real multi-tenant data
    boundary, before it's more than a local/trusted-network tool.
 3. **Live Tenable/Armis connectors (`remediation/connectors/`)** ✅ Built, ⚠️ unverified
@@ -678,7 +678,7 @@ Usable by someone who isn't running Claude Code interactively:
    `alert_state`/`schedule_state`, `exceptions`, `remediation_approvals`,
    `activity_log`, `ai_usage_log`, `asset_ownership`, `users`, and `live_data_findings`
    (the generic-ingest/Prisma Cloud/Cortex XSIAM adapters' pending output) all now live
-   in a real local SQLite database (`remediation/vulnhunter.db`, via SQLAlchemy Core —
+   in a real local SQLite database (`remediation/quanta.db`, via SQLAlchemy Core —
    see [remediation/utils/db.py](remediation/utils/db.py)) with real ACID transactions,
    replacing the flat JSON files most of them used before. `activity_log` is the real,
    already-built "who approved what, and when" audit trail this item asked for;
@@ -1187,8 +1187,8 @@ Qualys was in that same "declined for now" list at the time, but has since been 
 
 ## 14. Appendix
 
-- **Branches:** `master` (code pipeline scaffold), `vulnhunter/auto-fixes-20260803`
+- **Branches:** `master` (code pipeline scaffold), `quanta/auto-fixes-20260803`
   (validated `/vulnhunt --fix` output), `feature/remediation-engine` (the `/remediate`
   pipeline, test suite, and this document)
-- **Deliverables:** [`deliverables/VulnHunter_Hackathon_Deck.pptx`](deliverables/VulnHunter_Hackathon_Deck.pptx),
-  [`deliverables/VulnHunter_Project_Report.docx`](deliverables/VulnHunter_Project_Report.docx)
+- **Deliverables:** [`deliverables/Quanta_Hackathon_Deck.pptx`](deliverables/Quanta_Hackathon_Deck.pptx),
+  [`deliverables/Quanta_Project_Report.docx`](deliverables/Quanta_Project_Report.docx)

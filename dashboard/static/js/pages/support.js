@@ -50,7 +50,7 @@ export async function render(container) {
       <li>Reads stay open by default even though real login/RBAC exists - mutations
         (admin settings, connector actions, approvals) require a real session, but
         anyone who can reach this port can view findings unless
-        <code>VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true</code> is set. Don't expose this
+        <code>QUANTA_REQUIRE_LOGIN_FOR_READS=true</code> is set. Don't expose this
         beyond localhost/a trusted network without setting it.</li>
       <li>No database - every page re-reads from disk on every request; there's no
         historical trend view.</li>

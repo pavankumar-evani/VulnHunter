@@ -16,7 +16,7 @@ jobs:
 
       - name: Create local tracking branches for all remotes
         # The test suite reads git history via `git show <ref>:<path>` and
-        # `git branch --list` for both `master` and the `vulnhunter/auto-fixes-*`
+        # `git branch --list` for both `master` and the `quanta/auto-fixes-*`
         # branch. actions/checkout only checks out the current ref locally, so
         # every other branch needs a local tracking branch created from the
         # fetched remote refs before the tests can find it.

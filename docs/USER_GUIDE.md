@@ -37,7 +37,7 @@ claude
 - With no `--fix`, this runs `vuln-scanner` → `vuln-triage-reporter` and writes
   `<path>/SECURITY_REPORT.md`. Read that file — it's the full ranked report.
 - With `--fix`, `vuln-fixer` also runs: it creates a new branch
-  (`vulnhunter/auto-fixes-<timestamp>`), applies only the findings marked
+  (`quanta/auto-fixes-<timestamp>`), applies only the findings marked
   `auto_fixable: true`, commits, and pushes. It never commits to `main`. If you omit
   `--fix`, the command asks you before invoking `vuln-fixer` at all — nothing gets fixed
   without an explicit yes.
@@ -67,18 +67,18 @@ claude
 
 ---
 
-## 2. Running headlessly (`cli/vulnhunter.py`)
+## 2. Running headlessly (`cli/quanta.py`)
 
 For CI, cron, or any automation without a human typing into an interactive session:
 
 ```bash
-python cli/vulnhunter.py --dry-run scan vulnerable-demo-app --fix   # preview, no cost
-python cli/vulnhunter.py scan vulnerable-demo-app --fix              # spends real API usage
-python cli/vulnhunter.py --dry-run remediate --generate
-python cli/vulnhunter.py remediate --generate
+python cli/quanta.py --dry-run scan vulnerable-demo-app --fix   # preview, no cost
+python cli/quanta.py scan vulnerable-demo-app --fix              # spends real API usage
+python cli/quanta.py --dry-run remediate --generate
+python cli/quanta.py remediate --generate
 ```
 
-`cli/vulnhunter.py` is a thin wrapper around `claude -p` (Claude Code's non-interactive
+`cli/quanta.py` is a thin wrapper around `claude -p` (Claude Code's non-interactive
 mode) — it does not reimplement any pipeline logic, so editing an agent's `.md` file
 changes behavior for both the interactive and headless paths identically. Key facts, all
 from [cli/README.md](../cli/README.md):
@@ -88,7 +88,7 @@ from [cli/README.md](../cli/README.md):
   `--max-budget-usd` (default `$2.00`) as a safety net — not a guarantee you've budgeted
   correctly for your own Claude plan.
 - Every real invocation writes an audit record to
-  `.vulnhunter/logs/<timestamp>-<pipeline>.json` (command run, full stdout/stderr) —
+  `.quanta/logs/<timestamp>-<pipeline>.json` (command run, full stdout/stderr) —
   gitignored, and the seed of the audit trail described in
   [COMPLIANCE_MAPPING.md](COMPLIANCE_MAPPING.md).
 - The `claude` binary is discovered via `CLAUDE_BIN` env var → `PATH` → `CLAUDE_CODE_EXECPATH`
@@ -111,7 +111,7 @@ vanilla-JS single-page frontend (`dashboard/static/`) — no Node/npm build step
 **read-mostly** for pipeline output: every page re-reads the real findings/plan
 artifacts on disk (git history for `/vulnhunt`, files under `remediation/` for
 `/remediate`) on every request, and there's still no historical trend view across runs.
-A real local SQLite database (`remediation/vulnhunter.db`) backs everything else that
+A real local SQLite database (`remediation/quanta.db`) backs everything else that
 gets read-modify-write traffic — exceptions, approvals, activity/AI-usage logs, asset
 ownership, users, and more — see
 [dashboard/README.md](../dashboard/README.md)'s "What this is NOT (yet)" section for the
@@ -161,7 +161,7 @@ per-tenant authentication or data isolation. See [FAQ.md](FAQ.md#does-it-support
 A real local login/RBAC system exists (see [§11](#11-logging-in-accounts-and-the-profile-page)
 below) - it gates mutations (admin-only settings, connector fetches, approvals) and
 scopes reads by team, but every read/GET route stays open with no session by default in
-this MVP, a stated, disclosed scope decision (set `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true`
+this MVP, a stated, disclosed scope decision (set `QUANTA_REQUIRE_LOGIN_FOR_READS=true`
 to close that gap). Before exposing this beyond localhost or a trusted network with reads
 still open: anyone who can reach the port can view findings. See [dashboard/README.md](../dashboard/README.md) and
 [COMPLIANCE_MAPPING.md](COMPLIANCE_MAPPING.md) for what's missing before that changes.
@@ -351,8 +351,8 @@ seed, not a real secret; change or remove before any real deployment):
 
 | Email | Password | Role |
 |---|---|---|
-| `admin@vulnhunter.local` | `ChangeMe123!` | admin |
-| `analyst@vulnhunter.local` | `ChangeMe123!` | user |
+| `admin@quanta.local` | `ChangeMe123!` | admin |
+| `analyst@quanta.local` | `ChangeMe123!` | user |
 
 Once logged in, `/profile` shows your name/email/role, a change-password form, and a
 logout button. Only the **admin** role can edit `/priority-rules` or revoke an

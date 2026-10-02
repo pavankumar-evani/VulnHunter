@@ -29,7 +29,7 @@ import requests
 
 from remediation.utils.retry import retry_with_backoff
 
-DEFAULT_SOURCETYPE = "vulnhunter:finding"
+DEFAULT_SOURCETYPE = "quanta:finding"
 
 _RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 

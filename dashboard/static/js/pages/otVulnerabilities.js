@@ -112,7 +112,7 @@ export async function render(container) {
       : otFindings;
     wireFindingsTable(container, filteredFindings, {
       exportGroupId: "ot-hub",
-      filenameBase: "vulnhunter-ot-vulnerabilities",
+      filenameBase: "quanta-ot-vulnerabilities",
       ownerByAssetName, teamByAssetName, environmentByAssetName,
     });
   }

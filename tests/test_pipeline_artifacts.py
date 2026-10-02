@@ -1,10 +1,10 @@
 """
-Test suite for VulnHunter's two pipelines (/vulnhunt and /remediate).
+Test suite for Quanta's two pipelines (/vulnhunt and /remediate).
 
 This does NOT invoke the Claude Code subagents directly (they only run inside
 an interactive Claude Code session). Instead it validates the real artifacts
 those agents produced during the documented validation run: the git history
-(master = vulnerable baseline, vulnhunter/auto-fixes-<ts> = the fix branch)
+(master = vulnerable baseline, quanta/auto-fixes-<ts> = the fix branch)
 for /vulnhunt, and the files under remediation/output/ + REMEDIATION_PLAN.md
 for /remediate. That makes this both a regression suite (re-run it after any
 prompt/agent edit to catch drift) and the test evidence for the hackathon
@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FIX_BRANCH_PREFIX = "vulnhunter/auto-fixes-"
+FIX_BRANCH_PREFIX = "quanta/auto-fixes-"
 
 
 def git_show(ref, path):
@@ -37,7 +37,7 @@ def find_fix_branch():
         cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", check=True,
     )
     branches = [b.strip().lstrip("* ").strip() for b in result.stdout.splitlines() if b.strip()]
-    assert branches, "no vulnhunter/auto-fixes-* branch found - has /vulnhunt --fix been run?"
+    assert branches, "no quanta/auto-fixes-* branch found - has /vulnhunt --fix been run?"
     return branches[0]
 
 

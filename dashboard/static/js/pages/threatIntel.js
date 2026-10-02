@@ -463,6 +463,6 @@ export async function render(container) {
   wireExportButtons(container, "ti-zerodays", {
     getRows: () => zeroDays,
     columns: ZERO_DAY_EXPORT_COLUMNS,
-    filenameBase: "vulnhunter-threat-intel-zero-days",
+    filenameBase: "quanta-threat-intel-zero-days",
   });
 }

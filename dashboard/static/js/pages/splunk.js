@@ -54,7 +54,7 @@ export async function render(container) {
     <form class="run-form" id="splunk-form">
       <label>HEC URL<input type="text" name="hec_url" placeholder="https://splunk.example.com:8088/services/collector/event"></label>
       <label>HEC token<input type="password" name="hec_token"></label>
-      <label>Sourcetype<input type="text" name="sourcetype" value="vulnhunter:finding"></label>
+      <label>Sourcetype<input type="text" name="sourcetype" value="quanta:finding"></label>
       <label>Index (optional - leave blank for the HEC token's default)<input type="text" name="index"></label>
       <label class="checkbox-label checkbox-danger">
         <input type="checkbox" name="confirm">
@@ -82,7 +82,7 @@ export async function render(container) {
     const body = {
       hec_url: form.hec_url.value.trim(),
       hec_token: form.hec_token.value,
-      sourcetype: form.sourcetype.value.trim() || "vulnhunter:finding",
+      sourcetype: form.sourcetype.value.trim() || "quanta:finding",
       index: form.index.value.trim(),
       confirm: form.confirm.checked,
     };

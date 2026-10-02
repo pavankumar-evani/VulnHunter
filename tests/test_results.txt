@@ -646,6 +646,6 @@ test_batch_sends_events_for_all_findings (test_splunk_connector.SendEventsForFin
 Ran 582 tests in 76.805s
 
 OK
-WARNING: VULNHUNTER_SESSION_SECRET is not set - using a random secret generated for this process only. Set it to a real, stable value before any real deployment (see dashboard/README.md).
+WARNING: QUANTA_SESSION_SECRET is not set - using a random secret generated for this process only. Set it to a real, stable value before any real deployment (see dashboard/README.md).
 Would run: C:\Users\pavane\AppData\Roaming\Claude\claude-code\2.1.219\claude.exe -p /vulnhunt vulnerable-demo-app --output-format json --permission-mode acceptEdits --allowedTools Read Grep Glob Bash Edit Write --max-budget-usd 2.00
-(working directory: C:\Users\pavane\OneDrive - Deloitte (O365D)\Desktop\Claud workspace\vulnhunter-project)
+(working directory: C:\Users\pavane\OneDrive - Deloitte (O365D)\Desktop\Claud workspace\quanta-project)

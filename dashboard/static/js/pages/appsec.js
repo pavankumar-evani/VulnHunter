@@ -227,7 +227,7 @@ export async function render(container) {
       : filteredFindings;
     wireFindingsTable(container, filteredFindings, {
       exportGroupId: "appsec-hub",
-      filenameBase: "vulnhunter-appsec-sca-dast",
+      filenameBase: "quanta-appsec-sca-dast",
       ownerByAssetName, teamByAssetName, environmentByAssetName,
     });
   }

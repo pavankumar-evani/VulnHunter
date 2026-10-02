@@ -6,7 +6,7 @@
 // identically in Chrome, Edge, Firefox, Safari, and Opera on both desktop and mobile.
 import { icon } from "./icons.js";
 
-const STORAGE_KEY = "vulnhunter-sidebar-collapsed";
+const STORAGE_KEY = "quanta-sidebar-collapsed";
 
 function applyState(collapsed) {
   const shell = document.querySelector(".app-shell");

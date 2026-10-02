@@ -107,10 +107,10 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 - **OWASP secure response headers**: every dashboard response now carries
   `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`
   unconditionally (zero-risk - this SPA never used the capabilities they remove), plus an
-  opt-in `Content-Security-Policy` (`VULNHUNTER_ENABLE_CSP=true`, off by default because
+  opt-in `Content-Security-Policy` (`QUANTA_ENABLE_CSP=true`, off by default because
   this codebase's existing inline `style="..."` attributes need `style-src
   'unsafe-inline'` - shipping it on by default risked breaking the UI it's meant to
-  protect). Same "opt-in, off by default" convention as `VULNHUNTER_REQUIRE_LOGIN_FOR_READS`.
+  protect). Same "opt-in, off by default" convention as `QUANTA_REQUIRE_LOGIN_FOR_READS`.
 - **[docs/GOING_LIVE.md](docs/GOING_LIVE.md)**: the operational checklist for actually
   connecting a real account - exact credentials needed per connector, exact commands/
   steps, and an honest split between what's ready today with zero code changes
@@ -149,19 +149,19 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   than link to a filter value that would misrepresent what was clicked.
 - **[docs/VR_PLATFORM_COMPARISON.md](docs/VR_PLATFORM_COMPARISON.md)**: independently-
   verified research (not the AI-drafted source deck's uncited numbers) comparing
-  VulnHunter and ServiceNow VR against Nucleus Security, DefectDojo, Brinqa, and
-  ArmorCode - real sourced pricing/connector-count facts, VulnHunter's actual current
+  Quanta and ServiceNow VR against Nucleus Security, DefectDojo, Brinqa, and
+  ArmorCode - real sourced pricing/connector-count facts, Quanta's actual current
   gaps (no cross-scanner deduplication; only 8 connectors, 8 of 10 total integrations
   never exercised against a live account), and a phased roadmap recommendation.
 - **Production-readiness pass**, closing/mitigating four of the real blockers named
   in a production-readiness assessment:
-  - **Closing the anonymous-read gap (opt-in)**: `VULNHUNTER_REQUIRE_LOGIN_FOR_READS=true`
+  - **Closing the anonymous-read gap (opt-in)**: `QUANTA_REQUIRE_LOGIN_FOR_READS=true`
     is a new environment flag enabling `dashboard/app.py`'s `_require_login_for_api_reads`
     middleware - every `/api/*` route then requires a real session except the login
     flow itself. One middleware, not ~100 individual route changes, so the large
     existing test suite (which exercises the still-default OFF state) is completely
     unaffected. Also closes per-team RBAC's own documented anonymous-bypass caveat.
-    Requires a real `VULNHUNTER_SESSION_SECRET` too - `rbac.validate_production_requirements()`
+    Requires a real `QUANTA_SESSION_SECRET` too - `rbac.validate_production_requirements()`
     (called at startup) refuses to start otherwise, since gating every read while
     sessions reset on every restart would lock everyone out.
   - **Real concurrent-write safety** for the highest-risk JSON stores: new
@@ -273,7 +273,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   - 22 new tests (`test_pattern_recognition.py`, `test_asset_inventory.py`) for the
     new IP/MAC validation and asset-inventory merge behavior; full suite green
     (1066 tests).
-  - **"Ask VulnHunter"** (new `/ask` page, `remediation/search/query_engine.py`): a
+  - **"Ask Quanta"** (new `/ask` page, `remediation/search/query_engine.py`): a
     real, deterministic "ask your data" search - the free/open alternative to an
     LLM-based assistant the original request asked for. No external API call, no
     signup, no cost, no data leaves the machine; it is pattern/keyword matching over
@@ -447,7 +447,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
     new `/asset-policy` page. New per-asset `remediation_schedule` override
     (`asset_inventory.set_remediation_schedule()`) takes precedence over a domain's
     default cadence in `remediation_policy_engine.py`, shown with an "override" badge.
-  - **Click-to-remediate**: `cli/vulnhunter.py`'s `remediate_prompt()` and `/api/run`
+  - **Click-to-remediate**: `cli/quanta.py`'s `remediate_prompt()` and `/api/run`
     gained an optional `finding_id` to scope a run to one already-approved finding -
     reuses the exact existing dry-run-preview-then-confirm mechanism, never executes
     against real infrastructure. New `remediation_triggered` approval status
@@ -806,8 +806,8 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
     both rendered correctly; the dry-run send-test path correctly returned
     "preview only" with no email sent; a real (confirm=true) send correctly 503s with
     SMTP unconfigured (tested via the automated suite, not triggered live).
-- **Footer copyright**: `VulnHunter v1.0.0 · © 2026 Deloitte Development LLC.` corrected
-  to `© 2026 VulnHunter LLC.` (`pageFooter.js`) - the LICENSE file's own copyright holder
+- **Footer copyright**: `Quanta v1.0.0 · © 2026 Deloitte Development LLC.` corrected
+  to `© 2026 Quanta LLC.` (`pageFooter.js`) - the LICENSE file's own copyright holder
   was left untouched (a separate, more significant legal decision than a footer string,
   out of scope here).
 - **Right-hand "Insights" panel + CVD-validated chart colors**: reviewing a live
@@ -1344,7 +1344,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   `SECURITY_REPORT.md` now documents 18 findings total, and the 5 newly auto-fixable
   ones (VULN-10, 14, 15, 17, 18) were actually mechanically fixed (secrets moved to
   environment variables, CORS scoped to a named origin, mass assignment closed with a
-  field allow-list) on the `vulnhunter/auto-fixes-*` branch, matching the same
+  field allow-list) on the `quanta/auto-fixes-*` branch, matching the same
   behavior-preserving pattern as the original 6. Broadened one `ai_vuln_taxonomy.py`
   regex (`\b(unsafe|insecure) (pickle|deserializ)`, previously `unsafe` only) so
   VULN-11's "insecure deserialization" wording - standard OWASP terminology - correctly
@@ -1427,7 +1427,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   for the rest of the browser session (`sessionStorage`). The bottom footer shows
   live finding/playbook counts plus quick links to FAQ/Support/Priority Rules/scope
   docs. Both stay hidden on the login page and reappear immediately after sign-in
-  (listening for the existing `vulnhunter-auth-changed` event, no reload needed).
+  (listening for the existing `quanta-auth-changed` event, no reload needed).
 - **Clickable finding ID opens a full detail view** (`dashboard/static/js/findingDetail.js`,
   new) — clicking any finding's ID in the live Remediation Queue opens a modal (reusing
   `dom.js`'s existing `openModal`/`closeModal` pattern) showing everything the normalized
@@ -1609,7 +1609,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   CrowdStrike (reference pages at `/infoblox` and `/axonius`, no send form), but unlike
   every connector before them they normalize into a plain **asset-inventory** record
   (`name`, `ip`, `mac`, `type`, `source`, `source_ref`, `extra`), not a vulnerability
-  Finding - since VulnHunter's asset inventory has so far been built entirely from
+  Finding - since Quanta's asset inventory has so far been built entirely from
   findings, not a real CMDB/DNS/IPAM system. Same "built against public docs,
   unit-tested against mocked HTTP, unverified against a live tenant/grid" honesty
   pattern as every other connector in this repo (33 new tests, 489 total).
@@ -1712,7 +1712,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   `remediation/connectors/generic_connector.py`) — a vendor-agnostic "bring your own
   tool" webhook receiver: validates and normalizes an inbound JSON payload from any
   tool that can send a custom outbound webhook (most modern SIEM/XDR/EDR/SOAR products
-  support this) into VulnHunter's normalized Finding schema, instead of building
+  support this) into Quanta's normalized Finding schema, instead of building
   bespoke per-vendor connectors for products with no real API access to verify
   against. IDs continue the real pipeline's FIND-N sequence (never collide with a
   real finding's ID); writes to `remediation/live-data/` (gitignored), not
@@ -1843,7 +1843,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## Tier 2 (headless CLI, dashboard, connectors)
 
 ### Added
-- `cli/vulnhunter.py` — headless CLI wrapping `claude -p` so either pipeline runs from a
+- `cli/quanta.py` — headless CLI wrapping `claude -p` so either pipeline runs from a
   script/CI/cron without an interactive session. Spend-capped, dry-run by default in
   spirit, with a JSON audit log per real invocation. 13 tests, no real API calls made in
   any test.
@@ -1923,4 +1923,4 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   vulnerable `vulnerable-demo-app/` Flask app (6 planted vulnerabilities plus 3
   Dockerfile-level issues).
 - Validated `/vulnhunt` end-to-end: 9 findings detected, 6 auto-fixed and pushed to
-  `vulnhunter/auto-fixes-20260803`, `SECURITY_REPORT.md` generated.
+  `quanta/auto-fixes-20260803`, `SECURITY_REPORT.md` generated.

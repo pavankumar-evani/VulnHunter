@@ -49,7 +49,7 @@ export async function render(container) {
     <form class="run-form" id="ad-form">
       <label>Server (hostname, or ldap://.../ldaps://... URL)<input type="text" name="server" placeholder="dc01.corp.local"></label>
       <label>Base DN<input type="text" name="base_dn" placeholder="DC=corp,DC=local"></label>
-      <label>Bind DN (optional - leave blank for an anonymous bind)<input type="text" name="bind_dn" autocomplete="off" placeholder="CN=svc-vulnhunter,OU=Service Accounts,DC=corp,DC=local"></label>
+      <label>Bind DN (optional - leave blank for an anonymous bind)<input type="text" name="bind_dn" autocomplete="off" placeholder="CN=svc-quanta,OU=Service Accounts,DC=corp,DC=local"></label>
       <label>Bind password<input type="password" name="bind_password" autocomplete="off"></label>
       <label class="checkbox-label">
         <input type="checkbox" name="use_ssl">

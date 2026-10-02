@@ -80,7 +80,7 @@ export async function render(container) {
       : certFindings;
     wireFindingsTable(container, filteredFindings, {
       exportGroupId: "cert-hub",
-      filenameBase: "vulnhunter-certificate-vulnerabilities",
+      filenameBase: "quanta-certificate-vulnerabilities",
       ownerByAssetName, teamByAssetName, environmentByAssetName,
     });
   }
