@@ -188,6 +188,13 @@
       needs:
       - A response endpoint you own
       admin: true
+    - id: soc-cases
+      title: Cases, queues and metrics
+      path: /soc
+      summary: ITIL-style cases in L1, L2 and L3 queues with priority, service-level clocks, escalation with hand-off notes, case summaries, log investigation, technique identification and SOC metrics.
+      needs:
+      - Alerts, or cases opened by hand
+      admin: true
 - id: other
   number: '5'
   title: Other capabilities

@@ -1,6 +1,6 @@
 # Enterprise Documentation Suite — Manifest
 
-Fifteen HTML documents, version-controlled here so they survive alongside the code they
+Sixteen HTML documents, version-controlled here so they survive alongside the code they
 document. Each is also published as a Claude Artifact (a hosted, shareable page) at the
 URL below. **The files in this directory are the source of truth** — the published
 Artifact is a mirror, kept in sync by republishing from these exact files (see "Keeping
@@ -8,7 +8,7 @@ this in sync" below).
 
 | File | Published URL | Audience |
 |---|---|---|
-| `hub.html` | https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b | Landing page — links to all 14 below |
+| `hub.html` | https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b | Landing page — links to all 15 below |
 | `executive-brief.html` | https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b | Enterprise evaluators |
 | `whitepaper.html` | https://claude.ai/code/artifact/2d57679f-6e91-4a8f-83b6-a9469bbcb4da | Enterprise evaluators — deep research/POV companion to `executive-brief.html`: why-now, vs. ServiceNow USEM, FAQs, patent/publication feasibility |
 | `architecture.html` | https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7 | Technical |
@@ -18,6 +18,7 @@ this in sync" below).
 | `rbac-governance.html` | https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c | Technical |
 | `ai-capabilities.html` | https://claude.ai/code/artifact/21f80f22-3840-4dbf-827b-bb9539ae73d4 | Technical — every AI surface in the app, what powers it, and its guardrails |
 | `reporting.html` | https://claude.ai/code/artifact/7f8dd69c-e1eb-4a2f-8bf2-02b39a88fdba | Technical — report fields, on-demand generation, scheduled email delivery |
+| `soc-operations.html` | https://claude.ai/artifact/8uRxdBAihsmEnGukLGSN2F | Technical — SOC, SOAR, hunting reports, threat intelligence, AI/ML-guided playbooks, detection use cases, SOC metrics and the models used |
 | `pages.html` | https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f | Technical |
 | `developer-guide.html` | https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4 | Developers |
 | `poc-methodology.html` | https://claude.ai/code/artifact/fc05a1c0-7664-4ce1-88a2-86bec7eae328 | Business |
@@ -36,6 +37,7 @@ document(s) in the same change** — don't let the docs drift. Concretely:
 | The Finding schema (`remediation/schema/normalized-finding-schema.md`) | `architecture.html` §4 and `CLAUDE.md`'s "The Finding schema" section (it names the current asset-type count) |
 | The remediation workflow, approval states, or policy engine | `remediation-engine.html` |
 | Add/remove a subagent, or change a pipeline's step sequence (`.claude/agents/*.md`, `.claude/commands/*.md`) | `vuln-engine.html` (for `/quanta-scan`), `remediation-engine.html` (for `/remediate`), and `CLAUDE.md`'s two "Architecture: ..." sections — this exact gap (a subagent added but never reflected in any of the three) is why this row was added |
+| SOC cases, queues, metrics, log analysis, TTP classifier, threat-intelligence scoring, hunt/investigation report sections, SOAR recommender, use-case generators (`remediation/soc/`, `remediation/hunting/`, `remediation/soar/`) | `soc-operations.html` (the method sections and the models table), `pages.html` (/soc, /hunting, /soar), `ai-capabilities.html` and `CLAUDE.md` |
 | RBAC, session/auth model, or the tenant-switcher's real scope | `rbac-governance.html` and `CLAUDE.md`'s "Authentication & RBAC" section |
 | A new connector accepting a host/URL, or any other AI/security guardrail | `rbac-governance.html` §06 ("AI & security guardrails") - and route it through `remediation/connectors/url_safety.py`'s `assert_safe_target()`/`assert_safe_instance_label()` before construction, the same guardrail every existing connector uses |
 | Any dashboard page/route (`dashboard/static/js/pages/`, `app.js` routes) | `pages.html` (the affected row) |
