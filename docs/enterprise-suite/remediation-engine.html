@@ -108,6 +108,7 @@
     <a href="#boundary">06 · The execution boundary</a>
     <a href="#tracks">07 · Four remediation tracks</a>
     <a href="#gates">08 · Safety gates &amp; proof</a>
+    <a href="#guidance">09 · Analyst guidance</a>
   </nav>
 
   <main>
@@ -208,6 +209,16 @@
         <div class="card"><h4>Staged rollout rings</h4><p>The remediation policy resolves a ring plan per finding: canary, pilot, then broad, with a soak period between rings (an emergency profile for actively exploited findings). Generated playbooks take a <code>rollout_ring</code> variable so no single run can touch every host. Quanta still executes nothing; whoever runs the playbook honors the rings.</p></div>
         <div class="card"><h4>Closed-loop verification</h4><p>After a remediation is triggered, the next scan decides: verified (no longer reported), still present, or awaiting rescan. "Verified" is evidence, not proof, because an asset leaving scan scope looks the same, and the interface says so.</p></div>
         <div class="card"><h4>Evidence and metrics</h4><p>An evidence pack bundles the finding, the approval trail, the reviewed artifact with its lint result and the outcome. Outcome metrics report real request-to-approval and request-to-trigger times and the fix-hold rate, and return no value rather than an estimate when there is no data.</p></div>
+      </div>
+    </section>
+
+    <section id="guidance">
+      <h2><span class="num">09</span>Analyst guidance and its limits</h2>
+      <p class="section-intro">Alongside the generated artifacts, every finding carries written, step-by-step guidance for the person who has to fix it. It changes nothing itself.</p>
+      <div class="grid2">
+        <div class="card"><h4>Curated knowledge base</h4><p><code>remediation/guidance/knowledge.yaml</code> is a human-written, editable set of 29 entries (injection, XSS, access control, secrets, crypto, dependencies, containers, IaC, CI/CD, OS patching, network, OT/IoT, cloud, AI/ML, end-of-life and more) plus a generic fallback. Each has a summary, why it matters, ordered steps, how to confirm the fix, compensating controls if it cannot be fixed now, effort and references (OWASP, CIS, NIST, CISA, SLSA, CWE).</p></div>
+        <div class="card"><h4>Matching and tailoring</h4><p>A finding is matched by CWE, then scan type, asset type and keywords, and the guidance says why it matched. It is tailored from known facts: dependency package and fixed version with the typical upgrade command, Windows KB with a check command, CISA KEV listing and due date, high EPSS, a breached SLA, and the scanner's own recommendation (hidden when it is only "See vendor advisory"). It also states what Quanta can automate for the finding, or that it can automate nothing.</p></div>
+        <div class="card"><h4>Honest limits</h4><p>Coverage is curated for common classes, not every CWE; unmatched findings get the generic approach, labelled generic. Client-specific compensating controls come from <code>security_controls.yaml</code>, which ships empty; until an asset is recorded there, the guidance says its controls are general and how to add the asset. It appears in the finding detail modal and on the Code Scan page.</p></div>
       </div>
     </section>
 

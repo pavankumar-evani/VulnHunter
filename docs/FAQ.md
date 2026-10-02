@@ -631,6 +631,26 @@ the last error if sending failed. State flows back on each sync and updates the 
 assignment status. A resolved ticket marks the assignment resolved but does not close the
 finding; the next scan decides that.
 
+### How do I get step-by-step instructions to fix a finding?
+
+Open the finding (click its ID anywhere) and read "How to fix this": a summary, why it matters,
+ordered steps, how to confirm it is fixed, what to do if you cannot fix it now, effort and
+references (OWASP, CIS, NIST, CISA, CWE). It also says what it matched on, and is tailored from
+what Quanta knows: the dependency's fixed version and typical upgrade command, a Windows KB
+number, CISA KEV listing, high EPSS, a breached SLA, and what the scanner itself recommended.
+On the Code Scan page (`/quanta-scan`), use the "How to fix" button in the Guidance column. It
+changes nothing itself and states plainly what Quanta can automate for that finding (a playbook,
+isolation plan, dependency-upgrade plan, a code fix on a branch, or nothing).
+
+### What does Quanta recommend if I cannot fix a finding right now, and how complete is the guidance?
+
+Each guidance entry lists compensating controls for that class of issue. If you have recorded the
+asset's firewall and EDR coverage in `remediation/config/security_controls.yaml` (it ships
+empty), the guidance shows your actual coverage; otherwise it says the controls are general and
+how to add the asset. The knowledge base (`remediation/guidance/knowledge.yaml`) is curated by
+hand for 29 common classes, not every CWE; an unmatched finding gets a generic approach,
+labelled generic. Compensating controls reduce risk, they do not close the finding.
+
 ### How do I set up scheduled reports or team alerts?
 
 Two related pages. `/reports` generates an on-demand snapshot (pick a period, view or

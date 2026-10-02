@@ -180,7 +180,7 @@
     <section id="testing">
       <h2><span class="num">05</span>Testing conventions</h2>
       <ul>
-        <li><strong>Python:</strong> <code>python -m unittest discover -s tests -p "test_*.py"</code> — 1,752 tests today, all passing; one file per module/route group, hand-rolled fakes over vendor mock libraries.</li>
+        <li><strong>Python:</strong> <code>python -m unittest discover -s tests -p "test_*.py"</code> — 1,773 tests today, all passing; one file per module/route group, hand-rolled fakes over vendor mock libraries.</li>
         <li><strong>JS:</strong> <code>node --check &lt;file&gt;</code> catches syntax errors only — a passing check is necessary, never sufficient. Frontend behavior is verified live in a running browser, not assumed from source reading.</li>
         <li><strong>CI:</strong> GitHub Actions runs the full Python suite on every push. A clean local pass can still mask an environment-specific failure (see the CLI's own dry-run-ordering bug, fixed after reproducing it in a simulated clean environment) — reproduce, don't assume.</li>
       </ul>
@@ -208,6 +208,7 @@ python cli/quanta.py /remediate --generate --max-budget-usd 5.00</pre></div>
           <tr><td>A new push connection (ticketing/SIEM)</td><td class="mono">remediation/connections/push.py + registry.py (§10)</td></tr>
           <tr><td>A new API-key-guarded inbound route</td><td class="mono">remediation/apikeys/store.py + dashboard/app.py (§10)</td></tr>
           <tr><td>A new dashboard page</td><td class="mono">dashboard/static/js/pages/ + app.js router entry</td></tr>
+          <tr><td>A new or edited remediation guidance entry</td><td class="mono">remediation/guidance/knowledge.yaml (summary, why, ordered steps, verification, compensating controls, effort, references, match keys); matching and tailoring in engine.py; tests in tests/test_guidance.py</td></tr>
           <tr><td>A new finding taxonomy</td><td class="mono">remediation/enrichment/ + normalized-finding-schema.md</td></tr>
         </tbody>
       </table></div>

@@ -277,6 +277,16 @@
       <h2><span class="num">08</span>Getting help</h2>
 
       <details class="howto">
+        <summary>How do I get step-by-step instructions to fix a finding?<span class="route">/queue</span></summary>
+        <div class="body"><p>Click the finding's ID anywhere and open "How to fix this": a summary, why it matters, ordered steps, how to confirm it is fixed, effort and references. It says what it matched on and is tailored from what Quanta knows (fixed version and upgrade command, Windows KB number, CISA KEV listing, EPSS, breached SLA, the scanner's own recommendation). On <code>/quanta-scan</code>, use the "How to fix" button in the Guidance column. It changes nothing itself, and states plainly what Quanta can automate for that finding, if anything.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>What does Quanta recommend if I cannot fix a finding right now?<span class="route">/queue</span></summary>
+        <div class="body"><p>The same section lists compensating controls for that class of issue. If your firewall and EDR coverage is recorded in <code>security_controls.yaml</code> (it ships empty), it shows your actual coverage; otherwise it says the controls are general. The guidance is curated for common classes, not every CWE; an unmatched finding gets a generic approach, labelled generic. Compensating controls reduce risk but do not close the finding.</p></div>
+      </details>
+
+      <details class="howto">
         <summary>How do I request a new feature?<span class="route">/support</span></summary>
         <div class="body"><p>Open a ticket from Support and choose "A feature request". It is stored in your own deployment's database and triaged by your administrators; nothing goes to a public tracker.</p></div>
       </details>
