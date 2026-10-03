@@ -38,6 +38,7 @@ export async function render(container) {
       <p class="muted">${escapeHtml(vel.note)} Merged per week (last 12): ${vel.merged_per_week.map((w) => w.merged).join(" ")}</p>
       <h3>The process</h3><ol class="step-list">${pol.policy.process.steps.map((s) => `<li>${escapeHtml(s.text)}</li>`).join("")}</ol>
       <p class="muted">Quanta never: ${pol.never.map(escapeHtml).join("; ")}. Branch pattern <code>${escapeHtml(pol.policy.branch.template)}</code>; approval is required before a pull request is opened${pol.policy.approval.require_distinct_approver ? " and a different administrator must approve" : ""}. Edit <code>remediation/config/gitops_policy.yaml</code> to match your process (branch names, labels, reviewers, draft pull requests, per-repository overrides).</p>
+      <p class="muted">Following the pull requests: ${pol.automation.scheduled_sync ? "Quanta checks the Git host every hour" : "the hourly check is switched off (QUANTA_GITOPS_SYNC=false)"}; ${pol.automation.webhook_configured ? "webhooks from GitHub or GitLab to <code>/api/inbound/git-webhook</code> update it at once" : "no webhook secret is set (QUANTA_GIT_WEBHOOK_SECRET), so webhooks are refused; the hourly check and the button below still work"}.</p>
       ${admin ? '<p class="inline-actions"><button type="button" class="btn-primary" id="sync">Check the Git host for review and merge updates</button></p>' : ""}
       <h3>Proposals</h3>
       <div class="table-scroll"><table class="data-table"><thead><tr><th>#</th><th>Change</th><th>Application</th><th>Status</th><th>Review / checks</th><th>Verification</th></tr></thead><tbody>
@@ -56,6 +57,7 @@ export async function render(container) {
       <h2 style="margin:4px 0">#${p.id} ${escapeHtml(p.title)}</h2>
       <p><span class="badge ${STATUS[p.status] || ""}">${escapeHtml(p.status)}</span> ${escapeHtml(p.application)} &middot; ${escapeHtml(p.kind)} &middot; ${p.repo ? `${escapeHtml(p.provider)} ${escapeHtml(p.repo)}` : '<span class="callout-warn">no repository set on the application</span>'}
         ${p.pr_url ? ` &middot; <a href="${escapeHtml(p.pr_url)}" target="_blank" rel="noopener">${escapeHtml(p.pr_url)}</a>` : ""}</p>
+      ${p.kind === "dependency-upgrade" && p.summary.lockfile_note ? `<p class="callout"><strong>Lock file.</strong> ${escapeHtml(p.summary.lockfile_note)}${(p.summary.lockfiles || []).length ? " Because one is present, the pull request opens as a draft: mark it ready once the lock file is refreshed and the checks pass." : ""}</p>` : ""}
       ${p.last_error ? `<p class="callout callout-warn">${escapeHtml(p.last_error)}</p>` : ""}
       <ol class="step-list">${FLOW.map(([k, l]) => `<li${p[k] ? "" : ' class="muted"'}>${l}${p[k] ? ` <span class="muted">${escapeHtml(p[k].slice(0, 16).replace("T", " "))}${k === "created_at" ? " by " + escapeHtml(p.created_by || "") : k === "approved_at" ? " by " + escapeHtml(p.approved_by || "") : k === "opened_at" ? " by " + escapeHtml(p.opened_by || "") : ""}</span>` : ""}</li>`).join("")}</ol>
       ${p.pr_state ? `<p class="muted">On the host: ${escapeHtml(p.pr_state)}; review ${escapeHtml(p.review_state || "none")}; checks ${escapeHtml(p.checks_state || "none")}; last checked ${escapeHtml((p.last_synced_at || "never").slice(0, 16).replace("T", " "))}.</p>` : ""}
@@ -69,11 +71,13 @@ export async function render(container) {
       ${admin ? `<div class="inline-actions">${p.status === "draft" ? '<button type="button" class="btn-primary" id="approve">Approve</button>' : ""}
         ${["approved", "failed"].includes(p.status) ? '<button type="button" class="btn-primary" id="dry">Preview what would be sent</button>' : ""}
         ${["draft", "approved", "failed"].includes(p.status) ? '<button type="button" class="secondary-button" id="discard">Discard</button>' : ""}
-        ${["pr-opened", "in-review"].includes(p.status) ? '<button type="button" class="secondary-button" id="sync1">Check the Git host now</button>' : ""}</div>` : '<p class="muted">An administrator approves and opens proposals.</p>'}`;
+        ${["pr-opened", "in-review"].includes(p.status) ? '<button type="button" class="secondary-button" id="sync1">Check the Git host now</button>' : ""}
+        ${p.status === "merged" && v.state !== "verified" ? '<button type="button" class="secondary-button" id="rescan">Queue a rescan on the scanner connections</button>' : ""}</div>` : '<p class="muted">An administrator approves and opens proposals.</p>'}`;
     container.querySelector("#back").addEventListener("click", () => go(null));
     const on = (sel, fn) => { const el = container.querySelector(sel); if (el) el.addEventListener("click", fn); };
     on("#approve", async () => { try { await api.gitopsApprove(p.id); flash("Approved.", "success"); show(); } catch (e) { flash(e.message, "error"); } });
     on("#discard", async () => { const why = window.prompt("Why is this being discarded? (optional)"); if (why === null) return; try { await api.gitopsDiscard(p.id, why); show(); } catch (e) { flash(e.message, "error"); } });
+    on("#rescan", async () => { try { const r = await api.gitopsRescan(p.id); flash(r.message, "success"); } catch (e) { flash(e.message, "error"); } });
     on("#sync1", async () => { try { await api.gitopsSync(); show(); } catch (e) { flash(e.message, "error"); } });
     on("#dry", async () => {
       try {

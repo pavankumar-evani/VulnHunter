@@ -84,3 +84,32 @@ def fetch_files(conn, app, paths):
             raise ValueError(f"{path}: not found on {ref}")
         out[path] = got["content"]
     return out
+
+
+def sync_and_verify(findings, engine=None):
+    """What the hourly scheduler tick and the Sync button both do: ask the host about every open pull request, then re-check merged ones against the
+    latest scan. Returns (sync report, verification list). Cheap when nothing is open: no connector is built."""
+    from remediation.gitops import proposals
+    cache = {}
+    report = proposals.sync(lambda p: connector_for_proposal(p, engine, cache), engine)
+    return report, proposals.verify_all(findings, engine)
+
+
+def has_open_pull_requests(engine=None):
+    from remediation.gitops import proposals
+    return any(p["status"] in ("pr-opened", "in-review") for p in proposals.list_proposals(engine=engine))
+
+
+def scanner_connections(engine=None):
+    """Enabled stored connections that pull findings from a scanner, i.e. the ones a rescan can be queued on."""
+    out = []
+    for c in conn_store.list_connections(engine):
+        spec = registry.SPECS.get(c["type"]) or {}
+        if c["enabled"] and spec.get("kind", "pull") == "pull" and spec.get("output") == "findings":
+            out.append(c)
+    return out
+
+
+def queue_rescans(enqueue, engine=None):
+    """enqueue(connection_id) -> job id. Returns [{"connection", "job"}] for each scanner connection a sync was queued on (an empty list when none is configured)."""
+    return [{"connection": c["name"], "job": enqueue(c["id"])} for c in scanner_connections(engine)]

@@ -37,3 +37,6 @@ dashboard/certs/
 *.key
 *.crt
 deliverables/
+
+# A local database from an older working name; never source
+remediation/vulnhunter.db

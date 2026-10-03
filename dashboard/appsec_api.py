@@ -9,6 +9,7 @@ unless `confirm` is true.
 """
 import datetime
 import json
+import os
 import re
 from pathlib import Path
 
@@ -27,7 +28,7 @@ from remediation.devsecops import design as dso_design
 from remediation.devsecops import gates as dso_gates
 from remediation.enrichment import network_reachability as network_reach
 from remediation.gitops import policy as gitops_policy
-from remediation.gitops import proposals, service as gitops_service, velocity
+from remediation.gitops import proposals, service as gitops_service, velocity, webhooks as gitops_webhooks
 from remediation.ingest import merge as findings_merge
 from remediation.utils import db as db_module
 
@@ -120,7 +121,7 @@ def _slug(text, limit=30):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:limit].strip("-") or "app"
 
 
-def build_router(require_api_key, scope_findings, read_upload, enrich_in_background):
+def build_router(require_api_key, scope_findings, read_upload, enrich_in_background, queue_rescan_job=None):
     r = APIRouter()
 
     def live():
@@ -257,6 +258,7 @@ def build_router(require_api_key, scope_findings, read_upload, enrich_in_backgro
     def api_gitops_policy(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
         pol = gitops_policy.load()
         return {"policy": {k: pol[k] for k in ("branch", "commit", "pull_request", "approval", "files", "code_fix", "process")}, "overrides": len(pol.get("overrides") or []),
+                "automation": {"webhook_configured": bool(os.environ.get("QUANTA_GIT_WEBHOOK_SECRET", "").strip()), "scheduled_sync": os.environ.get("QUANTA_GITOPS_SYNC", "true").strip().lower() not in ("0", "false", "no")},
                 "never": ["merge a pull request", "write to a default or protected branch", "force-push", "delete a branch", "run a package manager or the project's tests", "open a pull request without an administrator's confirmation"]}
 
     @r.get("/api/gitops/proposals")
@@ -428,6 +430,53 @@ def build_router(require_api_key, scope_findings, read_upload, enrich_in_backgro
         except ValueError as exc:
             raise bad(exc) from exc
         return {"id": p["id"], "status": p["status"], "merged_at": p["merged_at"]}
+
+    @r.post("/api/inbound/git-webhook")
+    async def api_git_webhook(request: Request):
+        """For a GitHub or GitLab webhook (pull_request / Merge Request events). Verified with QUANTA_GIT_WEBHOOK_SECRET (GitHub: HMAC-SHA256 signature of the body;
+        GitLab: the secret token). With no secret configured every delivery is refused. Only the pull request's URL and state are used."""
+        body = await request.body()
+        if len(body) > 2_000_000:
+            raise HTTPException(status_code=413, detail="Payload too large")
+        secret = os.environ.get("QUANTA_GIT_WEBHOOK_SECRET", "").strip()
+        provider = gitops_webhooks.provider_of(dict(request.headers))
+        try:
+            if provider == "github":
+                gitops_webhooks.verify_github(secret, body, request.headers.get("x-hub-signature-256"))
+            elif provider == "gitlab":
+                gitops_webhooks.verify_gitlab(secret, request.headers.get("x-gitlab-token"))
+            else:
+                raise gitops_webhooks.WebhookError("Not a GitHub or GitLab delivery", 400)
+        except gitops_webhooks.WebhookError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="The body is not JSON") from exc
+        event = request.headers.get("x-github-event") if provider == "github" else request.headers.get("x-gitlab-event")
+        change = (gitops_webhooks.parse_github if provider == "github" else gitops_webhooks.parse_gitlab)(event, payload if isinstance(payload, dict) else {})
+        if not change:
+            return {"ignored": "not a pull request state change"}
+        try:
+            p = proposals.record_external(change["pr_url"], change["state"], change["merged_at"], f"webhook:{provider}")
+        except (KeyError, ValueError):
+            return {"ignored": "not a pull request Quanta opened"}
+        return {"id": p["id"], "status": p["status"]}
+
+    @r.post("/api/gitops/proposals/{proposal_id}/rescan")
+    def api_proposal_rescan(proposal_id: int, user: dict = Depends(rbac.require_admin)):
+        """After a merge: queue a sync on each enabled scanner connection so the next scan result (and so the verification) arrives sooner than the schedule."""
+        p = proposals.get(proposal_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="No such proposal")
+        if p["status"] != "merged":
+            raise HTTPException(status_code=409, detail="A rescan is only useful after the pull request is merged")
+        if queue_rescan_job is None:
+            raise HTTPException(status_code=501, detail="Rescans are not available")
+        queued = gitops_service.queue_rescans(lambda cid: queue_rescan_job(cid, user["email"]))
+        activity_log.record_activity(user["email"], "gitops.rescan", str(proposal_id), {"connections": [q["connection"] for q in queued]})
+        return {"queued": queued, "message": ("Queued a sync on each scanner connection; re-check verification when they finish." if queued
+                                              else "No enabled scanner connection is configured. Upload the next scan (SARIF or a scanner export) and verification follows from it.")}
 
     @r.get("/api/gitops/velocity")
     def api_velocity(user: dict = Depends(rbac.require_login)):  # noqa: ARG001

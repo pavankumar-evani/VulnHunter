@@ -68,6 +68,7 @@ from remediation.firewall import analysis as fw_analysis, model as fw_model, sto
 from remediation.enrichment import network_reachability as network_reach  # noqa: E402
 from remediation.devsecops import controls as dso_controls, factory as dso_factory, gates as dso_gates  # noqa: E402
 from remediation.appsec import store as appsec_store  # noqa: E402
+from remediation.gitops import service as gitops_service  # noqa: E402
 from remediation.enrichment import sbom as sbom_mod, zero_day_watch as zero_day  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
@@ -322,6 +323,16 @@ async def _leader_loop():
         await asyncio.sleep(_LEADER_CHECK_SECONDS)
 
 
+def _run_gitops_sync_if_due():
+    """Hourly: follow open fix pull requests on their Git host and re-check merged ones against the latest scan. Off with QUANTA_GITOPS_SYNC=false. Does nothing
+    (no connector is built) when no pull request is open."""
+    if os.environ.get("QUANTA_GITOPS_SYNC", "true").strip().lower() in ("0", "false", "no"):
+        return None
+    if not gitops_service.has_open_pull_requests():
+        return None
+    return gitops_service.sync_and_verify(dashboard_data.load_live_queue())
+
+
 async def _notification_scheduler_loop():
     while True:
         await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
@@ -333,6 +344,7 @@ async def _notification_scheduler_loop():
             _run_support_sla_escalations()
             _run_grc_evidence_if_due()
             _run_detection_assessment_if_due()
+            _run_gitops_sync_if_due()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -5480,7 +5492,9 @@ def api_devsecops_factory_brief(finding_id: str, user: dict = Depends(rbac.requi
 
 
 app.include_router(appsec_api.build_router(require_api_key=require_api_key, scope_findings=lambda rows, user: _scope_to_team(_annotate_finding_teams(rows), user),
-                                           read_upload=_read_upload, enrich_in_background=_enrich_in_background))
+                                           read_upload=_read_upload, enrich_in_background=_enrich_in_background,
+                                           queue_rescan_job=lambda connection_id, actor: job_queue.enqueue(job_worker.KIND_CONNECTION_SYNC, {"connection_id": connection_id, "actor": actor},
+                                                                                                          dedupe_key=f"sync:{connection_id}")))
 
 
 @app.get("/api/zero-day-watch")

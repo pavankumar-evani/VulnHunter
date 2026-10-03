@@ -358,6 +358,7 @@ export const api = {
   gitopsApprove: (id) => request("POST", `/api/gitops/proposals/${id}/approve`),
   gitopsDiscard: (id, reason) => request("POST", `/api/gitops/proposals/${id}/discard`, { reason }),
   gitopsOpen: (id, confirm) => request("POST", `/api/gitops/proposals/${id}/open`, { confirm }),
+  gitopsRescan: (id) => request("POST", `/api/gitops/proposals/${id}/rescan`),
   gitopsSync: () => request("POST", "/api/gitops/sync"),
   gitopsVelocity: () => request("GET", "/api/gitops/velocity"),
   // release gate, secure design, own controls
