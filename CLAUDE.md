@@ -26,7 +26,7 @@ a real, deployable web application. Both halves are real and current today:
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 2,285 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 2,302 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 2,285 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 2,302 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -698,6 +698,12 @@ writes are not retried. State comes back by `POST /api/gitops/sync` or `POST /ap
 rule (gone from the latest scan = resolved); `velocity.py` reports stage times. The subagents stay Read/Write only: `remediation-fixer-application` also writes
 `remediation/output/upgrade-plans/<id>.json`, and `remediation-fixer-code` (new) writes `remediation/output/code-fixes/<id>.json` (a unified diff plus an honest
 validation record); Python checks and applies them.
+
+Keeping pull requests current is automatic where it can be: an hourly scheduler tick (`_run_gitops_sync_if_due`, off with `QUANTA_GITOPS_SYNC=false`) follows open pull
+requests and re-checks merged ones against the latest scan; `POST /api/inbound/git-webhook` accepts signed GitHub / GitLab webhooks (`gitops/webhooks.py`, secret
+`QUANTA_GIT_WEBHOOK_SECRET`, refuses everything when unset); `POST /api/gitops/proposals/{id}/rescan` queues a sync on each enabled scanner connection after a merge.
+`python cli/quanta_admin.py seed-appsec-demo` (`remediation/appsec/demo.py`) registers a demo application, its SBOM and a few findings under source `appsec-demo`
+(`--remove` undoes exactly that) and prints the topology entry that makes the graph's exposure lane show a path.
 
 `remediation/devsecops/` additionally has `gates.py` + `config/pipeline_gates.yaml` (the CI release gate: `GET /api/gate/evaluate`, key scope `read:findings`, every
 evaluation recorded in `gate_runs` and used as evidence for the `vulnerability-gate` control; the `sbom` control is evidenced by a stored SBOM), `design.py` +

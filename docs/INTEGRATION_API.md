@@ -271,6 +271,15 @@ Scope `tickets:update`. `proposal` is the proposal number or the pull request UR
 Git host webhook or a CI job so Quanta need not poll. Quanta also polls the host itself (`POST /api/gitops/sync`, administrators). Verification is separate: it is
 set only when a later scan stops reporting the findings.
 
+### Receive GitHub or GitLab webhooks
+
+Point a repository (or organisation) webhook at `https://quanta.example.com/api/inbound/git-webhook` and send **pull request** events (GitLab: **Merge request** events).
+Set the same secret on both sides in `QUANTA_GIT_WEBHOOK_SECRET` (or `QUANTA_GIT_WEBHOOK_SECRET_FILE` for a mounted secret). GitHub signs each delivery
+(`X-Hub-Signature-256`, HMAC-SHA256 of the body); GitLab sends the secret as `X-Gitlab-Token`. Both are compared in constant time. With no secret configured the endpoint
+refuses every delivery (503). Only the pull request's URL and its open, merged or closed state are used, and a pull request Quanta did not open is ignored without comment.
+No login or API key is involved, so keep the secret long and random. Quanta also polls the host every hour (`QUANTA_GITOPS_SYNC=false` turns that off) and has a Sync
+button, so a missed delivery is caught up.
+
 ### Report a ticket's state
 
 ```bash

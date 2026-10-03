@@ -363,6 +363,31 @@
       </details>
 
       <details class="howto">
+        <summary>How do I keep pull request status up to date automatically?<span class="route">/fix-prs</span></summary>
+        <div class="body"><p>An hourly scheduler tick follows every open fix pull request and re-checks merged ones against the latest scan. It does nothing when no pull request is open, and it is on by default; set <code>QUANTA_GITOPS_SYNC</code> to <code>false</code>, <code>0</code> or <code>no</code> to turn it off. You can also set up the webhook (next entry) so the Git host tells Quanta as soon as the state changes. The Fix Pull Requests page shows whether the hourly check and the webhook are active. Verification is evidence from the next scan, not proof.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I set up the GitHub or GitLab webhook?<span class="route">/api/inbound/git-webhook</span></summary>
+        <div class="body"><p>Set a shared secret in <code>QUANTA_GIT_WEBHOOK_SECRET</code> (or <code>QUANTA_GIT_WEBHOOK_SECRET_FILE</code> for a mounted secret), then add a webhook in the repository settings that sends pull request events to <code>POST /api/inbound/git-webhook</code> with the same secret. GitHub signs the body (<code>X-Hub-Signature-256</code>, HMAC-SHA256); GitLab sends the secret as <code>X-Gitlab-Token</code>. With no secret set, Quanta refuses every delivery (503); a bad signature gets 401; a pull request Quanta did not open is ignored. Only the pull request URL and its open, merged or closed state are used. No login or API key is involved, because the signature is the check. Tested against hand-signed payloads; no delivery has been received from a live host.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>What do I do after a merge to get verification sooner?<span class="route">/fix-prs</span></summary>
+        <div class="body"><p>On the merged proposal, choose "Queue a rescan on the scanner connections" (admin). It queues a sync on each enabled scanner pull connection, meaning those whose output is findings. If none is configured it tells you to upload the next scan instead. Once that scan lands, Verify reads it and marks the fix verified, still present or awaiting a rescan.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>Why did my dependency pull request open as a draft?<span class="route">/fix-prs</span></summary>
+        <div class="body"><p>The repository has a lock file, and Quanta never runs a package manager, so it cannot refresh it for the new version. The proposal page shows a callout saying so: refresh the lock file on the branch, run your tests, and mark the pull request ready when checks pass.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I load demo data for the application pages?<span class="route">quanta_admin.py</span></summary>
+        <div class="body"><p>Run <code>python cli/quanta_admin.py seed-appsec-demo</code> (optionally <code>--name NAME</code>). It registers a demo application from the sample SBOM plus five findings under the source <code>appsec-demo</code>, and prints the <code>network_topology.yaml</code> entry to add if you want the exposure lane to show. <code>--remove</code> undoes exactly those. It is sample data, not a scan result.</p></div>
+      </details>
+
+      <details class="howto">
         <summary>How do I use the release gate in CI?<span class="route">/pipeline-gates</span></summary>
         <div class="body"><p>Create an API key with the <code>read:findings</code> scope (Connections, "Send data to Quanta"). On Pipeline Gates, open "Add it to a pipeline", pick GitHub Actions, GitLab CI or shell, and paste the snippet; it calls <code>GET /api/gate/evaluate</code> for your application and fails the job when the result says block. "Try it" runs an evaluation on demand, and the Policy section shows what is set to block, warn or off (edit <code>remediation/config/pipeline_gates.yaml</code>). A finding with an approved exception is not counted. Every evaluation is recorded under History.</p></div>
       </details>

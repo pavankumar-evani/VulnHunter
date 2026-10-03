@@ -256,6 +256,13 @@ docstrings for the full design. Summary:
   real deployment (`python -c "import secrets; print(secrets.token_hex(32))"` generates
   one) - without it, a random secret is generated fresh per process, so every session is
   invalidated on restart and multiple worker processes mint incompatible cookies.
+- **`QUANTA_GIT_WEBHOOK_SECRET`** (or `QUANTA_GIT_WEBHOOK_SECRET_FILE`): the shared secret
+  that verifies GitHub/GitLab pull request webhooks at `POST /api/inbound/git-webhook`
+  (GitHub `X-Hub-Signature-256` HMAC-SHA256, GitLab `X-Gitlab-Token`). That route takes no
+  login or API key, so with no secret set it refuses every delivery (503). Not exercised
+  against a live host.
+- **`QUANTA_GITOPS_SYNC`**: the hourly scheduler follow-up of open fix pull requests and
+  re-check of merged ones. On by default; `false`, `0` or `no` turns it off.
 - **HTTPS**: **on by default**, not opt-in. `python dashboard/app.py` auto-generates a
   self-signed cert into `dashboard/certs/` (gitignored - a private key must never be
   committed) the first time you run it - the same `openssl req -x509 -newkey rsa:2048

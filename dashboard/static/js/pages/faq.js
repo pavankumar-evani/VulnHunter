@@ -458,6 +458,31 @@ const FAQS = [
     "pipeline files, CODEOWNERS, keys and env files. It runs no package manager or tests, so " +
     "refresh the lock file and run your tests on the branch (the PR opens as a draft when a " +
     "lock file exists). The connectors are unit-tested against fakes, not run on a live host."],
+  ["How do I keep pull request status up to date automatically?",
+    "An hourly scheduler tick follows open fix pull requests and re-checks merged ones " +
+    "against the latest scan; it does nothing when none is open. It is on by default (set " +
+    "QUANTA_GITOPS_SYNC to false, 0 or no to turn it off). You can also set up the webhook so " +
+    "the host tells Quanta immediately. Fix Pull Requests shows whether each is active."],
+  ["How do I set up the GitHub or GitLab webhook?",
+    "Set QUANTA_GIT_WEBHOOK_SECRET (or QUANTA_GIT_WEBHOOK_SECRET_FILE), then add a webhook " +
+    "for pull request events pointing at POST /api/inbound/git-webhook with the same secret. " +
+    "GitHub signs the body (X-Hub-Signature-256); GitLab sends X-Gitlab-Token. No secret " +
+    "means every delivery is refused (503), a bad signature gets 401, and a pull request " +
+    "Quanta did not open is ignored. Unit-tested against hand-signed payloads; none received " +
+    "from a live host."],
+  ["What do I do after a merge to get verification sooner?",
+    "On the merged proposal, use Queue a rescan on the scanner connections (admin). It queues " +
+    "a sync on each enabled scanner pull connection; if none is configured it tells you to " +
+    "upload the next scan instead. Then Verify reads that scan."],
+  ["Why did my dependency pull request open as a draft?",
+    "The repository has a lock file, and Quanta never runs a package manager. Refresh the " +
+    "lock file on the branch, run your tests and mark the pull request ready when checks " +
+    "pass. The proposal page shows a callout saying so."],
+  ["How do I load demo data for the application pages?",
+    "Run python cli/quanta_admin.py seed-appsec-demo (optionally --name NAME). It registers a " +
+    "demo application from the sample SBOM plus five findings under source appsec-demo and " +
+    "prints the network_topology.yaml entry for the exposure lane. --remove undoes exactly " +
+    "those. It is sample data, not a scan result."],
   ["How do I use the release gate in CI?",
     "Create an API key with the read:findings scope, then on Pipeline Gates copy the GitHub " +
     "Actions, GitLab CI or shell snippet. It calls GET /api/gate/evaluate and fails the job " +

@@ -860,6 +860,46 @@ so refresh the lock file and run your tests on the branch; with a lock file pres
 request opens as a draft. Use Sync to read state back and Verify after the next scan. The GitHub
 and GitLab connectors are unit-tested against fakes and not run against a live host.
 
+### How do I keep pull request status up to date automatically?
+
+Two ways, and you can use both. An hourly scheduler tick follows every open fix pull request and
+re-checks merged ones against the latest scan; it does nothing, and builds no connector, when no
+pull request is open. It is on by default; set `QUANTA_GITOPS_SYNC` to `false`, `0` or `no` to
+turn it off. Or set up the webhook (next entry) so GitHub or GitLab tells Quanta the moment the
+state changes. The Fix Pull Requests page shows whether the hourly check and the webhook are
+active. Verification is still evidence from the next scan, not proof.
+
+### How do I set up the GitHub or GitLab webhook?
+
+Set a shared secret in `QUANTA_GIT_WEBHOOK_SECRET` (or `QUANTA_GIT_WEBHOOK_SECRET_FILE` for a
+mounted secret), then add a webhook in the repository settings that posts pull request events to
+`POST /api/inbound/git-webhook` using the same secret. GitHub signs the body (`X-Hub-Signature-256`,
+HMAC-SHA256); GitLab sends the secret as `X-Gitlab-Token`. With no secret set Quanta refuses every
+delivery (503), a bad signature gets 401, and a pull request Quanta did not open is ignored. Only
+the pull request URL and its open, merged or closed state are used. No login or API key is
+involved, because the signature is the check. See docs/INTEGRATION_API.md. The signing is
+unit-tested against hand-signed payloads; no delivery has been received from a live host.
+
+### What do I do after a merge to get verification sooner?
+
+On the merged proposal, use "Queue a rescan on the scanner connections" (admin). It queues a sync
+on each enabled scanner pull connection (the ones whose output is findings). If none is
+configured it tells you to upload the next scan instead. Once that scan lands, Verify reads it and
+marks the fix verified, still present or awaiting a rescan.
+
+### Why did my dependency pull request open as a draft?
+
+Because the repository has a lock file. Quanta never runs a package manager, so it cannot
+regenerate the lock file for the new version. The proposal page shows a callout saying so: refresh
+the lock file on the branch, run your tests, and mark the pull request ready when checks pass.
+
+### How do I load demo data for the application pages?
+
+From the repository, run `python cli/quanta_admin.py seed-appsec-demo` (optionally `--name NAME`).
+It registers a demo application from the sample SBOM plus five findings under the source
+`appsec-demo`, and prints the `network_topology.yaml` entry to add if you want the exposure lane
+to show. `--remove` undoes exactly those and nothing else. It is sample data, not a scan result.
+
 ### How do I use the release gate in CI?
 
 Create an API key with the `read:findings` scope. On Pipeline Gates (`/pipeline-gates`), open "Add

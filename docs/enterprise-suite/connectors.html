@@ -315,6 +315,8 @@
         </table>
       </div>
       <p>Only <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> accept a key in place of a browser login, and each checks the key itself. Every other route still requires a signed-in user when <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> is on.</p>
+      <h3>Git host webhook</h3>
+      <p>The one inbound route that takes no API key is <code>POST /api/inbound/git-webhook</code>, which lets GitHub or GitLab report a fix pull request's state as it changes. Set <code>QUANTA_GIT_WEBHOOK_SECRET</code> (or <code>QUANTA_GIT_WEBHOOK_SECRET_FILE</code>) and give the host the same secret. GitHub signs the body (<code>X-Hub-Signature-256</code>, HMAC-SHA256); GitLab sends it as <code>X-Gitlab-Token</code>. With no secret set every delivery is refused (503), a bad signature is 401, and a pull request Quanta did not open is ignored. Only the pull request URL and its open, merged or closed state are used. Built against the hosts' public documentation and tested against hand-signed payloads; no delivery has been received from a live host. See <code>docs/INTEGRATION_API.md</code>.</p>
 
       <h3>Push findings</h3>
       <pre><code>curl -X POST https://quanta.example.com/api/ingest/findings \
