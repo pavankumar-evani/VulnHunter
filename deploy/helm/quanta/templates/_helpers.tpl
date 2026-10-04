@@ -117,6 +117,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.files.syncSeconds | quote }}
 - name: QUANTA_LEADER_TTL_SECONDS
   value: {{ .Values.config.leaderTtlSeconds | quote }}
+- name: QUANTA_GITOPS_SYNC
+  value: {{ .Values.config.gitopsSync | quote }}
 - name: QUANTA_JOB_VISIBILITY_SECONDS
   value: {{ .Values.worker.jobVisibilitySeconds | quote }}
 {{- if .Values.config.bootstrapAdminEmail }}

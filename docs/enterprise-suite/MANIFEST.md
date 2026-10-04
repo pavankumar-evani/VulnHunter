@@ -8,22 +8,22 @@ this in sync" below).
 
 | File | Published URL | Audience |
 |---|---|---|
-| `hub.html` | https://claude.ai/code/artifact/506d5ae4-b369-4fe4-83b2-e645a843c19b | Landing page — links to all 15 below |
-| `executive-brief.html` | https://claude.ai/code/artifact/7ed55a02-ab8b-4ebd-9451-281b035cfc1b | Enterprise evaluators |
-| `whitepaper.html` | https://claude.ai/code/artifact/2d57679f-6e91-4a8f-83b6-a9469bbcb4da | Enterprise evaluators — deep research/POV companion to `executive-brief.html`: why-now, vs. ServiceNow USEM, FAQs, patent/publication feasibility |
-| `architecture.html` | https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7 | Technical |
-| `vuln-engine.html` | https://claude.ai/code/artifact/37848de1-aed0-4e71-b903-0cf2780dc52b | Technical |
-| `remediation-engine.html` | https://claude.ai/code/artifact/845f8806-5bdf-47b3-ba02-d55fe8a34f46 | Technical |
-| `connectors.html` | https://claude.ai/code/artifact/97b22f55-f70e-4f0a-9d5c-d99af5c12a0c | Technical |
-| `rbac-governance.html` | https://claude.ai/code/artifact/2411def2-8368-47b2-82e4-e4068ba3dd1c | Technical |
-| `ai-capabilities.html` | https://claude.ai/code/artifact/21f80f22-3840-4dbf-827b-bb9539ae73d4 | Technical — every AI surface in the app, what powers it, and its guardrails |
-| `reporting.html` | https://claude.ai/code/artifact/7f8dd69c-e1eb-4a2f-8bf2-02b39a88fdba | Technical — report fields, on-demand generation, scheduled email delivery |
+| `hub.html` | https://claude.ai/artifact/Aw2XoPpCrAbGekPUjzdrCA | Landing page — links to all 15 below |
+| `executive-brief.html` | https://claude.ai/artifact/GfPjPuQLEEg3TGFs7Zrgb4 | Enterprise evaluators |
+| `whitepaper.html` | https://claude.ai/artifact/6bjsozJYehi9kecgTT18Mw | Enterprise evaluators — deep research/POV companion to `executive-brief.html`: why-now, vs. ServiceNow USEM, FAQs, patent/publication feasibility |
+| `architecture.html` | https://claude.ai/artifact/TYwmnQLD96mY8iqGcTcgyL | Technical |
+| `vuln-engine.html` | https://claude.ai/artifact/7rd9dp3xbpMLbkrLkyD5PY | Technical |
+| `remediation-engine.html` | https://claude.ai/artifact/HM4xPo3cWiDrAtb53eiWKf | Technical |
+| `connectors.html` | https://claude.ai/artifact/KjThFCZZFQx5p84rL7aUcj | Technical |
+| `rbac-governance.html` | https://claude.ai/artifact/5TLSKiAErPCxdC4oQ1aiu9 | Technical |
+| `ai-capabilities.html` | https://claude.ai/artifact/5CHkYU17mET2mLXpjTxySK | Technical — every AI surface in the app, what powers it, and its guardrails |
+| `reporting.html` | https://claude.ai/artifact/GkZ6EcabxquNLLyYyGXePj | Technical — report fields, on-demand generation, scheduled email delivery |
 | `soc-operations.html` | https://claude.ai/artifact/8uRxdBAihsmEnGukLGSN2F | Technical — SOC, SOAR, hunting reports, threat intelligence, AI/ML-guided playbooks, detection use cases, SOC metrics and the models used |
-| `pages.html` | https://claude.ai/code/artifact/04f95814-0635-4949-9046-4221d0e0513f | Technical |
-| `developer-guide.html` | https://claude.ai/code/artifact/99a5503d-91d9-45cf-a83d-29ac14960ea4 | Developers |
-| `poc-methodology.html` | https://claude.ai/code/artifact/fc05a1c0-7664-4ce1-88a2-86bec7eae328 | Business |
-| `pricing.html` | https://claude.ai/code/artifact/6fc9ea41-5cc3-4934-8e2a-236a252b1bd1 | Business |
-| `user-guide.html` | https://claude.ai/code/artifact/d7ca3df9-8759-4c84-8cd4-adc3927b1578 | Everyday users |
+| `pages.html` | https://claude.ai/artifact/1cdCtX7fNB3xwTV99xR6V4 | Technical |
+| `developer-guide.html` | https://claude.ai/artifact/KyRcNyctxD9jXCBpK98sqd | Developers |
+| `poc-methodology.html` | https://claude.ai/artifact/Y81CxD9usZnY3Bjhh4bK1Z | Business |
+| `pricing.html` | https://claude.ai/artifact/EoeA8VCKW94gK21efoXJyn | Business |
+| `user-guide.html` | https://claude.ai/artifact/TeWQ7PY8BWq4JU7RLXJcKH | Everyday users |
 
 ## Keeping this in sync with the application — read this when you change anything
 

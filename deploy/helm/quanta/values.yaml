@@ -71,6 +71,7 @@ config:
     host: ""
     port: "587"
     fromAddress: ""
+  gitopsSync: true                           # hourly follow-up of open fix pull requests (QUANTA_GITOPS_SYNC); false turns it off
   leaderTtlSeconds: 60                       # a dead scheduler leader is replaced after this long
   extraEnv: []                               # [{name: X, value: "y"}]; never put secrets here
 
