@@ -158,6 +158,14 @@
       - Alerts via the API or OCSF
       - Reputation and Splunk search connections (optional)
       admin: true
+    - id: darkweb
+      title: Dark Web Watch
+      path: /dark-web-watch
+      summary: Ransomware leak-site feeds and credential-exposure lookups matched against your domains and brands, and import of crawler and monitoring-platform output. Hits raise SOC alerts.
+      needs:
+      - Your domains and brand names
+      - A key for IntelligenceX, DeHashed, LeakCheck or Snusbase (optional)
+      admin: true
     - id: soar
       title: SOAR playbooks
       path: /soar

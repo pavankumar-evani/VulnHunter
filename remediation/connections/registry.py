@@ -20,6 +20,7 @@ from remediation.connectors import url_safety
 from remediation.connectors.active_directory_connector import ActiveDirectoryConnector
 from remediation.connectors.ai_usage_connector import AnthropicUsageConnector, OpenAIUsageConnector
 from remediation.connectors.axonius_connector import AxoniusConnector
+from remediation.connectors import darkweb_connector
 from remediation.connectors.cortex_xsiam_connector import CortexXsiamConnector
 from remediation.connectors.infoblox_connector import InfobloxConnector
 from remediation.connectors.prismacloud_connector import PrismaCloudConnector
@@ -282,6 +283,22 @@ SPECS.update({
         "note": "Not synced on a schedule. Used by SOAR playbooks. Testing posts a short test message.",
         "build": lambda c: NotifyWebhook(c["url"]), "test": lambda c: NotifyWebhook(c["url"]).test_connection(),
     },
+})
+
+
+def _dw(label, cls, site, help_text):
+    return {"label": label, "category": "Threat intelligence", "output": "darkweb", "kind": "tool",
+            "fields": [_f("api_key", "API key", secret=True)],
+            "docs": f"{help_text} Only your own domains from the Dark Web Watch terms are sent. Identifiers are masked and passwords are never kept. Account: {site}.",
+            "note": "Not synced like a scanner. Run from Dark Web Watch, on demand or on its daily schedule once switched on.",
+            "build": lambda c: cls(c["api_key"]), "test": lambda c: cls(c["api_key"]).test_connection()}
+
+
+SPECS.update({
+    "intelx": _dw("IntelligenceX (breach and paste search)", darkweb_connector.IntelX, "intelx.io", "Searches leaks, pastes and dark-web indexes for your domain."),
+    "dehashed": _dw("DeHashed (credential search)", darkweb_connector.DeHashed, "dehashed.com", "Searches breach data for your domain; needs API credits."),
+    "leakcheck": _dw("LeakCheck (credential search)", darkweb_connector.LeakCheck, "leakcheck.io", "Domain search needs a plan that includes it."),
+    "snusbase": _dw("Snusbase (breach compilations)", darkweb_connector.Snusbase, "snusbase.com", "Searches breach compilations by domain."),
 })
 
 

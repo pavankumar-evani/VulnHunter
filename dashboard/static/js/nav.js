@@ -124,6 +124,8 @@ export const NAV = [
       tip: "Leavers with access, dormant and unowned accounts, separation-of-duties conflicts, and manager access reviews. Quanta records decisions; your identity team removes the access." },
     { path: "/soar", label: "SOAR Playbooks", icon: "rules",
       tip: "Admin: playbooks that investigate, notify and ask your own automation to respond, with a second person approving anything that changes your environment. Dry run first." },
+    { path: "/dark-web-watch", label: "Dark Web Watch", icon: "rules",
+      tip: "Admin: ransomware leak-site feeds and credential-exposure lookups matched against your domains and brands, plus import of crawler and platform output. Hits raise SOC alerts. Quanta never touches Tor." },
     { path: "/soc", label: "SOC Operations", icon: "rules",
       tip: "Admin: cases in L1, L2 and L3 queues with priority, service-level clocks, escalation with hand-off notes, case summaries, log investigation, technique identification and SOC metrics." },
     { path: "/hunting", label: "Hunting & SOC", icon: "rules",
