@@ -686,6 +686,13 @@ ranks playbooks by similarity-weighted past success; `remediation/soar/ai_draft.
 refinement), confirm-gated through `_enforce_ai_usage_limit`/`_run_ai_call_and_record_usage`, never auto-saved. Page `/soc`; routes under `/api/soc/*`, `/api/detections/usecases*`,
 `/api/soar/draft-playbook`. Method and models: `docs/enterprise-suite/soc-operations.html`. None of this is deep learning, and none has run against a live SIEM.
 
+**Dark Web Watch** (`remediation/darkweb/`, `remediation/connectors/darkweb_connector.py`, page `/dark-web-watch`, admin only; tables `darkweb_hits`, `darkweb_sources`;
+`config/darkweb_watch.yaml`, ships empty): `catalog.yaml` lists every source and how it is used (feed, lookup, import, guide). Active: Ransomwatch and ransomware.live
+feeds (public, matched locally against the watch terms, polled by the leader tick) and credential-exposure lookups for the org's own domains (IntelligenceX, DeHashed,
+LeakCheck, Snusbase: tool connections, confirm-gated, daily once enabled; counts, breach names and masked identifiers only, passwords dropped in the connector). Everything
+else is import via the page or `POST /api/ingest/darkweb` (key scope `darkweb:write`). Quanta never connects to Tor or crawls. A hit raises a SOC alert from source
+`darkweb`. Built against public docs and fakes; never run with a live account.
+
 ## Support tickets (ITSM service desk)
 
 The Support page is a real helpdesk, not a link to an external tracker. Tables

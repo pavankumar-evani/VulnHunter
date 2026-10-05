@@ -126,6 +126,7 @@
     <a href="#models">12 · Models used</a>
     <a href="#limits">13 · Limits and honest status</a>
     <a href="#api">14 · API reference</a>
+    <a href="#darkweb">15 · Dark web and exposure intelligence</a>
   </nav>
 
   <main>
@@ -400,6 +401,7 @@
           <tr><td>Threat-intelligence relevance</td><td>Additive score</td><td>No</td><td>No</td></tr>
           <tr><td>Playbook recommendation</td><td>Similarity-weighted, Laplace-smoothed success rate</td><td>Yes: past runs</td><td>No</td></tr>
           <tr><td>Use-case generation</td><td>Gap analysis; pattern counting with support and precision</td><td>Yes: alerts and dispositions</td><td>No</td></tr>
+          <tr><td>Dark Web Watch matching</td><td>Domain and whole-word term matching</td><td>No</td><td>No</td></tr>
           <tr><td>Cyber-risk simulation</td><td>PERT and Poisson Monte Carlo</td><td>Per input</td><td>No</td></tr>
           <tr><td>Playbook drafting</td><td>Prompted language model, validated</td><td>No</td><td>Yes, optional, confirm-gated</td></tr>
           <tr><td>Use-case refinement</td><td>Prompted language model</td><td>No</td><td>Yes, optional, confirm-gated</td></tr>
@@ -420,6 +422,30 @@
       </ul>
     </section>
 
+    <section id="darkweb">
+      <h2><span class="num">15</span>Dark web and exposure intelligence</h2>
+      <p class="section-intro">Dark Web Watch matches what is published about the world against your own names. Quanta never connects to Tor, crawls an onion site, logs in to a forum, or stores a password. It reads clearnet services, and it takes in what your analysts' tools produce in an isolated environment.</p>
+      <h3>Four ways a source reaches Quanta</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Mode</th><th>What happens</th><th>Sources</th></tr></thead>
+        <tbody>
+          <tr><td>Feed (active)</td><td>Quanta fetches a public list on a schedule (every 60 minutes by default) and matches it against your watch terms locally. Nothing about you is sent.</td><td>Ransomwatch (posts list), ransomware.live (recent victims)</td></tr>
+          <tr><td>Lookup (your key)</td><td>Quanta asks the service about your own domains only. The first run previews the domains and needs confirmation; once switched on it runs daily. Only a count, the breach or database name, its date and a masked identifier (first character and the domain) are kept. Passwords and hashes are dropped inside the connector.</td><td>IntelligenceX, DeHashed, LeakCheck, Snusbase</td></tr>
+          <tr><td>Import</td><td>Paste a tool's output, or post it to <code>/api/ingest/darkweb</code> with a key scoped <code>darkweb:write</code>. Only lines naming your watch terms, and the onion addresses beside them, are kept.</td><td>SOCRadar, Flare, DarkFeed, DeepDarkCTI, OnionSearch, Darkdump, TorBot, TorCrawl.py, Darc, VigilantOnion, OnionIngestor, Prying Deep, Midnight Sea, Katana, Darkus, Robin, Recon, OnionScan</td></tr>
+          <tr><td>Reference</td><td>Not ingested. Directories, search engines and Tor infrastructure the analysts use, listed so the toolkit is in one place.</td><td>Ahmia, Onion Search Engine, Darkweblink, Tor66, TorNode, IACA, Onioff, Docker Onion Nmap, BreachForums monitor, Tor Project, torsocks, Nyx, Tor Browser</td></tr>
+        </tbody></table></div>
+      <h3>How a hit is made</h3>
+      <ol class="steps">
+        <li>Your terms (<code>darkweb_watch.yaml</code>, edited on the page): domains, brands, suppliers and partners, keywords. It ships empty; nothing is matched until you fill it in.</li>
+        <li>A domain matches a victim's website or a whole host name in the text. A brand, supplier or keyword matches as a whole word, case-insensitively; a term shorter than four characters must be the entire victim name.</li>
+        <li>When one subject matches several terms, one hit is made for the strongest (domain, then brand, then supplier, then keyword) and the others are named in the detail.</li>
+        <li>Severity comes from settings: High for a leak-site post naming you or exposed credentials for your domain, one level lower for a supplier, Medium for a mention in imported output.</li>
+        <li>A hit is stored once, with a stable key. With auto-alerts on it also raises a SOC alert from source <code>darkweb</code> (technique T1486 for a leak-site post, T1078 for exposed credentials), which flows into triage, cases and playbooks like any other alert.</li>
+        <li>An analyst moves the hit to reviewing, actioned or dismissed; the last two need a note.</li>
+      </ol>
+      <div class="callout warn"><span class="label">Limits</span><p>A name match is not proof: the page tells the analyst to confirm it is the same organization. The ransomware lists are community-run and can lag the leak sites. The four lookup connectors and both feeds are built against public documentation and tested against hand-written fakes; none has been run with a live account. Commercial platforms are import-only until a connector is built against a plan that exposes an API.</p></div>
+    </section>
+
     <section id="api">
       <h2><span class="num">14</span>API reference</h2>
       <p class="section-intro">All routes below need an administrator login unless a key scope is named.</p>
@@ -436,6 +462,8 @@
           <tr><td><code>GET /api/soc/metrics?days=30</code></td><td>SOC metrics</td></tr>
           <tr><td><code>GET/POST/DELETE /api/soc/analysts</code></td><td>Analysts and their tiers</td></tr>
           <tr><td><code>GET /api/detections/usecases</code>, <code>POST …/{key}/status</code>, <code>POST …/{key}/ai-refine</code></td><td>Use cases, decisions, optional refinement (confirm-gated)</td></tr>
+          <tr><td><code>GET /api/darkweb/overview</code>, <code>PUT /api/darkweb/watch-terms</code>, <code>POST /api/darkweb/sources/{id}/enable|run</code>, <code>POST /api/darkweb/import</code>, <code>POST /api/darkweb/hits/{id}/status</code></td><td>Dark Web Watch (lookups preview before sending, then need confirm)</td></tr>
+          <tr><td><code>POST /api/ingest/darkweb</code></td><td>Crawler or platform output (key scope <code>darkweb:write</code>)</td></tr>
           <tr><td><code>POST /api/soar/draft-playbook</code></td><td>Optional drafted playbook (confirm-gated, validated, never saved)</td></tr>
         </tbody></table></div>
     </section>

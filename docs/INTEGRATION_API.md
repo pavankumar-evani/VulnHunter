@@ -263,6 +263,13 @@ curl "https://quanta.example.com/api/export/findings?severity=critical&kev=true&
 
 Filters: `source`, `severity`, `kev`. Paged with `limit` (at most 5,000) and `offset`.
 
+### Dark-web monitoring output
+
+`POST /api/ingest/darkweb` (scope `darkweb:write`): `{"source": "<catalog id, e.g. torbot>", "text": "<the tool's output>"}`. Only lines that name a term in
+`remediation/config/darkweb_watch.yaml` are kept, with any onion addresses beside them; a match becomes a Dark Web Watch hit and, with auto-alerts on, a SOC alert from
+source `darkweb`. Run crawlers and monitoring tools in an isolated environment you control; Quanta never connects to Tor. Source ids are listed in
+`remediation/darkweb/catalog.yaml` and on the Dark Web Watch page, which also says how each source is ingested.
+
 ## 3. Per vendor, end to end
 
 * **ServiceNow.** Create an integration user that can create and read incidents. Add a ServiceNow connection

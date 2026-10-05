@@ -353,6 +353,13 @@ const FAQS = [
     "used only to draft a playbook and to refine a use case, each asked for explicitly, validated, and " +
     "never acted on automatically. The SOC, Hunting and Detection Engineering document gives the method " +
     "for each."],
+  ["Does Quanta crawl the dark web? How do the dark-web sources get in?",
+    "No. Quanta never connects to Tor, crawls onion sites, or logs in to forums. On Dark Web Watch it " +
+    "reads public ransomware leak-site lists on a schedule and matches them locally against your domains " +
+    "and brand names, asks IntelligenceX, DeHashed, LeakCheck or Snusbase about your own domains when you " +
+    "add a key (counts and masked identifiers only; passwords are never kept), and takes in the output of " +
+    "the crawlers and monitoring platforms your analysts run in an isolated environment, pasted or posted " +
+    "to /api/ingest/darkweb. A hit raises a SOC alert."],
   ["Where do threat-model threats come from? Is an LLM involved?",
     "From explicit rules you can read in remediation/threatmodel/rules.py, not an LLM. You " +
     "describe a system as components, data flows and trust zones; the rules raise STRIDE " +
