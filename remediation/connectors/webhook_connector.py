@@ -81,3 +81,35 @@ class NotifyWebhook:
 
     def test_connection(self):
         return self.send("Quanta connection test")
+
+
+class PolicyWebhook:
+    """Sends an API protection policy, signed exactly like a response action, to an endpoint the customer owns. Quanta never changes a WAF or gateway itself: the customer's
+    automation verifies the signature and timestamp, then applies, adjusts or rejects the policy in its own change process, and may report the edge result back to Quanta.
+
+      POST <your url>   X-Quanta-Timestamp, X-Quanta-Signature (sha256= HMAC of "<timestamp>.<body>"), X-Quanta-Delivery: <delivery id>
+      {"type": "api-protection-policy", "delivery_id": "...", "policy": {"id", "name", "version", "kind", "mode", "enabled", "scope", "params"}, "requested_by", "approved_by"}
+
+    Built against those conventions and unit-tested against a hand-rolled fake. It has NOT been exercised against a real WAF-automation endpoint."""
+
+    def __init__(self, url, signing_secret, session=None, clock=time.time):
+        if not signing_secret:
+            raise ValueError("A signing secret is required")
+        self.url, self.secret, self.session, self.clock = url, signing_secret, session or requests.Session(), clock
+
+    def _post(self, body_obj, delivery_id, timeout=20):
+        body = json.dumps(body_obj, sort_keys=True)
+        ts = str(int(self.clock()))
+        resp = self.session.post(self.url, data=body, headers={"Content-Type": "application/json", "X-Quanta-Timestamp": ts, "X-Quanta-Signature": sign(self.secret, ts, body),
+                                                              "X-Quanta-Delivery": str(delivery_id)}, timeout=timeout)
+        if resp.status_code >= 400:
+            raise WebhookError(f"The endpoint answered {resp.status_code}")
+        return {"status": resp.status_code}
+
+    def push(self, payload, timeout=20):
+        if not isinstance(payload, dict) or payload.get("type") != "api-protection-policy":
+            raise WebhookError("Not a policy payload")
+        return self._post(payload, payload.get("delivery_id", ""), timeout)
+
+    def test_connection(self):
+        return self._post({"type": "connection-test", "note": "Quanta connection test. Nothing to apply."}, "quanta-connection-test")

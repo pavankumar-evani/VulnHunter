@@ -213,6 +213,21 @@
   evidence: {scan_type: dast}
   ssdf: [PW.8]
   keywords: [dynamic analysis, dast, penetration test, runtime testing, vulnerability scan of running application]
+- id: api-security-testing
+  stage: test
+  title: APIs are tested against the OWASP API Security Top 10 before release
+  why: Object-level authorization, broken authentication and excessive data exposure cannot be seen by a general web scanner or a code scanner; they need tests that know the API's contract.
+  how: Keep the OpenAPI specification in the repository, run an API security tester against a staging deployment on every merge, send its results to Quanta's /api/ingest/api-test-results, and fail the job when the gate fails. Start report-only, then make the gate blocking.
+  snippets:
+    github-actions: |
+      - name: Send API test results to Quanta and apply the gate
+        run: |
+          curl -sS --fail-with-body -X POST "$QUANTA_URL/api/ingest/api-test-results" -H "Authorization: Bearer $QUANTA_API_KEY" \
+               -H "Content-Type: application/json" -d @upload.json | tee response.json
+          test "$(jq -r '.gate.passed' response.json)" = "true"
+  evidence: {scan_type: api-test}
+  ssdf: [PW.8, PW.7]
+  keywords: [api security, api test, api testing, openapi, swagger, owasp api, contract test]
 - id: coverage-gate
   stage: test
   title: Security-relevant code has tests

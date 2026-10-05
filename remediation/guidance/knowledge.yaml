@@ -6,7 +6,7 @@
 # Entries describe the approach and the checks; the engine adds what it knows about the specific finding
 # (package and fixed version, operating system, KEV status, the client's own controls).
 #
-# Fields: id, title, match {cwe: [...], keywords: [...], scan_types: [...], asset_types: [...]}, summary, why,
+# Fields: id, title, match {rule_ids: [...], cwe: [...], keywords: [...], scan_types: [...], asset_types: [...]}, summary, why,
 # steps (ordered), verify, compensating (when the fix cannot ship now), effort, references [{title, url}].
 # Keep steps concrete and tool-neutral; never invent a CVE-specific fix here.
 
@@ -558,6 +558,196 @@ entries:
     effort: Large.
     references:
       - {title: CISA Known Exploited Vulnerabilities Catalog, url: "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}
+
+  # ---------------------------------------------------------------- API security (OWASP API Security Top 10, 2023), matched by rule id
+  - id: api-bola
+    title: Broken object level authorization (API1)
+    match: {rule_ids: ["API1:2023"], keywords: ["api1:2023"]}
+    summary: The API accepts an object id from the caller and returns or changes that object without checking the caller may.
+    why: It lets one user read or change other users' records just by changing an id, and it is the most common serious API flaw.
+    steps:
+      - Find the handler for the endpoint and locate where the object is loaded by the id from the path, query or body.
+      - Add an authorization check in that handler (or a shared policy layer) that compares the object's owner or tenant with the authenticated caller, for every method.
+      - Load objects through a query already scoped to the caller (owner = caller) so a foreign id simply is not found, and return 404 (or 403) for both missing and forbidden.
+      - Do not rely on random or unguessable ids as the control; they only slow enumeration down.
+      - Add an automated test with two users that proves user B cannot read, change or delete user A's object through this endpoint.
+    verify:
+      - Run the request in the finding with a low-privilege token and another user's object id; it must return 403 or 404.
+      - Re-import traffic after the fix and confirm no caller touches large numbers of distinct ids.
+    compensating:
+      - Add a rate limit and a distinct-object limit per caller on this endpoint (a protection policy in monitor mode first), and alert on a caller walking ids.
+    effort: Small to medium per endpoint; large if the application has no shared authorization layer.
+    references:
+      - {title: OWASP API1:2023 Broken Object Level Authorization, url: "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/"}
+
+  - id: api-broken-authentication
+    title: Broken authentication (API2)
+    match: {rule_ids: ["API2:2023"], keywords: ["api2:2023"]}
+    summary: An endpoint can be used without credentials, or its tokens or credentials are weak, long-lived or exposed.
+    why: Weak or missing authentication hands the API to anyone, and a token that never expires or is unsigned is a permanent key.
+    steps:
+      - For an unauthenticated endpoint, decide whether it is meant to be public. If not, require authentication in the framework's global middleware so new routes are protected by default.
+      - Validate every token on the server - signature, an allow-listed algorithm (never none), expiry, issuer and audience - and reject tokens that name their own key location (jku, x5u, jwk).
+      - Issue short-lived access tokens (minutes to an hour) with refresh tokens, and set an expiry on every token.
+      - Prefer asymmetric signing so services that only verify cannot also mint tokens.
+      - Remove credentials from URLs. Move api keys and tokens to headers, and rotate any that appeared in a query string because logs now hold them.
+    verify:
+      - Send the request in the finding without credentials; expect 401 or 403.
+      - Present an unsigned token and an expired token; both must be rejected.
+      - Search the access logs for the credential parameter and confirm it no longer appears.
+    compensating:
+      - Put the endpoint behind a gateway that enforces authentication, restrict it to known networks, and add a rate limit on authentication failures.
+    effort: Small for an open endpoint; medium for a token-handling change.
+    references:
+      - {title: OWASP API2:2023 Broken Authentication, url: "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/"}
+      - {title: OWASP JSON Web Token Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html"}
+
+  - id: api-property-level
+    title: Broken object property level authorization (API3)
+    match: {rule_ids: ["API3:2023"], keywords: ["api3:2023"]}
+    summary: The API returns more properties than the caller needs, or lets the caller set properties they should not control.
+    why: Excess properties leak personal and internal data, and writable privileged properties (role, price, owner) turn into privilege escalation.
+    steps:
+      - Replace "return the whole database object" with an explicit response model (a DTO or serializer) listing each property the caller may see.
+      - For sensitive properties, apply a per-property check on the caller's role, not only on the object.
+      - For writes, bind requests to an allow-list of settable properties and ignore or reject everything else (no automatic mass assignment of the request body onto a model).
+      - Update the specification so the declared response and request properties match the code, then keep it as a contract test.
+    verify:
+      - Compare the live response with the specification. No undeclared property may appear.
+      - Send the request in the finding with an extra privileged property; it must be ignored or rejected and not change the stored value.
+    compensating:
+      - A gateway response filter that removes the named properties for callers that do not need them, as a stopgap.
+    effort: Small to medium.
+    references:
+      - {title: OWASP API3:2023 Broken Object Property Level Authorization, url: "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/"}
+
+  - id: api-resource-consumption
+    title: Unrestricted resource consumption (API4)
+    match: {rule_ids: ["API4:2023"], keywords: ["api4:2023"]}
+    summary: Nothing limits how much one caller can take, in requests, response size or expensive work.
+    why: One caller can exhaust capacity, scrape the whole dataset, or run up costs for paid downstream services.
+    steps:
+      - Set a rate limit per caller and per endpoint at the gateway or in the application, sized from the endpoint's normal use (see its metrics), not guessed.
+      - Cap page size and response size, require pagination on list endpoints, and reject requests that ask for more.
+      - Add timeouts, payload size limits and limits on expensive operations (exports, search, uploads).
+      - Return 429 with a Retry-After header so well-behaved clients back off.
+    verify:
+      - Send a burst of requests from one identity in a non-production environment. Later requests must be refused or slowed.
+      - Request a list endpoint with a huge page size; it must be capped.
+    compensating:
+      - A rate-limit protection policy at the edge (monitor mode first, then block once the monitor results look right).
+    effort: Small to medium.
+    references:
+      - {title: OWASP API4:2023 Unrestricted Resource Consumption, url: "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/"}
+
+  - id: api-function-level
+    title: Broken function level authorization (API5)
+    match: {rule_ids: ["API5:2023"], keywords: ["api5:2023"]}
+    summary: An administrative or privileged function can be reached by callers who should not have it.
+    why: A normal user who finds an administrative path can perform privileged actions such as creating users or changing configuration.
+    steps:
+      - List the administrative and privileged functions and the roles allowed to use each.
+      - Enforce the role check on the server for every such function, denying by default, rather than hiding the path or the button.
+      - Move administrative endpoints off the public interface (a separate host or network) where possible.
+      - Check state-changing methods (PUT, PATCH, DELETE) separately from reads on the same path.
+    verify:
+      - Call the endpoint in the finding with an ordinary user's token; it must return 403.
+      - Confirm the endpoint is no longer reachable from public addresses if it is meant to be internal.
+    compensating:
+      - Restrict the path at the edge to known source networks and require a second factor for administrative sessions.
+    effort: Small to medium.
+    references:
+      - {title: OWASP API5:2023 Broken Function Level Authorization, url: "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/"}
+
+  - id: api-business-flow
+    title: Unrestricted access to sensitive business flows (API6)
+    match: {rule_ids: ["API6:2023"], keywords: ["api6:2023"]}
+    summary: A flow that attackers automate (sign-up, login, checkout, reset, redeem) has no limits suited to automation.
+    why: Automation turns a legitimate flow into credential stuffing, account farming, inventory hoarding or voucher abuse.
+    steps:
+      - Name the business impact of abuse for the flow and decide the normal human rate for it.
+      - Add per-account, per-device and per-address limits, a delay or step-up (challenge, one-time code) after repeated attempts, and alerting on anomalies.
+      - Make results less informative to automation (uniform errors for login and reset).
+      - Monitor the flow's metrics for jumps in volume or error rate.
+    verify:
+      - Replay the flow at machine speed in a non-production environment. It must be slowed or challenged.
+    compensating:
+      - An edge rate-limit policy scoped to this flow, in monitor mode first.
+    effort: Medium.
+    references:
+      - {title: OWASP API6:2023 Unrestricted Access to Sensitive Business Flows, url: "https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/"}
+
+  - id: api-ssrf
+    title: Server-side request forgery in an API (API7)
+    match: {rule_ids: ["API7:2023"], keywords: ["api7:2023"]}
+    summary: The API takes a URL or host from the caller and may fetch it from inside your network.
+    why: An attacker can make the server reach internal services and cloud metadata addresses and read what comes back.
+    steps:
+      - Find what the server does with the parameter. If it never fetches it, remove the parameter or document why it is only stored.
+      - If it must fetch, allow-list the destination hosts or schemes, resolve the name once and refuse private, loopback, link-local and metadata addresses, and disable redirects.
+      - Do not return the fetched body to the caller unmodified.
+      - Run the fetching component with no access to internal networks or cloud credentials it does not need (and require IMDSv2 or the cloud equivalent).
+    verify:
+      - Send a URL to a host you control and a loopback address (the request in the finding). The server must not contact either.
+    compensating:
+      - Egress filtering from the application tier so it can only reach approved destinations.
+    effort: Medium.
+    references:
+      - {title: OWASP API7:2023 Server Side Request Forgery, url: "https://owasp.org/API-Security/editions/2023/en/0xa7-server-side-request-forgery/"}
+      - {title: OWASP SSRF Prevention Cheat Sheet, url: "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"}
+
+  - id: api-misconfiguration
+    title: Security misconfiguration in an API (API8)
+    match: {rule_ids: ["API8:2023"], keywords: ["api8:2023"]}
+    summary: The API is served over plain HTTP, or has another unsafe setting such as credentials in URLs.
+    why: Plain HTTP exposes credentials and data in transit to anyone on the path.
+    steps:
+      - Serve the API only over TLS 1.2 or later; redirect or refuse plain HTTP and add Strict-Transport-Security.
+      - Check the load balancer and gateway listeners, not only the application, and look for internal hops that still use HTTP.
+      - Remove credentials from URLs, restrict CORS to the origins that need it, and make error responses free of stack traces and internal names.
+    verify:
+      - Request the endpoint over http://. It must be refused or redirected before any data is returned.
+    compensating:
+      - Block port 80 for the API host at the edge.
+    effort: Small.
+    references:
+      - {title: OWASP API8:2023 Security Misconfiguration, url: "https://owasp.org/API-Security/editions/2023/en/0xa8-security-misconfiguration/"}
+
+  - id: api-inventory
+    title: Improper inventory management (API9)
+    match: {rule_ids: ["API9:2023"], keywords: ["api9:2023"]}
+    summary: An endpoint is live that nobody documents, owns or reviews, or an old version is still answering.
+    why: Shadow and deprecated endpoints skip testing, patching and monitoring, so attackers choose them first.
+    steps:
+      - Confirm with the owning team whether the endpoint is intended. If not, remove it or block it at the gateway.
+      - If it is intended, add it to the specification, name an owner, and put it through the same tests and controls as the rest of the API.
+      - For a deprecated or superseded version, set a retirement date, tell the remaining callers (see caller activity), and return 410 after the date.
+      - Make the specification part of the release by uploading it in the pipeline, so drift against live traffic is reported on every release.
+    verify:
+      - Re-import traffic. The endpoint is either gone, documented and owned, or marked decommissioning with a date.
+    compensating:
+      - Restrict the endpoint at the gateway to its known callers while the decision is made.
+    effort: Small to medium.
+    references:
+      - {title: OWASP API9:2023 Improper Inventory Management, url: "https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/"}
+
+  - id: api-unsafe-consumption
+    title: Unsafe consumption of APIs (API10)
+    match: {rule_ids: ["API10:2023"], keywords: ["api10:2023"]}
+    summary: Your service calls a third-party API and trusts what comes back, or sends it more than it needs.
+    why: A compromised or careless third party can inject data into your systems or receive sensitive data it should never have had.
+    steps:
+      - Record what data your service sends to the third party and remove anything it does not need.
+      - Validate and size-limit everything received from it exactly as you would user input, and do not follow redirects blindly.
+      - Enforce TLS with certificate validation, timeouts and retry limits, and handle the third party being down.
+      - Review the contract and the vendor's security posture on a schedule.
+    verify:
+      - Review the outbound request and response handling for the integration, and confirm validation and timeouts are in place.
+    compensating:
+      - An egress allow-list and a proxy that logs and limits what leaves toward the third party.
+    effort: Medium.
+    references:
+      - {title: OWASP API10:2023 Unsafe Consumption of APIs, url: "https://owasp.org/API-Security/editions/2023/en/0xaa-unsafe-consumption-of-apis/"}
 
 # Used when nothing above matches. Keeps the page useful rather than blank, and says it is generic.
 fallback:

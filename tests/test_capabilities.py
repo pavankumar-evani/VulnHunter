@@ -40,7 +40,7 @@ class CatalogTests(unittest.TestCase):
     def test_five_areas_numbered_one_to_five(self):
         self.assertEqual([d["number"] for d in self.cat], ["1", "2", "3", "4", "5"])
         self.assertTrue(all(g["number"].startswith(d["number"] + ".") for d in self.cat for g in d["groups"]))
-        self.assertEqual([g["number"] for g in self.cat[0]["groups"]], ["1.1", "1.2"])  # vulnerability management, then the DevSecOps library
+        self.assertEqual([g["number"] for g in self.cat[0]["groups"]], ["1.1", "1.2", "1.3"])  # vulnerability management, the DevSecOps library, then API security
         self.assertEqual([g["number"] for g in self.cat[2]["groups"]], ["3.1", "3.2"])  # detection and hunting, then AI security
 
     def test_ids_are_unique_and_every_item_is_described(self):
@@ -58,7 +58,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_every_new_page_is_in_the_catalog(self):
         paths = {i["path"].split("?")[0] for i in self.items}
-        for page in ("/devsecops", "/cyber-risk", "/hunting", "/soar", "/ai-security", "/firewall", "/access-governance", "/zero-day-watch", "/grc", "/threat-models", "/ai-usage", "/controls"):
+        for page in ("/devsecops", "/cyber-risk", "/hunting", "/soar", "/ai-security", "/firewall", "/access-governance", "/zero-day-watch", "/grc", "/threat-models", "/ai-usage", "/controls", "/api-security"):
             self.assertIn(page, paths)
 
     def test_the_page_module_each_route_loads_exists(self):
