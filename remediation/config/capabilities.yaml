@@ -1,64 +1,159 @@
-# The capability catalog behind the Capabilities page: five areas, each with the things Quanta does in it, in the order a team usually adopts them.
+# The capability catalog behind the Capabilities page, organised into the same eight modules as the sidebar (dashboard/static/js/nav.js).
+# Each module has `groups` of `items` and a `connectors` list: the systems that feed that module.
 # `needs` says what to connect or load for the capability to have anything to work on. `admin: true` marks pages only administrators can open.
-# Edit freely; the page reads this file on every request.
-- id: vm
+# Edit freely; the page reads this file on every request. Keep module ids in step with nav.js (a test checks it).
+- id: soc
   number: '1'
-  title: Vulnerability management and remediation
-  summary: Find what is exposed, decide what matters first, fix it, and prove it is fixed.
+  title: Threat Detection & Response
+  summary: 'The SOC in one place: triage alerts, hunt, engineer detections, run threat intelligence and respond through playbooks that need a second person for anything that changes your environment.'
   groups:
   - number: '1.1'
-    title: Vulnerability management and remediation
+    title: Threat Detection & Response
     items:
-    - id: queue
-      title: Prioritised queue
-      path: /queue
-      summary: Every finding from every scanner, scored on exploitability, exposure and deadlines, with fix guidance written for its kind.
+    - id: soc-cases
+      title: Cases, queues and metrics
+      path: /soc
+      summary: ITIL-style cases in L1, L2 and L3 queues with priority, service-level clocks, escalation with hand-off notes, case summaries, log investigation, technique identification and SOC metrics.
       needs:
-      - A scanner connection or export
-    - id: remediation
-      title: Remediation plans and approvals
-      path: /remediation-approvals
-      summary: Generated fix artifacts, linted and approved by a second person before anything is run, with rollout rings and verification from the next scan.
+      - Alerts, or cases opened by hand
+      admin: true
+    - id: triage
+      title: Alert triage and investigation
+      path: /hunting?tab=alerts
+      summary: Alerts from your SIEM or XDR ranked with vulnerability context, investigated step by step, with a recommended verdict a person validates.
       needs:
-      - Findings in the queue
-    - id: compensating
-      title: Compensating controls
-      path: /controls
-      summary: Which firewalls, EDR and other controls protect which assets, so the advice for a finding that cannot be patched yet is specific to you.
+      - Alerts via the API or OCSF
+      - Reputation and Splunk search connections (optional)
+      admin: true
+    - id: hunting
+      title: Threat hunting
+      path: /hunting?tab=proposals
+      summary: Hunts proposed from known-exploited vulnerabilities in your estate, with queries to run in your SIEM and verdicts that need an outcome to close.
       needs:
-      - Controls recorded or reported by an EDR or firewall
-    - id: zero-day
-      title: Zero-day watch
-      path: /zero-day-watch
-      summary: Newly exploited vulnerabilities (CISA KEV) in products you appear to run that no scanner has reported yet.
+      - A Splunk search connection to run queries from Quanta
+      admin: true
+    - id: detection
+      title: Detection engineering
+      path: /hunting?tab=detections
+      summary: Per-rule health from analyst outcomes, ATT&CK coverage gaps, and tuning suggestions with before and after.
       needs:
-      - Network access to cisa.gov
-    - id: attack-paths
-      title: Attack paths
-      path: /attack-paths
-      summary: Entry, pivot and impact chains across your findings, and the single fix that breaks the most of them.
+      - Alerts that name their rule
+      - Sigma rules (optional)
+      admin: true
+    - id: threat-intel
+      title: Threat Intelligence
+      path: /threat-intel
+      summary: Zero-days, top vulnerabilities, and MITRE-documented threat-actor groups relevant to the selected tenant's industry - built from data already tagged elsewhere in this app.
+      needs: []
+    - id: intel
+      title: Threat intelligence intake
+      path: /hunting?tab=intel
+      summary: Paste a report or send STIX; Quanta extracts the CVEs, techniques and indicators and scores how much it matters to your estate.
       needs:
-      - Findings with ATT&CK techniques
-    - id: dependencies
-      title: Dependency blast radius
-      path: /dependencies
-      summary: Which applications contain a vulnerable open-source package, and the safe upgrade.
+      - Reports or a feed
+      admin: true
+    - id: darkweb
+      title: Dark Web Watch
+      path: /dark-web-watch
+      summary: Ransomware leak-site feeds and credential-exposure lookups matched against your domains and brands, and import of crawler and monitoring-platform output. Hits raise SOC alerts.
       needs:
-      - An SBOM
-    - id: applications
-      title: Applications and SBOM
-      path: /applications
-      summary: Each application with its deployment context and SBOM, an interactive graph from the internet through its dependencies, and its findings ranked by how much they matter there, grouped into the upgrades that close the most.
+      - Your domains and brand names
+      - A key for IntelligenceX, DeHashed, LeakCheck or Snusbase (optional)
+      admin: true
+    - id: soar
+      title: SOAR playbooks
+      path: /soar
+      summary: Playbooks that investigate, notify and ask your own automation to respond. Dry run first; destructive steps need a second person.
       needs:
-      - An SBOM or dependency files
-    - id: fix-prs
-      title: Fix pull requests
-      path: /fix-prs
-      summary: Dependency upgrades and code fixes as reviewable pull requests on GitHub or GitLab, with the evidence in the description, tracked from approval to merge to verification, and how fast fixes move.
+      - A response endpoint you own
+      admin: true
+  connectors:
+  - title: Splunk
+    path: /splunk
+    summary: Send findings to Splunk HEC; search it for hunts and triage
+  - title: Cortex XSIAM
+    path: /cortex-xsiam
+    summary: Pull correlated incidents
+  - title: CrowdStrike (XDR)
+    path: /xdr
+    summary: Reference page for endpoint detections
+  - title: Search, reputation and response endpoints
+    path: /connections
+    summary: Splunk search, VirusTotal, notification and response webhooks
+- id: appsec
+  number: '2'
+  title: Application Security
+  summary: 'Everything found in your own applications: static and dynamic testing, secrets, containers, APIs and the threats to a design, with fixes handed to developers.'
+  groups:
+  - number: '2.1'
+    title: Application Security
+    items:
+    - id: appsec
+      title: Application Vulnerabilities
+      path: /appsec
+      summary: Hub view across SAST, DAST, SCA, Secrets, Container, and API sub-categories - counts and links into each.
+      needs: []
+    - id: quanta-scan
+      title: Code Scan
+      path: /quanta-scan
+      summary: Source-code findings from /quanta-scan - agentless static analysis, no target install.
+      needs: []
+    - id: api-inventory
+      title: API inventory and discovery
+      path: /api-security
+      summary: Every endpoint from uploaded specifications and imported gateway or access logs, with exposure, authentication, the data it returns under your classification framework, owners, and shadow or deprecated endpoints.
       needs:
-      - A GitHub or GitLab connection
-  - number: '1.2'
-    title: DevSecOps control library
+      - OpenAPI files and/or access-log exports
+      admin: true
+    - id: api-findings
+      title: OWASP API Top 10 findings
+      path: /api-security?tab=findings
+      summary: Findings mapped to the OWASP API Security Top 10 (2023) with an evidence chain and a request that confirms a true or false positive, published to the main queue.
+      needs:
+      - Traffic records and specifications
+      admin: true
+    - id: api-identity
+      title: Caller activity
+      path: /api-security?tab=callers
+      summary: What each caller reached, how much, and which of your data classes it carried, for investigating scraping and exfiltration.
+      needs:
+      - Traffic records that carry a caller identity
+      admin: true
+    - id: api-policies
+      title: Runtime protection policies
+      path: /api-security?tab=policies
+      summary: Monitor-or-block policies (rate limits, bad sources, data-loss limits, geography, signatures) sent as signed requests to an endpoint you own, with review artifacts for common web application firewalls and an audit trail. Quanta changes no firewall.
+      needs:
+      - An endpoint you own that applies policies
+      admin: true
+    - id: api-ci
+      title: API tests in CI and rollout
+      path: /api-security?tab=ci
+      summary: A results format, a pass/fail gate and GitHub Actions and GitLab CI examples, plus the onboarding checklist, phased rollout and who does what.
+      needs:
+      - An API key with the api:write scope
+      admin: true
+    - id: threat-models
+      title: Threat models
+      path: /threat-models
+      summary: Describe a system and get the threats a design review would raise, joined to your live findings and controls.
+      needs:
+      - A system description
+      admin: true
+  connectors:
+  - title: Scanner uploads (SARIF, coverage) and API keys
+    path: /connections
+    summary: Semgrep, CodeQL, ZAP, Trivy and others push results; gateways push API traffic
+  - title: Prisma Cloud
+    path: /prismacloud
+    summary: Code and cloud posture findings
+- id: devsecops
+  number: '3'
+  title: DevSecOps & Supply Chain
+  summary: 'The delivery pipeline: the controls it needs, SBOMs and the dependency graph, fix pull requests and the release gate.'
+  groups:
+  - number: '3.1'
+    title: DevSecOps & Supply Chain
     items:
     - id: devsecops
       title: Control library and repository status
@@ -78,10 +173,28 @@
       summary: Static analysis, dependency, secret and infrastructure-as-code findings tracked with a fix brief until a later scan stops reporting them.
       needs:
       - Code scan results
+    - id: applications
+      title: Applications and SBOM
+      path: /applications
+      summary: Each application with its deployment context and SBOM, an interactive graph from the internet through its dependencies, and its findings ranked by how much they matter there, grouped into the upgrades that close the most.
+      needs:
+      - An SBOM or dependency files
+    - id: dependencies
+      title: Dependency blast radius
+      path: /dependencies
+      summary: Which applications contain a vulnerable open-source package, and the safe upgrade.
+      needs:
+      - An SBOM
+    - id: fix-prs
+      title: Fix pull requests
+      path: /fix-prs
+      summary: Dependency upgrades and code fixes as reviewable pull requests on GitHub or GitLab, with the evidence in the description, tracked from approval to merge to verification, and how fast fixes move.
+      needs:
+      - A GitHub or GitLab connection
     - id: pipeline-gates
       title: Pipeline gates
       path: /pipeline-gates
-      summary: "The release gate a CI job calls before shipping: pass, warn or fail with reasons, per environment, plus the step to paste into GitHub Actions or GitLab CI."
+      summary: 'The release gate a CI job calls before shipping: pass, warn or fail with reasons, per environment, plus the step to paste into GitHub Actions or GitLab CI.'
       needs:
       - An API key for CI
     - id: secure-design
@@ -89,68 +202,122 @@
       path: /secure-design
       summary: Answer a few questions about a system you are about to build and get the security requirements, pipeline controls and threat questions it calls for.
       needs: []
-- id: risk
-  number: '2'
-  title: Cyber risk management
-  summary: Put risk in money, show the evidence behind your controls, and keep the register of what you have decided to live with.
+  connectors:
+  - title: GitHub, GitLab and OSV
+    path: /connections
+    summary: Open fix pull requests and match SBOM packages to known vulnerabilities
+- id: infra
+  number: '4'
+  title: Infrastructure & Exposure
+  summary: 'Hosts, networks, OT, certificates and cryptography: what is vulnerable, what is exposed, what already protects it, and how an attacker could chain it.'
   groups:
-  - number: '2.1'
-    title: Cyber risk management
+  - number: '4.1'
+    title: Infrastructure & Exposure
     items:
-    - id: cyber-risk
-      title: Cyber risk quantification
-      path: /cyber-risk
-      summary: Loss scenarios simulated into an average and a bad-year loss, which treatment is worth its cost, and a cyber health score.
+    - id: infrastructure
+      title: Infrastructure Vulnerabilities
+      path: /infrastructure
+      summary: Hub view across OS, Network, Network Security, OT/IoT, and Cloud sub-categories (Tenable/Armis-style asset scanning).
+      needs: []
+    - id: ot-vulnerabilities
+      title: OT Vulnerabilities
+      path: /ot-vulnerabilities
+      summary: Dedicated hub for Operational Technology/IoT device findings (PLCs, SCADA/HMI, building automation, cameras, sensor gateways) - the same real data as Infrastructure Vulnerabilities' own OT/IoT sub-category, broken out for teams who own OT/I
+      needs: []
+    - id: certificate-vulnerabilities
+      title: Certificate Vulnerabilities
+      path: /certificate-vulnerabilities
+      summary: Hub view for Certificate & TLS Lifecycle Management findings - KPIs, severity/aging charts, top rankings, and AI trend analysis, same shape as the other Security Domains hubs.
+      needs: []
+    - id: quantum-readiness
+      title: Quantum Readiness
+      path: /quantum-readiness
+      summary: Real findings naming classical RSA/ECDSA/Diffie-Hellman crypto or a legacy TLS/cipher weakness - a post-quantum migration inventory against real NIST FIPS 203/204/205 + NIST IR 8547 guidance.
+      needs: []
+    - id: zero-day
+      title: Zero-day watch
+      path: /zero-day-watch
+      summary: Newly exploited vulnerabilities (CISA KEV) in products you appear to run that no scanner has reported yet.
       needs:
-      - Your estimates; control evidence improves the health score
-      admin: true
-    - id: grc
-      title: Risk and compliance
-      path: /grc
-      summary: Framework coverage with automated evidence, the risk register, attestations and policies. Evidence and workflow, not a certification.
+      - Network access to cisa.gov
+    - id: compensating-controls
+      title: Compensating Controls
+      path: /compensating-controls
+      summary: Findings that can't be remediated right now - Critical EOL/EOS, actively-exploited zero-days with no public POC, or an approved exception - with recommended controls for each.
+      needs: []
+    - id: compensating
+      title: Security controls inventory
+      path: /controls
+      summary: Which firewalls, EDR and other controls protect which assets, so the advice for a finding that cannot be patched yet is specific to you.
       needs:
-      - Findings; optional OSCAL catalogs
-      admin: true
-    - id: threat-models
-      title: Threat models
-      path: /threat-models
-      summary: Describe a system and get the threats a design review would raise, joined to your live findings and controls.
+      - Controls recorded or reported by an EDR or firewall
+    - id: firewall
+      title: Firewall rules management
+      path: /firewall
+      summary: Rule analysis, internet exposure, recertification by owner, and access requests checked against the rules before anyone reviews them.
       needs:
-      - A system description
-      admin: true
-- id: detect
-  number: '3'
-  title: Threat detection engineering and hunting
-  summary: Know whether your detections work, look for what they missed, and keep AI systems from becoming the next blind spot.
+      - Rule exports from your firewalls
+    - id: attack-paths
+      title: Attack paths
+      path: /attack-paths
+      summary: Entry, pivot and impact chains across your findings, and the single fix that breaks the most of them.
+      needs:
+      - Findings with ATT&CK techniques
+    - id: risk-blast-radius
+      title: Blast Radius
+      path: /risk/blast-radius
+      summary: If this asset is compromised, how far does the damage spread - business criticality and reachability, cross-referenced against real exploitability.
+      needs: []
+    - id: assets
+      title: Asset Inventory
+      path: /assets
+      summary: Every asset with findings against it, aggregated, with an editable owner/team.
+      needs: []
+    - id: asset-mapping
+      title: Asset Mapping
+      path: /asset-mapping
+      summary: Which real assets carry the most distinct vulnerabilities, ranked and clickable.
+      needs: []
+    - id: vulnerability-mapping
+      title: Vulnerability Mapping
+      path: /vulnerability-mapping
+      summary: Which real vulnerabilities hit the most assets, ranked and clickable.
+      needs: []
+  connectors:
+  - title: Tenable
+    path: /tenable
+    summary: Vulnerability scanner
+  - title: Qualys
+    path: /qualys
+    summary: Vulnerability scanner
+  - title: OpenVAS / GVM
+    path: /openvas
+    summary: Open-source scanner
+  - title: Prisma Cloud
+    path: /prismacloud
+    summary: Cloud posture
+  - title: Infoblox
+    path: /infoblox
+    summary: Asset discovery (DNS/DHCP/IPAM)
+  - title: Axonius
+    path: /axonius
+    summary: Asset discovery
+  - title: Active Directory
+    path: /active-directory
+    summary: Asset discovery (computers)
+- id: ai
+  number: '5'
+  title: AI Security
+  summary: 'Risks in and around AI: model and prompt vulnerabilities, a register of AI systems checked against the OWASP LLM Top 10, and who is spending what.'
   groups:
-  - number: '3.1'
-    title: Detection engineering and hunting
+  - number: '5.1'
+    title: AI Security
     items:
-    - id: detection
-      title: Detection engineering
-      path: /hunting?tab=detections
-      summary: Per-rule health from analyst outcomes, ATT&CK coverage gaps, and tuning suggestions with before and after.
-      needs:
-      - Alerts that name their rule
-      - Sigma rules (optional)
-      admin: true
-    - id: hunting
-      title: Threat hunting
-      path: /hunting?tab=proposals
-      summary: Hunts proposed from known-exploited vulnerabilities in your estate, with queries to run in your SIEM and verdicts that need an outcome to close.
-      needs:
-      - A Splunk search connection to run queries from Quanta
-      admin: true
-    - id: intel
-      title: Threat intelligence intake
-      path: /hunting?tab=intel
-      summary: Paste a report or send STIX; Quanta extracts the CVEs, techniques and indicators and scores how much it matters to your estate.
-      needs:
-      - Reports or a feed
-      admin: true
-  - number: '3.2'
-    title: AI security
-    items:
+    - id: ai-vulnerabilities
+      title: AI Vulnerabilities
+      path: /ai-vulnerabilities
+      summary: Prompt injection, model poisoning, and other AI/ML risks - with an illustrative MITRE ATLAS heat map, summaries, and remediation guidance.
+      needs: []
     - id: ai-security
       title: AI security posture
       path: /ai-security
@@ -165,61 +332,98 @@
       needs:
       - A provider connection, gateway events or traffic logs
       admin: true
-- id: soc
-  number: '4'
-  title: L1 SOC analyst with SOAR
-  summary: Triage every alert the same way with the context of what is exposed, and respond through playbooks that need a second person for anything that changes your environment.
+  connectors:
+  - title: AI usage connectors
+    path: /connections
+    summary: Anthropic and OpenAI usage and cost, gateway events and proxy logs
+- id: remediation
+  number: '6'
+  title: Remediation & Workflow
+  summary: 'Turn findings into finished work: a prioritised queue, plans and approvals, owners, exceptions and the tickets that carry it.'
   groups:
-  - number: '4.1'
-    title: L1 SOC analyst with SOAR
+  - number: '6.1'
+    title: Remediation & Workflow
     items:
-    - id: triage
-      title: Alert triage and investigation
-      path: /hunting?tab=alerts
-      summary: Alerts from your SIEM or XDR ranked with vulnerability context, investigated step by step, with a recommended verdict a person validates.
+    - id: queue
+      title: Prioritised queue
+      path: /queue
+      summary: Every finding from every scanner, scored on exploitability, exposure and deadlines, with fix guidance written for its kind.
       needs:
-      - Alerts via the API or OCSF
-      - Reputation and Splunk search connections (optional)
-      admin: true
-    - id: darkweb
-      title: Dark Web Watch
-      path: /dark-web-watch
-      summary: Ransomware leak-site feeds and credential-exposure lookups matched against your domains and brands, and import of crawler and monitoring-platform output. Hits raise SOC alerts.
+      - A scanner connection or export
+    - id: remediate
+      title: Remediation Plan
+      path: /remediate
+      summary: The static plan snapshot from the last /remediate run, linked to generated playbooks.
+      needs: []
+    - id: remediation
+      title: Remediation plans and approvals
+      path: /remediation-approvals
+      summary: Generated fix artifacts, linted and approved by a second person before anything is run, with rollout rings and verification from the next scan.
       needs:
-      - Your domains and brand names
-      - A key for IntelligenceX, DeHashed, LeakCheck or Snusbase (optional)
-      admin: true
-    - id: soar
-      title: SOAR playbooks
-      path: /soar
-      summary: Playbooks that investigate, notify and ask your own automation to respond. Dry run first; destructive steps need a second person.
+      - Findings in the queue
+    - id: assignments
+      title: Assignments
+      path: /assignments
+      summary: 'The work queue: findings assigned to you, routed to your team, or still waiting for an owner - assign, track status, and hand off, like an ITSM ticket queue.'
+      needs: []
+    - id: ownership
+      title: Asset ownership and assignment
+      path: /ownership
+      summary: Who owns each asset, and findings assigned to a person or team.
       needs:
-      - A response endpoint you own
-      admin: true
-    - id: soc-cases
-      title: Cases, queues and metrics
-      path: /soc
-      summary: ITIL-style cases in L1, L2 and L3 queues with priority, service-level clocks, escalation with hand-off notes, case summaries, log investigation, technique identification and SOC metrics.
-      needs:
-      - Alerts, or cases opened by hand
-      admin: true
-- id: other
-  number: '5'
-  title: Other capabilities
-  summary: The infrastructure, identity and service-desk work around security operations.
+      - Asset inventory or ownership records
+    - id: exceptions
+      title: Exceptions
+      path: /exceptions
+      summary: Request, approve, and track time-boxed risk-acceptance waivers per finding.
+      needs: []
+    - id: run
+      title: Run Pipeline
+      path: /run
+      summary: Trigger /quanta-scan or /remediate - dry-run preview by default.
+      needs: []
+  connectors:
+  - title: ServiceNow
+    path: /servicenow
+    summary: Open and track incidents
+  - title: Jira
+    path: /jira
+    summary: Open and track issues
+  - title: Splunk
+    path: /splunk
+    summary: Append findings to an event stream
+- id: grc
+  number: '7'
+  title: Risk, Governance & Compliance
+  summary: Put risk in money, show control evidence, govern who has access and keep the audit trail.
   groups:
-  - number: '5.1'
-    title: Cyber infrastructure
+  - number: '7.1'
+    title: Risk, Governance & Compliance
     items:
-    - id: firewall
-      title: Firewall rules management
-      path: /firewall
-      summary: Rule analysis, internet exposure, recertification by owner, and access requests checked against the rules before anyone reviews them.
+    - id: risk
+      title: Risk Dashboard
+      path: /risk
+      summary: MITRE ATT&CK heat map, top critical assets, and internal/external-facing exposure.
+      needs: []
+    - id: cyber-risk
+      title: Cyber risk quantification
+      path: /cyber-risk
+      summary: Loss scenarios simulated into an average and a bad-year loss, which treatment is worth its cost, and a cyber health score.
       needs:
-      - Rule exports from your firewalls
-  - number: '5.2'
-    title: Identity and access governance
-    items:
+      - Your estimates; control evidence improves the health score
+      admin: true
+    - id: grc
+      title: Risk and compliance
+      path: /grc
+      summary: Framework coverage with automated evidence, the risk register, attestations and policies. Evidence and workflow, not a certification.
+      needs:
+      - Findings; optional OSCAL catalogs
+      admin: true
+    - id: ml-insights
+      title: ML Insights
+      path: /ml-insights
+      summary: Real, live-trained scikit-learn models (IsolationForest anomaly detection, KMeans risk clustering) - unsupervised, advisory, and never a replacement for the deterministic policy/priority engines.
+      needs: []
     - id: iam
       title: Access governance
       path: /access-governance
@@ -227,22 +431,27 @@
       needs:
       - Entitlement exports
       - An HR roster (optional)
-  - number: '5.3'
-    title: Ownership and service desk
-    items:
-    - id: ownership
-      title: Asset ownership and assignment
-      path: /ownership
-      summary: Who owns each asset, and findings assigned to a person or team.
-      needs:
-      - Asset inventory or ownership records
-    - id: support
-      title: Service desk
-      path: /support
-      summary: A helpdesk with priorities, deadlines, routing and satisfaction measures.
+    - id: reports
+      title: Reports
+      path: /reports
+      summary: Generate a shareable KPI/SLA/coverage report snapshot.
       needs: []
-  - number: '5.4'
-    title: Integrations
+    - id: activity-log
+      title: Activity Log
+      path: /activity-log
+      summary: Real who/what/when audit trail - every asset edit, approval decision, exception revocation, and login attempt in this app.
+      needs: []
+  connectors:
+  - title: Entitlement and HR roster imports
+    path: /connections
+    summary: Access governance reads exports; evidence comes from the modules above
+- id: admin
+  number: '8'
+  title: Administration
+  summary: Connections and API keys, policies, notifications, users and teams.
+  groups:
+  - number: '8.1'
+    title: Administration
     items:
     - id: connections
       title: Connections and API keys
@@ -251,3 +460,52 @@
       needs:
       - Credentials for the tools you use
       admin: true
+    - id: adaptors
+      title: Connectors / Adaptors
+      path: /adaptors
+      summary: Every external system Quanta talks to (or has researched), in one place - pick a connector from the dropdown.
+      needs: []
+      admin: true
+    - id: priority-rules
+      title: Priority Rules
+      path: /priority-rules
+      summary: Tune severity/asset/KEV/EPSS weights and SLA windows - takes effect immediately.
+      needs: []
+      admin: true
+    - id: exploit-criteria
+      title: Exploit Criteria
+      path: /exploit-criteria
+      summary: Define which real KEV/POC/EPSS signal combinations count as a 'zero-day criteria' match - customizable per client, takes effect immediately.
+      needs: []
+      admin: true
+    - id: remediation-policy
+      title: Remediation Policy
+      path: /remediation-policy
+      summary: Cadence, ITIL 4 change type, maintenance windows, and PAM backend per remediation domain - the real config driving the Remediation Queue's approval/auto-remediate treatment.
+      needs: []
+      admin: true
+    - id: asset-policy
+      title: Asset Policy
+      path: /asset-policy
+      summary: Bulk, rule-based asset owner/team/environment/facing/remediation-schedule editing - match a group of real assets and set fields on all of them in one action.
+      needs: []
+      admin: true
+    - id: notification-settings
+      title: Notification Settings
+      path: /notification-settings
+      summary: Schedule sub-domain/team-wise reports (weekly-yearly) and critical/zero-day/threat-intel email alerts - requires real SMTP configuration to actually send.
+      needs: []
+      admin: true
+    - id: admin-people
+      title: Users & Teams
+      path: /admin/people
+      summary: 'Admin-only: user accounts and roles, team records and managers, who is on which team, each person''s live workload, and the auto-routing rule.'
+      needs: []
+      admin: true
+    - id: admin
+      title: Admin Settings
+      path: /admin
+      summary: 'Admin-only: which real Claude Code model to use, per-user daily token limits (enforced server-side), real usage/cost by user, and read-only system health.'
+      needs: []
+      admin: true
+  connectors: []

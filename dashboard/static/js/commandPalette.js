@@ -4,15 +4,15 @@
 // different, complementary tool from search.js's global search bar, which searches
 // real finding/asset DATA, not pages/commands (the same split real products like
 // GitHub draw between a data search box and a Cmd+K command palette).
-import { NAV } from "./nav.js";
+import { openableNav } from "./nav.js";
 import { icon } from "./icons.js";
 
 let paletteEl = null;
 
 function flattenNav() {
   const items = [];
-  for (const group of NAV) {
-    for (const item of group.items) items.push({ ...item, group: group.group });
+  for (const group of openableNav()) {
+    for (const item of [...group.items, ...(group.connectors || [])]) items.push({ ...item, group: group.group });
   }
   return items;
 }

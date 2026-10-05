@@ -604,6 +604,18 @@ not a SIEM: the analyst runs them in their own tool and records each result and 
 `POST /api/ingest/alerts` (key scope `soc:write`); `triage.py` ranks them with vulnerability context and attaches a runbook from `runbooks.yaml`
 (technique, then title keywords, else a generic one). Hunt metrics include ATT&CK coverage of the techniques in the estate's open findings.
 
+**API security** (`remediation/apisec/`, page `/api-security`, admin only; full reference `docs/API_SECURITY.md`): an API inventory built from OpenAPI uploads or URL fetches
+(`openapi.py`, `store.import_spec`) and imported gateway/WAF/access logs (`logs.py`; JSON lines, array, common/combined log, CSV; `POST /api/ingest/api-traffic`, key scope `api:write`).
+Quanta cannot sniff traffic and never changes a WAF. Endpoints are keyed (service, method, path key); shadow/zombie/drift come from spec vs traffic; daily metrics, per-caller rows and
+service dependencies are aggregated in memory per upload (tables `api_specs`, `api_endpoints`, `api_metrics`, `api_actor_hits`, `api_dependencies`). `classify.py` detects kinds of data and maps
+them ONLY to the customer's imported framework (`api_data_classes`); unmapped data is "unclassified", never assumed sensitive. `rules.py` applies the OWASP API Top 10 (2023) with an evidence
+chain and a placeholder-only cURL, thresholds in `remediation/config/api_security.yaml`; findings publish to the queue (source `api-security`, scan type dast) with curated guidance matched by
+`rule_id` (`match.rule_ids` in `knowledge.yaml`). `identity.py` joins callers to endpoints and data classes; `metrics.py` derives error rate (errors/calls) and trend; `cicd.py` takes CI results
+(`/api/ingest/api-test-results`, gate, DevSecOps control `api-security-testing`, scan type `api-test`); `policies.py` holds protection policies (monitor default, block needs a second
+approver, versioned, audited; tables `api_policies`, `api_policy_events`, `api_policy_pushes`), sent via `PolicyWebhook` (signed like the SOAR response webhook; connection type
+`api-policy-endpoint`; edge result reported back at `/api/inbound/api-policy-status`) with alerts on the notification webhook/email (`QUANTA_ALERT_EMAIL`); `waf.py` renders AWS WAF and Cloud Armor
+review artifacts (data-loss limits and Cloud Armor body matches are honestly "not expressible"); `rollout.py` is the onboarding checklist. Built against public docs, never run against a live source.
+
 **SOC agents** (`remediation/hunting/`, extends the hunting page): `siem_search_connector.py` runs a read-only Splunk search (only `search ...`,
 write/delete/script commands refused, rows capped, slow searches cancelled) for a hunt lead or an alert investigation, only after a person confirms;
 `reputation_connector.py` looks up public indicators (VirusTotal API v3; private addresses never sent). Both are connection types of kind `tool`
@@ -646,13 +658,27 @@ source `ai-security` (asset type `ai-ml-system`, a complete set each time).
 `config/iam_policy.yaml`): entitlement and HR-roster intake; findings IAM001-IAM007 (leavers with access, dormant, unowned, too many privileged systems,
 separation of duties, shared accounts, never used); manager access reviews (a revoke is a recorded decision, the identity team acts); SoD pre-check.
 
-**Capabilities page** (`remediation/capabilities.py`, `config/capabilities.yaml`, page `/capabilities`): five selectable areas (1 vulnerability
-management and DevSecOps, 2 cyber risk, 3 detection/hunting and AI security, 4 L1 SOC with SOAR, 5 other) listing each capability with a live count and
-what to connect when it is empty. Add a capability to the YAML and it appears.
+**Module layout** (sidebar `dashboard/static/js/nav.js`, catalog `remediation/config/capabilities.yaml`): the app is organised into eight modules - 1 Threat Detection & Response (SOC, hunting, detection
+engineering, threat intel, SOAR), 2 Application Security, 3 DevSecOps & Supply Chain, 4 Infrastructure & Exposure, 5 AI Security, 6 Remediation & Workflow, 7 Risk, Governance & Compliance, 8 Administration -
+plus Home and Help. `nav.js` shows ONE module at a time: a picker when none is chosen, otherwise only the chosen module (its pages, then its `connectors`), with the others behind "Switch module". The module of the
+current route wins and is remembered in `localStorage` key `quanta.module`; /capabilities with no `area` clears it. `setLicense()`/`isLicensed()` lock modules the licence does not cover (picker shows
+them locked; `app.js` refuses their pages). `capabilities.yaml` uses the same module ids and also lists `connectors`; the "All modules" page
+(`/capabilities?area=<id>`) renders them. When you add a page, add it to the right module in BOTH files - `tests/test_capabilities.py` (`SidebarModuleTests`) fails if the module ids, a catalog page
+or a connector page are missing from the sidebar, or a sidebar path has no route.
+
+**Module licensing** (`remediation/licensing/license.py`, `config/licensing.yaml`, `cli/quanta_license.py`, `GET /api/license`; reference `docs/LICENSING.md`): the licence unit is the module. A licence is an
+Ed25519-signed claim set (customer, edition label, modules, issued, expires, optional grace_days) verified offline against the vendor public key (`QUANTA_LICENSE` / `QUANTA_LICENSE_FILE`,
+`QUANTA_LICENSE_PUBLIC_KEY_FILE`); nothing is sent anywhere. `QUANTA_LICENSE_MODE` is `off` (default: nothing checked), `warn` (reported, never blocks) or `enforce` (a middleware answers 403 for a route of an
+unlicensed module). `licensing.yaml` maps every API route prefix to `core` or a module (longest prefix; `shared` prefixes need any one of several modules) and a test fails if an API route has no entry,
+so add new route prefixes there when you add a feature. Core (sign-in, findings store, support, connections, administration) is never blocked. An expired licence keeps working for a grace period, then only core
+remains. A technical guardrail and a clear contract, not copy protection; never used with a real issued licence.
+
+**Capabilities page / All modules** (`remediation/capabilities.py`, `config/capabilities.yaml`, page `/capabilities`): the eight modules above, each listing its capabilities with a live count,
+what to connect when it is empty, and its connectors. Add a capability to the YAML and it appears.
 
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
-`read:findings` / `controls:write` / `ai-usage:write` / `soc:write`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
+`read:findings` / `controls:write` / `ai-usage:write` / `soc:write` / `api:write`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
 guards `POST /api/ingest/findings`, `/api/ingest/scanner-csv`, `/api/inbound/ticket-status`,
 `GET /api/export/findings`; only `/api/ingest/`, `/api/inbound/`, `/api/export/` are exempt from the
 login gate, and only because each route checks a key itself. `/api/ingest/generic` needs a key when

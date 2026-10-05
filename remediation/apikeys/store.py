@@ -17,6 +17,7 @@ Scopes:
   ingest:write    push findings or a scanner export into the queue
   tickets:update  report ticket state changes back (ServiceNow, Jira and similar)
   read:findings   read the findings export
+  api:write       push API specifications, traffic records and CI test results, and report a protection policy's edge result
 """
 import datetime
 import hashlib
@@ -30,7 +31,7 @@ from sqlalchemy import insert, select, update
 from remediation.audit.activity_log import record_activity
 from remediation.utils import db as db_module
 
-SCOPES = ("ingest:write", "tickets:update", "read:findings", "controls:write", "ai-usage:write", "soc:write", "darkweb:write")
+SCOPES = ("ingest:write", "tickets:update", "read:findings", "controls:write", "ai-usage:write", "soc:write", "darkweb:write", "api:write")
 _FORMAT = re.compile(r"^qk_([0-9a-f]{8})_([A-Za-z0-9_-]{43})$")
 LAST_USED_RESOLUTION_SECONDS = 60
 

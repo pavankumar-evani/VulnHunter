@@ -1,7 +1,7 @@
 """
 The capability catalog and what each capability currently holds.
 
-The catalog (remediation/config/capabilities.yaml) says what Quanta does, grouped into five areas. For each capability this adds a short live status:
+The catalog (remediation/config/capabilities.yaml) says what Quanta does, grouped into the eight modules the sidebar shows, each with the connectors that feed it. For each capability this adds a short live status:
 how much it holds right now ("14 rules", "3 playbooks"), and whether it is in use yet. A capability with nothing in it is "ready", not "broken":
 the page says what to connect or load to give it something to work on. Counting is cheap, and a count that cannot be read is simply omitted.
 """
@@ -80,6 +80,9 @@ def metrics(findings, engine=None):
         put("firewall", n_rules, f"{n_rules:,} rules from {_plural(devices, 'firewall')}")
 
     safe(firewall)
+    safe(lambda: put("api-inventory", _count(engine, t.api_endpoints), _plural(_count(engine, t.api_endpoints), "endpoint") + " in the inventory"))
+    safe(lambda: put("api-policies", _count(engine, t.api_policies), _plural(_count(engine, t.api_policies), "protection policy", "protection policies")))
+    safe(lambda: put("api-ci", _count(engine, t.scan_runs, t.scan_runs.c.scan_type == "api-test"), _plural(_count(engine, t.scan_runs, t.scan_runs.c.scan_type == "api-test"), "test upload")))
     safe(lambda: put("iam", _count(engine, t.iam_entitlements), f"{_count(engine, t.iam_entitlements):,} entitlements"))
     safe(lambda: put("ownership", _count(engine, t.asset_ownership), _plural(_count(engine, t.asset_ownership), "asset") + " with an owner"))
     safe(lambda: put("support", _count(engine, t.support_tickets, t.support_tickets.c.status != "resolved"), _plural(_count(engine, t.support_tickets, t.support_tickets.c.status != "resolved"), "open ticket")))
@@ -104,5 +107,6 @@ def build(findings, is_admin, engine=None):
                 active += sum(1 for i in items if i["state"] == "active")
                 groups.append({"number": g["number"], "title": g["title"], "items": items})
         if groups:
-            out.append({"id": dom["id"], "number": dom["number"], "title": dom["title"], "summary": dom["summary"], "groups": groups, "capabilities": total, "in_use": active})
+            out.append({"id": dom["id"], "number": dom["number"], "title": dom["title"], "summary": dom["summary"], "groups": groups, "capabilities": total, "in_use": active,
+                        "connectors": dom.get("connectors") or []})
     return out

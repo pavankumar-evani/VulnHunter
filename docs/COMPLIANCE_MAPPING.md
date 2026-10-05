@@ -85,6 +85,12 @@ them regardless of what this app does or doesn't do.
 
 ---
 
+## API security — conceptual mapping (OWASP API Security Top 10 2023)
+
+Informational, not certifying. The API Security area (`/api-security`, [API_SECURITY.md](API_SECURITY.md)) gives evidence that APIs are inventoried (CSF ID.AM), tested before release
+(CSF PR.PS / SSDF PW.8, via the `api-security-testing` DevSecOps control), monitored (CSF DE.CM) and protected by policies a person approved (CSF PR.PS), and it maps each finding to the
+OWASP API Security Top 10 category. It supplies evidence and workflow; it does not certify compliance with any framework, and nothing in it has been run against a live traffic source.
+
 ## What's explicitly missing for a real compliance program
 
 Pulled directly from the gaps already named in

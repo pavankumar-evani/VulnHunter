@@ -1,0 +1,128 @@
+# API security: every threshold, pattern and detector the API inventory, rules and policy checks use. Read fresh on every request; edit freely.
+# Nothing here is a fixed vendor taxonomy of what is sensitive: `detectors` only say what KIND of data a field or value looks like. What that data is WORTH is
+# decided by your own classification framework (imported on the API Security page); until a detector is mapped to one of your classes it is reported as
+# "unclassified", never assumed sensitive or harmless.
+
+thresholds:
+  # --- identity and abuse (API1, API4, API6) ---
+  bola_distinct_objects_per_actor_day: 50    # one caller touching this many different object ids on one endpoint in a day looks like enumeration (BOLA indicator)
+  scraping_calls_per_actor_day: 1000         # identity investigation: calls to one endpoint by one caller in a day
+  exfil_bytes_per_actor_day: 52428800        # identity investigation: bytes returned to one caller in a day (50 MB)
+  min_calls_for_rate_checks: 50              # fewer observed calls than this is too little to say anything about volume
+  dominant_actor_share: 0.6                  # one caller making this share of an endpoint's calls (API4 / API6)
+  large_response_bytes: 5242880              # a single endpoint returning this much per call on average (5 MB) with no rate limit policy
+  # --- authentication (API2) ---
+  jwt_max_lifetime_hours: 24                 # a token that lives longer than this is a finding
+  jwt_weak_algorithms: ["none", "hs256", "hs384", "hs512"]   # symmetric or no signature: flagged as "weak or shared-secret", not as broken
+  # --- inventory (API9) ---
+  stale_days: 90                             # documented in a spec but never observed in this many days: reported as documentation drift (Low), not a vulnerability
+  shadow_min_calls: 1                        # an observed endpoint absent from every uploaded spec of its service is shadow from the first call
+  # --- metrics and trends ---
+  trend_window_days: 7                       # compare the latest window with the one before it
+  trend_min_calls: 100                       # a window with fewer calls than this is not compared
+  trend_calls_change_pct: 50
+  trend_error_rate_delta: 0.05               # absolute change in errors / calls
+  trend_latency_change_pct: 50
+  error_rate_warn: 0.05
+  # --- identity data ---
+  actor_handling: plain                      # plain | hash. "hash" stores a SHA-256 of the caller id instead of the id itself (you can still correlate, not read)
+  max_objects_tracked_per_actor_day: 100000
+  max_records_per_import: 500000
+  max_distinct_actors_per_endpoint_day: 5000
+
+severity:
+  # sensitive_priority_max: classes in your framework with priority <= this number are "sensitive" and lift a finding one level
+  sensitive_priority_max: 2
+
+# Paths and parameter names the rules look for. Lower-case substrings or regular expressions (re.search, case-insensitive).
+patterns:
+  admin_paths: ["^/admin", "/admin/", "/internal/", "/management", "/manage/", "/actuator", "/debug", "/console", "/superuser", "/backoffice", "/_"]
+  sensitive_flows: ["/login", "/signin", "/sign-in", "/signup", "/sign-up", "/register", "/password", "/reset", "/forgot", "/otp", "/verify", "/token", "/checkout", "/payment", "/redeem", "/coupon", "/voucher", "/transfer", "/withdraw", "/booking", "/reserve", "/vote", "/invite"]
+  url_params: ["url", "uri", "callback", "webhook", "redirect", "redirect_uri", "return_url", "next", "dest", "destination", "target", "feed", "image_url", "proxy", "endpoint", "host"]
+  credential_params: ["api_key", "apikey", "access_token", "token", "password", "passwd", "secret", "auth", "session", "sessionid", "jwt", "bearer"]
+  public_paths: ["^/health", "^/healthz", "^/ready", "^/readyz", "^/live", "^/ping", "^/status", "^/metrics", "^/robots.txt", "^/favicon", "^/.well-known/", "^/openapi", "^/swagger", "^/docs$", "^/v\\d+/(health|status|ping)"]
+  mass_assignment_fields: [role, roles, is_admin, isadmin, admin, permissions, privilege, privileges, scope, scopes, owner_id, ownerid, account_type, verified, is_verified, balance, credit, discount, price, status_override]
+  pagination_params: [limit, page, per_page, perpage, page_size, pagesize, offset, cursor, size, top, take, max]
+  state_changing_methods: ["POST", "PUT", "PATCH", "DELETE"]
+
+# What a field name or a value looks like. `fields` match a whole word of the name after splitting camelCase, snake_case and kebab-case; `value` is a regular
+# expression for sampled values (the sample is classified in memory and discarded); `luhn` additionally requires a valid card checksum.
+detectors:
+  - {id: email, label: Email address, fields: [email, mail, e_mail, emailaddress], value: "^[^@\\s]{1,64}@[^@\\s]+\\.[a-zA-Z]{2,}$"}
+  - {id: phone, label: Phone number, fields: [phone, mobile, msisdn, telephone, tel, cell], value: "^\\+?[0-9][0-9 ()\\-.]{7,16}[0-9]$"}
+  - {id: payment-card, label: Payment card number, fields: [card, cardnumber, pan, ccnum, creditcard, card_number], value: "^[0-9][0-9 \\-]{11,22}[0-9]$", luhn: true}
+  - {id: national-id, label: National or tax identifier, fields: [ssn, nin, nino, sin, taxid, tax_id, national_id, passport, driver_license, drivers_license], value: "^[0-9]{3}-?[0-9]{2}-?[0-9]{4}$"}
+  - {id: bank-account, label: Bank account, fields: [iban, account_number, accountnumber, routing, routing_number, sort_code, swift, bic], value: "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"}
+  - {id: date-of-birth, label: Date of birth, fields: [dob, birthdate, birth_date, date_of_birth, birthday]}
+  - {id: person-name, label: Person's name, fields: [firstname, first_name, lastname, last_name, surname, fullname, full_name, givenname, familyname]}
+  - {id: postal-address, label: Postal address, fields: [address, street, postcode, postal_code, zip, zipcode, city]}
+  - {id: geolocation, label: Location, fields: [latitude, longitude, lat, lng, lon, geolocation, gps]}
+  - {id: health, label: Health information, fields: [diagnosis, medication, prescription, mrn, patient, allergy, condition, icd10, treatment]}
+  - {id: financial, label: Financial amounts and accounts, fields: [salary, income, balance, credit_score, creditscore, iban_balance, wage, payroll]}
+  - {id: credential, label: Credential or secret, fields: [password, passwd, secret, apikey, api_key, access_token, refresh_token, private_key, client_secret], value: "^(eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*|sk_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16})$"}
+  - {id: ip-address, label: IP address, fields: [ip, ipaddress, ip_address, clientip, client_ip, remote_addr], value: "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"}
+  - {id: government-or-employee-id, label: Employee or customer identifier, fields: [employeeid, employee_id, customerid, customer_id, userid, user_id, memberid, member_id]}
+
+# Gate for pipeline results (POST /api/ingest/api-test-results). A failing test at or above `fail_on` fails the gate. A request may pass ?fail_on= to override.
+ci:
+  fail_on: High                              # Critical | High | Medium | Low
+  scan_type: api-test                        # the scan-run type recorded for the DevSecOps control library
+  max_results_per_upload: 5000
+
+policy:
+  rate_limit_windows_seconds: [60, 120, 300, 600]   # the windows both common edge services accept
+  rate_limit_min: 10
+  rate_limit_max: 20000000
+  max_cidrs: 10000
+  max_countries: 250
+  max_pattern_length: 400
+  data_loss_windows_seconds: [60, 300, 3600, 86400]
+  signature_targets: [header, query, body, uri_path]
+  # monitor mode first: a new policy defaults to monitor, and block needs approval by a second administrator before it can be pushed
+  require_second_approver_for_block: true
+
+# The onboarding checklist and the two rollout orders. `check` names something Quanta can see; a step with no check is stated by a person.
+rollout:
+  checklist:
+    - {id: architecture, phase: foundation, title: Agree the architecture and where traffic is observed, detail: "Decide which gateways, load balancers or log stores supply access logs, and who owns each. Quanta reads exports and pushed records; it does not sniff traffic."}
+    - {id: sso-rbac, phase: foundation, title: Single sign-on and roles, detail: "Quanta has an administrator role and an ordinary-user role with team scoping. Configure OIDC if you have an identity provider, and decide who is an administrator for this area."}
+    - {id: api-key, phase: foundation, title: Issue an API key for log and test-result ingest, detail: "Create a key with the api:write scope on the Connections page and keep it in your log shipper and CI secrets.", check: api_key}
+    - {id: spec, phase: discovery, title: Load the API specifications you have, detail: "Upload OpenAPI or Swagger files or fetch them from a URL. They become the documented side of the inventory.", check: spec}
+    - {id: traffic, phase: discovery, title: Import access logs from gateways and load balancers, detail: "Upload an export or push records. Observed endpoints that no spec describes are listed as shadow APIs.", check: traffic}
+    - {id: owners, phase: discovery, title: Name an owner for every external endpoint, detail: "Findings need someone to route to.", check: owners}
+    - {id: classification, phase: data, title: Import your data-classification framework, detail: "Your classes and their priority, and which kinds of data belong to which. Until this is done, data seen in APIs is reported as unclassified.", check: classification}
+    - {id: map-data, phase: data, title: Map observed data types to your classes, detail: "Anything observed and not mapped is listed so nothing is silently treated as harmless.", check: mapped}
+    - {id: publish, phase: findings, title: Publish API findings to the main queue, detail: "So developers see them with the rest of their work, with the evidence and a request they can run.", check: published}
+    - {id: ci-results, phase: shift-left, title: Send API test results from CI, detail: "From GitHub Actions or GitLab CI. The response says whether the gate passed.", check: ci}
+    - {id: ci-gate, phase: shift-left, title: Make the gate blocking for new Critical and High failures, detail: "Start report-only, then fail the pipeline once the baseline is clean."}
+    - {id: policy-connection, phase: runtime, title: Connect an endpoint you own to receive protection policies, detail: "An automation endpoint (or a small function) that verifies Quanta's signature and applies the rule to your WAF or gateway. Quanta never touches the WAF itself.", check: policy_connection}
+    - {id: policy-monitor, phase: runtime, title: Push policies in monitor mode first, detail: "Watch what each rule would have blocked before it blocks anything.", check: policy_pushed}
+    - {id: policy-block, phase: runtime, title: Approve and push the first blocking policy, detail: "Needs a second administrator. Keep the monitor version alongside it until it has run clean.", check: policy_block}
+    - {id: alerts, phase: runtime, title: Receive an alert for every policy change, detail: "Connect a notification webhook or set SMTP and QUANTA_ALERT_EMAIL; have your automation report the edge result back.", check: alerts}
+    - {id: soc, phase: operations, title: Hand the SOC its runbooks and alert flow, detail: "Actor investigation, policy changes and the alert-ingest API are what the SOC uses."}
+    - {id: reporting, phase: operations, title: Agree reporting and review cadence, detail: "Inventory drift, unclassified data, open API findings by team, policy changes."}
+  tracks:
+    - id: runtime-first
+      title: Runtime protection first
+      note: "Fastest to visible protection; needs the log pipeline and an enforcement endpoint early. Many programmes add runtime protection as a second phase, which is why shift-left is offered first below."
+      order: [foundation, discovery, data, findings, runtime, shift-left, operations]
+    - id: shift-left-first
+      title: Pipeline testing first
+      note: "Lower operational risk: nothing in production changes. Start report-only, then gate."
+      order: [foundation, discovery, shift-left, data, findings, runtime, operations]
+  maturity:
+    - {id: visibility, title: Limited visibility, check: always}
+    - {id: discovery, title: Automated discovery, check: traffic}
+    - {id: detection, title: Live-traffic vulnerability detection, check: findings}
+    - {id: threat-events, title: Threat-event integration, check: alerts}
+    - {id: data-protection, title: Data protection, check: classification}
+    - {id: mitigation, title: Mitigation controls, check: policy_pushed}
+    - {id: shift-left, title: Shift-left testing, check: ci}
+    - {id: remediation, title: Remediation workflows, check: published}
+    - {id: advanced, title: Advanced controls (asset-management integration, automated testing)}
+  roles:
+    - {role: SOC, uses: "Actor investigation, policy-change alerts, the alert-ingest API and runbooks; may approve a blocking policy.", quanta: "Administrator"}
+    - {role: AppSec, uses: "Findings with evidence and a request to reproduce, rule tuning, the data classification mapping, CI gate settings.", quanta: "Administrator"}
+    - {role: Developers, uses: "Their team's API findings in the main queue, the fix guidance and the request to confirm a true or false positive.", quanta: "Ordinary user with a team assigned (sees only that team's findings)"}
+    - {role: API office, uses: "Inventory ownership, specifications, documentation drift and the generated specification for undocumented services.", quanta: "Administrator"}
+    - {role: Platform or network team, uses: "Receives signed policy requests on its own endpoint and applies the WAF or gateway change.", quanta: "No Quanta account needed; verifies the signature"}

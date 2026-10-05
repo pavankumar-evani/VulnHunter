@@ -594,3 +594,11 @@ Engine: honest scheduling/policy/playbook visualization" roadmap item.
   questions.
 - [KNOWLEDGE_TRANSFER.md](../KNOWLEDGE_TRANSFER.md) and [README.md](../README.md) — full
   architecture and roadmap.
+
+## API protection policy endpoint (outbound, customer-owned)
+
+Not a vendor integration: an endpoint **you** own (a small function, your WAF or gateway automation) that receives Quanta's API protection policies. Add a connection of type
+*API protection policy endpoint* (URL plus a signing secret). Quanta sends a policy as a signed request (`X-Quanta-Timestamp`, `X-Quanta-Signature: sha256=` HMAC of `timestamp.body`,
+`X-Quanta-Delivery`), only after an administrator confirms, and only for a blocking policy after a second administrator approved that version. Verify the signature and timestamp, apply
+the rule in your own change process, and optionally report the result to `POST /api/inbound/api-policy-status` (key scope `api:write`). Quanta never calls a WAF API itself. Built against
+the same signing convention as the SOAR response webhook and unit-tested against a fake; never run against a real endpoint. See [API_SECURITY.md](API_SECURITY.md) and [INTEGRATION_API.md](INTEGRATION_API.md).

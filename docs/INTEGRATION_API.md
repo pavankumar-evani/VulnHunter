@@ -69,6 +69,7 @@ Revoke it at any time; it stops working immediately. Each key is rate limited (`
 | `ingest:write` | `POST /api/ingest/findings`, `POST /api/ingest/scanner-csv`, and (in production) `POST /api/ingest/generic` |
 | `tickets:update` | `POST /api/inbound/ticket-status` |
 | `read:findings` | `GET /api/export/findings` |
+| `api:write` | `POST /api/ingest/api-traffic`, `POST /api/ingest/openapi`, `POST /api/ingest/api-test-results`, `POST /api/inbound/api-policy-status` (see [API_SECURITY.md](API_SECURITY.md)) |
 
 Only `/api/ingest/`, `/api/inbound/` and `/api/export/` accept a key in place of a browser login, and each
 checks the key itself. Every other route still requires a signed-in user when `QUANTA_REQUIRE_LOGIN_FOR_READS`
@@ -294,6 +295,38 @@ curl -X POST https://quanta.example.com/api/inbound/ticket-status \
 name, or one of `open`, `in_progress`, `blocked`, `resolved`. In ServiceNow, a business rule or Flow on the
 incident table that calls this URL when `state` changes is enough; use the finding id Quanta put in the
 incident's `correlation_id`.
+
+### Send API specifications, traffic and CI test results
+
+Scope `api:write`. Full behaviour in [API_SECURITY.md](API_SECURITY.md).
+
+```bash
+# An OpenAPI/Swagger document (raw body); the response includes the drift against observed traffic
+curl -X POST "https://quanta.example.com/api/ingest/openapi?service=shop-api" \
+  -H "Authorization: Bearer $QUANTA_KEY" --data-binary @openapi.yaml
+
+# Request records from a gateway, WAF or log shipper (query values, bodies and tokens are never kept)
+curl -X POST https://quanta.example.com/api/ingest/api-traffic -H "Authorization: Bearer $QUANTA_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"service":"shop-api","records":[{"method":"GET","path":"/v1/users/42","status":200,"latency_ms":12,"bytes_out":512,"actor":"u-17","client_ip":"203.0.113.9","auth":"bearer"}]}'
+
+# Results of an API security test run in CI; `gate.passed` tells the pipeline whether to fail
+curl -X POST "https://quanta.example.com/api/ingest/api-test-results?reconcile=true" -H "Authorization: Bearer $QUANTA_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"my-tester","repository":"org/shop-api","results":[{"method":"GET","path":"/users/{id}","test":"object-level authorization","owasp":"API1:2023","status":"fail","severity":"High"}]}'
+
+# Your automation reports what the edge service said about a protection policy Quanta sent it
+curl -X POST https://quanta.example.com/api/inbound/api-policy-status -H "Authorization: Bearer $QUANTA_KEY" \
+  -H "Content-Type: application/json" -d '{"push_id":12,"status":"applied","detail":"web ACL updated"}'
+```
+
+Optional query parameters on the test-results route: `fail_on` (Critical, High, Medium, Low), `report_only=true`, `reconcile=true`.
+
+#### Receiving a protection policy (the signed request Quanta sends you)
+
+Add a connection of type *API protection policy endpoint*. Quanta `POST`s JSON `{"type": "api-protection-policy", "delivery_id", "policy": {...}, "requested_by", "approved_by"}` with
+`X-Quanta-Timestamp` (unix seconds), `X-Quanta-Signature: sha256=<hex HMAC-SHA256 of "<timestamp>.<body>" with your signing secret>` and `X-Quanta-Delivery`. Verify the signature and reject a stale timestamp,
+then apply the rule in your own change process. Quanta changes no WAF itself.
 
 ### Read findings out
 

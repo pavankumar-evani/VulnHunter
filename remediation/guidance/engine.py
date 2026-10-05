@@ -72,6 +72,9 @@ def _scan_type(finding):
 def _score(entry, finding, cwes, scan_type, asset_type, text):
     m = entry.get("match") or {}
     score, why = 0, []
+    if finding.get("rule_id") and finding["rule_id"] in (m.get("rule_ids") or []):
+        score += 200  # an exact rule id (for example an OWASP API Security category) is the most specific match there is
+        why.append(f"rule {finding['rule_id']}")
     hit = [c for c in cwes if c in (m.get("cwe") or [])]
     if hit:
         score += 100

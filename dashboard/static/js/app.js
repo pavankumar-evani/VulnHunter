@@ -2,8 +2,9 @@
 // ./pages/*.js and exports `render(container, ...params)` plus a `title` (string
 // or function taking the matched URL params). No framework, no build step -
 // dynamic import() is a native browser feature, not a bundler trick.
+import { api } from "./api.js";
 import { getCurrentUser, initAccountChip } from "./auth.js";
-import { renderSidebar } from "./nav.js";
+import { renderSidebar, setLicense, findModule, isLicensed } from "./nav.js";
 import { initNotificationBell } from "./notifications.js";
 import { initGlobalSearch } from "./search.js";
 import { initSidebarToggle } from "./sidebarToggle.js";
@@ -50,6 +51,7 @@ const routes = [
   { pattern: /^\/soc\/?$/, load: () => import("./pages/soc.js") },
   { pattern: /^\/access-governance\/?$/, load: () => import("./pages/iam.js") },
   { pattern: /^\/ai-security\/?$/, load: () => import("./pages/aiSecurity.js") },
+  { pattern: /^\/api-security\/?$/, load: () => import("./pages/apiSecurity.js") },
   { pattern: /^\/firewall\/?$/, load: () => import("./pages/firewall.js") },
   { pattern: /^\/zero-day-watch\/?$/, load: () => import("./pages/zeroDay.js") },
   { pattern: /^\/devsecops\/?$/, load: () => import("./pages/devsecops.js") },
@@ -110,6 +112,14 @@ function matchRoute(pathname) {
   return null;
 }
 
+// The licence (which modules this deployment may use), fetched at most once every few minutes. If it cannot be read the app stays unrestricted: the server is what enforces it.
+let licenseLoadedAt = 0;
+async function loadLicense() {
+  if (Date.now() - licenseLoadedAt < 5 * 60 * 1000) return;
+  try { setLicense(await api.license()); } catch { setLicense(null); }
+  licenseLoadedAt = Date.now();
+}
+
 // Client-side login gate: every page except /login redirects to it when nobody is
 // logged in. This is a UX gate, not the real security boundary - the real one is
 // server-side (app.py's Depends(rbac.require_*) on sensitive mutation routes only).
@@ -139,7 +149,16 @@ async function renderRoute() {
   if (isAuthPage(pathname)) {
     document.getElementById("sidebar").innerHTML = "";
   } else {
+    await loadLicense();
     renderSidebar(pathname, window.location.search);
+    // A page of a module the licence does not cover is not opened; say so instead of showing a page whose data calls would all be refused.
+    const owner = findModule(pathname, window.location.search);
+    if (owner && !isLicensed(owner.id)) {
+      titleEl.textContent = owner.group;
+      document.title = `${owner.group} · Quanta`;
+      appEl.innerHTML = `<div class="callout callout-warn"><strong>${owner.group} is not part of your licence.</strong><p>Your administrator can add it. <a href="/capabilities" data-link>See all modules</a>.</p></div>`;
+      return;
+    }
   }
 
   const matched = matchRoute(pathname);
