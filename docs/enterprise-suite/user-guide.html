@@ -319,6 +319,23 @@
       </details>
 
       <details class="howto">
+        <summary>How is the app organised, and where do I find a connector?<span class="route">/capabilities</span></summary>
+        <div class="body"><p>The sidebar has eight numbered modules: Threat Detection &amp; Response (SOC, alert triage, hunting, detection engineering, threat intelligence, dark web watch, SOAR), Application Security, DevSecOps &amp; Supply Chain, Infrastructure &amp; Exposure, AI Security, Remediation &amp; Workflow, Risk, Governance &amp; Compliance, and Administration. The sidebar shows one module at a time: pick a module and only its pages show; use Switch module or All modules to change, and the app remembers your choice. Each module ends with a Connectors list (the scanners, SIEM, ticketing system or Git host that feeds it). Open All modules under Home for a landing page per module that shows what it holds right now and what to connect when it is empty. Credentials for every connector are managed on Connections under Administration, and Ctrl/Cmd+K jumps to any page by name.</p></div>
+      </details>
+      <details class="howto">
+        <summary>How do I build an API inventory and check it for OWASP API Top 10 problems?<span class="route">/api-security</span></summary>
+        <div class="body"><p>Admin only. Quanta cannot watch traffic, so give it what you have. On Import, upload an OpenAPI or Swagger file (or fetch it from a URL; you are asked to confirm) and an access-log export from your gateway, load balancer or WAF, or have your log shipper push records with an API key that has the api:write scope. Inventory then lists every endpoint with its exposure, authentication, owner and the data it returns; endpoints in traffic that no spec describes are shadow endpoints. Import your own data-classification framework on Data classes so sensitivity follows your definitions; until then data is shown as unclassified. Findings lists OWASP API Top 10 indicators, each with an evidence chain and a cURL request a developer can run against a system they are allowed to test to confirm a true or false positive; Publish sends them to the main queue.</p></div>
+      </details>
+      <details class="howto">
+        <summary>How do I send a protection policy to my WAF, and what does Quanta change?<span class="route">/api-security</span></summary>
+        <div class="body"><p>Quanta changes nothing. On Protection policies create a policy (rate limit, bad sources, data-loss limit, geography or signature); it starts in monitor mode. Use Rules to review for an AWS WAF or Cloud Armor rule you apply yourself, or add a connection of type API protection policy endpoint on Connections and choose Send to my endpoint: Quanta posts a signed request to a URL you own and your automation decides. A blocking policy must be approved by a second administrator first. Your automation can report applied or rejected back, and each result raises an alert.</p></div>
+      </details>
+      <details class="howto">
+        <summary>How do I run API security tests in my pipeline and fail the build?<span class="route">/api-security</span></summary>
+        <div class="body"><p>On CI and rollout copy the GitHub Actions or GitLab CI example. Your tester posts its results to /api/ingest/api-test-results; the response says whether the gate passed, and the job fails when it did not. Start with report_only=true, then make the gate blocking.</p></div>
+      </details>
+
+      <details class="howto">
         <summary>How do I start a hunt from a proposal and close it with an outcome?<span class="route">/hunting</span></summary>
         <div class="body"><p>Admin only. Quanta is not a SIEM and does not run queries; it proposes where to look and you run the queries in your own tool. On Proposed hunts, each card is an open CVE that is on the KEV list or has an EPSS of 0.5 or more, with the hosts, the ATT&amp;CK techniques Quanta tags and ready-made queries (Splunk SPL, to be adapted to your data model). Click Start this hunt, then on Hunts open it, run each query in your SIEM, and set each query's result (hits, no-hits, not-run, error). Add notes and follow-ups, tick "This hunt led to a new detection" if it did, set the status to closed and choose an outcome (confirmed, not-found or needs-data). Closing requires an outcome. The Overview tab then shows hunts closed and confirmed and how many of the techniques in your open findings have been hunted.</p></div>
       </details>
@@ -466,20 +483,4 @@
   }
   document.getElementById('hs-btn').addEventListener('click', runSearch);
   document.getElementById('hs-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
-</script>      <details>
-        <summary>How is the app organised, and where do I find a connector?<span class="route">/capabilities</span></summary>
-        <div class="body"><p>The sidebar has eight numbered modules: Threat Detection &amp; Response (SOC, alert triage, hunting, detection engineering, threat intelligence, dark web watch, SOAR), Application Security, DevSecOps &amp; Supply Chain, Infrastructure &amp; Exposure, AI Security, Remediation &amp; Workflow, Risk, Governance &amp; Compliance, and Administration. The sidebar shows one module at a time: pick a module and only its pages show; use Switch module or All modules to change, and the app remembers your choice. Each module ends with a Connectors list (the scanners, SIEM, ticketing system or Git host that feeds it). Open All modules under Home for a landing page per module that shows what it holds right now and what to connect when it is empty. Credentials for every connector are managed on Connections under Administration, and Ctrl/Cmd+K jumps to any page by name.</p></div>
-      </details>
-      <details>
-        <summary>How do I build an API inventory and check it for OWASP API Top 10 problems?<span class="route">/api-security</span></summary>
-        <div class="body"><p>Admin only. Quanta cannot watch traffic, so give it what you have. On Import, upload an OpenAPI or Swagger file (or fetch it from a URL; you are asked to confirm) and an access-log export from your gateway, load balancer or WAF, or have your log shipper push records with an API key that has the api:write scope. Inventory then lists every endpoint with its exposure, authentication, owner and the data it returns; endpoints in traffic that no spec describes are shadow endpoints. Import your own data-classification framework on Data classes so sensitivity follows your definitions; until then data is shown as unclassified. Findings lists OWASP API Top 10 indicators, each with an evidence chain and a cURL request a developer can run against a system they are allowed to test to confirm a true or false positive; Publish sends them to the main queue.</p></div>
-      </details>
-      <details>
-        <summary>How do I send a protection policy to my WAF, and what does Quanta change?<span class="route">/api-security</span></summary>
-        <div class="body"><p>Quanta changes nothing. On Protection policies create a policy (rate limit, bad sources, data-loss limit, geography or signature); it starts in monitor mode. Use Rules to review for an AWS WAF or Cloud Armor rule you apply yourself, or add a connection of type API protection policy endpoint on Connections and choose Send to my endpoint: Quanta posts a signed request to a URL you own and your automation decides. A blocking policy must be approved by a second administrator first. Your automation can report applied or rejected back, and each result raises an alert.</p></div>
-      </details>
-      <details>
-        <summary>How do I run API security tests in my pipeline and fail the build?<span class="route">/api-security</span></summary>
-        <div class="body"><p>On CI and rollout copy the GitHub Actions or GitLab CI example. Your tester posts its results to /api/ingest/api-test-results; the response says whether the gate passed, and the job fails when it did not. Start with report_only=true, then make the gate blocking.</p></div>
-      </details>
-
+</script>
