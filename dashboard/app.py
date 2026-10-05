@@ -65,6 +65,7 @@ from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa
 from remediation.apisec import cicd as api_cicd, classify as api_classify, config as api_config, generate as api_generate, identity as api_identity, logs as api_logs  # noqa: E402
 from remediation.apisec import metrics as api_metrics, openapi as api_openapi, policies as api_policies, rollout as api_rollout, rules as api_rules, store as api_store, waf as api_waf  # noqa: E402
 from remediation import capabilities as capabilities_mod  # noqa: E402
+from remediation.licensing import license as licensing  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
 from remediation.enrichment import network_reachability as network_reach  # noqa: E402
@@ -6713,8 +6714,33 @@ def api_iam_revocations(campaign_id: int, user: dict = Depends(rbac.require_admi
 # ---------------------------------------------------------------- capabilities
 @app.get("/api/capabilities")
 def api_capabilities(user: dict = Depends(rbac.require_login)):
-    """The five capability areas, what Quanta does in each, and what each currently holds. Administrator-only pages are left out for everyone else."""
-    return {"areas": capabilities_mod.build(dashboard_data.load_live_queue(), user.get("role") == "admin")}
+    """The eight modules, what Quanta does in each, and what each currently holds. Administrator-only pages are left out for everyone else. Each module says whether the licence covers it."""
+    st = licensing.status()
+    areas = capabilities_mod.build(dashboard_data.load_live_queue(), user.get("role") == "admin")
+    for a in areas:
+        a["licensed"] = a["id"] in st["modules"] or not st["enforced"]
+    return {"areas": areas, "license": st}
+
+
+@app.get("/api/license")
+def api_license(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """What the licence covers: mode (off, warn, enforce), state, customer, end date and the entitled modules. Reads the licence from QUANTA_LICENSE or QUANTA_LICENSE_FILE; nothing is sent anywhere."""
+    st = licensing.status()
+    return {**st, "all_modules": [{"id": m, "licensed": m in st["modules"] or not st["enforced"]} for m in licensing.MODULE_IDS]}
+
+
+@app.middleware("http")
+async def _enforce_module_license(request: Request, call_next):
+    """In enforce mode a route of a module the licence does not cover answers 403. Core routes (sign-in, the findings store, support, administration) are never blocked; with the mode off
+    (the default) this does nothing at all. See docs/LICENSING.md."""
+    path = request.url.path
+    if path.startswith("/api/"):
+        st = licensing.status()
+        if st["enforced"]:
+            ok, mids = licensing.check(path, st)
+            if not ok:
+                return JSONResponse({"detail": f"This part of Quanta ({', '.join(mids)}) is not covered by your licence.", "modules": mids, "license_state": st["state"]}, status_code=403)
+    return await call_next(request)
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

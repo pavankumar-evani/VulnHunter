@@ -1,7 +1,7 @@
 """
 The capability catalog and what each capability currently holds.
 
-The catalog (remediation/config/capabilities.yaml) says what Quanta does, grouped into five areas. For each capability this adds a short live status:
+The catalog (remediation/config/capabilities.yaml) says what Quanta does, grouped into the eight modules the sidebar shows, each with the connectors that feed it. For each capability this adds a short live status:
 how much it holds right now ("14 rules", "3 playbooks"), and whether it is in use yet. A capability with nothing in it is "ready", not "broken":
 the page says what to connect or load to give it something to work on. Counting is cheap, and a count that cannot be read is simply omitted.
 """
@@ -107,5 +107,6 @@ def build(findings, is_admin, engine=None):
                 active += sum(1 for i in items if i["state"] == "active")
                 groups.append({"number": g["number"], "title": g["title"], "items": items})
         if groups:
-            out.append({"id": dom["id"], "number": dom["number"], "title": dom["title"], "summary": dom["summary"], "groups": groups, "capabilities": total, "in_use": active})
+            out.append({"id": dom["id"], "number": dom["number"], "title": dom["title"], "summary": dom["summary"], "groups": groups, "capabilities": total, "in_use": active,
+                        "connectors": dom.get("connectors") or []})
     return out
