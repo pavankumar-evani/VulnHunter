@@ -179,6 +179,8 @@
           <tr><td>The same rule on the same host was closed benign or false positive before</td><td>2</td><td>False positive</td></tr>
         </tbody></table></div>
       <p>A score of 3 or more on a side gives that verdict; 5 or more is high confidence. Thin or mixed evidence gives <code>escalate-l2</code>, never a guess at closing. A Critical alert is never called a likely false positive automatically. Reputation lookups and SIEM searches happen only when an administrator confirms: the preview lists exactly which public indicators would be sent, and the searches are read-only.</p>
+      <h3>Investigated before anyone opens it</h3>
+      <p>Each new alert that arrives by the API is investigated at once, locally and for free: classification, history, entities, ATT&amp;CK flow, blast radius, host exposure and a verdict, with <strong>no</strong> reputation lookup and <strong>no</strong> SIEM search (those still need a person's confirmation). The report is waiting when the analyst opens the alert, and, if the verdict qualifies (§04), so is the case. It is on by default for every severity (<code>auto_investigate</code> in <code>soc_triage.yaml</code>, with a severity floor) and at most 200 alerts are investigated in one request; the rest are investigated when opened. A failure to investigate never loses the alert.</p>
       <h3>Priority order in the queue</h3>
       <p>Alerts are ordered by severity base (Critical 100, High 70, Medium 40, Low 15, Informational 5) plus 30 for a known-exploited vulnerability on the host, 20 when a finding on the host carries the alert's technique, 10 for a high exploit-probability finding, and 10 when the host has no owner. The reasons are shown. This orders work; it does not change the alert's severity.</p>
     </section>
@@ -189,8 +191,8 @@
       <ol class="steps">
         <li><strong>Verdict and why.</strong> The recommendation and every signal behind it (§02).</li>
         <li><strong>Incident summary.</strong> What the alert is, on what host, how long ago, and what else Quanta knows about the host: open and known-exploited vulnerabilities and its owner.</li>
-        <li><strong>Historical correlation.</strong> For each host, user and address, how many earlier alerts involve it and how they were closed, plus what a SIEM history search found (when confirmed). The look-back is limited to 90 days by default (<code>max_lookback_days</code>), widened to 365 only with a written justification, and the report says when it was widened.</li>
-        <li><strong>Associated entities.</strong> The host and its owner, the user and whether they hold privileged access (from Access Governance), and the addresses, domains and hashes.</li>
+        <li><strong>Historical correlation.</strong> For each host, user and address, how many earlier alerts involve it and how they were closed, plus what a SIEM history search found (when confirmed). Every search an investigation or hunt runs, including the corroboration searches, is clipped to the look-back ceiling: 90 days by default (<code>max_lookback_days</code>). A request for longer needs a written justification of at least 20 characters, which is kept in the activity log, and is refused past 365 days (<code>extended_lookback_days</code>). The report says when the ceiling was reached with activity throughout, so the analyst knows a wider look may be worth justifying.</li>
+        <li><strong>Associated entities.</strong> The host and its owner, the user and whether they hold privileged access (taken from the Access Governance entitlements, by user or account name; disabled grants are ignored, and with no entitlements loaded the report says the access records are not loaded rather than guessing), and the addresses, domains and hashes.</li>
         <li><strong>ATT&amp;CK mapping.</strong> The technique and tactic from the table in <code>attack_tactics.yaml</code> and what to check next for it.</li>
         <li><strong>Attack flow.</strong> Alerts on the same host or user in time order, labelled by tactic, so the reader sees where this alert sits in a sequence.</li>
         <li><strong>Indicators.</strong> Each public indicator with its reputation when looked up. Private and documentation addresses are never sent.</li>
@@ -198,7 +200,7 @@
         <li><strong>What your tools did.</strong> The action the EDR or firewall reported (blocked, quarantined, allowed) and whether it needs checking. An "allowed" on a likely true positive is called out.</li>
         <li><strong>Recommended actions.</strong> From the verdict, the signals, the matching runbook and the rule's history, with the playbooks that could carry each action.</li>
         <li><strong>References and timeline.</strong> The searches that were run with counts, the detection rule, the runbook, and the events in order.</li>
-        <li><strong>Follow-ups.</strong> Questions asked after the first report, answered from the same data and merged in.</li>
+        <li><strong>Follow-ups.</strong> Questions asked after the first report (similar alerts involving a value, an entity's history, where an indicator was seen elsewhere), answered from the same data and merged into the stored report, with one optional read-only SIEM search after confirmation. Each follow-up is kept, so the ticket text always shows what was asked.</li>
       </ol>
       <p>The report is available as Markdown and as a self-contained HTML page. Because nothing is generated by a model, the same alert and data always produce the same report.</p>
     </section>
@@ -252,6 +254,7 @@
           <tr><td>Recommendation accuracy</td><td>When the first look recommended likely true positive, how often the analyst resolved true positive; likely false positive against false positive, benign or duplicate; escalate-L2 against a case that did reach L2 or above. Only cases with both a recommendation and a resolution count, and the number judged is shown.</td></tr>
           <tr><td>Automation rate</td><td>Cases opened automatically divided by cases opened.</td></tr>
           <tr><td>Analyst workload</td><td>Per analyst: open, resolved in the window, mean time to resolve.</td></tr>
+          <tr><td>Alert-to-action timing</td><td>From each alert's arrival (alerts received in the window): to its first investigation, to the case opened for it, and to a person acknowledging that case; and the share of alerts investigated automatically before anyone touched them.</td></tr>
           <tr><td>Daily series</td><td>Opened and resolved per day across the window.</td></tr>
         </tbody></table></div>
     </section>
@@ -338,6 +341,7 @@
         <li>The report is rendered: verdict and headline, executive summary, hypothesis, scope (techniques, hosts), a trial-hit execution summary table (status, hits, affected entities), a section per detection domain, correlated entities, analyst notes and follow-ups.</li>
         <li>It is served as Markdown or as a self-contained HTML page. Nothing in it is written by a model.</li>
       </ol>
+      <p><strong>Run all.</strong> A hunt's leads can be run in turn with one confirmation: at most <code>max_trial_hits_per_run</code> (30) leads per call, leads that already have a result are skipped, a lead that fails is recorded as failed and the rest still run, and a look-back past the ceiling needs the same written justification. The preview lists exactly which leads will run and how many the cap holds back. <strong>From intelligence.</strong> A report pushed by API whose relevance is high (<code>auto_create_hunt_at_or_above</code>) has its hunt created at once; the hunt is only created, and its searches run when a person confirms. The hunt page opens with the summary the report uses: leads run, leads with results, entities, and techniques with no enabled rule.</p>
       <p>Every lead is a read-only search with the look-back window recorded on it; the report headline states how many leads ran, against which sources and over which windows. Hosts, techniques and the enabled rules that already cover each technique are named, and techniques with no enabled rule are listed as candidates for a new detection (§11).</p>
     </section>
 
@@ -458,6 +462,8 @@
           <tr><td><code>GET/POST /api/soc/cases</code>, <code>GET /api/soc/cases/{id}</code></td><td>List by queue, status, owner or priority; open; read with history, clocks, summary</td></tr>
           <tr><td><code>POST /api/soc/cases/{id}/{note|assign|acknowledge|pending|escalate|resolve|close|reopen|impact|link-alert|techniques}</code></td><td>Case actions; escalate, resolve and close need a summary</td></tr>
           <tr><td><code>POST /api/soc/cases/{id}/analyse-logs</code>, <code>POST /api/soc/analyse-logs</code></td><td>Log investigation</td></tr>
+          <tr><td><code>POST /api/soc/alerts/{id}/follow-up</code></td><td>A follow-up question merged into the stored report (optional confirmed SIEM search)</td></tr>
+          <tr><td><code>POST /api/hunting/hunts/{id}/run-all</code></td><td>Run all of a hunt's leads (preview, confirm, cap, look-back guard)</td></tr>
           <tr><td><code>POST /api/soc/ttp</code></td><td>Technique identification</td></tr>
           <tr><td><code>GET /api/soc/metrics?days=30</code></td><td>SOC metrics</td></tr>
           <tr><td><code>GET/POST/DELETE /api/soc/analysts</code></td><td>Analysts and their tiers</td></tr>

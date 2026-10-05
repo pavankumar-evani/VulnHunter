@@ -13,11 +13,16 @@ over timestamps on the case, so it cannot drift from the case history.
   Automation rate   cases opened automatically / all cases
   Analyst workload  per analyst: open, resolved in the window, mean time to resolve
   Daily series      opened and resolved per day over the window
+  Timing            from an alert's arrival: to its first investigation, to the case opened for it, and to a person acknowledging that case (alerts received in the window);
+                    the share of alerts that were investigated before an analyst touched them
 """
 import datetime
 import statistics
 
+from sqlalchemy import select
+
 from remediation.soc import cases as cases_module
+from remediation.utils import db as db_module
 
 FP_CODES = ("false-positive", "benign", "duplicate")
 
@@ -40,6 +45,38 @@ def _ratio(a, b):
 def _mins(c, a, b):
     x, y = cases_module._parse(c.get(a)), cases_module._parse(c.get(b))
     return (y - x).total_seconds() / 60 if x and y else None
+
+
+def _timing(engine, allc, since):
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    a, i, ca = db_module.soc_alerts, db_module.soc_investigations, db_module.soc_case_alerts
+    with engine.connect() as conn:
+        alerts = {r["id"]: r["received_at"] for r in conn.execute(select(a.c.id, a.c.received_at)).mappings() if cases_module._parse(r["received_at"]) >= since}
+        first_inv = {}
+        for r in conn.execute(select(i.c.alert_id, i.c.created_at, i.c.created_by).order_by(i.c.id)).mappings():
+            first_inv.setdefault(r["alert_id"], (r["created_at"], r["created_by"]))
+        links = {}
+        for r in conn.execute(select(ca.c.case_id, ca.c.alert_id)).mappings():
+            links.setdefault(r["case_id"], []).append(r["alert_id"])
+    by_case = {c["id"]: c for c in allc}
+    to_inv = [m for aid, ts in alerts.items() if aid in first_inv for m in [_mins({"a": ts, "b": first_inv[aid][0]}, "a", "b")] if m is not None and m >= 0]
+    to_case, to_ack = [], []
+    for cid, aids in links.items():
+        c = by_case.get(cid)
+        got = [alerts[x] for x in aids if x in alerts]
+        if not c or not got:
+            continue
+        first = min(got)
+        m = _mins({"a": first, "b": c["created_at"]}, "a", "b")
+        if m is not None and m >= 0:
+            to_case.append(m)
+        m = _mins({"a": first, "b": c["acknowledged_at"]}, "a", "b")
+        if m is not None and m >= 0:
+            to_ack.append(m)
+    auto_inv = sum(1 for aid in alerts if aid in first_inv and first_inv[aid][1] == "system")
+    return {"alerts_received": len(alerts), "alert_to_investigation_minutes": _mean(to_inv), "alert_to_case_minutes": _mean(to_case), "alert_to_acknowledged_minutes": _mean(to_ack),
+            "investigated_automatically": auto_inv, "investigated_automatically_share": _ratio(auto_inv, len(alerts))}
 
 
 def compute(engine=None, days=30, now=None):
@@ -127,6 +164,6 @@ def compute(engine=None, days=30, now=None):
         "resolution_mix": mix, "false_positive_rate": _ratio(fp, len(resolved)),
         "recommendation_accuracy": accuracy, "recommendation_judged": judged,
         "automation_rate": _ratio(sum(1 for c in opened if c["source"] == "auto"), len(opened)),
-        "analyst_workload": workload,
+        "analyst_workload": workload, "timing": _timing(engine, allc, since),
         "daily": [{"date": d, **v} for d, v in sorted(series.items())],
     }

@@ -644,8 +644,9 @@ class SocApiTests(unittest.TestCase):
         self.assertEqual({r_["rule_name"] for r_ in rows}, {"Web shell spawn", "Rule Z"})
 
     def test_investigation_local_preview_and_confirmed(self):
-        self.client.post("/api/ingest/alerts", json={"alerts": [{"external_id": "a1", "title": "Shell from w3wp", "severity": "High", "asset": "WEB-1", "technique": "T1190",
-                                                                   "detail": "beacon 185.220.101.9"}]}, headers=self.h())
+        with patch.object(soc, "config", return_value={**soc.config(), "auto_investigate": {"enabled": False}}):  # this test is about the manual path
+            self.client.post("/api/ingest/alerts", json={"alerts": [{"external_id": "a1", "title": "Shell from w3wp", "severity": "High", "asset": "WEB-1", "technique": "T1190",
+                                                                    "detail": "beacon 185.220.101.9"}]}, headers=self.h())
         self.login("admin@t.local")
         aid = self.client.get("/api/soc/alerts").json()["alerts"][0]["id"]
         self.assertEqual(self.client.get(f"/api/soc/alerts/{aid}/investigation").status_code, 404)

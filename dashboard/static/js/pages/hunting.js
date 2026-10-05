@@ -101,6 +101,13 @@ export async function render(container) {
       <h3>${escapeHtml(h.title)} <span class="badge ${OVERALL[v.overall]}">${escapeHtml(v.overall)}</span></h3><p>${escapeHtml(h.hypothesis)}</p><p>${techniques(h.techniques)}</p>
       <p><strong>Hosts in scope:</strong> ${h.assets.map(escapeHtml).join(", ") || "none"}</p>
       <p><strong>Data you need:</strong> ${h.data_sources.map(escapeHtml).join("; ") || "not specified"}</p>
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">trial hits run</div><div class="kpi-value">${h.summary.run} of ${h.summary.total}</div></div>
+        <div class="kpi-card"><div class="kpi-label">returned results</div><div class="kpi-value">${h.summary.with_hits}</div></div>
+        <div class="kpi-card"><div class="kpi-label">entities in the results</div><div class="kpi-value">${h.summary.entities.length}</div></div>
+        <div class="kpi-card"><div class="kpi-label">techniques without a rule</div><div class="kpi-value">${h.summary.gaps.length}</div></div></div>
+      <p>${escapeHtml(h.summary.headline)}</p>${h.summary.executive_summary.map((x) => `<p class="muted">${escapeHtml(x)}</p>`).join("")}
+      ${h.queries.length ? `<p><button type="button" id="run-all">Run all leads in the SIEM</button> <label>Look back <select id="ra-earliest"><option value="-24h">24 hours</option><option value="-7d">7 days</option><option value="-30d">30 days</option><option value="-90d">90 days</option><option value="-180d">180 days (needs a reason)</option></select></label> <label>Why (past 90 days) <input id="ra-why" size="36" placeholder="at least 20 characters"></label></p>` : ""}
       ${v.correlated_entities.length ? `<p class="callout callout-warn">The same entity appears in more than one lead: ${v.correlated_entities.map(escapeHtml).join(", ")}</p>` : ""}
       <h3>Leads</h3><p class="muted">Run a lead in your SIEM from here (needs a "Splunk search" connection), or run the query yourself and record the result. Then say what you made of the results. Unassessed hits are treated as possible true positives, never as benign.</p>
       ${h.queries.length ? h.queries.map((q, i) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 16px;margin:10px 0"><strong>${escapeHtml(q.technique)}: ${escapeHtml(q.name)}</strong>
@@ -129,6 +136,17 @@ export async function render(container) {
         show();
       } catch (e) { flash(e.message, "error"); }
     }));
+    const ra = container.querySelector("#run-all");
+    if (ra) ra.addEventListener("click", async () => {
+      const body = { earliest: container.querySelector("#ra-earliest").value, justification: container.querySelector("#ra-why").value };
+      try {
+        const pre = await api.huntingRunAll(h.id, body);
+        if (!window.confirm(`${pre.message}\n\nLeads: ${pre.leads.map((l) => l.name).join("; ") || "none to run"}${pre.not_run_because_of_the_cap ? `\n\n${pre.not_run_because_of_the_cap} more are held back by the per-run cap of ${pre.cap}.` : ""}`)) return;
+        const done = await api.huntingRunAll(h.id, { ...body, confirm: true });
+        flash(`Ran ${done.ran} lead(s); ${done.failed} failed.`, done.failed ? "error" : "success");
+        show();
+      } catch (e) { flash(e.message, "error"); }
+    });
     container.querySelector("#df").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target;
@@ -150,16 +168,34 @@ export async function render(container) {
     container.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => { openAlert = Number(b.dataset.open); show(); }));
   }
 
+  function table(rows, head) {
+    return rows.length ? `<div class="table-scroll"><table class="data-table"><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td class="wrap-cell">${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
+  }
+
   function invPanel(r) {
     if (!r) return '<p class="muted">Not investigated yet.</p>';
-    const inv = r.investigation;
-    return `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 16px;margin:10px 0">
-      <p><span class="badge ${VERDICT[r.verdict]}">${escapeHtml(r.verdict)}</span> confidence ${escapeHtml(r.confidence)} &middot; ${escapeHtml(r.created_at)}. <span class="muted">A recommendation for you to validate; nothing has been closed.</span></p>
-      <ul class="guidance-list">${r.reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
-      ${inv.indicators.length ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Indicator</th><th>Type</th><th>Result</th><th>Flagged</th></tr></thead><tbody>${inv.indicators.map((x) => `<tr><td class="wrap-cell">${escapeHtml(x.value)}</td><td>${escapeHtml(x.type)}</td><td>${escapeHtml(x.result || "not looked up")}</td><td>${x.malicious ?? "-"}${x.total ? " of " + x.total : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}
-      ${inv.lookup_note ? `<p class="muted">${escapeHtml(inv.lookup_note)}</p>` : ""}
-      ${inv.siem_evidence.length ? `<p><strong>SIEM:</strong> ${inv.siem_evidence.map((e) => escapeHtml(e.name) + ": " + (e.error ? "failed" : e.count + " event(s)")).join("; ")}</p>` : ""}
-      <details><summary>Report to paste into the ticket</summary><pre class="code-block">${escapeHtml(r.report_md)}</pre></details></div>`;
+    const inv = r.investigation, rep = inv.report;
+    const card = (inner) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 16px;margin:10px 0">${inner}</div>`;
+    const head = card(`<p><span class="badge ${VERDICT[r.verdict]}">${escapeHtml(r.verdict)}</span> confidence ${escapeHtml(r.confidence)} &middot; ${escapeHtml(r.created_at)}. <span class="muted">A recommendation for you to validate; nothing has been closed.</span></p>
+      ${rep ? `<p>${escapeHtml(rep.gist)}</p>` : ""}<ul class="guidance-list">${r.reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`);
+    if (!rep) return head + `<details><summary>Report to paste into the ticket</summary><pre class="code-block">${escapeHtml(r.report_md)}</pre></details>`;
+    const sec = (title, inner) => `<h4>${title}</h4>${inner}`;
+    const att = rep.attack;
+    return head + card(
+      sec("Historical correlation", rep.history.length ? `<ul class="guidance-list">${rep.history.map((h) => `<li>${escapeHtml(h.text)}</li>`).join("")}</ul>` : '<p class="muted">The alert names no host, user or address to correlate.</p>')
+      + sec("Associated entities", table(rep.entities.map((e) => [escapeHtml(e.kind), escapeHtml(e.value), escapeHtml(e.detail)]), ["Kind", "Value", "Detail"]) || '<p class="muted">None named in the alert.</p>')
+      + sec("ATT&amp;CK", att ? `<p><strong>${escapeHtml(att.id)} ${escapeHtml(att.name || "")}</strong> ${att.tactics.length ? "&middot; " + att.tactics.map(escapeHtml).join(", ") : ""}</p>${att.what_to_check ? `<p>Check next: ${escapeHtml(att.what_to_check)}</p>` : ""}${att.data_sources.length ? `<p class="muted">Look in: ${att.data_sources.map(escapeHtml).join("; ")}</p>` : ""}` : '<p class="muted">The alert carries no technique.</p>')
+      + sec("Attack flow", (rep.flow.stages.length ? `<p class="muted">${rep.flow.stages.map(escapeHtml).join(" &rarr; ")}</p>` : "") + table(rep.flow.steps.map((s) => [escapeHtml(s.at || ""), (s.current ? "<strong>&rarr; " : "") + escapeHtml(s.title) + (s.current ? "</strong>" : ""), escapeHtml(s.tactic || "-"), escapeHtml(s.technique || "-")]), ["When", "Alert", "Tactic", "Technique"]))
+      + sec("Indicators", inv.indicators.length ? table(inv.indicators.map((x) => [escapeHtml(x.value), escapeHtml(x.type), escapeHtml(x.result || "not looked up"), x.malicious == null ? "-" : escapeHtml(String(x.malicious)) + (x.total ? " of " + x.total : "")]), ["Indicator", "Type", "Result", "Flagged"]) + (inv.lookup_note ? `<p class="muted">${escapeHtml(inv.lookup_note)}</p>` : "") : '<p class="muted">None in the alert.</p>')
+      + sec("Blast radius", `<p>${escapeHtml(rep.blast_radius.text)} <span class="muted">Scope: ${escapeHtml(rep.blast_radius.scope)}.</span></p>${rep.blast_radius.exposed.length ? `<ul class="guidance-list">${rep.blast_radius.exposed.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}`)
+      + sec("What your tools did", `<p>${rep.tool_action.text ? "Reported outcome: " + escapeHtml(rep.tool_action.text) + ". " : ""}${escapeHtml(rep.tool_action.advice)}</p>`)
+      + sec("Recommended actions", `<ul class="guidance-list">${rep.actions.map((x) => `<li><strong>${escapeHtml(x.action)}</strong>: ${escapeHtml(x.why)}</li>`).join("")}</ul><div id="rec-out"></div>`)
+      + (rep.widen_note ? `<p class="callout callout-warn">${escapeHtml(rep.widen_note)}</p>` : "")
+      + sec("References", `<ul class="guidance-list">${rep.references.map((x) => `<li>${escapeHtml(x.kind)}: ${escapeHtml(x.name)}${x.detail ? " <span class='muted'>(" + escapeHtml(x.detail) + ")</span>" : ""}</li>`).join("")}</ul>`)
+      + sec("Follow-ups", `<div id="fu-list">${rep.followups.map((f) => `<p><strong>${escapeHtml(f.question)}</strong><br>${escapeHtml(f.answer)}</p>`).join("") || '<p class="muted">None asked yet.</p>'}</div>
+        <p><select id="fu-kind"><option value="similar-alerts">Similar alerts involving</option><option value="entity-history">History of</option><option value="indicator-sightings">Where else was seen</option></select>
+        <input id="fu-value" placeholder="host, user, address, domain or hash" size="34"> <label><input type="checkbox" id="fu-siem"> also search the SIEM (read-only)</label> <button type="button" id="fu-ask">Ask</button></p>`)
+    ) + `<details><summary>Report to paste into the ticket</summary><pre class="code-block">${escapeHtml(r.report_md)}</pre></details>`;
   }
 
   async function alertDetail(a) {
@@ -176,6 +212,7 @@ export async function render(container) {
       <h3>L1 investigation</h3>
       <p class="muted">Classifies the alert, reads the history of the rule and host, extracts the indicators and weighs the signals. Looking up indicators sends only the public ones to your reputation connection; searching your SIEM is read-only. Both ask first.</p>
       <p><label><input type="checkbox" id="inv-rep"> Look up indicators</label> <label><input type="checkbox" id="inv-siem"> Search the SIEM for matching events</label> <button type="button" id="inv-run">Investigate</button></p>
+      <p class="muted">Searches look back at most 90 days. <label>Look back <input id="inv-days" type="number" min="1" max="365" placeholder="90" style="width:5em"> days</label> <label>Why (needed past 90 days) <input id="inv-why" size="40" placeholder="at least 20 characters"></label></p>
       <div id="inv-out">${invPanel(inv)}</div>
       ${c.runbook ? `<h3>Runbook: ${escapeHtml(c.runbook.title)}</h3><ol>${c.runbook.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol><p class="muted">Quanta shows the steps; responding stays with your team or SOAR.</p>` : ""}
       <form id="af" class="run-form"><label>Status <select name="status">${["new", "investigating", "closed"].map((s) => `<option${s === a.status ? " selected" : ""}>${s}</option>`).join("")}</select></label>
@@ -183,8 +220,28 @@ export async function render(container) {
         <label>Assignee <input name="assignee" value="${escapeHtml(a.assignee || "")}" placeholder="name@company.com"></label>
         <label>Notes <textarea name="notes" rows="3">${escapeHtml(a.notes || "")}</textarea></label><div><button type="submit">Save</button></div></form>`);
     container.querySelector("#back").addEventListener("click", () => { openAlert = null; show(); });
+    const ask = container.querySelector("#fu-ask");
+    if (ask) ask.addEventListener("click", async () => {
+      const body = { kind: container.querySelector("#fu-kind").value, value: container.querySelector("#fu-value").value, siem: container.querySelector("#fu-siem").checked };
+      try {
+        if (body.siem) {
+          const pre = await api.socFollowUp(a.id, body);
+          if (!window.confirm(pre.message + `\n\nConnection: ${pre.siem_connection}`)) return;
+          body.confirm = true;
+        }
+        await api.socFollowUp(a.id, body);
+        flash("Added to the report.", "success");
+        show();
+      } catch (e) { flash(e.message, "error"); }
+    });
+    const rec = container.querySelector("#rec-out");
+    if (rec) api.socRecommendPlaybook(a.id).then((r) => {
+      rec.innerHTML = r.recommendations.length ? `<p class="muted">Playbooks that could carry this out (${escapeHtml(r.basis)}): ${r.recommendations.map((x) => `<strong>${escapeHtml(x.name)}</strong> &mdash; ${escapeHtml(x.why)}${x.needs_second_person ? " Needs a second person." : ""}`).join("; ")}. Start one on the SOAR page; a dry run comes first.</p>` : "";
+    }).catch(() => {});
     container.querySelector("#inv-run").addEventListener("click", async () => {
       const body = { reputation: container.querySelector("#inv-rep").checked, siem: container.querySelector("#inv-siem").checked };
+      const days = Number(container.querySelector("#inv-days").value);
+      if (days) { body.lookback_days = days; body.justification = container.querySelector("#inv-why").value; }
       try {
         if (body.reputation || body.siem) {
           const pre = await api.socInvestigate(a.id, body);
