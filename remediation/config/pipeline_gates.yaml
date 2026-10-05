@@ -1,0 +1,61 @@
+# The release gate: the policy a CI/CD job asks Quanta about before it lets a build ship.
+#
+# Read by remediation/devsecops/gates.py. A pipeline step calls GET /api/gate/evaluate?application=NAME&environment=ENV with a Quanta API key (scope
+# read:findings) and fails the job when the answer is "fail". The Pipeline gates page shows the policy, evaluates an application on demand and gives the
+# step to paste into GitHub Actions, GitLab CI or a shell script. Every evaluation is recorded, which is also the evidence for the library's
+# "releases are blocked by..." control.
+#
+# Each rule has a mode per environment:
+#   block  a failing rule makes the decision "fail"
+#   warn   a failing rule makes the decision "warn" (the job should pass but print it)
+#   "off"  the rule is not checked (keep the quotes: unquoted, YAML reads off as false; Quanta accepts that too)
+# The first environment named in the request that exists here is used; an unknown environment name uses `default_environment`.
+#
+# A finding with an active exception (approved waiver) does not count against any rule. Rules judge only what Quanta knows: a scan that was never
+# uploaded cannot be seen, which is why `required_scans` exists.
+
+default_environment: production
+
+rules:
+  open_severity:
+    title: No open findings at or above the limit
+    # The most open findings allowed per severity. Omit a severity to allow any number of it.
+    limits: {Critical: 0, High: 0}
+  known_exploited:
+    title: No open finding is on the CISA known-exploited list
+  fixable_overdue:
+    title: Findings with a fix available are not left open too long
+    severity_at_least: High
+    older_than_days: 14
+  required_scans:
+    title: The scans that must run have run recently
+    scan_types: [sast, sca, secrets]
+    max_age_days: 14
+  sbom:
+    title: A current SBOM is stored for the application
+    max_age_days: 30
+  secrets:
+    title: No open secret findings
+
+environments:
+  production:
+    open_severity: block
+    known_exploited: block
+    fixable_overdue: block
+    required_scans: block
+    sbom: block
+    secrets: block
+  staging:
+    open_severity: warn
+    known_exploited: block
+    fixable_overdue: warn
+    required_scans: warn
+    sbom: warn
+    secrets: block
+  development:
+    open_severity: "off"
+    known_exploited: warn
+    fixable_overdue: "off"
+    required_scans: warn
+    sbom: "off"
+    secrets: warn

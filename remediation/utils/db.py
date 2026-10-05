@@ -695,6 +695,34 @@ detection_usecases = Table(
     Column("updated_at", String, nullable=False),
 )
 
+darkweb_hits = Table(
+    "darkweb_hits", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("dedupe_key", String, nullable=False, unique=True),
+    Column("source", String, nullable=False),
+    Column("kind", String, nullable=False),  # leak-site-post | supply-chain-post | credential-exposure | mention
+    Column("term", String, nullable=False),
+    Column("term_kind", String, nullable=False),  # domain | brand | vendor | keyword
+    Column("title", String, nullable=False),
+    Column("severity", String, nullable=False),
+    Column("detail", Text, nullable=True),
+    Column("url", String, nullable=True),
+    Column("status", String, nullable=False),  # new | reviewing | actioned | dismissed
+    Column("note", Text, nullable=True),
+    Column("alert_id", Integer, nullable=True),
+    Column("first_seen", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+darkweb_sources = Table(
+    "darkweb_sources", metadata,
+    Column("source_id", String, primary_key=True),
+    Column("enabled", Integer, nullable=False, default=1),
+    Column("last_run_at", String, nullable=True),
+    Column("last_status", String, nullable=True),
+    Column("last_count", Integer, nullable=True),
+)
+
 soc_analysts = Table(
     "soc_analysts", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -1042,6 +1070,27 @@ api_policies = Table(
     Column("updated_at", String, nullable=False),
 )
 
+applications = Table(
+    "applications", metadata,
+    Column("name", String, primary_key=True),
+    Column("environment", String, nullable=True),
+    Column("platform", String, nullable=True),
+    Column("os", String, nullable=True),
+    Column("owner", String, nullable=True),
+    Column("team", String, nullable=True),
+    Column("business_criticality", String, nullable=True),
+    Column("internet_facing", Boolean, nullable=True),
+    Column("data_classification", String, nullable=True),
+    Column("repo_provider", String, nullable=True),
+    Column("repo", String, nullable=True),
+    Column("default_branch", String, nullable=True),
+    Column("manifest_paths", Text, nullable=True),
+    Column("connection_id", Integer, nullable=True),
+    Column("notes", Text, nullable=True),
+    Column("updated_by", String, nullable=True),
+    Column("updated_at", String, nullable=False),
+)
+
 api_policy_events = Table(
     "api_policy_events", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -1082,6 +1131,80 @@ api_rollout_state = Table(
     Column("set_at", String, nullable=False),
 )
 
+app_sboms = Table(
+    "app_sboms", metadata,
+    Column("application", String, primary_key=True),
+    Column("format", String, nullable=False),
+    Column("source", String, nullable=True),
+    Column("graph_json", Text, nullable=False),
+    Column("component_count", Integer, nullable=False),
+    Column("notes_json", Text, nullable=True),
+    Column("uploaded_by", String, nullable=True),
+    Column("uploaded_at", String, nullable=False),
+)
+
+fix_proposals = Table(
+    "fix_proposals", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("application", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("finding_ids", Text, nullable=False),
+    Column("title", String, nullable=False),
+    Column("summary_json", Text, nullable=True),
+    Column("provider", String, nullable=True),
+    Column("repo", String, nullable=True),
+    Column("connection_id", Integer, nullable=True),
+    Column("base_branch", String, nullable=True),
+    Column("branch", String, nullable=True),
+    Column("files_json", Text, nullable=False),
+    Column("pr_title", String, nullable=False),
+    Column("pr_body", Text, nullable=False),
+    Column("test_command", String, nullable=True),
+    Column("status", String, nullable=False),
+    Column("pr_number", Integer, nullable=True),
+    Column("pr_url", String, nullable=True),
+    Column("pr_state", String, nullable=True),
+    Column("review_state", String, nullable=True),
+    Column("checks_state", String, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("approved_by", String, nullable=True),
+    Column("approved_at", String, nullable=True),
+    Column("opened_by", String, nullable=True),
+    Column("opened_at", String, nullable=True),
+    Column("merged_at", String, nullable=True),
+    Column("closed_at", String, nullable=True),
+    Column("verified_state", String, nullable=True),
+    Column("verified_at", String, nullable=True),
+    Column("last_synced_at", String, nullable=True),
+    Column("last_error", Text, nullable=True),
+    Column("notes", Text, nullable=True),
+)
+
+gate_runs = Table(
+    "gate_runs", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("application", String, nullable=False),
+    Column("environment", String, nullable=False),
+    Column("decision", String, nullable=False),
+    Column("detail_json", Text, nullable=False),
+    Column("evaluated_by", String, nullable=True),
+    Column("evaluated_at", String, nullable=False),
+)
+
+devsecops_custom_controls = Table(
+    "devsecops_custom_controls", metadata,
+    Column("id", String, primary_key=True),
+    Column("stage", String, nullable=False),
+    Column("title", String, nullable=False),
+    Column("why", Text, nullable=False),
+    Column("how", Text, nullable=False),
+    Column("keywords_json", Text, nullable=True),
+    Column("evidence_json", Text, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
 
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
@@ -1104,8 +1227,9 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
+            hunts, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
+            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

@@ -20,7 +20,9 @@ from remediation.connectors import url_safety
 from remediation.connectors.active_directory_connector import ActiveDirectoryConnector
 from remediation.connectors.ai_usage_connector import AnthropicUsageConnector, OpenAIUsageConnector
 from remediation.connectors.axonius_connector import AxoniusConnector
+from remediation.connectors import darkweb_connector
 from remediation.connectors.cortex_xsiam_connector import CortexXsiamConnector
+from remediation.connectors import git_host_connector
 from remediation.connectors.infoblox_connector import InfobloxConnector
 from remediation.connectors.prismacloud_connector import PrismaCloudConnector
 from remediation.connectors.jira_connector import JiraConnector
@@ -292,6 +294,43 @@ SPECS.update({
         "note": "Not synced on a schedule. Used by SOAR playbooks. Testing posts a short test message.",
         "build": lambda c: NotifyWebhook(c["url"]), "test": lambda c: NotifyWebhook(c["url"]).test_connection(),
     },
+})
+
+
+def _dw(label, cls, site, help_text):
+    return {"label": label, "category": "Threat intelligence", "output": "darkweb", "kind": "tool",
+            "fields": [_f("api_key", "API key", secret=True)],
+            "docs": f"{help_text} Only your own domains from the Dark Web Watch terms are sent. Identifiers are masked and passwords are never kept. Account: {site}.",
+            "note": "Not synced like a scanner. Run from Dark Web Watch, on demand or on its daily schedule once switched on.",
+            "build": lambda c: cls(c["api_key"]), "test": lambda c: cls(c["api_key"]).test_connection()}
+
+
+SPECS.update({
+    "intelx": _dw("IntelligenceX (breach and paste search)", darkweb_connector.IntelX, "intelx.io", "Searches leaks, pastes and dark-web indexes for your domain."),
+    "dehashed": _dw("DeHashed (credential search)", darkweb_connector.DeHashed, "dehashed.com", "Searches breach data for your domain; needs API credits."),
+    "leakcheck": _dw("LeakCheck (credential search)", darkweb_connector.LeakCheck, "leakcheck.io", "Domain search needs a plan that includes it."),
+    "snusbase": _dw("Snusbase (breach compilations)", darkweb_connector.Snusbase, "snusbase.com", "Searches breach compilations by domain."),
+})
+
+
+def _git_spec(provider, label, default_url, token_help):
+    return {
+        "label": label, "category": "Source control", "output": "pull-requests", "kind": "tool",
+        "fields": [_f("base_url", "API base URL (leave blank for the hosted service)", required=False, placeholder=default_url), _f("token", "Access token", secret=True)],
+        "safe_targets": ["base_url"],
+        "docs": token_help + " Quanta uses it to read dependency files, create a branch of its own, commit to that branch and open a pull request, only after an administrator "
+                "confirms. It never merges and never writes to the default branch. Give the token access to the repositories you list on the Applications page and nothing else.",
+        "note": "Not synced on a schedule. Used by the Fix pull requests page. Testing only checks that the token is valid.",
+        "build": lambda c: git_host_connector.build(provider, c["token"], c.get("base_url")),
+        "test": lambda c: git_host_connector.build(provider, c["token"], c.get("base_url")).whoami(),
+    }
+
+
+SPECS.update({
+    "github": _git_spec("github", "GitHub (pull requests)", "https://api.github.com   (GitHub Enterprise Server: https://HOST/api/v3)",
+                        "Use a fine-grained personal access token or a GitHub App installation token with Contents and Pull requests read/write on the repositories."),
+    "gitlab": _git_spec("gitlab", "GitLab (merge requests)", "https://gitlab.com   (self-managed: https://gitlab.example.com)",
+                        "Use a project or group access token with the api scope and the Developer role."),
 })
 
 

@@ -20,10 +20,13 @@ exception, see "Keeping this current" at the bottom.
 
 ## claude/dashboard
 
-- **Owns**: `dashboard/` — the FastAPI app, all ~50 page modules, static JS/CSS.
-- **Scope boundary**: does not touch `remediation/` or `.claude/agents/`.
-- **Status**: scaffolded 2026-09-04, not yet started.
-- **Last synced with master**: 2026-09-04 (created from current master).
+- **Owns**: `dashboard/` (the FastAPI app, all page modules, static JS/CSS) and, in practice, the product features built on top of it that ship together with their pages:
+  the application-security stack (`remediation/appsec/`, `remediation/gitops/`, `remediation/devsecops/`, the Git host and OSV connectors), plus the SOC, hunting,
+  SOAR, risk, firewall, AI-security and identity modules that were developed on this branch.
+- **Scope boundary**: still does not edit `.claude/agents/vuln-*.md` or the `/quanta-scan` command. Changes to `remediation/utils/db.py` are additive (new tables) and
+  must be merged quickly, see "Not a good fit for a long-lived parallel branch" below.
+- **Status**: active. Carries a large body of work that `master` does not have yet; open a reviewed pull request into `master` rather than pushing there.
+- **Last synced with master**: 2026-10-03 (merged into this branch, full suite green, 2,302 tests at that point).
 
 ## claude/vuln-scan-engine
 

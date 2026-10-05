@@ -56,6 +56,9 @@ def metrics(findings, engine=None):
     safe(lambda: put("compensating", _count(engine, t.asset_controls), _plural(_count(engine, t.asset_controls), "control") + " recorded"))
     safe(lambda: put("attack-paths", sum(1 for f in findings if f.get("attack_techniques")), f"{sum(1 for f in findings if f.get('attack_techniques')):,} findings tagged with ATT&CK techniques"))
     safe(lambda: put("devsecops", _count(engine, t.scan_runs), _plural(_count(engine, t.scan_runs), "scan upload") + " recorded"))
+    safe(lambda: put("applications", _count(engine, t.applications), _plural(_count(engine, t.applications), "application") + f", {_count(engine, t.app_sboms)} with an SBOM"))
+    safe(lambda: put("fix-prs", _count(engine, t.fix_proposals), _plural(_count(engine, t.fix_proposals), "proposal") + f", {_count(engine, t.fix_proposals, t.fix_proposals.c.status == 'merged')} merged"))
+    safe(lambda: put("pipeline-gates", _count(engine, t.gate_runs), _plural(_count(engine, t.gate_runs), "evaluation") + " recorded"))
     safe(lambda: put("devsecops-queue", _count(engine, t.remediation_factory), _plural(_count(engine, t.remediation_factory), "finding") + " queued"))
     safe(lambda: put("cyber-risk", _count(engine, t.risk_scenarios), _plural(_count(engine, t.risk_scenarios), "scenario")))
     safe(lambda: put("grc", _count(engine, t.grc_risks), _plural(_count(engine, t.grc_risks), "risk") + " in the register"))
@@ -67,6 +70,7 @@ def metrics(findings, engine=None):
     safe(lambda: put("ai-usage", _count(engine, t.ai_usage_events), f"{_count(engine, t.ai_usage_events):,} usage records"))
     safe(lambda: put("triage", _count(engine, t.soc_alerts, t.soc_alerts.c.status != "closed"), _plural(_count(engine, t.soc_alerts, t.soc_alerts.c.status != "closed"), "open alert")))
     safe(lambda: put("soc-cases", _count(engine, t.soc_cases, t.soc_cases.c.status.in_(("new", "in_progress", "pending", "escalated"))), _plural(_count(engine, t.soc_cases, t.soc_cases.c.status.in_(("new", "in_progress", "pending", "escalated"))), "open case")))
+    safe(lambda: put("darkweb", _count(engine, t.darkweb_hits, t.darkweb_hits.c.status == "new"), _plural(_count(engine, t.darkweb_hits, t.darkweb_hits.c.status == "new"), "new hit")))
     safe(lambda: put("soar", _count(engine, t.soar_playbooks), _plural(_count(engine, t.soar_playbooks), "playbook")
                      + (f", {_count(engine, t.soar_runs, t.soar_runs.c.status == 'waiting-approval')} waiting for approval" if _count(engine, t.soar_runs, t.soar_runs.c.status == "waiting-approval") else "")))
     def firewall():

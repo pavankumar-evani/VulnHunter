@@ -19,14 +19,14 @@ Quanta started as a Claude Code **extension** — two slash commands plus seven 
 subagents, no runnable application. It has since grown a second, much larger half on top:
 a real, deployable web application. Both halves are real and current today:
 
-- **The pipelines** — `/quanta-scan` and `/remediate`, orchestrating 11 subagents total
-  (4 + 7) via markdown prompt/config files under `.claude/`. No build system or package
+- **The pipelines** — `/quanta-scan` and `/remediate`, orchestrating 12 subagents total
+  (4 + 8) via markdown prompt/config files under `.claude/`. No build system or package
   manifest of their own. See "Architecture: the 3-stage subagent pipeline" and
   "Architecture: the remediation engine" below.
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
   single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 1,933 tests — all passing as
+  pipeline non-interactively, and a Python `unittest` suite of 2,302 tests — all passing as
   of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
   the dashboard" below.
 
@@ -298,7 +298,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 1,933 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 2,302 tests today, all passing
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -388,7 +388,7 @@ widen an agent's tool access to "make it easier," since the narrow scope is the 
 
 ## Architecture: the remediation engine (`/remediate`)
 
-`/remediate` (`.claude/commands/remediate.md`) orchestrates **seven** subagents, same
+`/remediate` (`.claude/commands/remediate.md`) orchestrates **eight** subagents, same
 scoped-tool-access philosophy as `/quanta-scan`:
 
 1. **`vuln-ingest-normalizer`** (tools: `Read, Glob, Write`) parses Tenable CSV, Armis
@@ -438,6 +438,10 @@ A `--finding-id FIND-N` argument (what the dashboard's "Trigger Remediation" but
 already-approved finding uses, via `/api/run`) skips steps 1-3 entirely and delegates
 straight to whichever fixer matches that one finding's `remediation_domain`, rather than
 re-running ingest/enrich/plan for the whole batch to reach one already-known finding.
+
+6. **`remediation-fixer-code`** (same `Read, Write`-only scope) handles first-party code findings: it confirms the flaw, records what behaviour must be preserved and writes
+   a proposed unified diff to `remediation/output/code-fixes/<id>.json`. It edits nothing; Quanta's gitops layer validates and applies the diff and an administrator
+   decides whether to open a pull request (see "Application security" above).
 
 ### Why network/firewall findings stay manual-only
 
@@ -685,6 +689,43 @@ and database URL). Still true: the findings are one whole stored file (tens of t
 not millions), and the chart is checked by `helm lint`/`template`, `scripts/e2e_replicas.py` (real processes), a kind install job (`.github/workflows/helm-kind.yml`, not yet run), static tests (`tests/test_helm_chart.py`), CI
 (`helm lint`/`template`/kubeconform) and unit tests but not yet installed on a live cluster.
 
+## Application security: SBOMs, the dependency graph, fix pull requests, the release gate
+
+`remediation/appsec/` holds the application model. `store.py` keeps applications (table `applications`: environment, platform, owner, team, business criticality,
+internet-facing flag, Git provider/repository/default branch/dependency-file paths, connection id) and one parsed SBOM each (`app_sboms`). `sbom_parse.py` reads
+CycloneDX and SPDX JSON into one shape; `manifest_gen.py` builds a CycloneDX SBOM from requirements.txt, package.json, package-lock.json, pom.xml or go.mod
+(only a lock file gives transitive dependencies; it says so, and never runs a package manager). `graph.py` computes depth, direct vs transitive, paths and blast
+radius and matches findings (by `dependency.package`) to components; `criticality.py` + `config/appsec_criticality.yaml` rate package sensitivity;
+`scoring.py` + `config/appsec_scoring.yaml` rank every finding with a visible breakdown (CVSS, EPSS, KEV, application criticality, package sensitivity, attack
+surface, attack-chain position, a lower multiplier for a denied network path); `analysis.py` joins it all, groups dependency findings into the one upgrade that
+closes them, and adds the internet-to-application lane from `network_topology.yaml`. `connectors/osv_connector.py` turns an SBOM into findings via the public OSV
+API (admin-confirmed, package URLs only, built against public docs and never run live). The graph UI is `static/js/depGraph.js` (plain SVG).
+
+`remediation/gitops/` is the pull-request workflow. `upgrade.py` makes the manifest edit deterministically (no model); `diffing.py` applies a code-fix patch strictly;
+`policy.py` + `config/gitops_policy.yaml` hold branch naming, protected branches, denied paths (pipeline files, CODEOWNERS, keys), approval rules and the process
+steps; `prbody.py` writes the evidence-carrying description; `proposals.py` is the lifecycle (draft, approved, pr-opened, in-review, merged/closed, failed, discarded;
+table `fix_proposals`) with `open_pr` as the **only** place Quanta writes to a repository: dry run unless `confirm`, a new branch, never the default or a protected
+branch, never merged. `connectors/git_host_connector.py` (GitHub and GitLab; stored as `tool` connections `github` / `gitlab`) is the only code that talks to the host;
+writes are not retried. State comes back by `POST /api/gitops/sync` or `POST /api/inbound/pr-status` (key scope `tickets:update`); verification reuses the closed-loop
+rule (gone from the latest scan = resolved); `velocity.py` reports stage times. The subagents stay Read/Write only: `remediation-fixer-application` also writes
+`remediation/output/upgrade-plans/<id>.json`, and `remediation-fixer-code` (new) writes `remediation/output/code-fixes/<id>.json` (a unified diff plus an honest
+validation record); Python checks and applies them.
+
+Keeping pull requests current is automatic where it can be: an hourly scheduler tick (`_run_gitops_sync_if_due`, off with `QUANTA_GITOPS_SYNC=false`) follows open pull
+requests and re-checks merged ones against the latest scan; `POST /api/inbound/git-webhook` accepts signed GitHub / GitLab webhooks (`gitops/webhooks.py`, secret
+`QUANTA_GIT_WEBHOOK_SECRET`, refuses everything when unset); `POST /api/gitops/proposals/{id}/rescan` queues a sync on each enabled scanner connection after a merge.
+`python cli/quanta_admin.py seed-appsec-demo` (`remediation/appsec/demo.py`) registers a demo application, its SBOM and a few findings under source `appsec-demo`
+(`--remove` undoes exactly that) and prints the topology entry that makes the graph's exposure lane show a path.
+
+`remediation/devsecops/` additionally has `gates.py` + `config/pipeline_gates.yaml` (the CI release gate: `GET /api/gate/evaluate`, key scope `read:findings`, every
+evaluation recorded in `gate_runs` and used as evidence for the `vulnerability-gate` control; the `sbom` control is evidenced by a stored SBOM), `design.py` +
+`design_rules.yaml` (the secure design assistant: questionnaire to requirements, ASVS references, library controls, STRIDE prompts), and organisation-specific controls
+(`devsecops_custom_controls`, `full_library()`) that use the same evidence model as the built-in library. Routes live in `dashboard/appsec_api.py` (an APIRouter built
+by `build_router()` with dependencies injected); `POST /api/ingest/sbom` lets CI upload an SBOM. Pages: `/applications`, `/fix-prs`, `/pipeline-gates`,
+`/secure-design`, and an "Our own controls" tab on `/devsecops`. Honest limits: the Git host connectors and OSV are unit-tested against fakes and not run live; Quanta
+cannot regenerate lock files, run tests or know a customer's business logic (the PR says so and opens as a draft when a lock file exists); vulnerabilities in an SBOM
+come from scanner findings or the OSV check, since Quanta ships no advisory database.
+
 ## SOC operations, models and use cases
 
 `remediation/soc/` holds the case side of the SOC: `cases.py` (ITIL cases in L1/L2/L3 queues, priority = impact x urgency, service-level clocks derived on read,
@@ -697,6 +738,13 @@ detection use cases (coverage gap, hunt promotion, tactic-pair sequence mining, 
 ranks playbooks by similarity-weighted past success; `remediation/soar/ai_draft.py` is the only language-model path (playbook drafts validated by `playbooks.validate`, use-case
 refinement), confirm-gated through `_enforce_ai_usage_limit`/`_run_ai_call_and_record_usage`, never auto-saved. Page `/soc`; routes under `/api/soc/*`, `/api/detections/usecases*`,
 `/api/soar/draft-playbook`. Method and models: `docs/enterprise-suite/soc-operations.html`. None of this is deep learning, and none has run against a live SIEM.
+
+**Dark Web Watch** (`remediation/darkweb/`, `remediation/connectors/darkweb_connector.py`, page `/dark-web-watch`, admin only; tables `darkweb_hits`, `darkweb_sources`;
+`config/darkweb_watch.yaml`, ships empty): `catalog.yaml` lists every source and how it is used (feed, lookup, import, guide). Active: Ransomwatch and ransomware.live
+feeds (public, matched locally against the watch terms, polled by the leader tick) and credential-exposure lookups for the org's own domains (IntelligenceX, DeHashed,
+LeakCheck, Snusbase: tool connections, confirm-gated, daily once enabled; counts, breach names and masked identifiers only, passwords dropped in the connector). Everything
+else is import via the page or `POST /api/ingest/darkweb` (key scope `darkweb:write`). Quanta never connects to Tor or crawls. A hit raises a SOC alert from source
+`darkweb`. Built against public docs and fakes; never run with a live account.
 
 ## Support tickets (ITSM service desk)
 

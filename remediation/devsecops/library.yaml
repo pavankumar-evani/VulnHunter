@@ -3,7 +3,8 @@
 # evidence:
 #   scan_type: a scan of this kind has been uploaded for the repository (a clean scan counts: Quanta records that the scan ran)
 #   clean_of:  a pipeline check ran for the repository and found none of these rules; a finding for one of them means the control is failing
-#   quanta:    something Quanta itself holds (for example a threat model)
+#   quanta:    something Quanta itself holds: threat-models (a threat model exists), sbom (an SBOM is stored for the application), gate-runs (the release
+#              gate was evaluated for the application in the last 30 days)
 #   (none)     Quanta cannot see this control; record it yourself with the state and a note
 # The snippets are starting points, not drop-in files: pin every action to a full commit SHA you have reviewed (the version tags shown only
 # say which release to look up) and check each tool's current documentation.
@@ -185,6 +186,7 @@
     github-actions: |
       - uses: anchore/sbom-action@v0   # pin to a commit SHA
         with: { format: cyclonedx-json }
+  evidence: {quanta: sbom}
   ssdf: [PS.3]
   keywords: [sbom, software bill of materials, bill of materials, component inventory]
 - id: container-scan
@@ -238,7 +240,8 @@
   stage: release
   title: Releases are blocked by known-exploited and critical findings
   why: A gate turns a policy into something that happens.
-  how: Fail the release job when the artifact has a critical vulnerability or one on CISA's KEV list that has no approved exception.
+  how: Fail the release job when the artifact has a critical vulnerability or one on CISA's KEV list that has no approved exception. Quanta's Pipeline gates page evaluates the policy in remediation/config/pipeline_gates.yaml and gives you the CI step to call it.
+  evidence: {quanta: gate-runs}
   ssdf: [PW.7, RV.1]
   keywords: [release gate, quality gate, block release, fail the build, vulnerability threshold]
 - id: protected-environments

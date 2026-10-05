@@ -361,6 +361,13 @@ const FAQS = [
     "used only to draft a playbook and to refine a use case, each asked for explicitly, validated, and " +
     "never acted on automatically. The SOC, Hunting and Detection Engineering document gives the method " +
     "for each."],
+  ["Does Quanta crawl the dark web? How do the dark-web sources get in?",
+    "No. Quanta never connects to Tor, crawls onion sites, or logs in to forums. On Dark Web Watch it " +
+    "reads public ransomware leak-site lists on a schedule and matches them locally against your domains " +
+    "and brand names, asks IntelligenceX, DeHashed, LeakCheck or Snusbase about your own domains when you " +
+    "add a key (counts and masked identifiers only; passwords are never kept), and takes in the output of " +
+    "the crawlers and monitoring platforms your analysts run in an isolated environment, pasted or posted " +
+    "to /api/ingest/darkweb. A hit raises a SOC alert."],
   ["Where do threat-model threats come from? Is an LLM involved?",
     "From explicit rules you can read in remediation/threatmodel/rules.py, not an LLM. You " +
     "describe a system as components, data flows and trust zones; the rules raise STRIDE " +
@@ -438,6 +445,72 @@ const FAQS = [
     "/api/ingest/ai-usage, or send OpenTelemetry JSON to /api/ingest/otlp/v1/traces, with an " +
     "API key that has the ai-usage:write scope. Quanta's own calls are included. See " +
     "docs/INTEGRATION_API.md."],
+  ["How do I register an application?",
+    "Admin only. On Applications & SBOM, add an application and fill in environment, " +
+    "platform, owner and team, business criticality, whether it is internet-facing and, for " +
+    "fix pull requests, its Git provider, repository, default branch and dependency-file " +
+    "paths. Criticality and the internet-facing flag feed the ranking, so they are your " +
+    "statement, not something Quanta discovers."],
+  ["How do I upload or generate an SBOM for an application?",
+    "Admin only. On the application's Context & SBOM tab, upload a CycloneDX or SPDX JSON " +
+    "file, or generate one from requirements.txt, package.json, package-lock.json, pom.xml " +
+    "or go.mod (only a lock file gives transitive dependencies; no package manager is run). " +
+    "CI can upload with an ingest:write key to POST /api/ingest/sbom. Quanta ships no " +
+    "advisory database: components show as vulnerable only from scanner findings or the " +
+    "admin-confirmed OSV check (package URLs only; unit-tested against fakes, not run live)."],
+  ["How do I read the dependency and exposure graph and the ranked work?",
+    "The graph shows the dependency tree (direct and transitive, with blast radius) and the " +
+    "lane from the internet through any recorded WAF, load balancer, DMZ and firewall; with " +
+    "nothing recorded the lane is absent, not guessed. Ranked work shows each finding with " +
+    "its score breakdown (CVSS, EPSS, KEV, application criticality, package sensitivity, " +
+    "attack surface, attack-chain position, a lower multiplier for a denied network path). " +
+    "The weights are a disclosed choice, not a standard."],
+  ["How do I propose and open a fix pull request?",
+    "Admin only. Store a GitHub or GitLab connection, set the repository on the application, " +
+    "create a proposal from the ranked work, review it on Fix Pull Requests and approve it. " +
+    "Opening is a dry run until you tick confirm, then creates a new branch and a pull " +
+    "request. Quanta never merges, never writes to a default or protected branch and refuses " +
+    "pipeline files, CODEOWNERS, keys and env files. It runs no package manager or tests, so " +
+    "refresh the lock file and run your tests on the branch (the PR opens as a draft when a " +
+    "lock file exists). The connectors are unit-tested against fakes, not run on a live host."],
+  ["How do I keep pull request status up to date automatically?",
+    "An hourly scheduler tick follows open fix pull requests and re-checks merged ones " +
+    "against the latest scan; it does nothing when none is open. It is on by default (set " +
+    "QUANTA_GITOPS_SYNC to false, 0 or no to turn it off). You can also set up the webhook so " +
+    "the host tells Quanta immediately. Fix Pull Requests shows whether each is active."],
+  ["How do I set up the GitHub or GitLab webhook?",
+    "Set QUANTA_GIT_WEBHOOK_SECRET (or QUANTA_GIT_WEBHOOK_SECRET_FILE), then add a webhook " +
+    "for pull request events pointing at POST /api/inbound/git-webhook with the same secret. " +
+    "GitHub signs the body (X-Hub-Signature-256); GitLab sends X-Gitlab-Token. No secret " +
+    "means every delivery is refused (503), a bad signature gets 401, and a pull request " +
+    "Quanta did not open is ignored. Unit-tested against hand-signed payloads; none received " +
+    "from a live host."],
+  ["What do I do after a merge to get verification sooner?",
+    "On the merged proposal, use Queue a rescan on the scanner connections (admin). It queues " +
+    "a sync on each enabled scanner pull connection; if none is configured it tells you to " +
+    "upload the next scan instead. Then Verify reads that scan."],
+  ["Why did my dependency pull request open as a draft?",
+    "The repository has a lock file, and Quanta never runs a package manager. Refresh the " +
+    "lock file on the branch, run your tests and mark the pull request ready when checks " +
+    "pass. The proposal page shows a callout saying so."],
+  ["How do I load demo data for the application pages?",
+    "Run python cli/quanta_admin.py seed-appsec-demo (optionally --name NAME). It registers a " +
+    "demo application from the sample SBOM plus five findings under source appsec-demo and " +
+    "prints the network_topology.yaml entry for the exposure lane. --remove undoes exactly " +
+    "those. It is sample data, not a scan result."],
+  ["How do I use the release gate in CI?",
+    "Create an API key with the read:findings scope, then on Pipeline Gates copy the GitHub " +
+    "Actions, GitLab CI or shell snippet. It calls GET /api/gate/evaluate and fails the job " +
+    "when the result says block. The policy (pipeline_gates.yaml) sets each check to block, " +
+    "warn or off; an approved exception is not counted; every evaluation is recorded."],
+  ["How do I use the secure design assistant?",
+    "Open Secure Design and answer the questionnaire. You get requirements with OWASP ASVS " +
+    "references, pipeline controls to put in place and questions for the threat model, from " +
+    "explicit rules rather than a model. Treat it as a starting checklist for design review."],
+  ["How do I add our own DevSecOps control?",
+    "Admin only. On DevSecOps, open the Our own controls tab and add a control specific to " +
+    "your organisation. It uses the same evidence model as the built-in library and can be " +
+    "edited or deleted later."],
   ["How does this compare to ServiceNow's Vulnerability Response / USEM module?",
     "The core bet is remediation, not just detection: three separate mechanisms by " +
     "asset domain (Ansible playbooks, a real git-PR flow for app code, and a " +

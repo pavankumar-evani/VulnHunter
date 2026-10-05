@@ -45,6 +45,18 @@
       summary: Which applications contain a vulnerable open-source package, and the safe upgrade.
       needs:
       - An SBOM
+    - id: applications
+      title: Applications and SBOM
+      path: /applications
+      summary: Each application with its deployment context and SBOM, an interactive graph from the internet through its dependencies, and its findings ranked by how much they matter there, grouped into the upgrades that close the most.
+      needs:
+      - An SBOM or dependency files
+    - id: fix-prs
+      title: Fix pull requests
+      path: /fix-prs
+      summary: Dependency upgrades and code fixes as reviewable pull requests on GitHub or GitLab, with the evidence in the description, tracked from approval to merge to verification, and how fast fixes move.
+      needs:
+      - A GitHub or GitLab connection
   - number: '1.2'
     title: DevSecOps control library
     items:
@@ -66,6 +78,17 @@
       summary: Static analysis, dependency, secret and infrastructure-as-code findings tracked with a fix brief until a later scan stops reporting them.
       needs:
       - Code scan results
+    - id: pipeline-gates
+      title: Pipeline gates
+      path: /pipeline-gates
+      summary: "The release gate a CI job calls before shipping: pass, warn or fail with reasons, per environment, plus the step to paste into GitHub Actions or GitLab CI."
+      needs:
+      - An API key for CI
+    - id: secure-design
+      title: Secure design assistant
+      path: /secure-design
+      summary: Answer a few questions about a system you are about to build and get the security requirements, pipeline controls and threat questions it calls for.
+      needs: []
   - number: '1.3'
     title: API security
     items:
@@ -195,6 +218,14 @@
       needs:
       - Alerts via the API or OCSF
       - Reputation and Splunk search connections (optional)
+      admin: true
+    - id: darkweb
+      title: Dark Web Watch
+      path: /dark-web-watch
+      summary: Ransomware leak-site feeds and credential-exposure lookups matched against your domains and brands, and import of crawler and monitoring-platform output. Hits raise SOC alerts.
+      needs:
+      - Your domains and brand names
+      - A key for IntelligenceX, DeHashed, LeakCheck or Snusbase (optional)
       admin: true
     - id: soar
       title: SOAR playbooks

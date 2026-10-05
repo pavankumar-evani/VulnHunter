@@ -3,7 +3,7 @@ import { escapeHtml, flash } from "../dom.js";
 
 export const title = "DevSecOps";
 
-const TABS = [["library", "Control library"], ["policy", "Policy check"], ["queue", "Code fix queue"]];
+const TABS = [["library", "Control library"], ["custom", "Our own controls"], ["policy", "Policy check"], ["queue", "Code fix queue"]];
 const STATUS = { evidenced: ["badge-low", "Evidenced"], failing: ["badge-critical", "Failing"], "no-evidence": ["badge-medium", "No evidence yet"], "not-observable": ["badge-outline", "Not observable"] };
 const SEV = { Critical: "badge-critical", High: "badge-high", Medium: "badge-medium", Low: "badge-low" };
 const QSTATE = { queued: "badge-outline", "in-progress": "badge-medium", "pr-opened": "badge-high", merged: "badge-medium", "wont-fix": "badge-outline", "merged-still-reported": "badge-critical", "resolved-in-latest-scan": "badge-low" };
@@ -37,7 +37,7 @@ export async function render(container) {
         <div class="kpi-card"><div class="kpi-label">not observable (record them)</div><div class="kpi-value">${rep.counts["not-observable"]}</div></div></div>` :
         '<p class="callout">No repository has sent a scan yet. Upload a SARIF file with <code>asset=&lt;repository&gt;</code> (<code>POST /api/ingest/sarif</code>) and it appears here, even if the scan found nothing. The library below is what to aim for.</p>'}
       <div class="table-scroll"><table class="data-table"><thead><tr><th>Control</th><th>Stage</th><th>Status</th><th>Recorded</th><th></th></tr></thead><tbody>
-      ${rows.map((c) => `<tr><td class="wrap-cell"><strong>${escapeHtml(c.title)}</strong><br><span class="muted">${escapeHtml(c.why)}</span></td><td>${escapeHtml(c.stage)}</td>
+      ${rows.map((c) => `<tr><td class="wrap-cell"><strong>${escapeHtml(c.title)}</strong>${c.custom ? ' <span class="badge badge-outline">ours</span>' : ""}<br><span class="muted">${escapeHtml(c.why)}</span></td><td>${escapeHtml(c.stage)}</td>
         <td><span class="badge ${STATUS[c.status][0]}">${STATUS[c.status][1]}</span><br><span class="muted">${escapeHtml(c.detail || "")}</span></td>
         <td class="wrap-cell">${c.recorded ? `${escapeHtml(c.recorded.state)}<br><span class="muted">${escapeHtml(c.recorded.note || "")} (${escapeHtml(c.recorded.set_by || "")})</span>` : '<span class="muted">-</span>'}</td>
         <td><button type="button" class="link-button" data-how="${escapeHtml(c.id)}">How</button>${admin && repo ? ` <button type="button" class="link-button" data-rec="${escapeHtml(c.id)}">Record</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
@@ -109,8 +109,33 @@ export async function render(container) {
     }));
   }
 
+  async function custom() {
+    const admin = await isAdmin();
+    const ov = await api.devsecopsOverview();
+    const mine = ov.library.filter((c) => c.custom);
+    shell(`<p class="muted">Add the controls your organisation requires that the built-in library does not name: a change ticket on every release, a security champion sign-off, an internal scanning standard. They use the same model as the built-in ones: one with an evidence rule shows <em>evidenced</em> or <em>failing</em> from uploaded scans and pipeline checks, and one without is recorded by a person. They appear in the library, in each repository's status and in the policy check.</p>
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Control</th><th>Stage</th><th>Evidence</th><th></th></tr></thead><tbody>
+      ${mine.length ? mine.map((c) => `<tr><td class="wrap-cell"><strong>${escapeHtml(c.title)}</strong> <code>${escapeHtml(c.id)}</code><br><span class="muted">${escapeHtml(c.why)}</span></td><td>${escapeHtml(c.stage)}</td>
+        <td>${c.evidence ? escapeHtml(JSON.stringify(c.evidence)) : '<span class="muted">recorded by a person</span>'}</td>${admin ? `<td><button type="button" class="link-button" data-del="${escapeHtml(c.id)}">Remove</button></td>` : "<td></td>"}</tr>`).join("") : '<tr><td colspan="4" class="empty-state">No controls of your own yet.</td></tr>'}</tbody></table></div>
+      ${admin ? `<h3>Add a control</h3><form id="cf" class="run-form"><div class="form-grid"><label>Id (starts with org-)<input name="id" placeholder="org-change-ticket" required></label>
+        <label>Stage<select name="stage">${ov.stages.map((x) => `<option>${x}</option>`).join("")}</select></label><label>Title<input name="title" required></label></div>
+        <label>Why it matters<textarea name="why" rows="2" required></textarea></label><label>How to put it in place<textarea name="how" rows="3" required></textarea></label>
+        <label>Keywords that point a policy sentence at it (comma separated)<input name="keywords" placeholder="change ticket, change approval"></label>
+        <div class="form-grid"><label>Evidence<select name="evk"><option value="">None: a person records it</option><option value="scan_type">A scan of this type was uploaded</option><option value="clean_of">A pipeline check found none of these rules</option></select></label>
+        <label>Scan type, or rule ids (comma separated)<input name="evv" placeholder="dast  or  GHA001, GL001"></label></div>
+        <p><button type="submit">Save the control</button></p></form>` : ""}`);
+    container.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => { if (window.confirm("Remove this control and the states recorded against it?")) { try { await api.customControlDelete(b.dataset.del); show(); } catch (e) { flash(e.message, "error"); } } }));
+    const f = container.querySelector("#cf");
+    if (f) f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const x = f.elements, evk = x.evk.value, evv = x.evv.value.trim();
+      const evidence = evk === "scan_type" ? { scan_type: evv } : evk === "clean_of" ? { clean_of: evv.split(",").map((t) => t.trim()).filter(Boolean) } : null;
+      try { await api.customControlSave(x.id.value.trim(), { stage: x.stage.value, title: x.title.value, why: x.why.value, how: x.how.value, keywords: x.keywords.value.split(",").map((t) => t.trim()).filter(Boolean), evidence }); flash("Saved.", "success"); show(); } catch (err) { flash(err.message, "error"); }
+    });
+  }
+
   async function show() {
-    try { await { library, policy, queue }[tab](); } catch (err) { shell(`<p class="callout callout-warn">${escapeHtml(err.message)}</p>`); }
+    try { await { library, custom, policy, queue }[tab](); } catch (err) { shell(`<p class="callout callout-warn">${escapeHtml(err.message)}</p>`); }
   }
   await show();
 }

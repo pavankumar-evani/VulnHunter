@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
+import appsec_api  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
 import reports  # noqa: E402
@@ -67,11 +68,15 @@ from remediation import capabilities as capabilities_mod  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
 from remediation.enrichment import network_reachability as network_reach  # noqa: E402
-from remediation.devsecops import controls as dso_controls, factory as dso_factory  # noqa: E402
+from remediation.devsecops import controls as dso_controls, factory as dso_factory, gates as dso_gates  # noqa: E402
+from remediation.appsec import store as appsec_store  # noqa: E402
+from remediation.gitops import service as gitops_service  # noqa: E402
 from remediation.enrichment import sbom as sbom_mod, zero_day_watch as zero_day  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
 from remediation.hunting import ttp as hunt_ttp  # noqa: E402
+from remediation.connectors import darkweb_connector as dw_connector  # noqa: E402
+from remediation.darkweb import watch as dw_watch  # noqa: E402
 from remediation.hunting import usecase_store as hunt_usecase_store, usecases as hunt_usecases  # noqa: E402
 from remediation.soar import ai_draft as soar_ai_draft, recommend as soar_recommend  # noqa: E402
 from remediation.soc import cases as soc_cases, loganalysis as soc_loganalysis, metrics as soc_metrics  # noqa: E402
@@ -252,7 +257,7 @@ async def _security_headers(request: Request, call_next):
 # can safely require) a real session, so they're not exempted here.
 # Routes for machine callers. They are exempt from the browser-login gate ONLY because each one
 # requires a valid API key with the right scope (require_api_key below); nothing else is exempt.
-_API_KEY_PATH_PREFIXES = ("/api/ingest/", "/api/inbound/", "/api/export/")
+_API_KEY_PATH_PREFIXES = ("/api/ingest/", "/api/inbound/", "/api/export/", "/api/gate/")
 _AUTH_FLOW_PATHS = frozenset({
     "/api/auth/login", "/api/auth/logout", "/api/auth/me",
     "/api/auth/oidc/config", "/api/auth/oidc/login", "/api/auth/oidc/callback",
@@ -322,6 +327,16 @@ async def _leader_loop():
         await asyncio.sleep(_LEADER_CHECK_SECONDS)
 
 
+def _run_gitops_sync_if_due():
+    """Hourly: follow open fix pull requests on their Git host and re-check merged ones against the latest scan. Off with QUANTA_GITOPS_SYNC=false. Does nothing
+    (no connector is built) when no pull request is open."""
+    if os.environ.get("QUANTA_GITOPS_SYNC", "true").strip().lower() in ("0", "false", "no"):
+        return None
+    if not gitops_service.has_open_pull_requests():
+        return None
+    return gitops_service.sync_and_verify(dashboard_data.load_live_queue())
+
+
 async def _notification_scheduler_loop():
     while True:
         await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
@@ -333,6 +348,8 @@ async def _notification_scheduler_loop():
             _run_support_sla_escalations()
             _run_grc_evidence_if_due()
             _run_detection_assessment_if_due()
+            _run_darkweb_if_due()
+            _run_gitops_sync_if_due()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -5067,6 +5084,169 @@ def api_soar_draft_playbook(body: DraftPlaybookBody, user: dict = Depends(rbac.r
     return {"dry_run": False, "draft": draft, "note": "A draft. Edit it, then save it yourself; it has not been saved and nothing has run."}
 
 
+# ---------------------------------------------------------------- Dark Web Watch: leak-site feeds, credential-exposure lookups, imported crawler output
+class WatchTermsBody(BaseModel):
+    domains: list[str] = []
+    brands: list[str] = []
+    vendors: list[str] = []
+    keywords: list[str] = []
+    settings: dict | None = None
+
+
+class DarkwebEnableBody(BaseModel):
+    enabled: bool
+
+
+class DarkwebRunBody(BaseModel):
+    confirm: bool = False
+
+
+class DarkwebImportBody(BaseModel):
+    source: str
+    text: str
+
+
+class DarkwebHitBody(BaseModel):
+    status: str
+    note: str | None = None
+
+
+def _darkweb_connected():
+    return {c["type"] for c in conn_store.list_connections() if c["enabled"] and c["type"] in dw_connector.LOOKUPS}
+
+
+def _run_darkweb_source(source_id):
+    """Runs one source now. Feeds are public reads; a lookup needs its stored connection."""
+    if source_id in dw_connector.FEEDS:
+        return dw_watch.run_feed(source_id, dw_connector.FEEDS[source_id]())
+    if source_id in dw_connector.LOOKUPS:
+        conn, _public = hunt_service.connector(source_id)
+        if not conn:
+            raise ValueError(f"No {source_id} connection is configured. Add one on the Connections page.")
+        return dw_watch.run_lookup(source_id, conn)
+    raise ValueError("This source is not fetched by Quanta; use Import")
+
+
+def _run_darkweb_if_due():
+    """Leader tick: reads enabled free feeds every poll_minutes and enabled credential lookups every lookup_hours. Never raises."""
+    try:
+        cfg = dw_watch.config()
+        if not dw_watch.has_terms(cfg):
+            return
+        now = datetime.datetime.now(datetime.timezone.utc)
+        for s in dw_watch.sources(connected=_darkweb_connected()):
+            if not s["enabled"] or s["mode"] not in ("feed", "lookup"):
+                continue
+            gap = datetime.timedelta(minutes=cfg["settings"]["poll_minutes"]) if s["mode"] == "feed" else datetime.timedelta(hours=cfg["settings"]["lookup_hours"])
+            if s["last_run_at"] and now - datetime.datetime.strptime(s["last_run_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc) < gap:
+                continue
+            try:
+                _run_darkweb_source(s["id"])
+            except Exception:  # noqa: BLE001 - recorded on the source by the runner; one bad source must not stop the others
+                logging.getLogger("quanta.scheduler").warning("dark web source %s failed", s["id"])
+    except Exception:  # noqa: BLE001
+        logging.getLogger("quanta.scheduler").exception("dark web watch tick failed")
+
+
+@app.get("/api/darkweb/overview")
+def api_darkweb_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    cfg = dw_watch.config()
+    hits = dw_watch.list_hits()
+    counts = {}
+    for h in hits:
+        counts[h["status"]] = counts.get(h["status"], 0) + 1
+    return {"sources": dw_watch.sources(connected=_darkweb_connected()), "terms": {k: cfg[k] for k in ("domains", "brands", "vendors", "keywords")}, "settings": cfg["settings"],
+            "has_terms": dw_watch.has_terms(cfg), "hit_counts": counts, "hits": hits[:100]}
+
+
+@app.put("/api/darkweb/watch-terms")
+def api_darkweb_terms(body: WatchTermsBody, user: dict = Depends(rbac.require_admin)):
+    def clean(xs):
+        out = []
+        for x in xs[:200]:
+            x = str(x).strip()
+            if x and len(x) <= 120 and x.lower() not in [o.lower() for o in out]:
+                out.append(x)
+        return out
+    cur = dw_watch.config()
+    settings = dict(cur["settings"])
+    for k, v in (body.settings or {}).items():
+        if k in settings:
+            settings[k] = v
+    data = {"domains": [d.lower() for d in clean(body.domains)], "brands": clean(body.brands), "vendors": clean(body.vendors), "keywords": clean(body.keywords), "settings": settings}
+    dw_watch.WATCH_PATH.write_text("# Dark Web Watch terms (edited in the app). See the header of the shipped file for what each setting does.\n" + yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    activity_log.record_activity(user["email"], "darkweb.terms", None, {k: len(data[k]) for k in ("domains", "brands", "vendors", "keywords")})
+    return {"terms": {k: data[k] for k in ("domains", "brands", "vendors", "keywords")}, "settings": settings}
+
+
+@app.post("/api/darkweb/sources/{source_id}/enable")
+def api_darkweb_enable(source_id: str, body: DarkwebEnableBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        dw_watch.set_enabled(source_id, body.enabled)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such source") from exc
+    activity_log.record_activity(user["email"], "darkweb.source.enable", source_id, {"enabled": body.enabled})
+    return {"sources": dw_watch.sources(connected=_darkweb_connected())}
+
+
+@app.post("/api/darkweb/sources/{source_id}/run")
+def api_darkweb_run(source_id: str, body: DarkwebRunBody, user: dict = Depends(rbac.require_admin)):
+    """A free feed runs at once. A credential lookup sends your domains to that service, so it previews first and needs confirm: true."""
+    if source_id in dw_connector.LOOKUPS and not body.confirm:
+        return {"preview_only": True, "service": source_id, "domains_that_would_be_sent": dw_watch.config()["domains"][:20],
+                "message": "Only these domains are sent to the service. Identifiers in the answer are masked and no password is kept. Send confirm: true to run."}
+    try:
+        res = _run_darkweb_source(source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except dw_connector.DarkWebError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "darkweb.source.run", source_id, {k: v for k, v in res.items() if isinstance(v, int)})
+    return res
+
+
+@app.post("/api/darkweb/import")
+def api_darkweb_import(body: DarkwebImportBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        res = dw_watch.run_import(body.source, body.text)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such source") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "darkweb.import", body.source, {"new": res["new"]})
+    return res
+
+
+@app.post("/api/ingest/darkweb")
+def api_ingest_darkweb(body: DarkwebImportBody, key: dict = Depends(require_api_key("darkweb:write"))):
+    """Output from a crawler or a monitoring platform, posted by your pipeline. Matched against the watch terms; the rest is discarded."""
+    try:
+        res = dw_watch.run_import(body.source, body.text)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown source id; see the catalog on Dark Web Watch") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(f"apikey:{key['name']}", "darkweb.import", body.source, {"new": res["new"]})
+    return res
+
+
+@app.get("/api/darkweb/hits")
+def api_darkweb_hits(status: str | None = None, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"hits": dw_watch.list_hits(status=status)}
+
+
+@app.post("/api/darkweb/hits/{hit_id}/status")
+def api_darkweb_hit_status(hit_id: int, body: DarkwebHitBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        h = dw_watch.set_hit_status(hit_id, body.status, body.note)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="No such hit") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "darkweb.hit", str(hit_id), {"status": body.status})
+    return h
+
+
 @app.get("/api/detections/overview")
 def api_detections_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
     a = hunt_detection.assess(hunt_store.list_alerts(), hunt_detection.list_rules(), dashboard_data.load_live_queue())
@@ -5402,16 +5582,22 @@ def _devsecops_inputs():
     return dso_controls.scan_runs(), dso_controls.states(), dashboard_data.load_live_queue(), len(tm_store.list_models())
 
 
+def _devsecops_extras():
+    """What Quanta itself holds that some controls are evidenced by: stored SBOMs and release-gate evaluations, by lower-case application name."""
+    sboms = {k.strip().lower(): v for k, v in appsec_store.sbom_summaries().items()}
+    return {"sboms": sboms, "gate_runs": dso_gates.last_by_application()}
+
+
 @app.get("/api/devsecops/overview")
 def api_devsecops_overview(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
     runs, rec, findings, tms = _devsecops_inputs()
-    return dso_controls.overview(runs, rec, findings, tms)
+    return dso_controls.overview(runs, rec, findings, tms, extras=_devsecops_extras(), lib=dso_controls.full_library())
 
 
 @app.get("/api/devsecops/repos")
 def api_devsecops_repo(asset: str, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
     runs, rec, findings, tms = _devsecops_inputs()
-    return dso_controls.repo_report(asset, dso_controls.library(), runs, rec, findings, tms)
+    return dso_controls.repo_report(asset, dso_controls.full_library(), runs, rec, findings, tms, extras=_devsecops_extras())
 
 
 @app.post("/api/devsecops/state")
@@ -5437,7 +5623,7 @@ def api_devsecops_clear_state(asset: str, control_id: str, user: dict = Depends(
 def api_devsecops_policy(body: PolicyTextBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
     if len(body.text) > 200_000:
         raise HTTPException(status_code=413, detail="The policy text is too large")
-    return dso_controls.map_policy(body.text)
+    return dso_controls.map_policy(body.text, dso_controls.full_library())
 
 
 @app.get("/api/devsecops/factory")
@@ -5471,6 +5657,12 @@ def api_devsecops_factory_brief(finding_id: str, user: dict = Depends(rbac.requi
     if not f or not dso_factory.is_code(f):
         raise HTTPException(status_code=404, detail="No such code-level finding")
     return PlainTextResponse(dso_factory.brief(f), media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="fix-{finding_id}.md"'})
+
+
+app.include_router(appsec_api.build_router(require_api_key=require_api_key, scope_findings=lambda rows, user: _scope_to_team(_annotate_finding_teams(rows), user),
+                                           read_upload=_read_upload, enrich_in_background=_enrich_in_background,
+                                           queue_rescan_job=lambda connection_id, actor: job_queue.enqueue(job_worker.KIND_CONNECTION_SYNC, {"connection_id": connection_id, "actor": actor},
+                                                                                                          dedupe_key=f"sync:{connection_id}")))
 
 
 @app.get("/api/zero-day-watch")

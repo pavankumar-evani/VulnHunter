@@ -1,0 +1,44 @@
+# How Quanta ranks application findings (open-source dependencies and first-party code) for the Applications page and the pull-request queue.
+#
+# Read by remediation/appsec/scoring.py. Every number here is a choice, not a standard: no published formula combines these signals, so the weights are
+# disclosed and meant to be tuned to your own risk method. Edit this file; the page recomputes on the next request and shows each factor's contribution,
+# so a score can always be explained.
+#
+# score = 100 x (sum of weight x signal) x reachability modifier x depth modifier, capped at 100. Each signal is between 0 and 1.
+
+# Must add up to 1.0 (checked when the file is read).
+weights:
+  cvss: 0.28                 # the CVSS base score divided by 10
+  epss: 0.17                 # the FIRST.org exploit-prediction probability, 0 to 1 (used as it is: most CVEs are near zero, which is the point)
+  known_exploited: 0.15      # 1 when the CISA KEV catalog lists the CVE
+  asset_criticality: 0.10    # the application's business criticality, from its record
+  package_criticality: 0.10  # how sensitive the affected package is (remediation/config/appsec_criticality.yaml); code findings use the file's sensitivity
+  attack_surface: 0.12       # exposure of the application x the environment it runs in
+  attack_chain: 0.08         # the finding's stage in an entry-pivot-impact chain on the same application
+
+# Used when a finding carries no CVSS score. The result says the score was assumed.
+severity_cvss_fallback: {Critical: 9.5, High: 8.0, Medium: 5.5, Low: 2.5}
+
+asset_criticality: {critical: 1.0, high: 0.75, medium: 0.5, low: 0.25, unknown: 0.5}
+package_criticality: {critical: 1.0, high: 0.75, medium: 0.5, low: 0.25, unknown: 0.4}
+
+attack_surface:
+  # Exposure comes from the application's "internet facing" flag, and from the recorded network path when there is one (remediation/config/network_topology.yaml).
+  exposure: {internet: 1.0, internal: 0.4, unknown: 0.6}
+  environment: {production: 1.0, staging: 0.6, development: 0.3, test: 0.3, unknown: 0.8}
+
+attack_chain: {pivot: 1.0, entry: 0.7, impact: 0.5, none: 0.0}
+
+# Multipliers. A recorded path that is denied somewhere between the internet and the application lowers the score but never removes the finding:
+# controls fail, and a denied path is evidence, not proof.
+modifiers:
+  reachability: {allowed: 1.0, unknown: 1.0, denied: 0.6}
+  dependency: {direct: 1.0, transitive: 0.9, unknown: 1.0}
+
+# P1 is the first things to fix. The thresholds are minimum scores.
+tiers: {P1: 75, P2: 55, P3: 35, P4: 0}
+
+# One package upgrade can close many findings. The upgrade's score is its highest finding's score plus a small bonus for each extra finding it closes.
+upgrade:
+  bonus_per_extra_finding: 1.5
+  bonus_cap: 8

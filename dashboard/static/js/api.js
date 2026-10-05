@@ -178,6 +178,12 @@ export const api = {
   huntingList: () => request("GET", "/api/hunting/hunts"),
   huntingCreate: (body) => request("POST", "/api/hunting/hunts", body),
   huntingUpdate: (id, body) => request("PUT", `/api/hunting/hunts/${id}`, body),
+  darkwebOverview: () => request("GET", "/api/darkweb/overview"),
+  darkwebTerms: (body) => request("PUT", "/api/darkweb/watch-terms", body),
+  darkwebEnable: (id, body) => request("POST", `/api/darkweb/sources/${id}/enable`, body),
+  darkwebRun: (id, body) => request("POST", `/api/darkweb/sources/${id}/run`, body),
+  darkwebImport: (body) => request("POST", "/api/darkweb/import", body),
+  darkwebHitStatus: (id, body) => request("POST", `/api/darkweb/hits/${id}/status`, body),
   socAlerts: () => request("GET", "/api/soc/alerts"),
   socCases: (q = {}) => request("GET", "/api/soc/cases" + (Object.keys(q).length ? "?" + new URLSearchParams(q) : "")),
   socCase: (id) => request("GET", `/api/soc/cases/${id}`),
@@ -372,4 +378,36 @@ export const api = {
   openvasScanStart: (body) => request("POST", "/api/openvas/scan/start", body),
   openvasScanStatus: (body) => request("POST", "/api/openvas/scan/status", body),
   openvasScanImport: (body) => request("POST", "/api/openvas/scan/import", body),
+  // applications, SBOMs and the dependency graph
+  applications: () => request("GET", "/api/applications"),
+  applicationSave: (name, body) => request("PUT", `/api/applications/${encodeURIComponent(name)}/context`, body),
+  applicationDelete: (name) => request("DELETE", `/api/applications/${encodeURIComponent(name)}/context`),
+  applicationAnalysis: (name, view) => request("GET", `/api/applications/${encodeURIComponent(name)}/analysis?view=${view || "focus"}`),
+  applicationSbomGenerate: (name, body) => request("POST", `/api/applications/${encodeURIComponent(name)}/sbom/generate`, body),
+  applicationSbomUpload: async (name, text) => {
+    const res = await fetch(`/api/applications/${encodeURIComponent(name)}/sbom?source=upload`, { method: "POST", body: text });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { const err = new Error((data && data.detail) || res.statusText); err.status = res.status; throw err; }
+    return data;
+  },
+  applicationOsvCheck: (name, confirm) => request("POST", `/api/applications/${encodeURIComponent(name)}/osv-check`, { confirm }),
+  // fix pull requests
+  gitopsPolicy: () => request("GET", "/api/gitops/policy"),
+  gitopsProposals: (application) => request("GET", `/api/gitops/proposals${application ? `?application=${encodeURIComponent(application)}` : ""}`),
+  gitopsProposal: (id) => request("GET", `/api/gitops/proposals/${id}`),
+  gitopsProposeDependency: (body) => request("POST", "/api/gitops/proposals/dependency", body),
+  gitopsProposeCode: (body) => request("POST", "/api/gitops/proposals/code", body),
+  gitopsApprove: (id) => request("POST", `/api/gitops/proposals/${id}/approve`),
+  gitopsDiscard: (id, reason) => request("POST", `/api/gitops/proposals/${id}/discard`, { reason }),
+  gitopsOpen: (id, confirm) => request("POST", `/api/gitops/proposals/${id}/open`, { confirm }),
+  gitopsRescan: (id) => request("POST", `/api/gitops/proposals/${id}/rescan`),
+  gitopsSync: () => request("POST", "/api/gitops/sync"),
+  gitopsVelocity: () => request("GET", "/api/gitops/velocity"),
+  // release gate, secure design, own controls
+  gateInfo: (application) => request("GET", `/api/pipeline-gates${application ? `?application=${encodeURIComponent(application)}` : ""}`),
+  gateEvaluate: (body) => request("POST", "/api/pipeline-gates/evaluate", body),
+  designQuestions: () => request("GET", "/api/secure-design/questions"),
+  designAssess: (body) => request("POST", "/api/secure-design/assess", body),
+  customControlSave: (id, body) => request("PUT", `/api/devsecops/custom-controls/${encodeURIComponent(id)}`, body),
+  customControlDelete: (id) => request("DELETE", `/api/devsecops/custom-controls/${encodeURIComponent(id)}`),
 };

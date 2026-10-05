@@ -20,6 +20,7 @@ Policy mapping: a security policy's sentences are matched to controls by the key
 hit, not an understanding of the sentence, and unmatched sentences are listed so nothing is silently dropped.
 """
 import datetime
+import json
 import re
 from pathlib import Path
 
@@ -36,6 +37,61 @@ STATES = ("implemented", "planned", "not-applicable", "not-implemented")
 def library():
     with open(LIBRARY_PATH, encoding="utf-8") as fh:
         return yaml.safe_load(fh) or []
+
+
+CUSTOM_EVIDENCE = ("scan_type", "clean_of")
+_CUSTOM_ID = re.compile(r"^org-[a-z0-9][a-z0-9-]{0,48}$")
+GATE_RECENT_DAYS = 30
+
+
+def full_library(engine=None):
+    """The shipped library plus the organisation's own controls (marked `custom`). A custom control uses the same evidence model, so it shows the same
+    statuses: evidenced from a scan, failing from a pipeline check, or not observable until someone records it."""
+    return library() + [dict(c, custom=True) for c in custom_controls(engine)]
+
+
+def custom_controls(engine=None):
+    engine, t = _engine(engine), db_module.devsecops_custom_controls
+    with engine.connect() as conn:
+        rows = conn.execute(select(t).order_by(t.c.id)).mappings().all()
+    return [{"id": r["id"], "stage": r["stage"], "title": r["title"], "why": r["why"], "how": r["how"], "keywords": json.loads(r["keywords_json"] or "[]"),
+             "evidence": json.loads(r["evidence_json"] or "null") or None, "created_by": r["created_by"], "created_at": r["created_at"]} for r in rows]
+
+
+def save_custom_control(control_id, fields, actor, engine=None):
+    """Create or replace one organisation control. Raises ValueError with a readable message."""
+    if not _CUSTOM_ID.match(control_id or ""):
+        raise ValueError("The id must start with org- and use lowercase letters, digits and hyphens (for example org-change-ticket)")
+    stage = fields.get("stage")
+    if stage not in STAGES:
+        raise ValueError(f"stage must be one of {', '.join(STAGES)}")
+    title, why, how = ((fields.get(k) or "").strip() for k in ("title", "why", "how"))
+    if not (title and why and how):
+        raise ValueError("A title, why it matters and how to put it in place are all required")
+    ev = fields.get("evidence") or None
+    if ev:
+        if not isinstance(ev, dict) or len(ev) != 1 or next(iter(ev)) not in CUSTOM_EVIDENCE:
+            raise ValueError("evidence is optional; if given it is {scan_type: <type>} or {clean_of: [<pipeline rule ids>]}")
+        if "clean_of" in ev and not (isinstance(ev["clean_of"], list) and all(isinstance(x, str) for x in ev["clean_of"])):
+            raise ValueError("clean_of must be a list of pipeline rule ids")
+    kw = [k.strip().lower() for k in (fields.get("keywords") or []) if isinstance(k, str) and k.strip()][:20]
+    if control_id in {c["id"] for c in library()}:
+        raise ValueError("That id belongs to a built-in control")
+    engine, t = _engine(engine), db_module.devsecops_custom_controls
+    vals = {"stage": stage, "title": title[:200], "why": why[:600], "how": how[:1500], "keywords_json": json.dumps(kw), "evidence_json": json.dumps(ev) if ev else None,
+            "created_by": actor, "created_at": _now()}
+    with engine.begin() as conn:
+        if conn.execute(update(t).where(t.c.id == control_id).values(**vals)).rowcount == 0:
+            conn.execute(insert(t), {"id": control_id, **vals})
+    return next(c for c in custom_controls(engine) if c["id"] == control_id)
+
+
+def delete_custom_control(control_id, engine=None):
+    engine, t = _engine(engine), db_module.devsecops_custom_controls
+    with engine.begin() as conn:
+        n = conn.execute(delete(t).where(t.c.id == control_id)).rowcount
+        conn.execute(delete(db_module.devsecops_status).where(db_module.devsecops_status.c.control_id == control_id))
+    return bool(n)
 
 
 def _now():
@@ -66,7 +122,7 @@ def scan_runs(engine=None):
 def set_state(asset, control_id, state, note, actor, engine=None):
     if state not in STATES:
         raise ValueError(f"state must be one of {', '.join(STATES)}")
-    if control_id not in {c["id"] for c in library()}:
+    if control_id not in {c["id"] for c in full_library(engine)}:
         raise KeyError("No such control")
     if not (asset or "").strip():
         raise ValueError("Name the repository or application")
@@ -103,7 +159,7 @@ def assets(runs, recorded, findings):
     return sorted(names.values(), key=str.lower)
 
 
-def control_status(control, asset, runs, recorded, findings, threat_models=0):
+def control_status(control, asset, runs, recorded, findings, threat_models=0, extras=None):
     ev = control.get("evidence") or {}
     a = _norm(asset)
     mine_runs = [r for r in runs if _norm(r["asset"]) == a]
@@ -122,23 +178,35 @@ def control_status(control, asset, runs, recorded, findings, threat_models=0):
         else:
             status, detail = "no-evidence", "The pipeline has not been checked for this repository."
     elif "quanta" in ev:
+        extras = extras or {}
         if ev["quanta"] == "threat-models":
             status, detail = ("evidenced", f"{threat_models} threat model(s) exist in Quanta.") if threat_models else ("no-evidence", "No threat model has been created in Quanta.")
+        elif ev["quanta"] == "sbom":
+            s = (extras.get("sboms") or {}).get(a)
+            status, detail = (("evidenced", f"An SBOM ({s['format']}, {s['components']} components) was stored {s['uploaded_at'][:10]}.") if s
+                              else ("no-evidence", "No SBOM is stored for this application."))
+        elif ev["quanta"] == "gate-runs":
+            at = (extras.get("gate_runs") or {}).get(a)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            recent = bool(at) and (now - datetime.datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)).days <= GATE_RECENT_DAYS
+            status, detail = (("evidenced", f"The release gate was last evaluated {at[:10]}.") if recent
+                              else ("no-evidence", f"The release gate has not been evaluated for this application in the last {GATE_RECENT_DAYS} days."))
     return {"control_id": control["id"], "status": status, "detail": detail,
             "recorded": {"state": rec["state"], "note": rec["note"], "set_by": rec["set_by"], "set_at": rec["set_at"]} if rec else None}
 
 
-def repo_report(asset, lib, runs, recorded, findings, threat_models=0):
-    rows = [{**{k: c.get(k) for k in ("id", "stage", "title", "why", "how", "snippets", "owasp_cicd", "ssdf")}, **control_status(c, asset, runs, recorded, findings, threat_models)} for c in lib]
+def repo_report(asset, lib, runs, recorded, findings, threat_models=0, extras=None):
+    rows = [{**{k: c.get(k) for k in ("id", "stage", "title", "why", "how", "snippets", "owasp_cicd", "ssdf", "custom")}, **control_status(c, asset, runs, recorded, findings, threat_models, extras)}
+            for c in lib]
     counts = {s: sum(1 for r in rows if r["status"] == s) for s in ("evidenced", "failing", "no-evidence", "not-observable")}
     counts["recorded_implemented"] = sum(1 for r in rows if r["status"] in ("no-evidence", "not-observable") and r["recorded"] and r["recorded"]["state"] == "implemented")
     return {"asset": asset, "controls": rows, "counts": counts}
 
 
-def overview(runs, recorded, findings, threat_models=0):
-    lib = library()
+def overview(runs, recorded, findings, threat_models=0, extras=None, lib=None):
+    lib = lib if lib is not None else library()
     names = assets(runs, recorded, findings)
-    repos = [repo_report(n, lib, runs, recorded, findings, threat_models) for n in names]
+    repos = [repo_report(n, lib, runs, recorded, findings, threat_models, extras) for n in names]
     per_control = []
     for c in lib:
         sts = [next(r for r in rp["controls"] if r["id"] == c["id"]) for rp in repos]

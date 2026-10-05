@@ -671,6 +671,15 @@ used only to draft a playbook and to refine a use case, each asked for explicitl
 never acted on automatically. The SOC, Hunting and Detection Engineering document gives the method
 for each.
 
+### Does Quanta crawl the dark web? How do the dark-web sources get in?
+
+No. Quanta never connects to Tor, crawls onion sites, or logs in to forums. On Dark Web Watch it
+reads public ransomware leak-site lists on a schedule and matches them locally against your domains
+and brand names, asks IntelligenceX, DeHashed, LeakCheck or Snusbase about your own domains when you
+add a key (counts and masked identifiers only; passwords are never kept), and takes in the output of
+the crawlers and monitoring platforms your analysts run in an isolated environment, pasted or posted
+to `/api/ingest/darkweb`. A hit raises a SOC alert.
+
 ### Where do threat-model threats come from? Is an LLM involved?
 
 From explicit rules you can read in `remediation/threatmodel/rules.py`, not an LLM. You
@@ -818,6 +827,108 @@ or send OpenTelemetry JSON to `/api/ingest/otlp/v1/traces`, with an API key that
 `ai-usage:write` scope. Quanta's own calls are included. See docs/INTEGRATION_API.md. As with
 every connector here, these are built against public documentation and tested against mocked
 responses, not run against a live provider account.
+
+### How do I register an application?
+
+Admin only. On Applications & SBOM (`/applications`), add an application and fill in what you
+know: environment, platform, owner and team, business criticality, whether it is internet-facing,
+and (for fix pull requests) its Git provider, repository, default branch and the paths of its
+dependency files. The criticality and internet-facing flag feed the ranking, so set them
+honestly; they are your statement, not something Quanta discovers.
+
+### How do I upload or generate an SBOM for an application?
+
+Admin only. Open the application's Context & SBOM tab. Upload a CycloneDX or SPDX JSON file (each
+application keeps one current SBOM), or generate one from a requirements.txt, package.json,
+package-lock.json, pom.xml or go.mod; only a lock file gives transitive dependencies, and Quanta
+says so when you generate from a manifest alone. It never runs a package manager. CI can upload
+an SBOM with an `ingest:write` API key to `POST /api/ingest/sbom`. Quanta ships no advisory
+database: components show as vulnerable only when a scanner finding names the package or when you
+run the OSV check (admin-confirmed, package URLs only). Without either, an SBOM shows components,
+not a clean bill of health. The OSV connector is unit-tested against fakes and not run live.
+
+### How do I read the dependency and exposure graph and the ranked work?
+
+The graph shows the dependency tree (direct and transitive, with the blast radius of a vulnerable
+package) and the lane from the internet through any WAF, load balancer, DMZ and firewall recorded
+in `network_topology.yaml`; with nothing recorded the lane is absent, not guessed. The ranked
+work lists each finding with its score breakdown: CVSS, EPSS, KEV, application criticality,
+package sensitivity, attack surface, attack-chain position and a lower multiplier when the network
+path is denied. Dependency findings are grouped into the one upgrade that closes them. The weights
+(`appsec_scoring.yaml`) are a disclosed choice, not a standard.
+
+### How do I propose and open a fix pull request?
+
+Admin only for anything that changes state. Store a GitHub or GitLab connection on Connections and
+set the repository on the application, then create a proposal (a dependency upgrade or a
+first-party code fix) from the ranked work, review the diff and evidence on Fix Pull Requests
+(`/fix-prs`) and approve it. Opening is a dry run until you tick confirm; a real open creates a new
+branch and a pull request. Quanta never merges, never writes to a default or protected branch and
+refuses pipeline files, CODEOWNERS, keys and env files. It does not run a package manager or tests,
+so refresh the lock file and run your tests on the branch; with a lock file present the pull
+request opens as a draft. Use Sync to read state back and Verify after the next scan. The GitHub
+and GitLab connectors are unit-tested against fakes and not run against a live host.
+
+### How do I keep pull request status up to date automatically?
+
+Two ways, and you can use both. An hourly scheduler tick follows every open fix pull request and
+re-checks merged ones against the latest scan; it does nothing, and builds no connector, when no
+pull request is open. It is on by default; set `QUANTA_GITOPS_SYNC` to `false`, `0` or `no` to
+turn it off. Or set up the webhook (next entry) so GitHub or GitLab tells Quanta the moment the
+state changes. The Fix Pull Requests page shows whether the hourly check and the webhook are
+active. Verification is still evidence from the next scan, not proof.
+
+### How do I set up the GitHub or GitLab webhook?
+
+Set a shared secret in `QUANTA_GIT_WEBHOOK_SECRET` (or `QUANTA_GIT_WEBHOOK_SECRET_FILE` for a
+mounted secret), then add a webhook in the repository settings that posts pull request events to
+`POST /api/inbound/git-webhook` using the same secret. GitHub signs the body (`X-Hub-Signature-256`,
+HMAC-SHA256); GitLab sends the secret as `X-Gitlab-Token`. With no secret set Quanta refuses every
+delivery (503), a bad signature gets 401, and a pull request Quanta did not open is ignored. Only
+the pull request URL and its open, merged or closed state are used. No login or API key is
+involved, because the signature is the check. See docs/INTEGRATION_API.md. The signing is
+unit-tested against hand-signed payloads; no delivery has been received from a live host.
+
+### What do I do after a merge to get verification sooner?
+
+On the merged proposal, use "Queue a rescan on the scanner connections" (admin). It queues a sync
+on each enabled scanner pull connection (the ones whose output is findings). If none is
+configured it tells you to upload the next scan instead. Once that scan lands, Verify reads it and
+marks the fix verified, still present or awaiting a rescan.
+
+### Why did my dependency pull request open as a draft?
+
+Because the repository has a lock file. Quanta never runs a package manager, so it cannot
+regenerate the lock file for the new version. The proposal page shows a callout saying so: refresh
+the lock file on the branch, run your tests, and mark the pull request ready when checks pass.
+
+### How do I load demo data for the application pages?
+
+From the repository, run `python cli/quanta_admin.py seed-appsec-demo` (optionally `--name NAME`).
+It registers a demo application from the sample SBOM plus five findings under the source
+`appsec-demo`, and prints the `network_topology.yaml` entry to add if you want the exposure lane
+to show. `--remove` undoes exactly those and nothing else. It is sample data, not a scan result.
+
+### How do I use the release gate in CI?
+
+Create an API key with the `read:findings` scope. On Pipeline Gates (`/pipeline-gates`), open "Add
+it to a pipeline", choose GitHub Actions, GitLab CI or shell, and paste the snippet; it calls
+`GET /api/gate/evaluate` and fails the job when the result says block. The Policy section shows
+what blocks, warns or is off (`remediation/config/pipeline_gates.yaml`); a finding with an
+approved exception is not counted, and every evaluation is recorded in the History.
+
+### How do I use the secure design assistant?
+
+Open Secure Design (`/secure-design`) and answer the questionnaire. You get security requirements
+with OWASP ASVS references, the pipeline controls to put in place and questions for the threat
+model. They come from explicit rules (`design_rules.yaml`), not a model, so the same answers give
+the same result. Treat the output as a starting checklist for a design review.
+
+### How do I add our own DevSecOps control?
+
+Admin only. On DevSecOps (`/devsecops`), open the "Our own controls" tab and add a control that is
+specific to your organisation. It uses the same evidence model as the built-in library and can be
+edited or deleted later.
 
 ### How do I see which ticket belongs to a finding?
 

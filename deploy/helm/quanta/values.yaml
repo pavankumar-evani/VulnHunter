@@ -71,6 +71,7 @@ config:
     host: ""
     port: "587"
     fromAddress: ""
+  gitopsSync: true                           # hourly follow-up of open fix pull requests (QUANTA_GITOPS_SYNC); false turns it off
   leaderTtlSeconds: 60                       # a dead scheduler leader is replaced after this long
   extraEnv: []                               # [{name: X, value: "y"}]; never put secrets here
 
@@ -115,7 +116,7 @@ secrets:
     - QUANTA_SESSION_SECRET                  # signs login sessions; any long random string (python cli/quanta_admin.py gen-secret)
     - QUANTA_ENCRYPTION_KEY                  # Fernet key that encrypts stored connector credentials (gen-key); comma-separate to rotate
     - QUANTA_DATABASE_URL                    # the PostgreSQL URL, password included
-  optionalKeys: []                           # add any of: QUANTA_ADMIN_PASSWORD, QUANTA_METRICS_TOKEN, SMTP_USERNAME, SMTP_PASSWORD, OIDC_CLIENT_SECRET
+  optionalKeys: []                           # add any of: QUANTA_ADMIN_PASSWORD, QUANTA_METRICS_TOKEN, QUANTA_GIT_WEBHOOK_SECRET (pull request webhook; refused when unset), SMTP_USERNAME, SMTP_PASSWORD, OIDC_CLIENT_SECRET
   # The vault entry name for each setting (the vault's own naming rules differ: Azure Key Vault
   # does not allow underscores). A name not listed here is used as is.
   keyMap:

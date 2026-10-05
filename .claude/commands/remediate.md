@@ -26,7 +26,12 @@ re-deriving a different finding ID. Instead:
    compensating-control recommendation, not a patch script - see that subagent's own
    file for why), **remediation-fixer-application** for `application` (generates a
    dependency-upgrade plan, not a manifest edit or a PR - see that subagent's own file) —
-   scoped to just that one finding, not the whole batch.
+   scoped to just that one finding, not the whole batch. A first-party code finding
+   (`scan_type` sast, secrets, iac or container, on an application or repository
+   asset) goes to **remediation-fixer-code**, which writes a proposed unified diff and an
+   honest validation record to `remediation/output/code-fixes/<finding-id>.json` - it
+   edits nothing; the dashboard's Applications page turns that file into a reviewable
+   pull request only after an administrator approves it.
 3. If the finding's domain doesn't map to either fixer, say so plainly (not every
    domain has a real fixer subagent yet) rather than guessing or fabricating a playbook.
 4. Report back the single playbook filename generated (or the reason none was), in the

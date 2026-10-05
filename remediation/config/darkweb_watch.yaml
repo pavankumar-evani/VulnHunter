@@ -1,0 +1,15 @@
+# Dark Web Watch: what to look for. Ships empty on purpose; nothing is matched until you fill it in.
+# Read live; edit and the next run sees it. Terms never leave Quanta: feeds are downloaded whole and matched here.
+domains: []      # your own domains, e.g. example.com (also the only thing a credential-exposure lookup sends)
+brands: []       # your company, product and subsidiary names
+vendors: []      # suppliers and partners whose breach would reach you (a match is rated one level lower)
+keywords: []     # anything else: project code names, executive names, internal system names
+
+settings:
+  auto_alert: true               # a new hit also creates a SOC alert (source darkweb), which flows into triage, cases and playbooks
+  ransomware_severity: High      # a leak-site post naming your domain or brand
+  credential_severity: High      # exposed credential records for one of your domains
+  credential_min_records: 1
+  mention_severity: Medium       # your name in imported crawler or platform output
+  poll_minutes: 60               # how often the free feeds are read
+  lookup_hours: 24               # how often enabled credential-exposure lookups run

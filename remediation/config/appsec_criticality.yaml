@@ -1,0 +1,52 @@
+# How sensitive a software package is, by what it does. A flaw in a library that handles authentication, cryptography or untrusted input matters more
+# than the same-severity flaw in a formatting helper. Read by remediation/appsec/criticality.py and used as one input to the application finding score.
+#
+# This is a reading aid built on package names, not on analysis of how your code uses the package. Add your own internal libraries under `overrides`
+# (they are checked first). A component declared optional or development-only (a test framework, a bundler) is capped at `development_scope_level`.
+#
+# match: a case-insensitive run of whole words of the package name, where words are split at - _ . / : (so `ring` matches `ring-core` and not `spring-core`;
+# `jackson-databind` matches `com.fasterxml.jackson.core:jackson-databind`). The first category that matches wins, so keep the specific ones above the general ones.
+
+development_scope_level: low
+default_level: medium     # a package that matches nothing below
+
+overrides: []
+# - {match: acme-auth-core, level: critical, reason: "Our single sign-on library"}
+
+categories:
+  - id: authentication
+    level: critical
+    reason: Handles authentication, tokens or sessions
+    match: [spring-security, passport, jsonwebtoken, pyjwt, python-jose, authlib, oauth, saml, keycloak, shiro, nimbus-jose, jwt, bcrypt, argon2, itsdangerous]
+  - id: cryptography
+    level: critical
+    reason: Implements cryptography or TLS
+    match: [openssl, bouncycastle, bcprov, cryptography, pycryptodome, libsodium, nacl, jsch, netty-handler, tls, crypto-js, node-forge, ring]
+  - id: deserialization
+    level: critical
+    reason: Parses untrusted structured data (serialization is a frequent source of remote code execution)
+    match: [jackson-databind, jackson-core, snakeyaml, pyyaml, xstream, fastjson, gson, kryo, pickle, jsonpickle, xmldecoder, ruamel, js-yaml, serialize-javascript, protobuf, commons-collections]
+  - id: logging
+    level: high
+    reason: Processes attacker-influenced strings in every request
+    match: [log4j, logback, slf4j, winston, bunyan, loguru]
+  - id: web-framework
+    level: high
+    reason: Receives and routes untrusted requests
+    match: [spring-web, spring-boot-starter-web, spring-webmvc, spring-webflux, tomcat, jetty, undertow, struts, express, koa, fastify, hapi, django, flask, fastapi, starlette, tornado, rails, gin-gonic, echo, werkzeug, uvicorn, gunicorn, next]
+  - id: database
+    level: high
+    reason: Builds or runs database queries
+    match: [hibernate, mybatis, jdbc, sqlalchemy, psycopg, pymysql, mysql-connector, sequelize, typeorm, knex, mongoose, mongodb, gorm, sqlite]
+  - id: http-client
+    level: medium
+    reason: Makes outbound requests on the application's behalf
+    match: [httpclient, okhttp, requests, urllib3, axios, node-fetch, got, httpx, resty]
+  - id: templating-and-parsing
+    level: medium
+    reason: Renders or parses content that can come from users
+    match: [freemarker, thymeleaf, velocity, jinja2, mustache, handlebars, ejs, pug, lxml, xerces, jsoup, commons-fileupload, multer, xml2js, marked, minimist, lodash]
+  - id: build-and-test
+    level: low
+    reason: Used to build or test, not shipped in the running application
+    match: [junit, mockito, pytest, mocha, jest, chai, sinon, webpack, babel, eslint, prettier, typescript, maven-plugin, gradle-plugin, coverage, flake8, black, mypy, sphinx]

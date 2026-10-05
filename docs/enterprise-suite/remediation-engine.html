@@ -106,13 +106,14 @@
     <a href="#approvals">04 · Approvals vs. exceptions</a>
     <a href="#policy">05 · Remediation policy engine</a>
     <a href="#boundary">06 · The execution boundary</a>
-    <a href="#tracks">07 · Four remediation tracks</a>
+    <a href="#tracks">07 · Five remediation tracks</a>
     <a href="#gates">08 · Safety gates &amp; proof</a>
     <a href="#guidance">09 · Analyst guidance</a>
     <a href="#clientcontrols">10 · Client-specific controls</a>
     <a href="#grcevidence">11 · GRC evidence</a>
     <a href="#detect">12 · Hunting &amp; SOC (detect)</a>
-    <a href="#notbuilt">13 · What is not built</a>
+    <a href="#fixprs">13 · Fix pull requests</a>
+    <a href="#notbuilt">14 · What is not built</a>
   </nav>
 
   <main>
@@ -182,8 +183,8 @@
     </section>
 
     <section id="tracks">
-      <h2><span class="num">07</span>Four remediation tracks — deliberately not one workflow</h2>
-      <p class="section-intro">Everything above describes the IT-infrastructure track in detail. Quanta actually runs <strong>four genuinely separate remediation mechanisms</strong>, each shaped for how that category of finding is really fixed in practice — not one generic "generate a fix" pipeline stretched to cover cases it doesn't fit.</p>
+      <h2><span class="num">07</span>Five remediation tracks — deliberately not one workflow</h2>
+      <p class="section-intro">Everything above describes the IT-infrastructure track in detail. Quanta actually runs <strong>five genuinely separate remediation mechanisms</strong>, each shaped for how that category of finding is really fixed in practice — not one generic "generate a fix" pipeline stretched to cover cases it doesn't fit.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Track</th><th>Findings</th><th>Mechanism</th><th>Output artifact</th><th>Default risk posture</th></tr></thead>
@@ -191,7 +192,8 @@
             <tr><td><strong>IT Infrastructure</strong></td><td><code>windows-server</code>, <code>unix-server</code></td><td><code>remediation-fixer-windows</code>/<code>-unix</code></td><td>Generated Ansible playbook</td><td>Conservative default (<code>needs-change-approval</code> unless clearly low-risk)</td></tr>
             <tr><td><strong>Application Security (SAST)</strong></td><td>SAST (<code>/quanta-scan</code> code findings)</td><td><code>vuln-fixer</code> — a completely separate pipeline</td><td>A real git branch + commit + pushed PR</td><td>Only <code>auto_fixable: true</code> findings touched; everything else flagged for manual review</td></tr>
             <tr><td><strong>OT / IoT</strong></td><td><code>iot-ot-device</code></td><td><code>remediation-fixer-ot</code></td><td>Compensating-control + vendor-coordination recommendation (never a patch script)</td><td>Always <code>needs-change-approval</code> — never auto-approvable, by rule</td></tr>
-            <tr><td><strong>Application Security (SCA)</strong></td><td><code>application</code> findings with a CVE, routed to <code>automation_target: "dependency-upgrade"</code></td><td><code>remediation-fixer-application</code></td><td>Dependency-upgrade plan (never a manifest edit, package-manager run, or PR — see §&nbsp;below)</td><td>Follows the planner's general per-finding judgment, same as the infra tracks</td></tr>
+            <tr><td><strong>Application Security (SCA)</strong></td><td><code>application</code> findings with a CVE, routed to <code>automation_target: "dependency-upgrade"</code></td><td><code>remediation-fixer-application</code></td><td>Dependency-upgrade plan (<code>remediation/output/upgrade-plans/&lt;id&gt;.json</code>); the manifest edit itself is made deterministically by Python and only ever reaches a repository as a reviewed pull request (see §13)</td><td>Follows the planner's general per-finding judgment, same as the infra tracks</td></tr>
+            <tr><td><strong>Application Security (first-party code)</strong></td><td>Code findings (SAST, secrets and similar) with a known file</td><td><code>remediation-fixer-code</code></td><td>A proposed fix (<code>remediation/output/code-fixes/&lt;id&gt;.json</code>): a unified diff limited to the finding's own file plus an honest validation record; Python checks and applies it (see §13)</td><td>Needs admin approval before any pull request; nothing is applied to a default branch</td></tr>
           </tbody>
         </table>
       </div>
@@ -199,7 +201,7 @@
       <div class="grid2">
         <div class="card"><h4>Why AppSec (SAST) was never merged into the infra track</h4><p><code>vuln-fixer</code> edits source files directly and opens a pull request — a fundamentally different action than generating a standalone playbook for someone else to run. It has its own tool scope (<code>Bash</code> for git, <code>Edit</code> for source files) and its own trigger (<code>/quanta-scan --fix</code>), independent of <code>/remediate</code>'s pipeline entirely. DAST, Secrets, and Container findings don't have an equivalent fixer yet — they're honestly <code>manual-only</code> today, the same disclosed gap as network devices and certificates.</p></div>
         <div class="card"><h4>Why OT gets a different artifact shape, not just a different template</h4><p>NIST SP 800-82 (OT security guidance) treats direct automated patching as the exception in industrial environments, not the default — many OT devices can't be safely rebooted mid-production, some have no reachable network path at all, and an unplanned change to a safety-critical controller risks physical harm, not just downtime. <code>remediation-fixer-ot</code> reflects that directly: it never generates a config/patch script, only a recommendation for IT security and OT/plant operations to act on together.</p></div>
-        <div class="card"><h4>Why the SCA fixer follows the Ansible pattern, not vuln-fixer's</h4><p><code>remediation-fixer-application</code> has only <code>Read, Write</code> tools — no <code>Bash</code>, no git access — unlike <code>vuln-fixer</code>. A dependency bump's real risk is a transitive breaking change this subagent has no way to test (no build tooling, no test suite), so it generates the upgrade <em>plan</em> a developer executes through their own normal PR workflow, the same artifact-only posture as the Ansible/OT fixers, not a diff pretending to already be validated.</p></div>
+        <div class="card"><h4>Why the SCA fixer follows the Ansible pattern, not vuln-fixer's</h4><p><code>remediation-fixer-application</code> has only <code>Read, Write</code> tools — no <code>Bash</code>, no git access — unlike <code>vuln-fixer</code>. A dependency bump's real risk is a transitive breaking change this subagent has no way to test (no build tooling, no test suite), so it generates the upgrade <em>plan</em> a developer reviews, the same artifact-only posture as the Ansible/OT fixers, not a diff pretending to already be validated. Both it and <code>remediation-fixer-code</code> stay <code>Read, Write</code> only: the model writes a plan or a diff as a file, and ordinary Python (not the model) validates it, applies it and talks to the Git host.</p></div>
         <div class="card"><h4>Closing the loop: post-fix verification</h4><p>Only the SAST track has this today: <code>vuln-verifier</code> (part of the Vulnerability Finding Engine document's <code>/quanta-scan</code> pipeline, triggered by <code>--verify FINDING-ID BRANCH</code>) re-checks a fixed finding against its fix branch from a fresh read and logs a real resolved/still-present/inconclusive verdict — closing the gap where a fixer's own report was previously the only signal a fix worked. The three <code>/remediate</code>-side tracks don't have an equivalent re-check yet.</p></div>
       </div>
     </section>
@@ -258,8 +260,31 @@
       <div class="callout warn"><span class="label">Not a SIEM</span><p>Quanta does not run hunt queries, collect logs or detect intrusions. Its Splunk push connector sends findings out; the hunt queries are text for an analyst to run.</p></div>
     </section>
 
+    <section id="fixprs">
+      <h2><span class="num">13</span>Fix pull requests</h2>
+      <p class="section-intro">The application track ends in a reviewable pull request rather than an artifact someone has to turn into one. <code>remediation/gitops/</code> owns the workflow; page <code>/fix-prs</code> and the Pull requests tab of an application drive it. Quanta proposes and opens; <strong>people review and merge</strong>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stage</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>Draft</td><td>A proposal is created for a finding, or for the one dependency upgrade that closes several. A dependency edit is made by <code>upgrade.py</code> deterministically (no model). A first-party code fix comes from <code>remediation-fixer-code</code> as a unified diff, and <code>diffing.py</code> applies it strictly (the context must match, and only the finding's own file may change). The description (<code>prbody.py</code>) carries the evidence: the finding, the score breakdown, what was changed and what was not verified.</td></tr>
+            <tr><td>Approved</td><td>An admin approves (or discards) the proposal, recorded with who and when. The approval rules and process steps come from <code>config/gitops_policy.yaml</code>.</td></tr>
+            <tr><td>PR opened</td><td><code>POST /api/gitops/proposals/{id}/open</code> is the <strong>only</strong> place Quanta writes to a repository. It is admin-only and a <strong>dry run unless <code>confirm=true</code></strong>: the dry run shows the branch, files and description. A real call creates a new branch and a pull request through the GitHub or GitLab connection. It never writes to the default or a protected branch and never merges. A write is not retried, so a failure marks the proposal failed instead of risking a second pull request.</td></tr>
+            <tr><td>In review, merged or closed</td><td>State is read back by Sync (<code>POST /api/gitops/sync</code>) or pushed in by the host's automation to <code>POST /api/inbound/pr-status</code> (key scope <code>tickets:update</code>). Two automatic paths also exist. An hourly scheduler tick (<code>QUANTA_GITOPS_SYNC</code>, on by default) follows open pull requests and re-checks merged ones against the latest scan, and builds no connector when none is open. And the host can post pull request events to the signed receiver <code>POST /api/inbound/git-webhook</code> (<code>remediation/gitops/webhooks.py</code>): GitHub <code>X-Hub-Signature-256</code> (HMAC-SHA256 of the body) or GitLab <code>X-Gitlab-Token</code>, checked against <code>QUANTA_GIT_WEBHOOK_SECRET</code>. With no secret it refuses every delivery (503), a bad signature is 401, a pull request Quanta did not open is ignored, and only the pull request URL and open, merged or closed state are used. The page shows whether each path is active. After a merge, an admin can queue a rescan (<code>POST /api/gitops/proposals/{id}/rescan</code>, merged proposals only), which queues a sync on each enabled scanner pull connection, or is told to upload the next scan if none is configured.</td></tr>
+            <tr><td>Verified</td><td>The closed-loop rule applies: a finding gone from the latest scan reads as resolved. That is evidence, not proof, exactly as for infrastructure fixes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="grid2">
+        <div class="card"><h4>Guards the policy enforces</h4><p>Branch naming, a list of protected branches, and <strong>denied paths</strong> that no proposal may touch: pipeline definitions (<code>.github/**</code>), <code>CODEOWNERS</code>, key files and environment files. A code fix may change only the file the finding is in. A proposal that breaks a guard is refused with the reason, not silently trimmed.</p></div>
+        <div class="card"><h4>What Quanta cannot do, and says so</h4><p>It never runs a package manager or tests, so it cannot refresh a lock file or prove the upgrade builds. When the repository has a lock file the pull request opens as a <strong>draft</strong>, and the proposal page shows a callout saying the team must refresh the lock file, run its tests and mark it ready when checks pass. Quanta also cannot know a customer's business logic, so a code fix is a proposal to review, with an honest validation record rather than a claim that it works.</p></div>
+        <div class="card"><h4>Velocity</h4><p><code>velocity.py</code> reports the time findings spend in each stage (proposed to approved, approved to opened, opened to merged) from recorded timestamps; with no data it returns none rather than an estimate.</p></div>
+        <div class="card"><h4>Verification status</h4><p>The GitHub and GitLab connectors are built against public documentation and unit-tested against fakes; <strong>neither has been run against a live host</strong>, and the webhook receiver is tested against hand-signed payloads, not deliveries from a live host. Use the dry run, then a trial repository, first.</p></div>
+      </div>
+    </section>
+
     <section id="notbuilt">
-      <h2><span class="num">13</span>What is not built</h2>
+      <h2><span class="num">14</span>What is not built</h2>
       <p class="section-intro">Stated plainly, so nothing above is read as more than it is.</p>
       <div class="table-wrap">
         <table>
@@ -271,6 +296,7 @@
             <tr><td>Controls inventory data</td><td>Ships empty. Quanta does not discover controls itself; it records what an integration, script or person reports, and says unknown otherwise.</td></tr>
             <tr><td>Compliance certification</td><td>Not provided. Evidence and workflow only; subset catalogs; OSCAL export is an observation record, not an audit opinion.</td></tr>
             <tr><td>SIEM, log collection, detection, hunt query execution</td><td>Not built. Quanta is not a SIEM.</td></tr>
+            <tr><td>Merging, lock-file refresh and test runs for fix pull requests</td><td>Not done by Quanta. It opens a pull request (a draft when a lock file exists) and stops; the team regenerates lock files, runs tests and merges.</td></tr>
             <tr><td>Live vendor validation</td><td>No connector (scanner, ticketing, AI-usage, push) has been exercised against a live vendor tenant; all are built to public documentation and tested against fakes.</td></tr>
           </tbody>
         </table>

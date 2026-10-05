@@ -1,0 +1,63 @@
+# The dark-web and exposure sources Quanta knows about, and exactly how each one reaches it. Four ways in:
+#   feed    Quanta fetches a public clearnet feed on a schedule (nothing about you is sent) and matches it against your watch terms.
+#   lookup  Quanta asks a service about your own domain with your key (confirm-gated, or on a schedule once you turn it on). Only the domain is sent.
+#   import  A tool or platform produces output; you paste it, or your pipeline posts it to /api/ingest/darkweb (key scope darkweb:write). Quanta never runs these.
+#   guide   Not ingested. A directory, search page or piece of infrastructure the analysts use; listed so the whole toolkit is in one place.
+# Quanta does not connect to Tor, does not crawl .onion sites, and does not log in to forums or marketplaces. Collection happens in an isolated analyst environment
+# you control; Quanta turns what it produces into watch hits, alerts and cases.
+sources:
+  - {id: ransomwatch, name: Ransomwatch, url: "https://ransomwatch.telemetry.ltd", category: leak-site monitor, mode: feed, active_default: true,
+     how: "Active. Quanta reads the project's public posts list (raw.githubusercontent.com/joshhighet/ransomwatch posts.json) and matches victim names against your watch terms. A match raises a High alert and a case. The project is community-run and its list can lag; ransomware.live is polled as a second source."}
+  - {id: ransomware-live, name: ransomware.live (companion feed), url: "https://www.ransomware.live", category: leak-site monitor, mode: feed, active_default: true,
+     how: "Active. Public API v2 recent victims (api.ransomware.live/v2/recentvictims): victim, group, discovered date, website. Same matching as Ransomwatch."}
+  - {id: intelx, name: IntelligenceX, url: "https://intelx.io", category: breach and paste search, mode: lookup, needs: "API key (a free key has limited access)",
+     how: "Add the key on Connections (type IntelligenceX). Quanta searches your domains and keeps the count, source bucket, date and a masked identifier per record. Run on demand or switch on the daily schedule."}
+  - {id: dehashed, name: DeHashed, url: "https://dehashed.com", category: credential search, mode: lookup, needs: "API key and credits",
+     how: "Add the key on Connections (type DeHashed). Query is domain:<yours>. Quanta reads the e-mail or username and database name only; passwords and hashes are dropped in the connector."}
+  - {id: leakcheck, name: LeakCheck, url: "https://leakcheck.io", category: credential search, mode: lookup, needs: "API key; domain search needs a plan that includes it",
+     how: "Add the key on Connections (type LeakCheck). Same handling: counts, breach names and dates, masked identifiers."}
+  - {id: snusbase, name: Snusbase, url: "https://snusbase.com", category: breach compilation search, mode: lookup, needs: "API key (premium)",
+     how: "Add the key on Connections (type Snusbase). Searches the _domain field for your domain; keeps database names and masked identifiers."}
+  - {id: socradar, name: SOCRadar Dark Web, url: "https://socradar.com/dark-web-monitoring", category: commercial platform, mode: import, needs: "A SOCRadar subscription",
+     how: "Export its alerts as JSON or CSV, or have its integration post them to /api/ingest/darkweb. A direct API connector is not built; the platform's own plan decides what it can export."}
+  - {id: flare, name: Flare, url: "https://flare.systems", category: commercial platform, mode: import, needs: "A Flare subscription",
+     how: "Export events (leaks, Telegram and Discord mentions) as JSON or CSV, or post them to /api/ingest/darkweb. No direct connector is built."}
+  - {id: darkfeed, name: DarkFeed, url: "https://darkfeed.io", category: IOC feed, mode: import, needs: "Free tier or subscription",
+     how: "Download its indicator export and post it to /api/ingest/darkweb; addresses, domains and hashes are extracted and matched against your terms."}
+  - {id: deepdarkcti, name: DeepDarkCTI, url: "https://github.com/fastfire/deepdarkCTI", category: curated source list, mode: import,
+     how: "A curated list of sources to monitor. Paste a section into Dark Web Watch > Import to record the sources; use it to decide what your collection tooling should watch. Not a feed of events."}
+  - {id: onionsearch, name: OnionSearch, url: "https://github.com/megadose/OnionSearch", category: collection tool, mode: import,
+     how: "Run it in your isolated environment with your terms; paste its CSV or text output into Import, or post it. Lines naming your terms become hits."}
+  - {id: darkdump, name: Darkdump, url: "https://github.com/josh0xA/darkdump", category: collection tool, mode: import,
+     how: "Run a search for your brand or domain in your isolated environment; import its output."}
+  - {id: torbot, name: TorBot, url: "https://github.com/DedSecInside/TorBot", category: crawler, mode: import,
+     how: "Crawl in your isolated environment; export JSON or text and import it. Quanta extracts onion addresses, indicators and mentions of your terms."}
+  - {id: torcrawl, name: TorCrawl.py, url: "https://github.com/MikeMeliz/TorCrawl.py", category: crawler, mode: import, how: "Crawl in your isolated environment; import the extracted text."}
+  - {id: darc, name: Darc, url: "https://github.com/JarryShaw/darc", category: crawler, mode: import, how: "Run the crawler in your isolated environment; import its exported text or JSON."}
+  - {id: vigilantonion, name: VigilantOnion, url: "https://github.com/andreyglauzer/VigilantOnion", category: monitoring framework, mode: import,
+     how: "Point its keyword list at your watch terms; import or post the matches it reports."}
+  - {id: onioningestor, name: OnionIngestor, url: "https://github.com/danieleperera/OnionIngestor", category: monitoring framework, mode: import,
+     how: "Its operators can forward findings to a webhook; send them to /api/ingest/darkweb (scope darkweb:write)."}
+  - {id: pryingdeep, name: Prying Deep, url: "https://github.com/iudicium/pryingdeep", category: OSINT framework, mode: import, how: "Export its report (JSON) and import it."}
+  - {id: midnightsea, name: Midnight Sea, url: "https://github.com/RicYaben/midnight_sea", category: scraper, mode: import, how: "Import the scraped text or JSON it produces."}
+  - {id: katana, name: Katana (dark-web crawler), url: "https://github.com/adnane-X-tebbaa/Katana", category: crawler, mode: import, how: "Export its results and import them."}
+  - {id: darkus, name: Darkus, url: "https://github.com/Lucksi/Darkus", category: monitoring tool, mode: import, how: "Import its monitoring output; screenshots stay with your analysts."}
+  - {id: robin, name: Robin, url: "https://github.com/apurvsinghgautam/robin", category: AI investigation tool, mode: import,
+     how: "Its summary is model-written. Import it as text if you wish; Quanta treats it as untrusted free text and only extracts indicators and mentions of your terms."}
+  - {id: recon, name: Recon, url: "https://github.com/UltimateHackers/Recon", category: reconnaissance framework, mode: import, how: "Import its output text."}
+  - {id: onionscan, name: OnionScan, url: "https://github.com/s-rah/onionscan", category: onion service scanner, mode: import,
+     how: "Useful for checking an onion service you operate or are authorised to assess. Import its JSON report; findings are shown as mentions."}
+  - {id: onioff, name: Onioff, url: "https://github.com/k4m4/onioff", category: reachability checker, mode: guide, how: "Checks whether onion links answer. Used by analysts when verifying a lead."}
+  - {id: docker-onion-nmap, name: Docker Onion Nmap, url: "https://github.com/milesrichardson/docker-onion-nmap", category: scanner, mode: guide, how: "Scanning through Tor from a container, for authorised assessment. Not ingested."}
+  - {id: ahmia, name: Ahmia, url: "https://ahmia.fi", category: search engine, mode: guide, how: "A clearnet search engine for onion sites. Analysts search for your brand and domains by hand; paste anything relevant into Import."}
+  - {id: onionengine, name: Onion Search Engine, url: "https://onionengine.com", category: search engine, mode: guide, how: "Clearnet onion search. Analyst use; paste findings into Import."}
+  - {id: darkweblink, name: Darkweblink, url: "https://darkweblink.com", category: link directory, mode: guide, how: "A directory of onion links. Analyst reference."}
+  - {id: tor66, name: Tor66, url: "http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/fresh", category: link directory, mode: guide, needs: "Tor", how: "An onion directory, opened in an analyst's isolated Tor Browser. Not fetched by Quanta."}
+  - {id: tornode, name: TorNode, url: "http://tornode3tnrtzgqwd3vmxdumucddqfd6zk7icu4wzdwxo5c3zn2xqfqd.onion", category: link directory, mode: guide, needs: "Tor", how: "An onion directory, opened in an analyst's isolated Tor Browser. Not fetched by Quanta."}
+  - {id: iaca, name: IACA Dark Web Tools, url: "https://iaca-darkweb-tools.com", category: resource directory, mode: guide, how: "A curated directory of investigation tools. Analyst reference."}
+  - {id: breachforums, name: BreachForums monitor, url: "https://breachforums.st", category: criminal forum, mode: guide,
+     how: "A criminal marketplace. Quanta does not visit or log in to it. Watch it through a commercial monitoring platform or your analysts' isolated environment and import what mentions you."}
+  - {id: tor-project, name: Tor Project, url: "https://www.torproject.org", category: infrastructure, mode: guide, how: "The network layer analysts use. Quanta itself never uses it."}
+  - {id: torsocks, name: torsocks, url: "https://gitlab.torproject.org/tpo/core/torsocks", category: infrastructure, mode: guide, how: "Routes command-line tools through Tor in the analyst's environment."}
+  - {id: nyx, name: Nyx, url: "https://github.com/torproject/nyx", category: infrastructure, mode: guide, how: "Terminal status monitor for the analyst's Tor client."}
+  - {id: tor-browser, name: Tor Browser, url: "https://www.torproject.org/download", category: infrastructure, mode: guide, how: "Hardened browser for opening onion pages in the isolated environment."}
