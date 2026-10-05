@@ -727,6 +727,12 @@ ranks playbooks by similarity-weighted past success; `remediation/soar/ai_draft.
 refinement), confirm-gated through `_enforce_ai_usage_limit`/`_run_ai_call_and_record_usage`, never auto-saved. Page `/soc`; routes under `/api/soc/*`, `/api/detections/usecases*`,
 `/api/soar/draft-playbook`. Method and models: `docs/enterprise-suite/soc-operations.html`. None of this is deep learning, and none has run against a live SIEM.
 
+**SOC workflow** (`dashboard/app.py`): `_AutoInvestigator` investigates each new alert on both ingest routes, locally (no reputation or SIEM), loading context once per request and capped
+by `auto_investigate.max_per_request`, then `soc_cases.auto_case`; `POST /api/soc/alerts/{id}/follow-up` merges a question into the stored investigation (optional confirmed SIEM
+search); `_lookback_cfg` enforces the look-back ceiling (`max_lookback_days`, past it a written justification, hard stop at `extended_lookback_days`) for investigations, single
+lead runs and `POST /api/hunting/hunts/{id}/run-all` (capped by `hunting.max_trial_hits_per_run`); a high-relevance report pushed to `/api/ingest/threat-intel` creates its hunt
+(`hunting.auto_create_hunt_at_or_above`); `_identity_map()` feeds privileged-access detail from the Access Governance entitlements into the report; metrics include alert-to-action timing.
+
 **Dark Web Watch** (`remediation/darkweb/`, `remediation/connectors/darkweb_connector.py`, page `/dark-web-watch`, admin only; tables `darkweb_hits`, `darkweb_sources`;
 `config/darkweb_watch.yaml`, ships empty): `catalog.yaml` lists every source and how it is used (feed, lookup, import, guide). Active: Ransomwatch and ransomware.live
 feeds (public, matched locally against the watch terms, polled by the leader tick) and credential-exposure lookups for the org's own domains (IntelligenceX, DeHashed,

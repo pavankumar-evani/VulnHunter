@@ -225,6 +225,8 @@ severity and never decides that an alert is real. Closing an alert needs a dispo
   `finding_info.uid/title/analytic.name/attacks[].technique.uid`, `severity_id`, `device`, `user`, endpoints and file hashes; a repeat is ignored.
 - `POST /api/ingest/alerts` also accepts `rule_name` and `entities` (`host`, `user`, `ips`, `domains`, `hashes`, `urls`) so detection engineering and
   investigation have something to work on.
+- Both alert routes investigate each new alert on arrival (locally; no outside lookups) and return `investigated`, the number done in that call (at most 200).
+- `POST /api/ingest/threat-intel` (scope `soc:write`) also creates the hunt at once when the report's relevance is high (`hunting.auto_create_hunt_at_or_above` in `soc_triage.yaml`) and returns its `hunt_id`; the hunt only exists, nothing runs.
 - `POST /api/ingest/threat-intel` (scope `soc:write`): `{"content": "<report text or STIX 2.1 bundle>", "title": "...", "source": "..."}`. The same
   content is stored once. Returns its relevance to your estate.
 - `POST /api/ingest/sarif?asset=<repository>` now also accepts a SARIF file with no results (a clean scan): it is recorded as evidence that the scan
