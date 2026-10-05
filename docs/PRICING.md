@@ -239,3 +239,7 @@ all state the same pricing model. If pricing, licensing, or SLA terms change, up
 all three (see `docs/enterprise-suite/MANIFEST.md` for how to republish the HTML
 versions) and check `docs/VR_PLATFORM_COMPARISON.md` for competitive-positioning
 language that assumes the old numbers.
+
+## Packaging by module
+
+The product is built so that each of its eight modules can be licensed on its own (see [LICENSING.md](LICENSING.md)); this document remains the source of truth for what anything costs, and no price or tier here has been changed by that design.

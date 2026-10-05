@@ -20,6 +20,8 @@ that context.
 | [REMEDIATION_WORKFLOWS.md](REMEDIATION_WORKFLOWS.md) | The full `/remediate` lifecycle end to end: ingest → normalize → enrich → risk-tier/priority/SLA scoring (and why there are two separate scoring mechanisms) → playbook generation → human review → manual apply. Includes MITRE ATT&CK tagging, ServiceNow ticketing, and which asset classes have no fixer yet. |
 | [COMPLIANCE_MAPPING.md](COMPLIANCE_MAPPING.md) | An informational (**not certifying**) map of existing capabilities to NIST CSF / SOC 2 control categories, plus an explicit list of what's missing before any real compliance claim could be made. |
 | [VR_PLATFORM_COMPARISON.md](VR_PLATFORM_COMPARISON.md) | Quanta vs. ServiceNow VR and four modern alternatives (Nucleus Security, DefectDojo, Brinqa, ArmorCode) — independently-verified connector/pricing facts, Quanta's real current gaps (no dedup, only 8 unverified connectors), and a prioritized roadmap. |
+| [API_SECURITY.md](API_SECURITY.md) | The API Security area end to end: inventory from specifications and imported logs, OWASP API Top 10 findings with evidence and a request to confirm, caller activity, your own data classes, protection policies sent as signed requests to an endpoint you own (Quanta changes no WAF), the CI gate, metrics and the rollout checklist. |
+| [LICENSING.md](LICENSING.md) | How module licensing works: the module as the licence unit, signed offline licences, off / warn / enforce, what is always included, how to issue and install a licence, and its honest limits. |
 | [SUPPORT.md](SUPPORT.md) | How to get help, report a bug, or report a security issue — and where to look first. |
 
 ## Also see

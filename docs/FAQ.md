@@ -1037,6 +1037,13 @@ configured); requesters can rate a resolved ticket 1 to 5 and the Analytics tab 
 satisfaction. Policy lives in `remediation/config/support_sla.yaml` and
 `support_routing.yaml`. See [SUPPORT.md](SUPPORT.md).
 
+### How is the app organised, and where do the connectors live?
+
+Into eight modules in the sidebar: Threat Detection & Response (SOC operations, alert triage, hunting, detection engineering, threat intelligence, dark web watch, SOAR), Application Security,
+DevSecOps & Supply Chain (control library, SBOMs, fix pull requests, pipeline gates), Infrastructure & Exposure, AI Security, Remediation & Workflow, Risk, Governance & Compliance, and Administration.
+The sidebar shows one module at a time (pick another with Switch module or All modules). Each module ends with the connectors that feed it, and **All modules** (under Home) shows what every module holds right now and what to connect
+when it is empty. Credentials for all connectors are managed on Connections under Administration.
+
 ### What does the API Security page do, and does it change my WAF?
 
 It builds an inventory of your APIs from OpenAPI files and the access logs you import (Quanta cannot sniff traffic), checks it against the OWASP API Security Top 10 (2023) with an evidence chain and a

@@ -28,6 +28,15 @@ exception, see "Keeping this current" at the bottom.
 - **Status**: active. Carries a large body of work that `master` does not have yet; open a reviewed pull request into `master` rather than pushing there.
 - **Last synced with master**: 2026-10-03 (merged into this branch, full suite green, 2,302 tests at that point).
 
+## claude/api-security
+
+- **Owns**: `remediation/apisec/` (API inventory, OWASP API Top 10 rules, caller activity, data classes, protection policies, CI gate, rollout), `remediation/config/api_security.yaml`,
+  `dashboard/static/js/pages/apiSecurity.js`, `tests/test_api_security.py`, `docs/API_SECURITY.md`, and the `/api/api-security/*` block in `dashboard/app.py`.
+- **Scope boundary**: touches shared files only additively (new tables in `remediation/utils/db.py`, one connection type in `remediation/connections/registry.py`, a `PolicyWebhook` class in
+  `webhook_connector.py`, a `rule_ids` match in the guidance engine, an `api:write` key scope, new guidance entries, one DevSecOps control, one capabilities group).
+- **Status**: complete and pushed; full suite green when last merged with `claude/dashboard`. Open a reviewed pull request into `claude/dashboard` (or `master`).
+- **Last synced with `claude/dashboard`**: 2026-10-05.
+
 ## claude/vuln-scan-engine
 
 - **Owns**: `.claude/agents/vuln-*.md`, `.claude/commands/quanta-scan.md` — the `/quanta-scan`

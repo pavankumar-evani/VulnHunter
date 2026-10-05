@@ -98,6 +98,22 @@ from [cli/README.md](../cli/README.md):
 
 ## 3. Using the dashboard
 
+**Finding your way around.** The app is eight modules and the sidebar shows **one at a time**. Start from the module list, pick one, and the sidebar shows only that module: its pages, then the
+connectors (scanners, SIEM, ticketing, Git hosts) that feed it. Use **Switch module** at the bottom of the module, or **All modules**, to change; the app remembers your choice. **All modules** is also a landing
+page per module that shows what it holds and what to connect when it is empty. A module your licence does not cover appears locked. Every connector's credentials are managed on **Connections** under
+Administration. Press Ctrl/Cmd+K to jump to any page by name (it opens that page's module).
+
+| # | Module | What is in it | Connectors that feed it |
+|---|---|---|---|
+| 1 | Threat Detection & Response | SOC Operations (cases, L1/L2/L3), Alert Triage, Threat Hunting, Detection Engineering, Threat Intelligence and Intel Intake, Dark Web Watch, SOAR Playbooks | Splunk, Cortex XSIAM, CrowdStrike, search / reputation / response endpoints |
+| 2 | Application Security | Application Vulnerabilities (SAST, DAST, SCA, secrets, containers), Code Scan, API Security, Threat Models | Scanner uploads (SARIF, coverage), Prisma Cloud |
+| 3 | DevSecOps & Supply Chain | Control Library, Code Fix Queue, Applications & SBOM, Dependencies, Fix Pull Requests, Pipeline Gates, Secure Design | GitHub, GitLab, OSV |
+| 4 | Infrastructure & Exposure | Infrastructure, OT, Certificate and Quantum-readiness views, Zero-day Watch, Compensating and Security Controls, Firewall Rules, Attack Chains, Blast Radius, Assets, Asset and Vulnerability Mapping | Tenable, Qualys, OpenVAS, Prisma Cloud, Infoblox, Axonius, Active Directory |
+| 5 | AI Security | AI Vulnerabilities, AI Security posture, AI Usage | AI usage connectors |
+| 6 | Remediation & Workflow | Remediation Queue, Plan, Approvals, Assignments, Ownership Analytics, Exceptions, Run Pipeline | ServiceNow, Jira, Splunk |
+| 7 | Risk, Governance & Compliance | Risk Dashboard, Cyber Risk, Risk & Compliance, ML Insights, Access Governance, Reports, Activity Log | Entitlement and HR imports |
+| 8 | Administration | Connections, Connectors catalog, policies, notifications, Users & Teams, Admin Settings | - |
+
 ```bash
 pip install -r dashboard/requirements.txt
 python dashboard/app.py
@@ -385,6 +401,25 @@ new dependency). "Excel" is deliberately offered as CSV rather than a fabricated
 a new library this project doesn't otherwise depend on anywhere.
 
 ---
+
+## 13. API security (admin)
+
+Open **API Security** (`/api-security`). Quanta cannot watch your network, so you give it what you have:
+
+1. **Import**: upload an OpenAPI or Swagger file (or fetch one from a URL; you are asked to confirm because the Quanta server makes the request), and an access-log export from your gateway,
+   load balancer or WAF. A log shipper can push records instead, with an API key that has the `api:write` scope (Connections page).
+2. **Inventory**: every endpoint with its exposure, authentication, owner and the data it returns. Endpoints in traffic that no spec describes are **shadow**. Set owners; mark a known one
+   *accepted-risk* to silence its finding.
+3. **Data classes**: import your own classification framework (JSON or CSV). Until you do, data seen in APIs is listed as *unclassified*, never assumed sensitive.
+4. **Findings**: OWASP API Top 10 indicators. Open one to see the evidence chain and the cURL request a developer can run, against a system they are allowed to test, to confirm a true or false
+   positive. **Publish to the main queue** sends the complete current set.
+5. **Callers**: what each caller reached, with volume, exfiltration, enumeration and probing indicators. A draft policy can be saved from an investigation (monitor mode).
+6. **Protection policies**: create a rate limit, bad-source list, data-loss limit, geographic restriction or signature. *Rules to review* shows AWS WAF or Cloud Armor rules for you to apply.
+   To have Quanta hand a policy to your own automation, add a connection of type *API protection policy endpoint* and choose *Send to my endpoint* (it previews the exact request first).
+   A blocking policy needs a different administrator to approve that version. Quanta never changes your WAF; your automation can report *applied* or *rejected* back and each result raises an alert.
+7. **Metrics** and **CI and rollout**: calls, error rate, latency and trend per endpoint; the CI gate and examples; the onboarding checklist, rollout order and who does what.
+
+See [API_SECURITY.md](API_SECURITY.md) for the full reference and its honest limits.
 
 ## See also
 
