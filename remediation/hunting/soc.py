@@ -128,7 +128,7 @@ def siem_evidence(alert, run, cfg=None):
     host = values["host"]
     if host and tech and SAFE_VALUE.match(str(host)):
         for q in generate.build_queries([tech], [host])[:2]:
-            planned.append({"name": q["name"], "kind": "corroboration", "query": q["query"], "days": 7})
+            planned.append({"name": q["name"], "kind": "corroboration", "query": q["query"], "days": min(7, cap)})
     out = []
     for q in planned[:limit]:
         base = {"name": q["name"], "technique": tech or None, "kind": q["kind"], "query": q["query"], "lookback_days": q["days"], "window": f"{q['days']} days"}

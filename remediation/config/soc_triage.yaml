@@ -68,6 +68,7 @@ extended_lookback_days: 365
 auto_investigate:
   enabled: true
   min_severity: Low
+  max_per_request: 200      # alerts investigated in one ingest call; the rest are investigated when opened
 
 # Hunting: when a threat-intelligence report arrives by API, create the hunt for it right away if its relevance is this priority or higher
 # (high, medium, low; blank to turn off). The hunt is only created; its searches run when a person confirms.

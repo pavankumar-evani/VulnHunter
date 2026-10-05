@@ -4530,7 +4530,8 @@ def api_hunting_accept(body: HuntProposalBody, user: dict = Depends(rbac.require
 
 @app.get("/api/hunting/hunts")
 def api_hunting_list(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
-    return {"hunts": [_hunt_out(h) for h in hunt_store.list_hunts()]}
+    rules = hunt_detection.list_rules()
+    return {"hunts": [_hunt_out(h, rules) for h in hunt_store.list_hunts()]}
 
 
 @app.post("/api/hunting/hunts")
@@ -4565,17 +4566,19 @@ def api_hunting_update(hunt_id: int, body: HuntBody, user: dict = Depends(rbac.r
 def api_ingest_alerts(body: AlertsPushBody, key: dict = Depends(require_api_key("soc:write"))):
     """Alerts from a SIEM, XDR or SOAR: {external_id, title, severity, asset, technique (ATT&CK id), detail, occurred_at}. A repeat is ignored."""
     created, repeats, errors = 0, 0, []
+    auto = _AutoInvestigator()
     for i, a in enumerate(body.alerts[:2000]):
         try:
             row, new = hunt_store.receive_alert(a.model_dump() | {"source": a.source if a.source != "api" else f"apikey:{key['name']}"})
             created += new
             if new:
+                auto.run(row)
                 _soar_auto(row)
             repeats += not new
         except ValueError as exc:
             errors.append({"index": i, "error": str(exc)})
     activity_log.record_activity(f"apikey:{key['name']}", "soc.alerts.push", None, {"created": created, "repeats": repeats, "rejected": len(errors)})
-    return {"created": created, "already_known": repeats, "rejected": len(errors), "errors": errors[:50]}
+    return {"created": created, "already_known": repeats, "rejected": len(errors), "errors": errors[:50], "investigated": auto.done}
 
 
 @app.get("/api/soc/alerts")
@@ -4613,6 +4616,23 @@ class HuntRunBody(BaseModel):
     connection_id: int | None = None
     earliest: str = "-24h"
     confirm: bool = False
+    justification: str | None = None
+
+
+class RunAllBody(BaseModel):
+    connection_id: int | None = None
+    earliest: str = "-24h"
+    confirm: bool = False
+    justification: str | None = None
+    only_unrun: bool = True
+
+
+class FollowUpBody(BaseModel):
+    kind: str
+    value: str
+    siem: bool = False
+    siem_connection_id: int | None = None
+    confirm: bool = False
 
 
 class IntelBody(BaseModel):
@@ -4627,6 +4647,8 @@ class InvestigateBody(BaseModel):
     siem: bool = False
     reputation_connection_id: int | None = None
     siem_connection_id: int | None = None
+    lookback_days: int | None = None
+    justification: str | None = None
 
 
 class RuleBody(BaseModel):
@@ -4644,9 +4666,96 @@ class RuleEnabledBody(BaseModel):
 _EARLIEST = re.compile(r"^-\d{1,4}[mhd]$")
 
 
-def _hunt_out(h):
+def _hunt_out(h, rules=None):
     h = dict(h)
     h["verdict"] = hunt_verdict.hunt_verdict(h)
+    h["summary"] = hunt_verdict.summary(h, hunt_detection.list_rules() if rules is None else rules)
+    return h
+
+
+def _identity_map():
+    """Who holds privileged access, from the access-governance records: {user or account (lower case): {privileged, systems}}; None when nothing is loaded."""
+    rows = iam_store.entitlements()
+    if not rows:
+        return None
+    out = {}
+    for r in rows:
+        if r.get("status") == "disabled":
+            continue
+        for key in {str(r["user"]).lower(), str(r.get("account") or "").lower()} - {""}:
+            e = out.setdefault(key, {"privileged": False, "systems": set()})
+            if r["privileged"]:
+                e["privileged"] = True
+                e["systems"].add(r["system"])
+    return out
+
+
+def _earliest_days(earliest):
+    n, unit = int(earliest[1:-1]), earliest[-1]
+    return max(1, -(-n // 1440) if unit == "m" else -(-n // 24) if unit == "h" else n)
+
+
+def _lookback_cfg(days, justification, actor, subject):
+    """The triage config with the look-back ceiling set for this request. Past max_lookback_days a written justification is required (kept in the activity
+    log) and the ceiling is extended_lookback_days. Raises 400 otherwise."""
+    cfg = dict(hunt_soc.config())
+    base, ext = cfg.get("max_lookback_days", 90), cfg.get("extended_lookback_days", 365)
+    if days is None:
+        return cfg
+    if days < 1:
+        raise HTTPException(status_code=400, detail="The look-back must be at least 1 day")
+    if days > ext:
+        raise HTTPException(status_code=400, detail=f"The look-back cannot exceed {ext} days")
+    if days > base:
+        if len((justification or "").strip()) < 20:
+            raise HTTPException(status_code=400, detail=f"Looking back more than {base} days needs a written justification of at least 20 characters")
+        activity_log.record_activity(actor, "soc.lookback.extended", subject, {"days": days, "justification": justification.strip()[:500]})
+    cfg["max_lookback_days"] = days
+    return cfg
+
+
+class _AutoInvestigator:
+    """Investigates new alerts as they arrive: locally and free (no reputation lookup, no SIEM search), so the report is waiting when an analyst opens the alert.
+    Context is loaded once per request, and at most max_per_request alerts are investigated in one call. Never raises."""
+
+    def __init__(self):
+        self.cfg = hunt_soc.config()
+        self.opts = self.cfg.get("auto_investigate") or {}
+        self.ctx = None
+        self.done = 0
+
+    def run(self, alert):
+        if not self.opts.get("enabled"):
+            return None
+        try:
+            sev = soc_cases.SEVERITIES
+            if alert["severity"] not in sev or sev.index(alert["severity"]) > sev.index(self.opts.get("min_severity", "Low")) or self.done >= self.opts.get("max_per_request", 200):
+                return None
+            if self.ctx is None:
+                self.ctx = {"alerts": hunt_store.list_alerts(), "findings": dashboard_data.load_live_queue(), "owners": _owner_map(), "identity": _identity_map(),
+                            "playbooks": soar_playbooks.list_all()}
+            c = self.ctx
+            inv = hunt_soc.investigate(alert, c["alerts"], c["findings"], c["owners"], cfg=self.cfg, identity=c["identity"], playbooks=c["playbooks"])
+            hunt_service.save_investigation(inv, hunt_soc.render_markdown(alert, inv), "system")
+            case = soc_cases.auto_case(alert, inv)
+            self.done += 1
+            if alert["id"] not in {a["id"] for a in c["alerts"]}:
+                c["alerts"].append(alert)
+            return case
+        except Exception:  # noqa: BLE001 - an automatic investigation must never lose the alert
+            logging.getLogger("quanta.soc").exception("automatic investigation failed")
+            return None
+
+
+def _hunt_from_intel(rec, actor):
+    """Creates the hunt for a stored threat-intelligence report and links it. Raises ValueError when the hunt cannot be created."""
+    ex = rec["extracted"]
+    score, prio, reasons, matches = hunt_intel.relevance(ex, dashboard_data.load_live_queue())
+    proposal = hunt_intel.propose_hunt(ex, (score, prio, reasons, matches), matches["hosts"])
+    proposal["source_ref"] = f"intel-{rec['id']}"
+    h = hunt_store.create_hunt(proposal, actor)
+    hunt_service.link_intel_hunt(rec["id"], h["id"])
+    activity_log.record_activity(actor, "hunt.create", str(h["id"]), {"title": h["title"], "source": "intel"})
     return h
 
 
@@ -4683,7 +4792,15 @@ def api_ingest_threat_intel(body: IntelBody, key: dict = Depends(require_api_key
         raise HTTPException(status_code=413, detail="The report is too large (limit 2 MB)")
     rec, created, _ = _store_intel(body.content, body.title, body.source or f"apikey:{key['name']}", f"apikey:{key['name']}")
     activity_log.record_activity(f"apikey:{key['name']}", "intel.push", str(rec["id"]), {"created": created, "priority": rec["priority"]})
-    return {"id": rec["id"], "created": created, "relevance": rec["relevance"], "priority": rec["priority"]}
+    hunt_id = rec["hunt_id"]
+    floor = ((hunt_soc.config().get("hunting") or {}).get("auto_create_hunt_at_or_above") or "").lower()
+    order = {"low": 0, "medium": 1, "high": 2}
+    if created and not hunt_id and floor in order and order[rec["priority"]] >= order[floor]:
+        try:
+            hunt_id = _hunt_from_intel(rec, f"apikey:{key['name']}")["id"]
+        except ValueError:
+            hunt_id = None  # a hunt for this already exists, or the report gave nothing to hunt; the report is still stored
+    return {"id": rec["id"], "created": created, "relevance": rec["relevance"], "priority": rec["priority"], "hunt_id": hunt_id}
 
 
 @app.get("/api/hunting/intel")
@@ -4698,16 +4815,10 @@ def api_hunting_intel_hunt(report_id: int, user: dict = Depends(rbac.require_adm
         raise HTTPException(status_code=404, detail="No such report")
     if rec["hunt_id"]:
         raise HTTPException(status_code=400, detail="A hunt was already started from this report")
-    ex = rec["extracted"]
-    score, prio, reasons, matches = hunt_intel.relevance(ex, dashboard_data.load_live_queue())
-    proposal = hunt_intel.propose_hunt(ex, (score, prio, reasons, matches), matches["hosts"])
-    proposal["source_ref"] = f"intel-{rec['id']}"
     try:
-        h = hunt_store.create_hunt(proposal, user["email"])
+        h = _hunt_from_intel(rec, user["email"])
     except ValueError as exc:
         raise _hunt_400(exc) from exc
-    hunt_service.link_intel_hunt(report_id, h["id"])
-    activity_log.record_activity(user["email"], "hunt.create", str(h["id"]), {"title": h["title"], "source": "intel"})
     return _hunt_out(h)
 
 
@@ -4731,6 +4842,7 @@ def api_hunting_run_query(hunt_id: int, index: int, body: HuntRunBody, user: dic
     if not body.confirm:
         return {"preview_only": True, "query": q["query"], "connection": public["name"], "earliest": body.earliest,
                 "message": "This read-only search will run in your SIEM. Send confirm: true to run it."}
+    _lookback_cfg(_earliest_days(body.earliest), body.justification, user["email"], f"hunt {hunt_id}")
     try:
         res = hunt_service.run_hunt_query(hunt_id, index, conn, body.earliest)
     except sec_search.SearchRefused as exc:
@@ -4739,6 +4851,73 @@ def api_hunting_run_query(hunt_id: int, index: int, body: HuntRunBody, user: dic
         raise HTTPException(status_code=502, detail=f"The search failed: {str(exc)[:200]}") from exc
     activity_log.record_activity(user["email"], "hunt.query.run", str(hunt_id), {"index": index, "count": res["count"], "connection": public["name"]})
     return {"query": res, "hunt": _hunt_out(hunt_store.get_hunt(hunt_id))}
+
+
+@app.post("/api/hunting/hunts/{hunt_id}/run-all")
+def api_hunting_run_all(hunt_id: int, body: RunAllBody, user: dict = Depends(rbac.require_admin)):
+    """Runs every lead of a hunt in turn, read-only, in the customer's SIEM. At most max_trial_hits_per_run leads per call; a look-back past the ceiling needs a
+    written justification. Previews first; one failing lead is recorded on that lead and the rest still run."""
+    h = hunt_store.get_hunt(hunt_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="No such hunt")
+    if not _EARLIEST.match(body.earliest):
+        raise HTTPException(status_code=400, detail="earliest must look like -24h, -7d or -30m")
+    try:
+        conn, public = hunt_service.connector("splunk-search", body.connection_id)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not conn:
+        raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+    cap = int(((hunt_soc.config().get("hunting") or {}).get("max_trial_hits_per_run")) or 30)
+    todo = [i for i, q in enumerate(h["queries"]) if q.get("query") and not (body.only_unrun and q.get("result") in ("hits", "no-hits"))]
+    chosen, skipped = todo[:cap], max(0, len(todo) - cap)
+    if not body.confirm:
+        return {"preview_only": True, "connection": public["name"], "earliest": body.earliest, "leads": [{"index": i, "name": h["queries"][i]["name"], "technique": h["queries"][i].get("technique")} for i in chosen],
+                "not_run_because_of_the_cap": skipped, "cap": cap,
+                "message": f"{len(chosen)} read-only search(es) will run in your SIEM over {body.earliest}. Send confirm: true to run them."}
+    _lookback_cfg(_earliest_days(body.earliest), body.justification, user["email"], f"hunt {hunt_id}")
+    results = []
+    for i in chosen:
+        try:
+            r = hunt_service.run_hunt_query(hunt_id, i, conn, body.earliest)
+            results.append({"index": i, "name": h["queries"][i]["name"], "count": r["count"], "error": None})
+        except Exception as exc:  # noqa: BLE001 - recorded on the lead by run_hunt_query; the rest still run
+            results.append({"index": i, "name": h["queries"][i]["name"], "count": None, "error": str(exc)[:200]})
+    activity_log.record_activity(user["email"], "hunt.run_all", str(hunt_id), {"leads": len(chosen), "failed": sum(1 for r in results if r["error"]), "connection": public["name"], "earliest": body.earliest})
+    return {"preview_only": False, "ran": len(chosen), "failed": sum(1 for r in results if r["error"]), "not_run_because_of_the_cap": skipped, "results": results, "hunt": _hunt_out(hunt_store.get_hunt(hunt_id))}
+
+
+@app.post("/api/soc/alerts/{alert_id}/follow-up")
+def api_soc_follow_up(alert_id: int, body: FollowUpBody, user: dict = Depends(rbac.require_admin)):
+    """A question asked after the first report (similar alerts, an entity's history, where an indicator was seen), answered from the data Quanta holds and
+    optionally one read-only SIEM search. The answer is merged into the stored investigation and its report."""
+    alert = hunt_store.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="No such alert")
+    stored = hunt_service.latest_investigation(alert_id)
+    if not stored:
+        raise HTTPException(status_code=400, detail="Investigate the alert first; a follow-up adds to its report")
+    siem_run = None
+    if body.siem:
+        try:
+            sconn, spub = hunt_service.connector("splunk-search", body.siem_connection_id)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not sconn:
+            raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+        if not body.confirm:
+            return {"preview_only": True, "siem_connection": spub["name"], "message": "One read-only search will run in your SIEM for this value. Send confirm: true to run it."}
+        siem_run = lambda q, earliest: sconn.search(q, earliest=earliest, max_rows=10)  # noqa: E731
+    try:
+        ans = hunt_soc.follow_up(alert, stored["investigation"], body.kind, body.value, hunt_store.list_alerts(), dashboard_data.load_live_queue(), siem_run=siem_run)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    inv = stored["investigation"]
+    inv["report"]["followups"] = (inv["report"].get("followups") or [])[-19:] + [{"question": ans["question"], "answer": ans["answer"], "asked": ans["asked"]}]
+    md = hunt_soc.render_markdown(alert, inv)
+    iid = hunt_service.save_investigation(inv, md, user["email"])
+    activity_log.record_activity(user["email"], "soc.alert.follow_up", str(alert_id), {"kind": body.kind, "siem": bool(siem_run)})
+    return {"id": iid, **ans, "investigation": inv, "report_md": md}
 
 
 @app.get("/api/hunting/hunts/{hunt_id}/report")
@@ -4761,18 +4940,20 @@ async def api_ingest_alerts_ocsf(request: Request, key: dict = Depends(require_a
     events = data.get("events") if isinstance(data, dict) and "events" in data else data
     events = events if isinstance(events, list) else [events]
     created, repeats, errors = 0, 0, []
+    auto = _AutoInvestigator()
     for i, ev in enumerate(events[:2000]):
         try:
             a = hunt_ocsf.map_detection_finding(ev)
             row, new = hunt_store.receive_alert({**a, "source": f"apikey:{key['name']}"})
             created += new
             if new:
+                auto.run(row)
                 _soar_auto(row)
             repeats += not new
         except ValueError as exc:
             errors.append({"index": i, "error": str(exc)})
     activity_log.record_activity(f"apikey:{key['name']}", "soc.alerts.push", "ocsf", {"created": created, "repeats": repeats, "rejected": len(errors)})
-    return {"created": created, "already_known": repeats, "rejected": len(errors), "errors": errors[:50]}
+    return {"created": created, "already_known": repeats, "rejected": len(errors), "errors": errors[:50], "investigated": auto.done}
 
 
 @app.post("/api/soc/alerts/{alert_id}/investigate")
@@ -4805,7 +4986,9 @@ def api_soc_investigate(alert_id: int, body: InvestigateBody, user: dict = Depen
             sendable = [i["value"] for i in hunt_soc.indicators(alert) if hunt_rep.classify(i["value"])[0]] if body.reputation else []
             return {"preview_only": True, "reputation_connection": rep_name, "indicators_that_would_be_sent": sendable, "siem_connection": siem_name,
                     "message": "Only the public indicators listed are sent to the reputation service; the SIEM searches are read-only. Send confirm: true to run."}
-    inv = hunt_soc.investigate(alert, hunt_store.list_alerts(), dashboard_data.load_live_queue(), _owner_map(), lookup=lookup, siem_run=siem_run)
+    cfg = _lookback_cfg(body.lookback_days, body.justification, user["email"], f"alert {alert_id}")
+    inv = hunt_soc.investigate(alert, hunt_store.list_alerts(), dashboard_data.load_live_queue(), _owner_map(), lookup=lookup, siem_run=siem_run, cfg=cfg,
+                               identity=_identity_map(), playbooks=soar_playbooks.list_all())
     md = hunt_soc.render_markdown(alert, inv)
     iid = hunt_service.save_investigation(inv, md, user["email"])
     auto = soc_cases.auto_case(alert, inv)
