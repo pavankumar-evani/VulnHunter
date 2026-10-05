@@ -9,14 +9,11 @@ see [docs/enterprise-suite/hub.html](enterprise-suite/hub.html).
 ## 1. Clone the repo
 
 ```bash
-git clone <your-Quanta-repository-URL>
-cd <repository-directory>
-git checkout feature/remediation-engine
+git clone https://github.com/pavankumar-evani/VulnHunter.git
+cd VulnHunter
 ```
 
-`feature/remediation-engine` is the branch with the current, actively-developed
-dashboard and remediation engine described in this repo's docs. `main`/`master` may lag
-behind it.
+`master` is the default branch and carries the current dashboard and remediation engine.
 
 ## 2. Install dependencies
 
