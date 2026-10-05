@@ -15,6 +15,7 @@ Quanta administration: the commands you need to install, run and look after a de
     python cli/quanta_admin.py backup --out ./backups
     python cli/quanta_admin.py restore --from ./backups/quanta-backup-....zip --yes
     python cli/quanta_admin.py rotate-keys        # re-encrypt stored credentials under the newest key
+    python cli/quanta_admin.py seed-appsec-demo   # a demo application, SBOM and findings for the Applications pages (--remove undoes it)
 
 Passwords are read from QUANTA_ADMIN_PASSWORD or prompted for; never put one on the command line.
 """
@@ -354,6 +355,21 @@ def cmd_import_coverage(a):
     return 0
 
 
+def cmd_seed_appsec_demo(a):
+    from remediation.appsec import demo
+    if a.remove:
+        print(json.dumps(demo.remove(a.name)))
+        return 0
+    out = demo.seed(a.name, actor="quanta-admin")
+    snippet = out.pop("topology_snippet")
+    print(json.dumps(out))
+    print()
+    print("To make the graph show a path from the internet, add this to remediation/config/network_topology.yaml (replacing `assets: []`):")
+    print()
+    print(snippet)
+    return 0
+
+
 def cmd_worker(_a):
     from remediation.coordination import worker
     worker.main()
@@ -412,6 +428,10 @@ def build_parser():
     icv.add_argument("--format")
     icv.add_argument("--threshold", type=float, default=60.0)
     icv.set_defaults(fn=cmd_import_coverage)
+    sd = sub.add_parser("seed-appsec-demo", help="register a demo application with its SBOM and a few findings (source appsec-demo); --remove undoes it")
+    sd.add_argument("--name", default="orders-service")
+    sd.add_argument("--remove", action="store_true")
+    sd.set_defaults(fn=cmd_seed_appsec_demo)
     s = sub.add_parser("restore")
     s.add_argument("--from", dest="source", required=True)
     s.add_argument("--yes", action="store_true")

@@ -151,6 +151,21 @@
       <h3>A fourth path: findings pushed in, not pulled out</h3>
       <p><code>remediation/connectors/generic_connector.py</code> is a different shape from every connector above — the receiving side of a webhook, for any SIEM/XDR/EDR/SOAR tool that already supports posting a custom outbound webhook. Quanta never calls out; the outside tool calls <code>POST /api/ingest/generic</code> with a JSON body validated against a minimal required shape (<code>title</code>, <code>severity</code>, <code>asset_name</code>, <code>asset_type</code>) and normalized into the same Finding schema every other source uses. One real, generic, testable adapter instead of another bespoke vendor connector nobody has real API access to verify.</p>
       <div class="callout warn"><span class="label">Unauthenticated unless production mode is on</span><p>Unlike every connector above, this route is not gated behind <code>rbac.require_admin</code> or any browser session — a machine-to-machine webhook receiver. With <code>QUANTA_PRODUCTION=true</code> it now requires a Quanta API key with the <code>ingest:write</code> scope (see §08); in a default, non-production run it still accepts anonymous posts, throttled per IP (see §05). Its output file is not capped in total size over time, a disclosed follow-up. New integrations should use the keyed <code>POST /api/ingest/findings</code> endpoint in §08 instead, which updates in place and reports bad records individually.</p></div>
+
+      <h3>Source control and package advisories: GitHub, GitLab and OSV</h3>
+      <p>Three connectors serve the application security workflow rather than the findings queue. They are listed here because they reach outside Quanta, but only one of them ever writes anywhere.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Connector</th><th>Kind</th><th>Auth model</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><strong>GitHub</strong></td><td><span class="chip pull">tool</span></td><td>Access token and repository, stored encrypted as a <code>tool</code> connection named <code>github</code></td><td>Opens a pull request for an approved fix proposal; reads the pull request's state back</td></tr>
+            <tr><td><strong>GitLab</strong></td><td><span class="chip pull">tool</span></td><td>Access token and project, stored encrypted as a <code>tool</code> connection named <code>gitlab</code></td><td>Opens a merge request for an approved fix proposal; reads its state back</td></tr>
+            <tr><td><strong>OSV</strong></td><td><span class="chip pull">pull</span></td><td>None (public API); an admin confirms each check</td><td>Turns an application's SBOM into findings; only package URLs are sent, nothing else about the application</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>remediation/connectors/git_host_connector.py</code> is the only code in Quanta that talks to a Git host. A <em>tool</em> connection is one a feature calls on demand (like the Splunk search and the response endpoint connections), not a source that is synced into the findings queue on a schedule. Writes are never retried automatically, so a failed attempt cannot open a second pull request; the proposal is marked failed with the reason instead. The connector creates a new branch and a pull request and nothing more: it never merges, never writes to the default or a protected branch, and refuses paths on the denied list (see the Remediation Engine document). State comes back when someone presses Sync on the Fix Pull Requests page or when the host's own automation posts to <code>POST /api/inbound/pr-status</code> with a <code>tickets:update</code> key.</p>
+      <div class="callout warn"><span class="label">Built against public documentation, never run against a live host</span><p>The GitHub, GitLab and OSV connectors were built against each service's public API documentation and unit-tested against hand-written fake responses. <strong>None has been exercised against a live GitHub or GitLab account or against the live OSV service</strong>, and each API evolves, so run a dry run and a trial repository first. Quanta ships no vulnerability advisory database: vulnerabilities attached to an SBOM come from your scanner findings or from the OSV check.</p></div>
     </section>
 
     <section id="push">
@@ -300,6 +315,8 @@
         </table>
       </div>
       <p>Only <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> accept a key in place of a browser login, and each checks the key itself. Every other route still requires a signed-in user when <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> is on.</p>
+      <h3>Git host webhook</h3>
+      <p>The one inbound route that takes no API key is <code>POST /api/inbound/git-webhook</code>, which lets GitHub or GitLab report a fix pull request's state as it changes. Set <code>QUANTA_GIT_WEBHOOK_SECRET</code> (or <code>QUANTA_GIT_WEBHOOK_SECRET_FILE</code>) and give the host the same secret. GitHub signs the body (<code>X-Hub-Signature-256</code>, HMAC-SHA256); GitLab sends it as <code>X-Gitlab-Token</code>. With no secret set every delivery is refused (503), a bad signature is 401, and a pull request Quanta did not open is ignored. Only the pull request URL and its open, merged or closed state are used. Built against the hosts' public documentation and tested against hand-signed payloads; no delivery has been received from a live host. See <code>docs/INTEGRATION_API.md</code>.</p>
 
       <h3>Push findings</h3>
       <pre><code>curl -X POST https://quanta.example.com/api/ingest/findings \

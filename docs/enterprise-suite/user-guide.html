@@ -102,7 +102,8 @@
     <a href="#reporting">06 · Reports &amp; alerts</a>
     <a href="#ai">07 · AI, search &amp; analytics</a>
     <a href="#secops">08 · Controls, risk, hunting &amp; AI usage</a>
-    <a href="#help">09 · Getting help</a>
+    <a href="#appsec">09 · Applications, SBOMs &amp; fix PRs</a>
+    <a href="#help">10 · Getting help</a>
   </nav>
 
   <main>
@@ -338,8 +339,72 @@
       </details>
     </section>
 
+    <section id="appsec">
+      <h2><span class="num">09</span>Applications, SBOMs &amp; fix pull requests</h2>
+
+      <details class="howto">
+        <summary>How do I register an application?<span class="route">/applications</span></summary>
+        <div class="body"><p>Admin only. On Applications &amp; SBOM, add an application and fill in what you know: environment, platform, owner and team, business criticality, whether it is internet-facing, and (if you want fix pull requests) its Git provider, repository, default branch and the paths of its dependency files. The criticality and internet-facing flag feed the ranking, so set them honestly; they are your statement, not something Quanta discovers. Anyone signed in can view the list.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I upload or generate an SBOM for an application?<span class="route">/applications</span></summary>
+        <div class="body"><p>Admin only. Open the application's Context &amp; SBOM tab. To upload, choose a CycloneDX or SPDX JSON file; each application keeps one current SBOM. To generate one, give Quanta a requirements.txt, package.json, package-lock.json, pom.xml or go.mod; only a lock file gives transitive dependencies, and Quanta says so when you generate from a manifest alone. It never runs a package manager. Your CI can also upload an SBOM with an API key that has the <code>ingest:write</code> scope (<code>POST /api/ingest/sbom</code>). Quanta ships no advisory database: components show as vulnerable only when a scanner finding names the package or when you run the OSV check, which an admin confirms and which sends package URLs only. Without either, an SBOM shows components, not a clean bill of health.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I read the dependency and exposure graph and the ranked work?<span class="route">/applications</span></summary>
+        <div class="body"><p>The graph shows the application's dependency tree (direct and transitive, with the blast radius of a vulnerable package) and, above it, the lane from the internet through any WAF, load balancer, DMZ and firewall that you recorded in the network topology file. With nothing recorded the lane is absent, not guessed. The ranked work lists every finding with a score breakdown: CVSS, EPSS, KEV, application criticality, package sensitivity, attack surface, position in an attack chain, and a lower multiplier when the network path is denied. Dependency findings are grouped into the one upgrade that closes them. The weights are a disclosed, editable choice, not a standard, so use the order to sequence work, not as a measurement.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I propose and open a fix pull request?<span class="route">/fix-prs</span></summary>
+        <div class="body"><p>Admin only for anything that changes state. First store a GitHub or GitLab connection on Connections (an access token) and set the repository on the application. Then create a proposal from the ranked work: a dependency upgrade, or a code fix for a first-party finding. Review the diff and evidence on Fix Pull Requests and Approve it. Opening is a <strong>dry run</strong> showing the branch, files and description until you tick confirm; a real open creates a new branch and a pull request. Quanta never merges, never writes to the default or a protected branch, and refuses pipeline files, CODEOWNERS, keys and env files. It does not run a package manager or tests, so refresh the lock file and run your tests on the branch; when a lock file exists the pull request opens as a draft. Use Sync to read the state back, and Verify after the next scan. The connectors were built to public documentation and tested against fakes, not run against a live host: try a trial repository first.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I keep pull request status up to date automatically?<span class="route">/fix-prs</span></summary>
+        <div class="body"><p>An hourly scheduler tick follows every open fix pull request and re-checks merged ones against the latest scan. It does nothing when no pull request is open, and it is on by default; set <code>QUANTA_GITOPS_SYNC</code> to <code>false</code>, <code>0</code> or <code>no</code> to turn it off. You can also set up the webhook (next entry) so the Git host tells Quanta as soon as the state changes. The Fix Pull Requests page shows whether the hourly check and the webhook are active. Verification is evidence from the next scan, not proof.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I set up the GitHub or GitLab webhook?<span class="route">/api/inbound/git-webhook</span></summary>
+        <div class="body"><p>Set a shared secret in <code>QUANTA_GIT_WEBHOOK_SECRET</code> (or <code>QUANTA_GIT_WEBHOOK_SECRET_FILE</code> for a mounted secret), then add a webhook in the repository settings that sends pull request events to <code>POST /api/inbound/git-webhook</code> with the same secret. GitHub signs the body (<code>X-Hub-Signature-256</code>, HMAC-SHA256); GitLab sends the secret as <code>X-Gitlab-Token</code>. With no secret set, Quanta refuses every delivery (503); a bad signature gets 401; a pull request Quanta did not open is ignored. Only the pull request URL and its open, merged or closed state are used. No login or API key is involved, because the signature is the check. Tested against hand-signed payloads; no delivery has been received from a live host.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>What do I do after a merge to get verification sooner?<span class="route">/fix-prs</span></summary>
+        <div class="body"><p>On the merged proposal, choose "Queue a rescan on the scanner connections" (admin). It queues a sync on each enabled scanner pull connection, meaning those whose output is findings. If none is configured it tells you to upload the next scan instead. Once that scan lands, Verify reads it and marks the fix verified, still present or awaiting a rescan.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>Why did my dependency pull request open as a draft?<span class="route">/fix-prs</span></summary>
+        <div class="body"><p>The repository has a lock file, and Quanta never runs a package manager, so it cannot refresh it for the new version. The proposal page shows a callout saying so: refresh the lock file on the branch, run your tests, and mark the pull request ready when checks pass.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I load demo data for the application pages?<span class="route">quanta_admin.py</span></summary>
+        <div class="body"><p>Run <code>python cli/quanta_admin.py seed-appsec-demo</code> (optionally <code>--name NAME</code>). It registers a demo application from the sample SBOM plus five findings under the source <code>appsec-demo</code>, and prints the <code>network_topology.yaml</code> entry to add if you want the exposure lane to show. <code>--remove</code> undoes exactly those. It is sample data, not a scan result.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I use the release gate in CI?<span class="route">/pipeline-gates</span></summary>
+        <div class="body"><p>Create an API key with the <code>read:findings</code> scope (Connections, "Send data to Quanta"). On Pipeline Gates, open "Add it to a pipeline", pick GitHub Actions, GitLab CI or shell, and paste the snippet; it calls <code>GET /api/gate/evaluate</code> for your application and fails the job when the result says block. "Try it" runs an evaluation on demand, and the Policy section shows what is set to block, warn or off (edit <code>remediation/config/pipeline_gates.yaml</code>). A finding with an approved exception is not counted. Every evaluation is recorded under History.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I use the secure design assistant?<span class="route">/secure-design</span></summary>
+        <div class="body"><p>Open Secure Design and answer the questionnaire about the feature or system you are planning. You get security requirements with OWASP ASVS references, the pipeline controls to put in place and questions for the threat model. They come from explicit rules (<code>design_rules.yaml</code>), not from a model, so the same answers give the same result. Treat the output as a starting checklist for your design review.</p></div>
+      </details>
+
+      <details class="howto">
+        <summary>How do I add our own DevSecOps control?<span class="route">/devsecops</span></summary>
+        <div class="body"><p>Admin only. On DevSecOps, open the "Our own controls" tab and add a control that is specific to your organisation. It uses the same evidence model as the built-in library, so it appears beside the built-in controls with its own evidence status. You can edit or delete it later.</p></div>
+      </details>
+    </section>
+
     <section id="help">
-      <h2><span class="num">09</span>Getting help</h2>
+      <h2><span class="num">10</span>Getting help</h2>
 
       <details class="howto">
         <summary>How do I get step-by-step instructions to fix a finding?<span class="route">/queue</span></summary>

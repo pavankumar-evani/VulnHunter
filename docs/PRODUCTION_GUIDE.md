@@ -75,6 +75,7 @@ says why.
 | Rotate the encryption key | put the new key first in `QUANTA_ENCRYPTION_KEY` (comma-separated, newest first), run `rotate-keys`, then drop the old one |
 | Liveness / readiness | `/healthz`, `/readyz` (no login; 503 when the database is unreachable) |
 | Metrics | set `QUANTA_METRICS_TOKEN`; scrape `/metrics` with `Authorization: Bearer <token>` |
+| Fix pull request status | an hourly check follows open pull requests (on by default; `QUANTA_GITOPS_SYNC=false` turns it off). For instant updates set `QUANTA_GIT_WEBHOOK_SECRET` (or `QUANTA_GIT_WEBHOOK_SECRET_FILE`) and point a GitHub or GitLab pull request webhook at `POST /api/inbound/git-webhook`; with no secret every delivery is refused (503) |
 | Logs | JSON, one object per line, with an `X-Request-ID` that also appears in the response header |
 
 Back up on a schedule (a nightly cron calling `backup`) and test a restore before you need one.

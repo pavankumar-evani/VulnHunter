@@ -102,6 +102,7 @@
     <a href="#queue">09 · Queue jobs &amp; the worker</a>
     <a href="#pushapi">10 · Push connections &amp; API keys</a>
     <a href="#recipes">11 · Guidance, control tests &amp; hunts</a>
+    <a href="#appsecdev">12 · Git hosts, gitops policy &amp; AppSec config</a>
   </nav>
 
   <main>
@@ -134,6 +135,9 @@
           <tr><td class="mono">remediation/threatmodel/</td><td>Threat models: <code>rules.py</code> (STRIDE rules), <code>engine.py</code> (scoring and joins), <code>store.py</code>, <code>seed.py</code></td></tr>
           <tr><td class="mono">remediation/grc/</td><td>Governance, risk and compliance: <code>catalog.py</code> and <code>builtin.yaml</code>, <code>risks.py</code>, <code>evidence.py</code>, <code>report.py</code>, policies and attestations</td></tr>
           <tr><td class="mono">remediation/hunting/</td><td>Threat hunting and SOC triage: <code>generate.py</code>, <code>library.yaml</code>, <code>translate.py</code>, <code>triage.py</code>, <code>runbooks.yaml</code>, <code>store.py</code></td></tr>
+          <tr><td class="mono">remediation/appsec/</td><td>Application model: <code>store.py</code> (tables <code>applications</code>, <code>app_sboms</code>), <code>sbom_parse.py</code>, <code>manifest_gen.py</code>, <code>graph.py</code>, <code>criticality.py</code>, <code>scoring.py</code>, <code>analysis.py</code>; the router is <code>dashboard/appsec_api.py</code></td></tr>
+          <tr><td class="mono">remediation/gitops/</td><td>Fix pull-request workflow: <code>upgrade.py</code>, <code>diffing.py</code>, <code>policy.py</code>, <code>prbody.py</code>, <code>proposals.py</code> (table <code>fix_proposals</code>), <code>velocity.py</code>, <code>service.py</code>, <code>webhooks.py</code> (signature checks for the Git host webhook); the only Git host client is <code>connectors/git_host_connector.py</code></td></tr>
+          <tr><td class="mono">remediation/devsecops/</td><td>Pipeline control library, plus <code>gates.py</code> (release gate, table <code>gate_runs</code>), <code>design.py</code> with <code>design_rules.yaml</code> (secure design assistant) and organisation-specific controls (table <code>devsecops_custom_controls</code>)</td></tr>
           <tr><td class="mono">tests/</td><td>One <code>unittest</code> file per module/route group — see §5</td></tr>
         </tbody>
       </table></div>
@@ -175,7 +179,8 @@
         <tbody>
           <tr><td class="mono">remediation-fixer-windows/-unix</td><td class="mono">Read, Write</td><td>Drafts a playbook; cannot run one — no Bash, no network, no credentials</td></tr>
           <tr><td class="mono">remediation-fixer-ot</td><td class="mono">Read, Write</td><td>Same restriction, different artifact shape — a compensating-control recommendation, never a patch script (OT devices are rarely safe to patch live)</td></tr>
-          <tr><td class="mono">remediation-fixer-application</td><td class="mono">Read, Write</td><td>Drafts a dependency-upgrade plan; cannot edit a manifest, run a package manager, or open a PR itself</td></tr>
+          <tr><td class="mono">remediation-fixer-application</td><td class="mono">Read, Write</td><td>Drafts a dependency-upgrade plan (<code>remediation/output/upgrade-plans/&lt;id&gt;.json</code>); cannot edit a manifest, run a package manager, or open a PR itself</td></tr>
+          <tr><td class="mono">remediation-fixer-code</td><td class="mono">Read, Write</td><td>Drafts a unified diff for a first-party code finding (<code>remediation/output/code-fixes/&lt;id&gt;.json</code>, with a validation record); Python in <code>remediation/gitops/</code> checks and applies it, and only the finding's own file may change</td></tr>
           <tr><td class="mono">vuln-scanner</td><td class="mono">Read, Grep, Glob, Bash</td><td>No Edit/Write — physically cannot modify what it's scanning</td></tr>
           <tr><td class="mono">vuln-triage-reporter</td><td class="mono">Write</td><td>Produces a report only</td></tr>
           <tr><td class="mono">vuln-fixer</td><td class="mono">Read, Edit, Write, Bash</td><td>New-branch-only git workflow; never commits to <code>main</code></td></tr>
@@ -220,6 +225,10 @@ python cli/quanta.py /remediate --generate --max-budget-usd 5.00</pre></div>
           <tr><td>A new or edited remediation guidance entry</td><td class="mono">remediation/guidance/knowledge.yaml (summary, why, ordered steps, verification, compensating controls, effort, references, match keys); matching and tailoring in engine.py; tests in tests/test_guidance.py</td></tr>
           <tr><td>A new automated control test</td><td class="mono">remediation/grc/evidence.py + remediation/config/grc_tests.yaml (§11); tests in tests/test_grc.py</td></tr>
           <tr><td>A new hunt technique or runbook</td><td class="mono">remediation/hunting/library.yaml and runbooks.yaml (§11); tests in tests/test_hunting.py</td></tr>
+          <tr><td>A new Git host connector (beyond GitHub and GitLab)</td><td class="mono">remediation/connectors/git_host_connector.py + remediation/connections/registry.py (§12)</td></tr>
+          <tr><td>Different branch, approval or denied-path rules for fix pull requests</td><td class="mono">remediation/config/gitops_policy.yaml (§12; no code change needed)</td></tr>
+          <tr><td>A new release-gate check, ranking weight or package-sensitivity rule</td><td class="mono">remediation/config/pipeline_gates.yaml, appsec_scoring.yaml, appsec_criticality.yaml (§12)</td></tr>
+          <tr><td>A new secure-design rule</td><td class="mono">remediation/devsecops/design_rules.yaml (§12)</td></tr>
           <tr><td>A new finding taxonomy</td><td class="mono">remediation/enrichment/ + normalized-finding-schema.md</td></tr>
         </tbody>
       </table></div>
@@ -301,6 +310,41 @@ python cli/quanta_admin.py prepare</pre></div>
 
       <h4>A runbook</h4>
       <p>Add an entry to <code>remediation/hunting/runbooks.yaml</code> with <code>id</code>, <code>title</code>, <code>techniques</code>, <code>keywords</code> and ordered <code>steps</code>. <code>triage.py</code> picks a runbook by the alert's technique first, then by title keywords, and falls back to the generic runbook. Runbooks are shown to responders; execution stays with the customer's own tools. Cover a new entry in <code>tests/test_hunting.py</code>.</p>
+    </section>
+
+    <section id="appsecdev">
+      <h2><span class="num">12</span>Git hosts, the gitops policy and the AppSec config files</h2>
+      <p class="section-intro">The fix pull-request workflow is deliberately split: a model may write a plan or a diff as a file, and plain Python does everything that touches a repository. Keep that split when you extend it.</p>
+
+      <h4>Adding a Git host connector</h4>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><div><h4>Implement the host client</h4><p>In <code>remediation/connectors/git_host_connector.py</code>, add a class beside <code>GitHubConnector</code> and <code>GitLabConnector</code> with the same methods (<code>whoami</code>, <code>test_connection</code>, <code>branch_sha</code>, <code>create_branch</code>, <code>get_file</code>, <code>commit_files</code>, <code>open_change_request</code>, <code>get_change_request</code>) and add it to <code>build()</code>. Take the HTTP session as a constructor argument so tests can inject a fake. Refuse the default branch in the client itself, and do not retry a write (a retried write could open a second pull request).</p></div></div>
+        <div class="step"><div class="n">2</div><div><h4>Register it as a tool connection</h4><p>In <code>remediation/connections/registry.py</code>, add a spec the way <code>_git_spec()</code> does for <code>github</code> and <code>gitlab</code>: kind <code>tool</code> (used on demand, not synced), the token as a secret field, and the base URL listed under <code>safe_targets</code> so it passes <code>url_safety</code> before anything is constructed.</p></div></div>
+        <div class="step"><div class="n">3</div><div><h4>Test against a fake and disclose</h4><p>Unit-test against a hand-written fake session (see <code>tests/test_gitops.py</code>). State in the docstring and the docs that it was built to public documentation and never run against a live host.</p></div></div>
+      </div>
+
+      <h4>The gitops policy</h4>
+      <p><code>remediation/config/gitops_policy.yaml</code> is read by <code>remediation/gitops/policy.py</code> on each use. It holds the branch template and protected-branch patterns, commit style, pull-request labels, reviewers and the provenance text appended to every description, whether a lock file forces a draft, whether approval is required before opening (and whether the approver must differ from the proposer), file limits, the <strong>denied paths</strong> (<code>.github/**</code>, <code>CODEOWNERS</code>, keys, env files and pipeline definitions), and the process steps shown on the page. Per-repository changes go under <code>overrides</code>, matched by a glob on the repository path. Loosening a guard here is an organisational decision; do not add a code path that bypasses <code>policy.py</code>, and keep <code>proposals.open_pr</code> the only function that writes to a repository.</p>
+
+      <h4>Other configuration files</h4>
+      <div class="table-wrap"><table>
+        <thead><tr><th>File</th><th>Controls</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">remediation/config/appsec_scoring.yaml</td><td>The weights and multipliers behind the ranking breakdown (CVSS, EPSS, KEV, application criticality, package sensitivity, attack surface, attack-chain position, denied-path multiplier). A disclosed choice, not a standard.</td></tr>
+          <tr><td class="mono">remediation/config/appsec_criticality.yaml</td><td>Which packages count as security-sensitive (read by <code>criticality.py</code>).</td></tr>
+          <tr><td class="mono">remediation/config/pipeline_gates.yaml</td><td>What the CI release gate blocks, warns on or ignores.</td></tr>
+          <tr><td class="mono">remediation/devsecops/design_rules.yaml</td><td>Secure design assistant: questionnaire to requirements, with ASVS references, library controls and STRIDE prompts.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h4>The Git host webhook, scheduled sync and demo data</h4>
+      <p><code>remediation/gitops/webhooks.py</code> verifies deliveries for <code>POST /api/inbound/git-webhook</code> (in <code>dashboard/appsec_api.py</code>): GitHub's <code>X-Hub-Signature-256</code> HMAC-SHA256 of the body, or GitLab's <code>X-Gitlab-Token</code>, compared in constant time against <code>QUANTA_GIT_WEBHOOK_SECRET</code> (<code>QUANTA_GIT_WEBHOOK_SECRET_FILE</code> for a mounted secret). It is the one inbound route exempt from both the login gate and API keys, so keep it that way only while the signature check stays first: no secret means 503, a bad signature 401, and an unknown pull request is ignored. Test with hand-signed payloads (<code>tests/test_gitops_automation.py</code>). The hourly scheduler tick follows open pull requests and re-checks merged ones, controlled by <code>QUANTA_GITOPS_SYNC</code> (default true; <code>false</code>, <code>0</code> or <code>no</code> disables it) and builds no connector when none is open. <code>python cli/quanta_admin.py seed-appsec-demo [--name NAME] [--remove]</code> registers a demo application from the sample SBOM plus five findings under the source <code>appsec-demo</code> (<code>remediation/appsec/demo.py</code>); <code>--remove</code> undoes exactly those, and it prints the <code>network_topology.yaml</code> entry for the exposure lane.</p>
+
+      <h4>Subagent tool scoping for this area</h4>
+      <p><code>remediation-fixer-application</code> and <code>remediation-fixer-code</code> hold <code>Read, Write</code> only. Do not give either <code>Bash</code> or <code>Edit</code> so that it can "just open the pull request": the checking, applying and host access live in Python (<code>diffing.py</code>, <code>upgrade.py</code>, <code>proposals.py</code>) precisely so they can be tested and so the model cannot reach a repository.</p>
+
+      <h4>Routes and tests</h4>
+      <p>The routes live in <code>dashboard/appsec_api.py</code>, an <code>APIRouter</code> built by <code>build_router()</code> with the app's dependencies (API-key guard, team scoping, upload reader) injected, which keeps it out of <code>app.py</code>. A route that machine callers use must sit under <code>/api/ingest/</code>, <code>/api/inbound/</code> or <code>/api/export/</code> or be one of the existing gate routes, and check its scope with <code>require_api_key</code>. Tests are in <code>tests/test_appsec_analysis.py</code>, <code>test_appsec_api.py</code>, <code>test_appsec_sbom.py</code> and <code>test_gitops.py</code>, with shared fixtures in <code>tests/appsec_fixtures.py</code>.</p>
     </section>
 
     <footer class="docfoot"><div class="legal">&copy; 2026 Quanta. All rights reserved. Confidential &mdash; prepared for evaluation by the intended recipient.</div>Part of the Quanta Enterprise Documentation Suite. See the <a href="https://claude.ai/code/artifact/d7036aa2-c68f-45fd-a6ce-132dad8309f7" target="_blank" rel="noopener" data-suite-link="arch">Architecture &amp; Schema Reference</a> for the full data contract this all builds on.</footer>

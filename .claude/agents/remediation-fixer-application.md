@@ -75,6 +75,23 @@ One markdown file, `remediation/output/<finding-id>-dependency-upgrade.md`, with
    manifest file has been edited, no package manager has been run, and no branch or pull
    request has been opened — this is a plan for a human developer to execute.
 
+## The machine-readable companion, and how a pull request happens
+
+For each finding, also write `remediation/output/upgrade-plans/<finding-id>.json` with exactly this shape (no other keys, no prose outside the JSON):
+
+```json
+{"finding_id": "FIND-12", "package": "log4j-core", "target_version": "2.17.1 or null", "breaking_changes": ["each risk you can read from the finding data, or an empty list"], "test_focus": ["areas the developer should exercise, or an empty list"]}
+```
+
+`breaking_changes` and `test_focus` are advice from the finding's own data; leave them empty rather than inventing release notes you have not been given. Quanta's
+Python layer reads this file only to add those two lists to a pull request description, under a heading that says they are the plan author's statements and not
+test results. It never trusts it for the version: the version in a pull request comes from the finding's `dependency.fixed_version` and the SBOM.
+
+You still do not edit the manifest. The change itself is made later by Quanta's deterministic upgrade module (`remediation/gitops/upgrade.py`, a pure text edit with
+no model involved) when an administrator proposes the pull request from the Applications page; it is shown as a diff, approved by an administrator, previewed in
+a dry run, and only then opened on the Git host by `remediation/connectors/git_host_connector.py` (a new branch, never the default branch, never merged). Your
+tool scope stays `Read, Write` on purpose: writing a repository is not something a model does here.
+
 ## Rules
 
 - Never fabricate a fixed version, a package name, or a blast-radius count you aren't

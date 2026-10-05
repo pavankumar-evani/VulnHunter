@@ -130,6 +130,11 @@ empty state with instructions instead of erroring.
 | `/ai-assist` | Ask Claude to explain/remediate/summarize a finding - dry-run preview by default, explicit confirm to spend real API usage |
 | `/inbox` | Real system-generated notifications (SLA breaches, KEV, expiring exceptions, pending generic-ingested findings) - not person-to-person messaging; also a bell icon + dropdown in the topbar on every page |
 | `/appsec` | Application Vulnerabilities hub - rolls up SAST/DAST/SCA/Secrets/Container/API/Repository-Secret-Scanning counts with links into each pre-filtered view (plus a by-category pie chart) and a date-range filter (real first-seen date) on the SCA/DAST/Secrets findings table. These are sidebar-menu-only reachable through this hub, not separate top-level nav entries |
+| `/applications` | Applications & SBOM - register applications (criticality, internet-facing, owner, Git repository), keep one CycloneDX/SPDX SBOM each (upload, generate from a manifest or lock file, or CI upload), ranked work with a visible score breakdown, an interactive SVG dependency and exposure graph (internet, WAF, load balancer, DMZ, firewall lane from `network_topology.yaml`), components, an admin-confirmed OSV check, and a Pull requests tab. No advisory database ships: vulnerabilities come from scanner findings or the OSV check (`remediation/appsec/`, `dashboard/appsec_api.py`) |
+| `/fix-prs` | Fix Pull Requests - dependency-upgrade and first-party code-fix proposals (draft, approved, pr-opened, in-review, merged/closed, failed, discarded). Admin approves, then opens: a dry run unless confirm is ticked, new branch only, never the default or a protected branch, denied paths refused, never merged; Sync, Verify and Velocity. GitHub/GitLab connectors unit-tested against fakes, not run live (`remediation/gitops/`) |
+| `/pipeline-gates` | Pipeline Gates - the CI release gate: try an evaluation, view the policy (`pipeline_gates.yaml`), copy a GitHub Actions / GitLab CI / shell snippet for `GET /api/gate/evaluate`, and see recorded gate runs |
+| `/secure-design` | Secure Design Assistant - questionnaire to security requirements with OWASP ASVS references, pipeline controls and STRIDE prompts, from explicit rules (`design_rules.yaml`) |
+| `/devsecops` | DevSecOps control library with evidence status, plus an "Our own controls" tab (admin) for organisation-specific controls |
 | `/infrastructure` | Infrastructure Vulnerabilities hub - rolls up OS/Network/Network Security/Cloud/OS Applications/Infrastructure-as-Code/Runtime counts (`remediation/enrichment/infra_classification.py`) with links into each pre-filtered `/queue` view; a severity bar chart and sub-category pie chart (`charts.js`, hand-rolled SVG, no dependency), plus a date-range filter (by real first-seen date, honestly caveated - see the FAQ) on the findings table below. OT-IoT is deliberately excluded here - see `/ot-vulnerabilities` |
 | `/ot-vulnerabilities` | OT Vulnerabilities hub - the one dedicated home for `infra_category="ot"` findings (Operational Technology/IoT devices), same shape as the other Security Domains hubs: total-vulnerabilities KPI, severity/device-type/team/priority/aging charts, top-5 rankings, AI trend analysis, and the full findings table |
 | `/queue?category=infra-vm` / `?category=dast` / `?category=sca` / `?category=cert-mgmt` | The Security Domains menu's deep links into `/queue`, pre-filtered by category |
@@ -251,6 +256,13 @@ docstrings for the full design. Summary:
   real deployment (`python -c "import secrets; print(secrets.token_hex(32))"` generates
   one) - without it, a random secret is generated fresh per process, so every session is
   invalidated on restart and multiple worker processes mint incompatible cookies.
+- **`QUANTA_GIT_WEBHOOK_SECRET`** (or `QUANTA_GIT_WEBHOOK_SECRET_FILE`): the shared secret
+  that verifies GitHub/GitLab pull request webhooks at `POST /api/inbound/git-webhook`
+  (GitHub `X-Hub-Signature-256` HMAC-SHA256, GitLab `X-Gitlab-Token`). That route takes no
+  login or API key, so with no secret set it refuses every delivery (503). Not exercised
+  against a live host.
+- **`QUANTA_GITOPS_SYNC`**: the hourly scheduler follow-up of open fix pull requests and
+  re-check of merged ones. On by default; `false`, `0` or `no` turns it off.
 - **HTTPS**: **on by default**, not opt-in. `python dashboard/app.py` auto-generates a
   self-signed cert into `dashboard/certs/` (gitignored - a private key must never be
   committed) the first time you run it - the same `openssl req -x509 -newkey rsa:2048
