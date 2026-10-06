@@ -22,6 +22,7 @@ const PALETTE = [
 // chart's "Critical" bar/slice always matches every Critical badge elsewhere on the same
 // page. Deliberately not theme-switched (the badges themselves aren't either, today).
 const STATUS_COLORS = { Critical: "#991b1b", High: "#9a3412", Medium: "#92400e", Low: "#1e40af" };
+export const SEVERITY_COLORS = STATUS_COLORS; // the one shared severity palette (ui.js chips reuse it)
 
 function colorFor(label, index) {
   return STATUS_COLORS[label] || PALETTE[index % PALETTE.length];

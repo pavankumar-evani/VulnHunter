@@ -134,11 +134,13 @@ export const NAV = [
     { path: "/notification-settings", label: "Notification Settings", icon: "mail", tip: "Schedule sub-domain/team-wise reports (weekly-yearly) and critical/zero-day/threat-intel email alerts - requires real SMTP configuration to actually send." },
     { path: "/admin/people", label: "Users & Teams", icon: "users", tip: "Admin-only: user accounts and roles, team records and managers, who is on which team, each person's live workload, and the auto-routing rule." },
     { path: "/admin", label: "Admin Settings", icon: "rules", tip: "Admin-only: which real Claude Code model to use, per-user daily token limits (enforced server-side), real usage/cost by user, and read-only system health." },
+    { path: "/design-system", label: "Design system", icon: "dashboard", tip: "The living style guide: every component of the interface with a live example, the keyboard shortcuts and how pages are built." },
   ], connectors: [
   ] },
   { group: "Help", id: "help", items: [
     { path: "/support", label: "Support", icon: "support", tip: "How to get help, report a bug, and where the deeper docs live." },
     { path: "/faq", label: "FAQ", icon: "faq", tip: "Direct answers about what this product does and doesn't do (yet)." },
+    { path: "/design-system", label: "Design system", icon: "dashboard", tip: "The living style guide: every component of the interface with a live example, the keyboard shortcuts and how pages are built." },
   ] },
 ];
 
