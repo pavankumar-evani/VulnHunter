@@ -113,8 +113,9 @@ implementation.
 Every request passes through three middlewares, in order: (1) a static no-cache rule, so
 an edited JS/CSS file is never served stale; (2) secure response headers
 (`X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`,
-`Permissions-Policy` always on; a full `Content-Security-Policy` is opt-in via
-`QUANTA_ENABLE_CSP=true`); (3) an opt-in require-login-for-reads gate, off by default
+`Permissions-Policy`, `Strict-Transport-Security`, `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy` always on; a same-origin-only
+`Content-Security-Policy` is on by default when `QUANTA_PRODUCTION` is set and otherwise opt-in via `QUANTA_ENABLE_CSP=true`; the font is self-hosted so no outside host is
+named; failed sign-ins are throttled per account and per address, and the session cookie is `Secure` over HTTPS); (3) an opt-in require-login-for-reads gate, off by default
 (see "Authentication & RBAC" below). Routes are two kinds: `/api/*` (the JSON API — the
 only thing the frontend calls, and the only thing worth testing from Python) and
 everything else, which all serve the same `dashboard/static/index.html` shell.

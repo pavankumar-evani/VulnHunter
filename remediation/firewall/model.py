@@ -17,7 +17,7 @@ import io
 import ipaddress
 import json
 import re
-import xml.etree.ElementTree as ET
+from remediation.utils import safe_xml
 
 ALIASES = {
     "name": ("name", "rule name", "rule", "policy name", "policy"),
@@ -151,8 +151,10 @@ def from_json(text, device):
 
 def from_panos_xml(text, device):
     try:
-        root = ET.fromstring(text)
-    except ET.ParseError as exc:
+        root = safe_xml.fromstring(text)
+    except safe_xml.UnsafeXml as exc:
+        raise RuleFormatError(str(exc)) from exc
+    except safe_xml.ParseError as exc:
         raise RuleFormatError(f"Not valid XML: {exc}") from exc
     entries = root.findall(".//security/rules/entry") or root.findall(".//rules/entry")
     if not entries:

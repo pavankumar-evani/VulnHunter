@@ -15,10 +15,19 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   search, kind filters, colour and size modes, neighbourhood focus, a table view, and JSON and SVG export. Administrator modules' graphs need an administrator and every graph is licensed with its module.
   An empty module says what to connect and never draws an invented picture; a graph is capped at the 400 best-connected nodes and says so.
 
+### Security
+- **Hardening from a static-analysis and dependency scan** (`bandit`, `pip-audit`; the audit found no vulnerable dependency, transitive ones included): every place Quanta parses
+  XML from outside (firewall rulebases, vendor API responses, manifests, coverage reports) now refuses entity declarations through one guard (`remediation/utils/safe_xml.py`);
+  the SHA-1 de-duplication keys are declared non-security without changing their output (`remediation/utils/digest.py`); failed sign-ins are throttled per account and per
+  address (`QUANTA_LOGIN_FAIL_MAX`, `QUANTA_LOGIN_FAIL_ADDRESS_MAX`, `QUANTA_LOGIN_FAIL_WINDOW_SECONDS`; a successful sign-in never counts); the session cookie is `Secure`
+  over HTTPS (directly or behind a proxy that says so); `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy` are sent; the Content-Security-Policy is on by default in
+  production (`QUANTA_ENABLE_CSP` forces it either way). Chakra Petch is now self-hosted (`dashboard/static/fonts/`, SIL Open Font License included), so the policy names no
+  outside host and the app makes no request to a font service. Checked live: 17 pages with the policy on gave no violation and no console error.
+
 ### Fixed
 - **A lock-stealing race in the file lock** (`remediation/utils/file_lock.py`): a lock older than the waiter's own timeout (5 s) was treated as abandoned and deleted, even when its holder was alive and only slow.
   On Linux that put two writers in one critical section, so creating the schema on a slow runner raised `table alert_state already exists` and the concurrency tests lost records (19 of 20), which showed up as
-  intermittent red CI runs. A lock now records its owner (process id and host) and is reclaimed only when that process is gone; a live holder is never robbed, and a lock with no readable owner keeps the age rule.
+  intermittent red CI runs. A lock now records its owner (process id and host) and a token; it is reclaimed only when that process is gone, a lock held by this process is always live, a live holder is never robbed, release deletes the file only if the token is still its own (and retries on Windows, where a file another thread is reading cannot be deleted), and a lock with no readable owner keeps the age rule.
   Schema creation waits up to 120 s. A lock file that had been committed to the repository is removed and `*.lock` is ignored.
 
 ### Added

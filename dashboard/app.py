@@ -211,7 +211,20 @@ async def _rate_limit_api(request: Request, call_next):
 def _csp_enabled():
     # Same read-fresh-from-env convention as _require_login_for_reads_enabled() below,
     # for the same reason (tests toggle it with patch.dict(os.environ, ...)).
-    return os.environ.get("QUANTA_ENABLE_CSP", "").strip().lower() in ("1", "true", "yes")
+    # Explicit QUANTA_ENABLE_CSP wins either way; with nothing set, production turns it on.
+    raw = os.environ.get("QUANTA_ENABLE_CSP", "").strip().lower()
+    if raw in ("0", "false", "no"):
+        return False
+    if raw in ("1", "true", "yes"):
+        return True
+    return os.environ.get("QUANTA_PRODUCTION", "").strip().lower() in ("1", "true", "yes")
+
+
+def _cookie_secure(request):
+    # Mark the session cookie Secure whenever the browser reached us over HTTPS (directly or via a proxy that says so).
+    # Not forced on plain HTTP, where a Secure cookie would never be sent back and nobody could sign in locally.
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",")[0].strip().lower()
+    return proto == "https"
 
 
 @app.middleware("http")
@@ -243,6 +256,8 @@ async def _security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
     if _csp_enabled():
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
@@ -4225,16 +4240,37 @@ class LoginBody(BaseModel):
     password: str
 
 
+# Failed sign-ins only: a successful sign-in never uses up the quota. One limiter per account-from-an-address (guessing one
+# password list) and one per address (trying many accounts), so neither a single account nor a single source can be ground down.
+_LOGIN_FAIL_PER_ACCOUNT = rate_limit.RateLimiter(
+    max_requests=int(os.environ.get("QUANTA_LOGIN_FAIL_MAX", "8")),
+    window_seconds=int(os.environ.get("QUANTA_LOGIN_FAIL_WINDOW_SECONDS", "600")),
+)
+_LOGIN_FAIL_PER_ADDRESS = rate_limit.RateLimiter(
+    max_requests=int(os.environ.get("QUANTA_LOGIN_FAIL_ADDRESS_MAX", "40")),
+    window_seconds=int(os.environ.get("QUANTA_LOGIN_FAIL_WINDOW_SECONDS", "600")),
+)
+
+
 @app.post("/api/auth/login")
-def api_auth_login(body: LoginBody, response: Response):
+def api_auth_login(body: LoginBody, request: Request, response: Response):
+    ip = _client_ip(request)
+    account_key = f"{ip}|{(body.email or '').strip().lower()}"
+    if _LOGIN_FAIL_PER_ACCOUNT.blocked(account_key) or _LOGIN_FAIL_PER_ADDRESS.blocked(ip):
+        wait = max(_LOGIN_FAIL_PER_ACCOUNT.retry_after_seconds(account_key), _LOGIN_FAIL_PER_ADDRESS.retry_after_seconds(ip), 1)
+        login_audit.record_login_attempt(body.email, success=False)
+        raise HTTPException(status_code=429, detail="Too many failed sign-in attempts. Try again later.", headers={"Retry-After": str(wait)})
     user = auth_users.verify_login(body.email, body.password)
     if not user:
+        _LOGIN_FAIL_PER_ACCOUNT.record(account_key)
+        _LOGIN_FAIL_PER_ADDRESS.record(ip)
         login_audit.record_login_attempt(body.email, success=False)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    _LOGIN_FAIL_PER_ACCOUNT.reset(account_key)
     login_audit.record_login_attempt(body.email, success=True)
     cookie_value = sessions.create_session_cookie(user, rbac.SESSION_SECRET)
     response.set_cookie(
-        rbac.SESSION_COOKIE_NAME, cookie_value, httponly=True, samesite="lax",
+        rbac.SESSION_COOKIE_NAME, cookie_value, httponly=True, samesite="lax", secure=_cookie_secure(request),
         max_age=sessions.DEFAULT_MAX_AGE_SECONDS,
     )
     return {"user": user}
@@ -4299,7 +4335,7 @@ def api_auth_oidc_login():
 
 
 @app.get("/api/auth/oidc/callback")
-def api_auth_oidc_callback(code: str, state: str):
+def api_auth_oidc_callback(code: str, state: str, request: Request):
     if not oidc.is_configured():
         raise HTTPException(status_code=503, detail="OIDC is not configured on this server.")
     verifier = _oidc_pending_logins.pop(state, None)
@@ -4326,7 +4362,7 @@ def api_auth_oidc_callback(code: str, state: str):
     cookie_value = sessions.create_session_cookie(user, rbac.SESSION_SECRET)
     redirect = RedirectResponse("/")
     redirect.set_cookie(
-        rbac.SESSION_COOKIE_NAME, cookie_value, httponly=True, samesite="lax",
+        rbac.SESSION_COOKIE_NAME, cookie_value, httponly=True, samesite="lax", secure=_cookie_secure(request),
         max_age=sessions.DEFAULT_MAX_AGE_SECONDS,
     )
     return redirect
