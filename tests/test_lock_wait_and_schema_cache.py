@@ -47,6 +47,7 @@ class LockWaitTests(unittest.TestCase):
             holder.release()
 
     def test_polling_is_jittered_so_waiters_do_not_retry_in_lockstep(self):
+        import types
         sleeps = []
         holder = FileLock(self.path)
         holder.acquire()
@@ -55,7 +56,10 @@ class LockWaitTests(unittest.TestCase):
         def spy(seconds):
             sleeps.append(seconds)
             real_sleep(min(seconds, 0.005))
-        with mock.patch.object(file_lock.time, "sleep", spy):
+        # Replace the lock module's own `time` with a shim, not time.sleep itself: patching time.sleep would also record every other thread's
+        # sleeps in a long test run and break the range check below.
+        shim = types.SimpleNamespace(sleep=spy, monotonic=time.monotonic, time=time.time)
+        with mock.patch.object(file_lock, "time", shim):
             with self.assertRaises(LockTimeoutError):
                 FileLock(self.path, timeout=0.3).acquire()
         holder.release()
