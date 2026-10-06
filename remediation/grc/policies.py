@@ -42,7 +42,7 @@ def create(title, body, owner, actor, status="draft", review_date=None, engine=N
     return get(pid, engine)
 
 
-def get(policy_id, engine=None, users=None):
+def get(policy_id, engine=None, users=None, today=None):
     engine, t = _engine(engine), db_module.grc_policies
     with engine.connect() as conn:
         r = conn.execute(select(t).where(t.c.id == int(policy_id))).mappings().first()
@@ -52,7 +52,7 @@ def get(policy_id, engine=None, users=None):
             db_module.grc_policy_acks.c.policy_id == int(policy_id), db_module.grc_policy_acks.c.version == r["version"])).mappings().all()]
     out = dict(r)
     out["acknowledged_by"] = sorted(a["user_email"] for a in acks)
-    out["review_overdue"] = bool(out["review_date"] and out["review_date"] < datetime.date.today().isoformat() and out["status"] == "active")
+    out["review_overdue"] = bool(out["review_date"] and out["review_date"] < (today or datetime.date.today().isoformat()) and out["status"] == "active")
     if users is not None:
         emails = {u["email"] for u in users}
         out["ack_pct"] = round(100 * len(emails & set(out["acknowledged_by"])) / len(emails)) if emails else None
