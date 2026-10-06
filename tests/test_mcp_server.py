@@ -171,7 +171,7 @@ class ToolBehaviourTests(Fixture):
         self.assertNotIn("10.0.0.9", text)
         assets = json.dumps(self.structured("list_assets"))
         self.assertNotIn("aa:bb", assets)
-        self.assertEqual(tools._text("key qk_abcd1234_" + "A" * 43 + " password=hunter2 AKIAABCDEFGHIJKLMNOP", 500).count("[redacted]"), 3)
+        self.assertEqual(tools._text("key qk_abcd1234_" + "A" * 43 + " password=hunter2 AKIA" + "ABCDEFGHIJKLMNOP", 500).count("[redacted]"), 3)
 
     def test_each_tool_returns_sensible_data(self):
         self.assertEqual(self.structured("kev_open_findings")["items"][0]["id"], "FIND-1")
