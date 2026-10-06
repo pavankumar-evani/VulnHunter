@@ -10,11 +10,13 @@ path", never a proven exploit path.
 """
 from remediation.enrichment import attack_chains, attack_mapping, network_reachability
 from remediation.firewall import analysis as fw_analysis, store as fw_store
-from remediation.graphs.schema import SEVERITIES, GraphBuilder
+from remediation.graphs.schema import SEVERITIES, GraphBuilder, prov
 
 MODULE = "infra"
 INTERNET = "internet"
 MAX_PIVOT_EDGES = 200
+_TOPOLOGY_PROV = prov(source="network_topology.yaml", source_kind="user", confidence="declared")
+_PIVOT_PROV = prov(source="attack_chains (same hop, entry/pivot to pivot/impact stage)", source_kind="derived", confidence="heuristic")
 NOTE_EMPTY = "No findings, network topology or firewall rules are recorded. Ingest scanner findings (Connections page), fill remediation/config/network_topology.yaml and import firewall rules (Firewall page) to see how the internet reaches your assets."
 NOTE_NO_EXPOSURE = "Showing assets with findings only. Add network_topology.yaml entries or import firewall rules (Firewall page) to add how the internet reaches them."
 _STAGE_RANK = {"entry": 0, "pivot": 1, "impact": 2}
@@ -90,10 +92,10 @@ def build(engine=None, findings=None, **context):
         for h in hops:
             hid = f"hop:{h.get('name')}"
             b.node(hid, h.get("name"), "hop", meta={"hop_type": h.get("hop_type"), "default_action": h.get("default_action")}, href="/infrastructure")
-            b.edge(prev, hid, "reaches" if prev == INTERNET else "routes_to")
+            b.edge(prev, hid, "reaches" if prev == INTERNET else "routes_to", prov=_TOPOLOGY_PROV)
             hop_assets.setdefault(hid, set()).add(name)
             prev = hid
-        b.edge(prev, f"asset:{name}", "routes_to")
+        b.edge(prev, f"asset:{name}", "routes_to", prov=_TOPOLOGY_PROV)
     # hops of topology entries with an exact name but no finding are not drawn: nothing to route to
 
     # firewall lane: internet-facing rules and the risky ports they open
@@ -109,7 +111,7 @@ def build(engine=None, findings=None, **context):
         def rule_node(r, sev, wide):
             rid = f"rule:{r['device']}/{r['rule']}"
             b.node(rid, r["rule"], "rule", sev=sev, meta={"device": r["device"], "wide_open": wide or None}, href="/firewall")
-            b.edge(INTERNET, rid, "reaches")
+            b.edge(INTERNET, rid, "reaches", prov=prov(source=f"firewall rules ({r.get('device')})", confidence="declared"))
             for d in r.get("destinations") or []:
                 if d.lower() in lower:
                     b.edge(rid, f"asset:{lower[d.lower()]}", "routes_to")
@@ -147,7 +149,7 @@ def build(engine=None, findings=None, **context):
                 s, d = staged.get(src, {}), staged.get(dst, {})
                 if ("entry" in s or "pivot" in s) and ("pivot" in d or "impact" in d):
                     tactic = sorted(s.get("pivot") or s.get("entry"))[0]
-                    b.edge(f"asset:{src}", f"asset:{dst}", "pivot", label=tactic)
+                    b.edge(f"asset:{src}", f"asset:{dst}", "pivot", label=tactic, prov=_PIVOT_PROV)
                     pivots += 1
     if not exposed:
         return b.build(note=NOTE_NO_EXPOSURE)

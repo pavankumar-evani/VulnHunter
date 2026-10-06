@@ -1,0 +1,60 @@
+# Named multi-hop questions over the whole-estate graph (remediation/ontology/query.py).
+#
+# Each question is a structured pattern, exactly what POST /api/ontology/query accepts. It is checked against ontology.yaml when loaded: if an edit to the
+# ontology makes a pattern invalid, the question is listed with an error instead of being dropped. Add one by copying an entry; nothing else needs to change.
+#
+# Pattern reading: `start` is the first node; each step follows `relation` (direction out is source to target, in is the reverse) once (`one`), zero or more
+# times (`star`) or one or more times (`plus`, up to max_depth) to a node of class `to.class` satisfying `to.where`. Ops: eq ne lt le gt ge in contains exists.
+# An attribute that is not recorded is unknown and satisfies no condition, so a question about a fact Quanta does not hold is honestly empty, and says why.
+
+questions:
+  - id: internet-facing-kev-no-control
+    title: Internet-facing assets that reach a KEV-listed vulnerability with no verified control
+    question: Which internet-facing assets can reach (themselves, or by up to three hops of movement) an asset that carries a vulnerability on the CISA KEV list and has no verified compensating control recorded?
+    why: Known-exploited vulnerabilities on assets an attacker can reach, with nothing independently confirmed to stand in the way, are the shortest route from the internet to a breach.
+    limits: "internet_facing needs network topology or firewall data; verified_controls counts controls a connector verified (zero means none recorded as verified, not none present); KEV needs the threat-intel enrichment to have run."
+    pattern:
+      start: {class: Asset, where: [{attr: internet_facing, op: eq, value: true}]}
+      steps:
+        - {relation: reaches, repeat: star, max_depth: 3, to: {class: Asset, where: [{attr: verified_controls, op: eq, value: 0}]}}
+        - {relation: affects, direction: in, to: {class: Finding}}
+        - {relation: instance-of, to: {class: Vulnerability, where: [{attr: kev, op: eq, value: true}]}}
+  - id: findings-on-unowned-assets
+    title: Findings on assets with no owner
+    question: Which findings sit on assets that no team or person owns and nobody is assigned to?
+    why: A finding nobody is accountable for is not going to be fixed; this is the list to take to whoever assigns ownership.
+    limits: "Ownership comes from asset ownership records and finding assignments; an asset the remediation graph does not cover is unknown, not unowned."
+    pattern:
+      start: {class: Finding}
+      steps:
+        - {relation: affects, to: {class: Asset, where: [{attr: owned, op: eq, value: false}]}}
+  - id: kev-through-dependency-chain
+    title: Applications that reach a KEV-listed vulnerability through their dependencies
+    question: Which applications depend, directly or through other packages, on a component with a known-exploited vulnerability?
+    why: A vulnerable library several levels down is easy to miss; this follows the dependency chain to it.
+    limits: "Needs SBOMs for the applications and findings that name a package; the package link is a name match and is marked heuristic."
+    pattern:
+      start: {class: Application}
+      steps:
+        - {relation: depends-on, repeat: plus, max_depth: 5, to: {class: Component}}
+        - {relation: exploits, direction: in, to: {class: Vulnerability, where: [{attr: kev, op: eq, value: true}]}}
+  - id: ai-write-tools-from-untrusted-data
+    title: AI tools with write side effects reachable from untrusted data sources
+    question: Which tools that can change something are called by an AI system that also reads data from an untrusted source?
+    why: "This is the shape of a prompt-injection path: untrusted content in, a tool that acts out."
+    limits: "Quanta's AI register does not record a tool's side effects or a data source's trust level yet, so this stays empty until a record carries tool side_effects and data source trust."
+    pattern:
+      start: {class: Tool, where: [{attr: side_effects, op: eq, value: write}]}
+      steps:
+        - {relation: invokes, direction: in, to: {class: AIAsset}}
+        - {relation: reads, to: {class: DataSource, where: [{attr: trust, op: eq, value: untrusted}]}}
+  - id: internet-facing-assets-with-kev
+    title: Internet-facing assets carrying a KEV-listed vulnerability
+    question: Which assets reachable from the internet have a finding for a vulnerability on the CISA KEV list?
+    why: The direct case of the first question, without the movement hops.
+    limits: "internet_facing needs network topology or firewall data; KEV needs the threat-intel enrichment."
+    pattern:
+      start: {class: Asset, where: [{attr: internet_facing, op: eq, value: true}]}
+      steps:
+        - {relation: affects, direction: in, to: {class: Finding}}
+        - {relation: instance-of, to: {class: Vulnerability, where: [{attr: kev, op: eq, value: true}]}}

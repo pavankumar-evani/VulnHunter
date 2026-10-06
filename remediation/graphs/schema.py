@@ -12,7 +12,30 @@ A graph is a plain dict (JSON on the wire):
 Graph theory (components, shortest paths, centrality, single points of failure) is computed in the browser from this shape
 (dashboard/static/js/graphTheory.js), so a builder only has to say what is connected to what, from real stored data, and nothing
 else. A builder never invents a node: with no data it returns an empty graph and a note that says what to connect.
+
+Optional provenance (remediation/ontology/provenance.py reads it): a node or edge may carry `"prov": {"source": str|None, "source_kind": "connector"|"scan"|"user"|"derived"|None,
+"observed_at": str|None, "confidence": "observed"|"declared"|"heuristic"|None}`. The key is present only when a builder passed `prov=` for a fact it can actually
+trace to stored data; a missing key (or a None inside it) means unknown, never a guess.
 """
+PROV_KEYS = ("source", "source_kind", "observed_at", "confidence")
+
+
+def prov(source=None, source_kind=None, observed_at=None, confidence=None):
+    """Build a provenance dict; None when nothing at all is known (so the caller can pass it straight to node/edge)."""
+    p = {"source": source, "source_kind": source_kind, "observed_at": observed_at, "confidence": confidence}
+    return p if any(v is not None for v in p.values()) else None
+
+
+def _merge_prov(cur, new):
+    """Fill the gaps in cur from new; a value already known is kept."""
+    if not new:
+        return cur
+    out = dict(cur or {})
+    for k in PROV_KEYS:
+        if out.get(k) is None and new.get(k) is not None:
+            out[k] = new[k]
+    return out
+
 SEVERITIES = ("critical", "high", "medium", "low", "info")
 DEFAULT_LIMIT = 400
 
@@ -27,22 +50,26 @@ class GraphBuilder:
     def kind(self, key, label):
         self._kinds[key] = {"label": label}
 
-    def node(self, node_id, label, kind, weight=1, sev=None, meta=None, href=None):
+    def node(self, node_id, label, kind, weight=1, sev=None, meta=None, href=None, prov=None):
         """Add a node, or merge into the existing one (weights add up, the worst severity wins, meta is merged)."""
         node_id = str(node_id)
         cur = self._nodes.get(node_id)
         if cur is None:
             self._nodes[node_id] = {"id": node_id, "label": str(label), "kind": kind, "weight": weight,
                                     "sev": sev if sev in SEVERITIES else None, "meta": dict(meta or {}), "href": href}
+            if prov:
+                self._nodes[node_id]["prov"] = dict(prov)
             return node_id
         cur["weight"] += weight
         if sev in SEVERITIES and (cur["sev"] is None or SEVERITIES.index(sev) < SEVERITIES.index(cur["sev"])):
             cur["sev"] = sev
         cur["meta"].update(meta or {})
         cur["href"] = cur["href"] or href
+        if prov:
+            cur["prov"] = _merge_prov(cur.get("prov"), prov)
         return node_id
 
-    def edge(self, source, target, kind, label=None, weight=1):
+    def edge(self, source, target, kind, label=None, weight=1, prov=None):
         """Add an edge between two nodes already added. A repeated edge (same source, target, kind) adds to its weight."""
         source, target = str(source), str(target)
         if source == target:
@@ -51,8 +78,12 @@ class GraphBuilder:
         cur = self._edges.get(key)
         if cur is None:
             self._edges[key] = {"source": source, "target": target, "kind": kind, "label": label, "weight": weight}
+            if prov:
+                self._edges[key]["prov"] = dict(prov)
         else:
             cur["weight"] += weight
+            if prov:
+                cur["prov"] = _merge_prov(cur.get("prov"), prov)
 
     def build(self, note=None, limit=DEFAULT_LIMIT):
         edges = [e for e in self._edges.values() if e["source"] in self._nodes and e["target"] in self._nodes]

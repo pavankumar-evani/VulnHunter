@@ -35,7 +35,7 @@ export function renderGraphView(host, graph, opts = {}) {
   const important = new Set([...A.summary.hubs, ...A.summary.chokepoints].map((x) => x.id));
 
   const pos = forceLayout(graph);
-  const S = { sizeBy: "weight", colorBy: "kind", labels: "auto", hidden: new Set(), selected: null, pathFrom: null, path: null, focus: 0, query: "", spof: false, table: false, view: { x: 0, y: 0, k: 1 }, touched: false };
+  const S = { sizeBy: "weight", colorBy: "kind", labels: "auto", hidden: new Set(), selected: null, pathFrom: null, path: null, focus: 0, query: "", spof: false, table: false, hl: { nodes: new Set(), edges: new Set() }, view: { x: 0, y: 0, k: 1 }, touched: false };
 
   host.innerHTML = `<div class="dg gv">
     <div class="gv-summary" data-gv="summary"></div>
@@ -98,7 +98,7 @@ export function renderGraphView(host, graph, opts = {}) {
   function draw() {
     const vis = visibleSet();
     const hit = (n) => S.query && (n.label.toLowerCase().includes(S.query) || n.id.toLowerCase().includes(S.query));
-    const onPath = new Set(S.path || []);
+    const onPath = new Set([...(S.path || []), ...S.hl.nodes]);
     const pathEdges = new Set();
     if (S.path) for (let i = 0; i + 1 < S.path.length; i++) { pathEdges.add(S.path[i] + "\u0000" + S.path[i + 1]); pathEdges.add(S.path[i + 1] + "\u0000" + S.path[i]); }
     const near = S.selected ? new Set([S.selected, ...(neighbours.get(S.selected) || [])]) : null;
@@ -107,7 +107,7 @@ export function renderGraphView(host, graph, opts = {}) {
       if (!vis.has(e.source) || !vis.has(e.target)) continue;
       const a = pos.get(e.source), b = pos.get(e.target);
       if (!a || !b) continue;
-      const on = pathEdges.has(e.source + "\u0000" + e.target);
+      const on = pathEdges.has(e.source + "\u0000" + e.target) || S.hl.edges.has(e.source + "\u0000" + e.target);
       const dim = near && !(near.has(e.source) && near.has(e.target)) && !on;
       const bridge = A.summary.bridges.some((p) => (p[0] === e.source && p[1] === e.target) || (p[1] === e.source && p[0] === e.target));
       const stroke = on ? "#ffffff" : S.spof && bridge ? "#f06a6a" : "#3a4a78";
@@ -303,5 +303,18 @@ export function renderGraphView(host, graph, opts = {}) {
   if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(onResize); ro.observe(stage); }
 
   drawSummary(); drawKinds(); fitView(); draw(); drawPanel();
-  return { destroy() { ro?.disconnect(); }, select };
+  // Highlight result paths from another source (the ontology question picker): paths = [{ nodes: [id...], edges: [{ source, target }] }] in THIS graph's ids.
+  // Ids this graph does not have are ignored. Returns how many nodes were lit.
+  function setHighlight(paths) {
+    const nodes = new Set(), edges = new Set();
+    for (const p of paths || []) {
+      for (const id of p.nodes || []) if (nodeById.has(id)) nodes.add(id);
+      for (const e of p.edges || []) if (nodeById.has(e.source) && nodeById.has(e.target)) edges.add(e.source + "\u0000" + e.target);
+    }
+    S.hl = { nodes, edges };
+    draw();
+    return nodes.size;
+  }
+
+  return { destroy() { ro?.disconnect(); }, select, setHighlight };
 }

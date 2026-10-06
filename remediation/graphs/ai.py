@@ -17,7 +17,7 @@ import datetime
 from remediation.aisec import store as aisec_store
 from remediation.aiusage import discovery
 from remediation.aiusage import store as usage_store
-from remediation.graphs.schema import SEVERITIES, GraphBuilder
+from remediation.graphs.schema import SEVERITIES, GraphBuilder, prov
 from remediation.utils import db as db_module
 
 MODULE = "ai"
@@ -28,6 +28,14 @@ NOTE_EMPTY = ("No AI systems recorded. Add them on AI Security (or copy in the a
 SYSTEM_KINDS = ("application", "agent", "gateway")
 # register kind -> graph node kind
 OTHER_KINDS = {"model": "model", "mcp-server": "mcp-server", "plugin": "tool", "vector-db": "data-source", "dataset": "data-source"}
+_REGISTER = prov(source="AI security register", source_kind="user", confidence="declared")
+
+
+def _usage(ev):
+    """Provenance of a link seen in a recorded usage event."""
+    return prov(source=ev.get("source"), observed_at=ev.get("ts"), confidence="observed")
+
+
 PAGE = {"system": "/ai-security", "model": "/ai-security", "provider": "/ai-usage", "tool": "/ai-security", "mcp-server": "/ai-security",
         "data-source": "/ai-security", "shadow": "/ai-usage"}
 
@@ -86,11 +94,11 @@ def build(engine=None, findings=None, **context):
 
     done = set()
 
-    def link(src, dst, kind, label):
+    def link(src, dst, kind, label, p=None):
         """One edge per (source, target, kind); the target's weight counts how many systems use it."""
         if (src, dst, kind) not in done:
             done.add((src, dst, kind))
-            g.edge(src, dst, kind, label)
+            g.edge(src, dst, kind, label, prov=p)
             g.node(dst, "", "", weight=1)  # merged into the existing node: weight = number of systems that use it
 
     def used(kind, name):
@@ -111,13 +119,13 @@ def build(engine=None, findings=None, **context):
     for key, (sid, a) in sorted(systems.items()):
         ln = links.get(key, {})
         if a.get("vendor_model"):
-            link(sid, used("model", a["vendor_model"]), "runs", "runs")
+            link(sid, used("model", a["vendor_model"]), "runs", "runs", _REGISTER)
         for name in _names(ln.get("provider") or a.get("provider")):
-            link(sid, provider(name), "hosted_by", "hosted by")
+            link(sid, provider(name), "hosted_by", "hosted by", _REGISTER)
         for kind, field, edge, label in (("tool", "tools", "can_call", "can call"), ("mcp-server", "mcp_servers", "can_call", "can call"),
                                          ("data-source", "data_sources", "reads", "reads")):
             for name in _names(ln.get(field) or a.get(field)):
-                link(sid, used(kind, name), edge, label)
+                link(sid, used(kind, name), edge, label, _REGISTER)
 
     # Recorded usage: the application name ties a system to the model and provider it was actually seen using
     seen = set()
@@ -128,10 +136,10 @@ def build(engine=None, findings=None, **context):
         sid = systems[key][0]
         if ev.get("model") and (sid, "m", _slug(ev["model"])) not in seen:
             seen.add((sid, "m", _slug(ev["model"])))
-            link(sid, used("model", ev["model"]), "runs", "runs")
+            link(sid, used("model", ev["model"]), "runs", "runs", _usage(ev))
         if ev.get("provider") and (sid, "p", _slug(ev["provider"])) not in seen:
             seen.add((sid, "p", _slug(ev["provider"])))
-            link(sid, provider(ev["provider"]), "hosted_by", "hosted by")
+            link(sid, provider(ev["provider"]), "hosted_by", "hosted by", _usage(ev))
 
     # Unreviewed applications found in traffic, joined to a provider already in the graph by name or domain, else to the service itself
     for app in shadows:
