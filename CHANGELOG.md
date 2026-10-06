@@ -7,6 +7,10 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Proactive hunt engine** (`remediation/hunting/engine/`, `docs/HUNT_ENGINE.md`, `GET/POST /api/hunting/suggestions*`, migration 9, tables `hunt_hypotheses` and `hunt_hypothesis_events`,
+  policy `remediation/config/hunt_engine.yaml`): hypothesis-driven suggestions (intel, coverage gaps, baseline/anomaly, exposure, identity, lessons learned, dark web, model-assisted) with the
+  evidence chain, ATT&CK tactics, data readiness ("cannot tell" rather than guessing), SPL/KQL/Sigma leads, a scored priority with its working, a lifecycle through accept (creates the existing hunt),
+  conclude and promote-to-detection, dismissal memory and a learning loop from past outcomes. The Threat Hunting page opens on a "Suggested hunts" tab. Nothing is run automatically.
 - **Read-only MCP endpoint** (`POST /mcp`, `remediation/mcp/`, `dashboard/mcp_api.py`, `remediation/config/mcp_policy.yaml`, `docs/MCP_ENDPOINT.md`): an AI assistant can query findings, assets, KEV items, priorities, attack paths and the posture summary
   in natural language. MCP revision 2025-11-25 over Streamable HTTP, hand-written (no new dependency). Off unless `QUANTA_MCP_ENABLED=true`; only a Quanta API key with the new `mcp:read` scope opens it (never anonymous, never in a URL), each tool also
   needs `read:findings`, a key can be bound to one team (`api_keys.team`, migration 8), every call is rate limited, timed out, size capped and audited (denials too, never result bodies), registering a non-read tool raises, and results carry `_untrusted: true`.
