@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
 import appsec_api  # noqa: E402
+import mcp_api  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
 import reports  # noqa: E402
@@ -2540,6 +2541,7 @@ class ApiKeyBody(BaseModel):
     name: str
     scopes: list[str]
     expires_days: int | None = None
+    team: str | None = None   # optional: binds an `mcp:read` key's results to this team
 
 
 @app.get("/api/api-keys")
@@ -2551,7 +2553,7 @@ def api_list_api_keys(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
 def api_create_api_key(body: ApiKeyBody, user: dict = Depends(rbac.require_admin)):
     """Creates a key. The response contains the full key exactly once; it cannot be shown again."""
     try:
-        record, token = apikey_store.create(body.name, body.scopes, user["email"], body.expires_days)
+        record, token = apikey_store.create(body.name, body.scopes, user["email"], body.expires_days, team=body.team)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"key": token, "record": record, "warning": "Copy this key now. It is not stored and cannot be shown again."}
@@ -6055,6 +6057,11 @@ app.include_router(appsec_api.build_router(require_api_key=require_api_key, scop
                                            read_upload=_read_upload, enrich_in_background=_enrich_in_background,
                                            queue_rescan_job=lambda connection_id, actor: job_queue.enqueue(job_worker.KIND_CONNECTION_SYNC, {"connection_id": connection_id, "actor": actor},
                                                                                                           dedupe_key=f"sync:{connection_id}")))
+app.include_router(mcp_api.build_router(
+    load_findings=lambda: dashboard_data.load_live_queue(), load_assets=lambda: [dict(r) for r in dashboard_data._load_scored_assets()[1]],
+    scope_findings=lambda rows, user: _scope_to_team(_annotate_finding_teams(rows), user), scope_assets=lambda rows, user: _scope_to_team(rows, user),
+    attack_chains=lambda findings: dashboard_data.get_attack_chains(findings),
+    posture=lambda findings: posture_engine.assess(findings=findings, now=datetime.datetime.now(datetime.timezone.utc))))  # read-only MCP endpoint; see dashboard/mcp_api.py
 app.include_router(__import__("simulation_api").build_router())  # demonstration data through the real connector code; see dashboard/simulation_api.py
 
 

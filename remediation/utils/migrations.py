@@ -60,12 +60,19 @@ def _m005_simulation_provenance(engine):
             _add_missing_columns(engine, table)
 
 
+def _m006_api_key_team(engine):
+    from remediation.utils import db
+    if inspect(engine).has_table("api_keys"):
+        _add_missing_columns(engine, db.api_keys)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
     (3, "soc_alert_rule_and_entities", _m003_soc_alert_columns),
     (4, "soc_alert_action_taken", _m004_soc_alert_action),
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
+    (6, "api_key_team_binding", _m006_api_key_team),
 ]
 
 

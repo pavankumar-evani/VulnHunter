@@ -11,6 +11,7 @@ const KEY_SCOPES = [
   ["ai-usage:write", "Report AI usage (gateway, OpenTelemetry)"],
   ["soc:write", "Send SIEM / XDR alerts for triage"],
   ["darkweb:write", "Send dark-web monitoring output"],
+  ["mcp:read", "Let an AI assistant read findings (MCP, read-only; also tick \"Read findings out\")"],
 ];
 
 const SCHEDULES = [[0, "Manual only"], [15, "Every 15 minutes"], [60, "Hourly"], [360, "Every 6 hours"], [1440, "Daily"], [10080, "Weekly"]];
@@ -106,6 +107,7 @@ function openKeyEditor(reload) {
       <fieldset><legend>Access</legend>
         ${KEY_SCOPES.map(([v, l]) => `<label><input type="checkbox" name="scope" value="${v}"${v === "ingest:write" ? " checked" : ""}> ${escapeHtml(l)}</label>`).join("")}
       </fieldset>
+      <label>Limit to one team (optional, narrows what an MCP key can read) <input name="team" maxlength="80" placeholder="Leave empty for the whole estate"></label>
       <label>Expires <select name="expires"><option value="">Never</option><option value="30">In 30 days</option><option value="90">In 90 days</option><option value="365">In a year</option></select></label>
       <div><button type="submit">Create key</button></div>
     </form>`;
@@ -115,7 +117,7 @@ function openKeyEditor(reload) {
     const scopes = [...f.querySelectorAll('[name="scope"]:checked')].map((x) => x.value);
     if (!scopes.length) { flash("Choose at least one kind of access.", "error"); return; }
     try {
-      const r = await api.createApiKey({ name: f.name.value, scopes, expires_days: f.expires.value ? Number(f.expires.value) : null });
+      const r = await api.createApiKey({ name: f.name.value, scopes, expires_days: f.expires.value ? Number(f.expires.value) : null, team: f.team.value.trim() || null });
       body.innerHTML = `<h2>Your new key</h2>
         <p><strong>Copy it now.</strong> Quanta stores only a fingerprint, so it cannot be shown again.</p>
         <p><input id="new-key" readonly value="${escapeHtml(r.key)}" style="width:100%"></p>
@@ -155,11 +157,27 @@ function openImport(reload) {
   });
 }
 
+// Placeholder key only: a real key is shown once, at creation, and never here.
+function mcpPanel(m) {
+  const snippet = JSON.stringify({ mcpServers: { quanta: { type: "http", url: m.endpoint_url, headers: { Authorization: "Bearer qk_YOUR_KEY_HERE" } } } }, null, 2);
+  const c = m.recent_audit_counts || {};
+  const total = (prefix) => Object.entries(c).filter(([k]) => k.startsWith(prefix)).reduce((n, [, v]) => n + v, 0);
+  return `<h2>AI assistant access (MCP)</h2>
+    <p class="muted">A read-only endpoint so an AI assistant can ask Quanta about findings, assets and posture. It cannot change anything or start anything. Results are scanner and user text:
+    the assistant is told to treat them as data. Create a key with <code>mcp:read</code> and <code>read:findings</code> to use it.</p>
+    <p>Status: <span class="badge ${m.enabled ? "" : "badge-outline"}">${m.enabled ? "Enabled" : "Disabled (set QUANTA_MCP_ENABLED=true and restart)"}</span>
+      &nbsp; Endpoint: <code>${escapeHtml(m.endpoint_url)}</code> &nbsp; Protocol ${escapeHtml(m.protocol_version)}</p>
+    <p class="muted">Recent calls: ${total("tool_call:")} answered, ${total("denied:")} refused. Tools: ${m.tools.map((t) => `<code>${escapeHtml(t.name)}</code>${t.enabled ? "" : " (off)"}`).join(", ")}.</p>
+    <pre class="code-block" style="white-space:pre-wrap">${escapeHtml(snippet)}</pre>`;
+}
+
 export async function render(container) {
   let polling = null;
   async function load() {
     const data = await api.connections();
     const keys = await api.apiKeys();
+    let mcp = null; // null when the status route is unavailable
+    try { mcp = await api.mcpStatus(); } catch { mcp = null; }
     let sim = null; // null when simulation is not allowed in this environment (the route answers 403)
     try { sim = await api.simulationStatus(); } catch { sim = null; }
     container.innerHTML = `
@@ -196,11 +214,12 @@ export async function render(container) {
         <tbody>${keys.keys.length ? keys.keys.map((k) => `<tr>
           <td>${escapeHtml(k.name)}${k.revoked_at ? ` <span class="muted">(revoked)</span>` : ""}</td>
           <td><code>qk_${escapeHtml(k.prefix)}...</code></td>
-          <td>${k.scopes.map((s) => escapeHtml(s)).join(", ")}</td>
+          <td>${k.scopes.map((s) => escapeHtml(s)).join(", ")}${k.team ? ` <span class="muted">(team: ${escapeHtml(k.team)})</span>` : ""}</td>
           <td>${escapeHtml(k.last_used_at || "Never")}</td>
           <td>${escapeHtml(k.expires_at || "Never")}</td>
           <td class="nowrap">${k.revoked_at ? "" : `<button type="button" class="link-button danger-link" data-revoke="${k.id}">Revoke</button>`}</td></tr>`).join("")
           : `<tr><td colspan="6" class="empty-state">No API keys yet.</td></tr>`}</tbody></table></div>
+      ${mcp ? mcpPanel(mcp) : ""}
       <h2>Supported sources</h2>
       <ul>${data.catalog.map((c) => `<li><strong>${escapeHtml(c.label)}</strong> (${escapeHtml(c.category)})${c.docs || c.note ? ` - ${escapeHtml([c.docs, c.note].filter(Boolean).join(" "))}` : ""}</li>`).join("")}</ul>
       <p class="muted">OpenVAS/GVM reads the results of a finished task here; launching and tracking a scan stays on its own page under Connectors / Adaptors.</p>`;

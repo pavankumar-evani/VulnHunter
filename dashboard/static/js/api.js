@@ -119,6 +119,7 @@ export const api = {
   simulationRemove: () => request("DELETE", "/api/simulation"),
   apiKeys: () => request("GET", "/api/api-keys"),
   createApiKey: (body) => request("POST", "/api/api-keys", body),
+  mcpStatus: () => request("GET", "/api/mcp/status"),
   revokeApiKey: (id) => request("DELETE", `/api/api-keys/${id}`),
   connectionSchema: () => request("GET", "/api/connections/schema"),
   findingGuidance: (id) => request("GET", `/api/findings/${encodeURIComponent(id)}/guidance`),
