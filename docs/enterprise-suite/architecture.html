@@ -342,7 +342,10 @@ flowchart LR
             <tr><td class="mono">X-Frame-Options</td><td class="mono">DENY</td><td>Yes</td></tr>
             <tr><td class="mono">Referrer-Policy</td><td class="mono">strict-origin-when-cross-origin</td><td>Yes</td></tr>
             <tr><td class="mono">Permissions-Policy</td><td class="mono">geolocation=(), microphone=(), camera=()</td><td>Yes</td></tr>
-            <tr><td class="mono">Content-Security-Policy</td><td class="mono">default-src 'self'; script-src 'self'; ...</td><td>No — <code>QUANTA_ENABLE_CSP=true</code></td></tr>
+            <tr><td class="mono">Strict-Transport-Security</td><td class="mono">max-age=31536000; includeSubDomains</td><td>Yes (honoured by browsers only over HTTPS)</td></tr>
+            <tr><td class="mono">Cross-Origin-Opener-Policy</td><td class="mono">same-origin</td><td>Yes</td></tr>
+            <tr><td class="mono">Cross-Origin-Resource-Policy</td><td class="mono">same-origin</td><td>Yes</td></tr>
+            <tr><td class="mono">Content-Security-Policy</td><td class="mono">default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; ...</td><td>On when <code>QUANTA_PRODUCTION</code> is set; otherwise <code>QUANTA_ENABLE_CSP=true</code>. Same-origin only: the font is self-hosted.</td></tr>
           </tbody>
         </table>
       </div>
