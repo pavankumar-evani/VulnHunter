@@ -172,7 +172,7 @@ these were previously flat JSON files with real, committed seed/example data
 two demo accounts) — `scripts/migrate_json_to_db.py` is the one-time, idempotent
 migration that carries that seed content into the DB; run it once on a fresh checkout
 (see "Running things" above). `remediation/utils/file_lock.py` — a real, dependency-free,
-cross-platform advisory file lock, not a placeholder — still guards every one of these
+cross-platform advisory file lock, not a placeholder (a lock records its owner's process id and host and is taken over only when that process is gone, never merely because the holder is slow) — still guards every one of these
 stores' own read-modify-write cycle (e.g. compute-next-id-then-insert) even though the
 storage backend is now a real database: SQLite's own locking gives atomicity for a
 single statement, but a caller whose critical section spans more than one statement (or
