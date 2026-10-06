@@ -363,6 +363,8 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request("GET", `/api/activity-log${qs ? `?${qs}` : ""}`);
   },
+  integrity: () => request("GET", "/api/integrity"),
+  integrityHeal: (confirm, actions) => request("POST", "/api/integrity/heal", { confirm, actions: actions || null }),
   activityLogInsights: () => request("GET", "/api/activity-log/insights"),
   getAssetPolicy: () => request("GET", "/api/asset-policy"),
   saveAssetPolicy: (rulesText) => request("POST", "/api/asset-policy", { rules_text: rulesText }),

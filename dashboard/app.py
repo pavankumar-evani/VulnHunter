@@ -44,6 +44,7 @@ from auth import users as auth_users  # noqa: E402
 from remediation import graphs as module_graphs  # noqa: E402
 from remediation.posture import engine as posture_engine  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
+from remediation.integrity import heal as integrity_heal, service as integrity_service  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
 import observability  # noqa: E402
@@ -355,6 +356,14 @@ def _run_gitops_sync_if_due():
     return gitops_service.sync_and_verify(dashboard_data.load_live_queue())
 
 
+def _run_integrity_checks_if_due():
+    """Hourly: code baseline, store consistency and host checks. A new or changed set of problems is written once to the activity log and mailed to
+    QUANTA_ALERT_EMAIL when SMTP is configured. Off with QUANTA_INTEGRITY_CHECKS=false. Never repairs anything: repairs are an admin action."""
+    to = [a.strip() for a in os.environ.get("QUANTA_ALERT_EMAIL", "").split(",") if a.strip()]
+    send = (lambda subject, body: email_sender.send_email(to, subject, body)) if to and email_sender.is_configured() else None
+    return integrity_service.run_tick(send=send)
+
+
 async def _notification_scheduler_loop():
     while True:
         await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
@@ -368,6 +377,7 @@ async def _notification_scheduler_loop():
             _run_detection_assessment_if_due()
             _run_darkweb_if_due()
             _run_gitops_sync_if_due()
+            _run_integrity_checks_if_due()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -2475,8 +2485,37 @@ def readyz():
         ok = False
     findings = dashboard_data.REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
     checks["findings_file"] = "ok" if findings.exists() else "missing (no data ingested yet)"
+    last = integrity_service.last_summary()
+    # informational only: integrity warnings never make the instance not-ready (that would restart a pod over a stale lock file)
+    checks["integrity"] = ("not checked yet" if last is None else ("ok" if not last["problems"] else f"{last['status']}: {len(last['problems'])} issue(s) - see /api/integrity"))
     checks["scheduler"] = "ok" if (_scheduler_task is not None and not _scheduler_task.done()) else "not running"
     return JSONResponse({"status": "ready" if ok else "not-ready", "checks": checks}, status_code=200 if ok else 503)
+
+
+class IntegrityHealBody(BaseModel):
+    actions: list[str] | None = None
+    confirm: bool = False
+
+
+@app.get("/api/integrity")
+def api_integrity(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Code baseline (modified/missing/unexpected files vs the build-time manifest; 'no-baseline' when none exists) plus store consistency checks and the
+    safe repairs currently available. Read-only. See docs/INTEGRITY.md."""
+    report = integrity_service.full_report()
+    report["heal_actions"] = {name: {"title": spec["title"], "why": spec["why"]} for name, spec in integrity_heal.ACTIONS.items()}
+    return report
+
+
+@app.post("/api/integrity/heal")
+def api_integrity_heal(body: IntegrityHealBody, user: dict = Depends(rbac.require_admin)):
+    """Safe repairs only (stale locks, findings file from .bak, missing tables, file snapshots). Preview unless confirm=true; each executed action is written to
+    the activity log. Never deletes customer data."""
+    unknown = [a for a in (body.actions or []) if a not in integrity_heal.ACTIONS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown action(s): {', '.join(unknown)}")
+    result = integrity_heal.run(actions=body.actions, confirm=body.confirm, actor=user["email"])
+    integrity_service.full_report()   # refresh the summary /readyz shows
+    return result
 
 
 @app.get("/metrics")

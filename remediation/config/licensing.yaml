@@ -32,6 +32,7 @@ core:
   - /api/simulation
   - /api/api-keys
   - /api/admin
+  - /api/integrity
   - /api/export
   - /api/analytics
   - /api/guidance

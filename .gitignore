@@ -43,3 +43,6 @@ remediation/vulnhunter.db
 
 # advisory lock files written at run time (remediation/utils/file_lock.py)
 *.lock
+
+# integrity baseline written at build time (remediation/integrity/manifest.py)
+remediation/integrity/manifest.json
