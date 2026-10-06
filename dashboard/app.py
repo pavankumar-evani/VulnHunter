@@ -91,6 +91,7 @@ from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as 
 from remediation.hunting import ttp as hunt_ttp  # noqa: E402
 from remediation.connectors import darkweb_connector as dw_connector  # noqa: E402
 from remediation.darkweb import watch as dw_watch  # noqa: E402
+from remediation.asm import findings as asm_findings, parsers as asm_parsers, store as asm_store, summary as asm_summary  # noqa: E402
 from remediation.hunting import usecase_store as hunt_usecase_store, usecases as hunt_usecases  # noqa: E402
 from remediation.soar import ai_draft as soar_ai_draft, recommend as soar_recommend  # noqa: E402
 from remediation.soc import cases as soc_cases, loganalysis as soc_loganalysis, metrics as soc_metrics  # noqa: E402
@@ -386,6 +387,7 @@ async def _notification_scheduler_loop():
             _run_grc_evidence_if_due()
             _run_detection_assessment_if_due()
             _run_darkweb_if_due()
+            _run_asm_stale_if_due()
             _run_cvd_if_due()
             _run_gitops_sync_if_due()
             _run_integrity_checks_if_due()
@@ -6235,6 +6237,136 @@ def api_zero_day_watch(days: int = 30, user: dict = Depends(rbac.require_login))
     return zero_day.watch(catalog, dashboard_data.load_live_queue(), comps, days)
 
 
+# ---------------------------------------------------------------- external attack surface (imported discovery output; Quanta never scans)
+class AsmScopeBody(BaseModel):
+    domains: list[str] = []
+    cidrs: list[str] = []
+
+
+class AsmPublishBody(BaseModel):
+    confirm: bool = False
+
+
+class AsmSettingsBody(BaseModel):
+    expected_cadence_hours: float | None = None
+
+
+def _run_asm_stale_if_due():
+    """Leader tick: if no import arrived within the expected cadence, raises one 'stale attack-surface data' SOC alert per episode. Never raises."""
+    try:
+        alert = asm_store.check_stale()
+        if alert:
+            activity_log.record_activity("system", "asm.stale", "attack-surface", {"alert_id": alert.get("id")})
+    except Exception:  # noqa: BLE001 - a bad check must never stop the tick
+        pass
+
+
+def _asm_state():
+    """The evaluation of the stored surface, judged against the asset inventory the queue and ownership records give."""
+    queue = findings_merge.load()
+    return asm_findings.evaluate(asm_store.all_assets(), asm_findings.known_assets(queue, asm_store.ownership()))
+
+
+def _asm_publish(actor, background):
+    res = _asm_state()
+    items = asm_findings.to_queue_items(res["findings"])
+    findings, errors = api_findings.normalise_batch(items)
+    result = findings_merge.merge(findings, "asm", reconcile=True)
+    activity_log.record_activity(actor, "asm.publish", "asm", {"findings": len(findings), "rejected": len(errors), **result})
+    if result["added"] or result["updated"]:
+        _enrich_in_background(background)
+    return {"published": len(findings), "rejected": len(errors), **result}
+
+
+def _asm_import(tool, data, scope, complete, publish, actor, allow_seeds, background):
+    try:
+        text = data.decode("utf-8", "replace")
+        out = asm_store.import_text(tool, text, scope_label=scope or None, complete=complete, actor=actor, allow_seeds=allow_seeds)
+    except asm_parsers.ParseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(actor, "asm.import", tool, {k: out[k] for k in ("records", "new", "changed", "disappeared", "out_of_scope", "skipped")})
+    if publish and tool != "seeds":
+        out["queue"] = _asm_publish(actor, background)
+    return out
+
+
+@app.post("/api/ingest/asm")
+async def api_ingest_asm(request: Request, background: BackgroundTasks, tool: str, scope: str = "", complete: bool = False, publish: bool = False, key: dict = Depends(require_api_key("asm:write"))):
+    """The raw output of subfinder, dnsx, httpx, naabu or nuclei as the request body (JSON lines or a JSON array). `complete=true` says the file is the whole answer for `scope`
+    (a domain or range), so assets it omits are marked disappeared. The scope itself cannot be changed here."""
+    return _asm_import(tool, await _read_upload(request), scope, complete, publish, f"apikey:{key['name']}", False, background)
+
+
+@app.post("/api/asm/import")
+async def api_asm_import(request: Request, background: BackgroundTasks, tool: str, scope: str = "", complete: bool = False, publish: bool = False, user: dict = Depends(rbac.require_admin)):
+    """The same import from the page. `tool=seeds` takes a CSV of domains and ranges and declares them as your scope."""
+    return _asm_import(tool, await _read_upload(request), scope, complete, publish, user["email"], True, background)
+
+
+@app.get("/api/asm/summary")
+def api_asm_summary(days: int = 7, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return asm_summary.build(queue_findings=findings_merge.load(), days=max(1, min(days, 365)))
+
+
+@app.get("/api/asm/assets")
+def api_asm_assets(kind: str | None = None, status: str | None = None, in_scope: bool | None = None, q: str | None = None, tag: str | None = None, tool: str | None = None,
+                   limit: int = 500, offset: int = 0, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    out = asm_store.list_assets(kind=kind, status=status, in_scope=in_scope, q=q, tag=tag, tool=tool, limit=limit, offset=max(0, offset))
+    out["data_age"] = asm_store.data_age()
+    return out
+
+
+@app.get("/api/asm/changes")
+def api_asm_changes(days: int | None = None, change: str | None = None, limit: int = 500, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"changes": asm_store.list_changes(days=days, change=change, limit=limit), "runs": asm_store.list_runs(limit=20), "data_age": asm_store.data_age()}
+
+
+@app.get("/api/asm/scope")
+def api_asm_scope(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    s = asm_store.get_scope()
+    return {**s, "declared": bool(s["domains"] or s["cidrs"]), "expected_cadence_hours": asm_store.get_cadence_hours(),
+            "note": "Anything outside this scope is recorded and flagged, never silently included, and never raises a finding. With nothing declared, everything is treated as in scope."}
+
+
+@app.put("/api/asm/scope")
+def api_asm_set_scope(body: AsmScopeBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        out = asm_store.set_scope(body.domains, body.cidrs, actor=user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "asm.scope", None, {"domains": len(out["domains"]), "cidrs": len(out["cidrs"]), "rescoped": out["rescoped"]})
+    return out
+
+
+@app.put("/api/asm/settings")
+def api_asm_settings(body: AsmSettingsBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        h = asm_store.set_cadence_hours(body.expected_cadence_hours)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "asm.settings", None, {"expected_cadence_hours": h})
+    return {"expected_cadence_hours": h, "data_age": asm_store.data_age()}
+
+
+@app.get("/api/asm/findings")
+def api_asm_findings(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    res = _asm_state()
+    return {**res, "rules": asm_findings.RULES, "data_age": asm_store.data_age(),
+            "note": "Findings are raised by explicit rules from imported tool output. A rule with no data to judge raises nothing, and the gaps list says what is missing."}
+
+
+@app.post("/api/asm/publish")
+def api_asm_publish(body: AsmPublishBody, background: BackgroundTasks, user: dict = Depends(rbac.require_admin)):
+    """Sends the current attack-surface findings to the main queue (source asm). It is the complete set, so findings the data no longer shows are removed."""
+    if not body.confirm:
+        items = asm_findings.to_queue_items(_asm_state()["findings"])
+        return {"preview_only": True, "findings": len(items), "message": "This replaces the asm findings in the main queue with the current set. Send confirm: true to publish."}
+    return _asm_publish(user["email"], background)
+
+
+@app.get("/api/asm/how-to-feed")
+def api_asm_how_to_feed(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"examples": asm_parsers.EXAMPLES, "post_example": asm_parsers.POST_EXAMPLE, "safety": asm_parsers.SAFETY, "tools": list(asm_parsers.TOOLS)}
 # ---------------------------------------------------------------- Anthropic CVD feed (public coordinated-disclosure payload, a threat-intel source)
 def cvd_connector_factory():
     return cvd_feed_connector.CvdFeedConnector()

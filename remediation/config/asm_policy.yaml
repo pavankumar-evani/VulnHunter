@@ -1,0 +1,125 @@
+# External attack surface policy. Every rule here is an explicit, editable statement; Quanta never scans, it judges what you imported.
+# Read fresh on every use.
+
+# Ports that should rarely be reachable from the internet. category: remote-admin | file-sharing | database | cleartext | management | other
+risky_ports:
+  21:    {name: FTP, severity: Medium, category: cleartext}
+  23:    {name: Telnet, severity: High, category: cleartext}
+  25:    {name: SMTP, severity: Low, category: other}
+  69:    {name: TFTP, severity: Medium, category: cleartext}
+  111:   {name: RPC portmapper, severity: Medium, category: other}
+  135:   {name: MS-RPC, severity: High, category: file-sharing}
+  139:   {name: NetBIOS, severity: High, category: file-sharing}
+  161:   {name: SNMP, severity: Medium, category: management}
+  389:   {name: LDAP, severity: Medium, category: other}
+  445:   {name: SMB, severity: High, category: file-sharing}
+  512:   {name: rexec, severity: High, category: cleartext}
+  513:   {name: rlogin, severity: High, category: cleartext}
+  514:   {name: rsh, severity: High, category: cleartext}
+  873:   {name: rsync, severity: Medium, category: file-sharing}
+  1433:  {name: Microsoft SQL Server, severity: High, category: database}
+  1521:  {name: Oracle database, severity: High, category: database}
+  2049:  {name: NFS, severity: High, category: file-sharing}
+  2375:  {name: Docker API (unencrypted), severity: Critical, category: management}
+  2376:  {name: Docker API, severity: High, category: management}
+  3306:  {name: MySQL, severity: High, category: database}
+  3389:  {name: RDP, severity: High, category: remote-admin}
+  5432:  {name: PostgreSQL, severity: High, category: database}
+  5900:  {name: VNC, severity: High, category: remote-admin}
+  5985:  {name: WinRM (HTTP), severity: High, category: remote-admin}
+  5986:  {name: WinRM (HTTPS), severity: Medium, category: remote-admin}
+  6379:  {name: Redis, severity: High, category: database}
+  6443:  {name: Kubernetes API, severity: High, category: management}
+  9200:  {name: Elasticsearch, severity: High, category: database}
+  10250: {name: Kubelet API, severity: High, category: management}
+  11211: {name: Memcached, severity: High, category: database}
+  27017: {name: MongoDB, severity: High, category: database}
+
+# SSH is judged separately: reachable SSH is common, so it is only noted. A host that also serves a website is a larger target than a bastion.
+ssh:
+  ports: [22]
+  severity_on_web_host: Medium
+  severity_otherwise: Low
+
+# A web page whose title or URL contains one of these words is probably an administration interface. A name match, confirmed by a person.
+management_words:
+  - phpmyadmin
+  - grafana
+  - kibana
+  - jenkins
+  - portainer
+  - webmin
+  - cpanel
+  - sonarqube
+  - argo cd
+  - rabbitmq management
+  - traefik dashboard
+  - admin console
+  - router configuration
+  - vcenter
+  - idrac
+  - globalprotect
+  - fortigate
+  - remote desktop web
+management_severity: Medium
+
+# TLS from httpx output.
+tls:
+  warn_days: 30
+  expired_severity: Medium
+  near_expiry_severity: Low
+  self_signed_severity: Medium
+  mismatch_severity: Medium
+
+# A CNAME to one of these provider domains whose target no longer answers can be claimed by someone else. A NAME MATCH: it says "looks like", never "is vulnerable".
+takeover_providers:
+  - {suffix: s3.amazonaws.com, name: Amazon S3}
+  - {suffix: elasticbeanstalk.com, name: AWS Elastic Beanstalk}
+  - {suffix: github.io, name: GitHub Pages}
+  - {suffix: herokuapp.com, name: Heroku}
+  - {suffix: herokudns.com, name: Heroku}
+  - {suffix: azurewebsites.net, name: Azure App Service}
+  - {suffix: cloudapp.net, name: Azure Cloud Services}
+  - {suffix: cloudapp.azure.com, name: Azure}
+  - {suffix: trafficmanager.net, name: Azure Traffic Manager}
+  - {suffix: blob.core.windows.net, name: Azure Blob Storage}
+  - {suffix: azureedge.net, name: Azure CDN}
+  - {suffix: netlify.app, name: Netlify}
+  - {suffix: surge.sh, name: Surge}
+  - {suffix: bitbucket.io, name: Bitbucket}
+  - {suffix: pantheonsite.io, name: Pantheon}
+  - {suffix: ghost.io, name: Ghost}
+  - {suffix: wpengine.com, name: WP Engine}
+  - {suffix: zendesk.com, name: Zendesk}
+  - {suffix: readme.io, name: Readme}
+  - {suffix: helpscoutdocs.com, name: Help Scout}
+  - {suffix: statuspage.io, name: Statuspage}
+  - {suffix: myshopify.com, name: Shopify}
+  - {suffix: unbouncepages.com, name: Unbounce}
+  - {suffix: tumblr.com, name: Tumblr}
+  - {suffix: fastly.net, name: Fastly}
+takeover_severity_unresolved: High
+takeover_severity_http_error: Medium
+
+# Nuclei results. 'info' results are counted but not raised unless include_info is true.
+nuclei:
+  include_info: false
+
+# Software versions. Judged ONLY where the import carries a version (for example "nginx/1.18.0" or "PHP:7.4.3"); a product with no version is never guessed at.
+# This compares against YOUR minimum, it does not look the version up in a vulnerability database. Add the products you care about.
+technology_minimums:
+  nginx: {minimum: "1.24.0", severity: Low}
+  apache: {minimum: "2.4.58", severity: Low}
+  php: {minimum: "8.1.0", severity: Medium}
+  openssl: {minimum: "3.0.0", severity: Medium}
+  microsoft-iis: {minimum: "10.0", severity: Low}
+  jquery: {minimum: "3.5.0", severity: Low}
+
+# Shadow assets: in scope, seen from outside, and absent from the asset inventory. Skipped (and reported as a gap) when no inventory exists.
+shadow:
+  enabled: true
+  severity_with_exposure: Medium
+  severity_otherwise: Low
+
+# Findings per rule are capped so one noisy import cannot flood the queue.
+max_findings_per_rule: 500

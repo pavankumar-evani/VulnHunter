@@ -185,6 +185,18 @@ classes:
   Port:
     is_a: Thing
     description: A risky network port that a firewall rule opens to the internet.
+  ExternalDomain:
+    is_a: Thing
+    description: A domain or subdomain seen from the outside by imported discovery output.
+  ExternalAddress:
+    is_a: Thing
+    description: An internet address seen from the outside by imported discovery output.
+  ExposedService:
+    is_a: Thing
+    description: A service or web endpoint reachable from the internet according to imported discovery output.
+  DetectedTechnology:
+    is_a: Thing
+    description: A product or framework that discovery output reports on an exposed service (name only, not a version check).
   FixProposal:
     is_a: Thing
     description: A drafted or opened pull request that upgrades a dependency or fixes code.
@@ -275,6 +287,15 @@ relations:
     description: A network hop or firewall rule forwards traffic on to the next hop or to an asset (a special case of reaches).
     signatures: [{domain: NetworkNode, range: NetworkNode}, {domain: NetworkNode, range: Asset}, {domain: FirewallRule, range: Asset}]
     sub_relation_of: reaches
+  exposes:
+    description: An external address or domain exposes a service.
+    signatures: [{domain: ExternalAddress, range: ExposedService}, {domain: ExternalDomain, range: ExposedService}]
+  resolves-to:
+    description: An external domain resolves to an address.
+    signatures: [{domain: ExternalDomain, range: ExternalAddress}]
+  runs-technology:
+    description: An exposed service reports a technology.
+    signatures: [{domain: ExposedService, range: DetectedTechnology}]
   opens:
     description: A firewall rule exposes a risky port.
     signatures: [{domain: FirewallRule, range: Port}]
@@ -369,8 +390,8 @@ mappings:
     nodes: {application: Application, package: Package, proposal: FixProposal}
     edges: {uses: depends-on, depends_on: depends-on, fixes: fixes, for: proposed-for}
   infra:
-    nodes: {internet: Internet, hop: NetworkHop, asset: Asset, rule: FirewallRule, port: Port}
-    edges: {reaches: reaches, routes_to: routes-to, opens: opens, pivot: reaches}
+    nodes: {internet: Internet, hop: NetworkHop, asset: Asset, rule: FirewallRule, port: Port, asm_domain: ExternalDomain, asm_ip: ExternalAddress, asm_service: ExposedService, asm_tech: DetectedTechnology}
+    edges: {reaches: reaches, routes_to: routes-to, opens: opens, pivot: reaches, exposes: exposes, resolves_to: resolves-to, runs: runs-technology}
   ai:
     nodes: {system: AIAsset, shadow: AIAsset, model: Model, provider: Provider, tool: Tool, mcp-server: McpServer, data-source: DataSource}
     edges: {runs: runs, hosted_by: hosted-by, can_call: invokes, reads: reads, talks_to: talks-to}

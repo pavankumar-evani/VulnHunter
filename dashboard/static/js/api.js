@@ -187,6 +187,23 @@ export const api = {
   huntingList: () => request("GET", "/api/hunting/hunts"),
   huntingCreate: (body) => request("POST", "/api/hunting/hunts", body),
   huntingUpdate: (id, body) => request("PUT", `/api/hunting/hunts/${id}`, body),
+  asmImport: async (tool, scope, complete, publish, text) => {
+    const q = new URLSearchParams({ tool, scope: scope || "", complete: complete ? "true" : "false", publish: publish ? "true" : "false" });
+    const res = await fetch(`/api/asm/import?${q}`, { method: "POST", body: text });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+    return data;
+  },
+  asmSummary: (days = 7) => request("GET", `/api/asm/summary?days=${days}`),
+  asmAssets: (params = {}) => request("GET", `/api/asm/assets?${new URLSearchParams(params)}`),
+  asmChanges: (params = {}) => request("GET", `/api/asm/changes?${new URLSearchParams(params)}`),
+  asmScope: () => request("GET", "/api/asm/scope"),
+  asmSetScope: (body) => request("PUT", "/api/asm/scope", body),
+  asmSettings: (body) => request("PUT", "/api/asm/settings", body),
+  asmFindings: () => request("GET", "/api/asm/findings"),
+  asmPublish: (body) => request("POST", "/api/asm/publish", body),
+  asmHowToFeed: () => request("GET", "/api/asm/how-to-feed"),
   darkwebOverview: () => request("GET", "/api/darkweb/overview"),
   darkwebTerms: (body) => request("PUT", "/api/darkweb/watch-terms", body),
   darkwebEnable: (id, body) => request("POST", `/api/darkweb/sources/${id}/enable`, body),
