@@ -77,6 +77,7 @@ const routes = [
   { pattern: /^\/attack-paths\/?$/, load: () => import("./pages/attackPaths.js") },
   { pattern: /^\/dependencies\/?$/, load: () => import("./pages/dependencies.js") },
   { pattern: /^\/graphs\/?$/, load: () => import("./pages/graphs.js") },
+  { pattern: /^\/posture\/?$/, load: () => import("./pages/posture.js") },
   { pattern: /^\/applications\/?$/, load: () => import("./pages/applications.js") },
   { pattern: /^\/fix-prs\/?$/, load: () => import("./pages/fixPrs.js") },
   { pattern: /^\/pipeline-gates\/?$/, load: () => import("./pages/pipelineGates.js") },

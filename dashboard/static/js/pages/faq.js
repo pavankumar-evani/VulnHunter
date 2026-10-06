@@ -519,6 +519,21 @@ const FAQS = [
     "prints the ordered steps (helm rollback, and a database restore only for a release that " +
     "dropped something: schema changes are expand-only). The workflows and Helm overlays are " +
     "checked statically; they have not been run against a live cluster."],
+  ["What is the Security Posture Review and how do I read it?",
+    "Open Security Posture Review in the Risk, Governance & Compliance module (administrators). " +
+    "It assesses what Quanta has recorded, and this deployment's own settings, against ten " +
+    "frameworks: zero trust, secure by design, threat modelling, defence in depth, architecture, " +
+    "the secure development lifecycle, the AI development lifecycle, software supply chain, AI " +
+    "supply chain and open-source dependencies, 183 checks in all. Each check is a pass, partial, " +
+    "gap, or not observable, and opens to show the recorded facts it looked at, what to do, and " +
+    "the exact setting to change (an environment variable, a config file key, a Helm value or a " +
+    "page). A score appears only when enough could be observed; what Quanta cannot see (build " +
+    "provenance, backups, model evaluation, endpoint protection state) is listed as not " +
+    "observable, never counted as a pass, so an empty estate does not look good. The overview " +
+    "ranks the biggest gaps first. The scores and stages are Quanta's own summary (none of the " +
+    "standards publishes a number) and the thresholds are in " +
+    "remediation/config/posture_policy.yaml. It reads and advises only: it changes nothing and is " +
+    "not an audit or certification."],
   ["How do I propose and open a fix pull request?",
     "Admin only. Store a GitHub or GitLab connection, set the repository on the application, " +
     "create a proposal from the ranked work, review it on Fix Pull Requests and approve it. " +

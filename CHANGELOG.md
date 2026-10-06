@@ -25,6 +25,10 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   a simulated record never overwrites a live one, removal deletes only simulated records, and simulation is refused in prod unless `QUANTA_ALLOW_SIMULATION=true`. Found on the way: merge crashed on a finding with no id (Prisma, XSIAM) and the Prisma connector
   passed epoch-millisecond timestamps through as dates.
 - **A reviewer guide** (`docs/REVIEWER_GUIDE.md`) for people and AI models assessing the repository: where things are, which command proves which claim, and what has not been verified.
+- **Security Posture Review** (`remediation/posture/`, `GET /api/posture`, page `/posture`, administrator only, `docs/POSTURE.md`): the recorded estate and this deployment assessed against ten frameworks (zero trust, secure by design,
+  threat modelling, defence in depth, architecture, SDLC, AI lifecycle, software supply chain, AI supply chain, open-source dependencies), 183 checks. Every check is pass, partial, gap or not observable; what Quanta cannot see is listed
+  and never scored, so an empty estate does not look good; a score needs 30% of the check weight to be observable. Each check shows the facts it read, what to do and the exact setting that closes the gap, and the overview ranks the gaps by
+  weight x what remains. Seventeen checks read this deployment's own settings (no secret value ever appears). Thresholds in `remediation/config/posture_policy.yaml`. An overall score, radar and per-framework tabs on the page.
 
 ### Added
 - **Relationship graphs for every module** (`remediation/graphs/`, `GET /api/graphs/<module>`, page `/graphs?module=<id>`, the first entry of each module's menu): one interactive plain-SVG component
