@@ -66,6 +66,13 @@ def _m006_cvd_advisories(engine):
     db.cvd_advisories.create(engine, checkfirst=True)
 
 
+def _m007_hunt_hypotheses(engine):
+    """New tables only (expand-only): the hunt engine's hypotheses and their event history. Safe if ensure_schema already created them."""
+    from remediation.utils import db
+    db.hunt_hypotheses.create(engine, checkfirst=True)
+    db.hunt_hypothesis_events.create(engine, checkfirst=True)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
@@ -73,6 +80,7 @@ MIGRATIONS = [
     (4, "soc_alert_action_taken", _m004_soc_alert_action),
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
     (6, "cvd_advisories_table", _m006_cvd_advisories),
+    (7, "hunt_hypotheses_tables", _m007_hunt_hypotheses),
 ]
 
 

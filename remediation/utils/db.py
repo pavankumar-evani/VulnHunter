@@ -617,6 +617,39 @@ hunts = Table(
     UniqueConstraint("source", "source_ref", name="uq_hunts_source_ref"),
 )
 
+hunt_hypotheses = Table(
+    "hunt_hypotheses", metadata,
+    Column("id", String, primary_key=True),  # stable hash of generator + subject, so a refresh dedupes
+    Column("generator", String, nullable=False),
+    Column("hunt_type", String, nullable=False),  # hypothesis-driven | baseline-anomaly | intel-driven | model-assisted
+    Column("pattern_key", String, nullable=False, index=True),  # outcome statistics are kept per pattern
+    Column("title", String, nullable=False),
+    Column("status", String, nullable=False),  # suggested | accepted | running | evidence-recorded | concluded | promoted | dismissed
+    Column("outcome", String, nullable=True),  # true-positive | benign | inconclusive-needs-data
+    Column("outcome_notes", Text, nullable=True),
+    Column("dismissal_reason", String, nullable=True),
+    Column("score", Float, nullable=False, default=0),
+    Column("current", Integer, nullable=False, default=1),  # 0 once a refresh no longer produces it (kept for history)
+    Column("hunt_id", Integer, nullable=True),
+    Column("promoted_key", String, nullable=True),
+    Column("evidence_refs_json", Text, nullable=False),
+    Column("data_json", Text, nullable=False),
+    Column("decided_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+hunt_hypothesis_events = Table(
+    "hunt_hypothesis_events", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("hypothesis_id", String, nullable=False, index=True),  # "_engine" for refresh runs
+    Column("kind", String, nullable=False),
+    Column("actor", String, nullable=True),
+    Column("body", Text, nullable=True),
+    Column("data_json", Text, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
 soc_alerts = Table(
     "soc_alerts", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -1277,7 +1310,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
+            hunts, hunt_hypotheses, hunt_hypothesis_events, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
             applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log,
         ])
