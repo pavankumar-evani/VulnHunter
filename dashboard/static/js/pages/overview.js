@@ -10,6 +10,7 @@ import {
   remediationTriggeredDisclaimerHtml,
 } from "../domainSummary.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
+import { mountInsights } from "../insightsCards.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 import { icon } from "../icons.js";
 
@@ -770,7 +771,8 @@ export async function render(container) {
   // is fully replaced every 20s by the auto-refresh below, which would otherwise wipe an
   // in-progress prompt preview or a just-received (real API cost!) AI response the
   // moment it arrived. Being position:fixed, it doesn't occupy row space either way.
-  container.innerHTML = `<div id="overview-body"></div>${aiTrendAnalysisFabHtml("overview")}`;
+  container.innerHTML = `<div id="home-insights"></div><div id="overview-body"></div>${aiTrendAnalysisFabHtml("overview")}`;
+  mountInsights(container.querySelector("#home-insights"));
   const bodyEl = container.querySelector("#overview-body");
   wireAiTrendAnalysis(container, "overview", "landscape-wide", buildOverviewAiStats,
     "the whole landscape (Infrastructure + AppSec + AI/ML + Certificate)");

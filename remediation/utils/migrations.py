@@ -73,6 +73,13 @@ def _m007_ai_asset_agent_fields(engine):
         store.backfill_new_fields(engine)
 
 
+def _m008_insights_tables(engine):
+    """New tables only (expand-only): insights and insight_baselines. Safe if ensure_schema already created them."""
+    from remediation.utils import db
+    db.insights.create(engine, checkfirst=True)
+    db.insight_baselines.create(engine, checkfirst=True)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
@@ -81,6 +88,7 @@ MIGRATIONS = [
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
     (6, "cvd_advisories_table", _m006_cvd_advisories),
     (7, "ai_asset_agent_mcp_lifecycle_fields", _m007_ai_asset_agent_fields),
+    (8, "insights_tables", _m008_insights_tables),
 ]
 
 

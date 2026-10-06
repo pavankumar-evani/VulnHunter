@@ -68,6 +68,7 @@ from remediation.aisec import rules as aisec_rules, rules_mcp as aisec_rules_mcp
 from remediation.apisec import cicd as api_cicd, classify as api_classify, config as api_config, generate as api_generate, identity as api_identity, logs as api_logs  # noqa: E402
 from remediation.apisec import metrics as api_metrics, openapi as api_openapi, policies as api_policies, rollout as api_rollout, rules as api_rules, store as api_store, waf as api_waf  # noqa: E402
 from remediation import capabilities as capabilities_mod  # noqa: E402
+from remediation.insights import ask as insights_ask, service as insights_service  # noqa: E402
 from remediation.decisions import calibration as decision_calibration, registry as decision_registry, schema as decision_schema, service as decision_service  # noqa: E402
 from remediation.licensing import license as licensing  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
@@ -367,6 +368,17 @@ def _run_integrity_checks_if_due():
     return integrity_service.run_tick(send=send)
 
 
+def _insights_inputs():
+    """The unscoped scored queue (each finding annotated with its team) and the asset inventory: insights are computed once for everyone and
+    filtered per person when read (admin-only ones hidden, team-limited ones shown only to that team)."""
+    return _annotate_finding_teams(dashboard_data.load_live_queue()), [dict(a) for a in dashboard_data._load_scored_assets()[1]]
+
+
+def _run_insights_if_due():
+    """Hourly on the leader tick: runs the deterministic insight detectors. Off with QUANTA_INSIGHTS=false. Never raises, never calls a model."""
+    return insights_service.run_tick(lambda: _insights_inputs()[0], lambda: _insights_inputs()[1])
+
+
 async def _notification_scheduler_loop():
     while True:
         await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
@@ -382,6 +394,7 @@ async def _notification_scheduler_loop():
             _run_cvd_if_due()
             _run_gitops_sync_if_due()
             _run_integrity_checks_if_due()
+            _run_insights_if_due()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -4901,6 +4914,121 @@ def api_decisions_policy(user: dict = Depends(rbac.require_login)):  # noqa: ARG
 @app.get("/api/decisions/calibration")
 def api_decisions_calibration(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
     return decision_calibration.report()
+
+
+# ---------------------------------------------------------------- insights and structured ask (docs/INSIGHTS.md)
+class InsightStateBody(BaseModel):
+    reason: str | None = None
+    days: int | None = None
+
+
+class InsightSettingsBody(BaseModel):
+    settings: dict
+
+
+@app.get("/api/insights")
+def api_insights(role: str | None = None, limit: int = 10, include_closed: bool = False, user: dict = Depends(rbac.require_login)):
+    if not insights_service.enabled():
+        return {"enabled": False, "insights": [], "last_refresh": None}
+    items = insights_service.list_insights(user, role=role, limit=max(1, min(limit, 50)), include_closed=include_closed)
+    return {"enabled": True, "role": role if role in ("admin", "analyst", "appsec", "exec") else insights_service.default_role(user),
+            "insights": items, "last_refresh": insights_service.last_refresh()}
+
+
+@app.post("/api/insights/refresh")
+def api_insights_refresh(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    if not insights_service.enabled():
+        raise HTTPException(status_code=409, detail="Insights are switched off (QUANTA_INSIGHTS=false).")
+    findings, assets = _insights_inputs()
+    return insights_service.refresh(findings=findings, assets=assets)
+
+
+@app.get("/api/insights/settings")
+def api_insights_settings(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return insights_service.settings_view()
+
+
+@app.put("/api/insights/settings")
+def api_insights_settings_put(body: InsightSettingsBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        insights_service.update_config(body.settings)
+    except insights_service.SettingsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "insights.settings", None, {"keys": sorted(body.settings)})
+    return insights_service.settings_view()
+
+
+@app.get("/api/insights/{insight_id}")
+def api_insight_get(insight_id: str, role: str | None = None, user: dict = Depends(rbac.require_login)):
+    ins = insights_service.get_insight(insight_id, user, role=role)
+    if ins is None:
+        raise HTTPException(status_code=404, detail="Insight not found")
+    return ins
+
+
+def _insight_state(insight_id, state, body, user):
+    try:
+        ins = insights_service.set_state(insight_id, state, user, reason=body.reason, snooze_days=body.days)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Insight not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], f"insights.{state}", insight_id, {"detector": ins["detector"]})
+    return ins
+
+
+@app.post("/api/insights/{insight_id}/snooze")
+def api_insight_snooze(insight_id: str, body: InsightStateBody, user: dict = Depends(rbac.require_login)):
+    return _insight_state(insight_id, "snoozed", body, user)
+
+
+@app.post("/api/insights/{insight_id}/dismiss")
+def api_insight_dismiss(insight_id: str, body: InsightStateBody, user: dict = Depends(rbac.require_login)):
+    return _insight_state(insight_id, "dismissed", body, user)
+
+
+@app.post("/api/insights/{insight_id}/acted")
+def api_insight_acted(insight_id: str, body: InsightStateBody, user: dict = Depends(rbac.require_login)):
+    return _insight_state(insight_id, "acted", body, user)
+
+
+class AskStructuredBody(BaseModel):
+    query: str
+
+
+@app.post("/api/ask/structured")
+def api_ask_structured(body: AskStructuredBody, user: dict = Depends(rbac.require_login)):
+    """Deterministic grammar over the existing read data, run with the asker's own permissions (team-scoped findings; cases and hunts admin only).
+    Returns the exact structured query it ran, or suggestions when the sentence fits no shape. No model is called."""
+    is_admin = user.get("role") == "admin"
+
+    def findings():
+        return _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+
+    def assets():
+        return _scope_to_team([dict(a) for a in dashboard_data._load_scored_assets()[1]], user)
+
+    def sbom():
+        out = []
+        for name in appsec_store.sbom_summaries():
+            g = (appsec_store.get_sbom(name) or {}).get("graph") or {}
+            comps = g.get("components") or []
+            comps = comps.values() if isinstance(comps, dict) else comps
+            out.extend({"application": name, "name": c.get("name"), "version": c.get("version")} for c in comps)
+        return out
+
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    ctx = insights_ask.Context(
+        user=user, findings=findings, assets=assets, today=today,
+        cases=(lambda: soc_cases.list_cases(open_only=False)) if is_admin else None,
+        hunts=hunt_store.list_hunts if is_admin else None,
+        sbom_components=sbom,
+        insights=lambda n: insights_service.list_insights(user, limit=n),
+        activity=lambda since: sum(1 for e in activity_log.list_activity(limit=2000) if str(e.get("timestamp", ""))[:10] >= since))
+    out = insights_ask.ask(body.query, ctx)
+    if out.get("forbidden"):
+        raise HTTPException(status_code=403, detail=out["forbidden"])
+    return out
 
 
 # ---------------------------------------------------------------- SOC agents: hunt execution, threat intel, investigation, detection engineering
