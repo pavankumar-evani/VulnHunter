@@ -6,6 +6,12 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Added
+- **Read-only MCP endpoint** (`POST /mcp`, `remediation/mcp/`, `dashboard/mcp_api.py`, `remediation/config/mcp_policy.yaml`, `docs/MCP_ENDPOINT.md`): an AI assistant can query findings, assets, KEV items, priorities, attack paths and the posture summary
+  in natural language. MCP revision 2025-11-25 over Streamable HTTP, hand-written (no new dependency). Off unless `QUANTA_MCP_ENABLED=true`; only a Quanta API key with the new `mcp:read` scope opens it (never anonymous, never in a URL), each tool also
+  needs `read:findings`, a key can be bound to one team (`api_keys.team`, migration 6), every call is rate limited, timed out, size capped and audited (denials too, never result bodies), registering a non-read tool raises, and results carry `_untrusted: true`.
+  `GET /api/mcp/status` (admin) and a panel on the Connections page show the state and a copy-paste client config with a placeholder key.
+
 ### Documentation
 - **README rewritten around the eight modules**: an About section, a pick-your-path table, a real screenshot of every module page on fictional demo data (51 images in `docs/images/modules/`), a flowchart per module, and a researched comparison with commercial and open-source tools that says where Quanta stops.
 ### Changed
