@@ -18,6 +18,7 @@ core:
   - /api/status
   - /api/license
   - /api/features
+  - /api/decisions
   - /api/capabilities
   - /api/overview
   - /api/queue

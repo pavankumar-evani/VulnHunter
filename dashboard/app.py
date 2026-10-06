@@ -67,6 +67,7 @@ from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa
 from remediation.apisec import cicd as api_cicd, classify as api_classify, config as api_config, generate as api_generate, identity as api_identity, logs as api_logs  # noqa: E402
 from remediation.apisec import metrics as api_metrics, openapi as api_openapi, policies as api_policies, rollout as api_rollout, rules as api_rules, store as api_store, waf as api_waf  # noqa: E402
 from remediation import capabilities as capabilities_mod  # noqa: E402
+from remediation.decisions import calibration as decision_calibration, registry as decision_registry, schema as decision_schema, service as decision_service  # noqa: E402
 from remediation.licensing import license as licensing  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
@@ -4819,7 +4820,45 @@ def api_soc_alert_update(alert_id: int, body: AlertUpdateBody, user: dict = Depe
     except (ValueError, KeyError) as exc:
         raise _hunt_400(exc) from exc
     activity_log.record_activity(user["email"], "soc.alert.update", str(alert_id), {"status": a["status"], "disposition": a["disposition"]})
+    if body.disposition:
+        decision_service.judge_soc_disposition(alert_id, a["disposition"])
     return a
+
+
+# ---------------------------------------------------------------- typed decisions: evaluate (dry), policy, calibration (docs/DECISIONS.md)
+class DecisionEvaluateBody(BaseModel):
+    decision: str
+    state: dict = {}
+    purpose: str = "decide"
+
+
+@app.post("/api/decisions/evaluate")
+def api_decisions_evaluate(body: DecisionEvaluateBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """Dry: evaluates one decision and returns the typed answers, the gate's route and whether a model would be needed. Writes nothing."""
+    try:
+        return decision_service.public(decision_service.evaluate(body.decision, body.state, purpose=body.purpose))
+    except decision_schema.SchemaViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/decisions/policy")
+def api_decisions_policy(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    from remediation.decisions import gate as decision_gate
+    pol = decision_gate.load_policy()
+    decs = []
+    for name, d in decision_registry.DECISIONS.items():
+        dp = (pol.get("decisions") or {}).get(name) or {}
+        decs.append({"name": name, "title": d.title, "questions": [{"name": q.name, "kind": q.kind, "options": list(q.options), "prompt": q.prompt} for q in d.questions],
+                     "reversible": dp.get("reversible"), "local": dp.get("local"), "touches_environment": d.touches_environment,
+                     "auto_allowed": decision_gate.auto_allowed(d, dp), "thresholds": dp.get("thresholds")})
+    return {"decisions": decs, "calibration": pol.get("calibration")}
+
+
+@app.get("/api/decisions/calibration")
+def api_decisions_calibration(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return decision_calibration.report()
 
 
 # ---------------------------------------------------------------- SOC agents: hunt execution, threat intel, investigation, detection engineering
@@ -4948,6 +4987,7 @@ class _AutoInvestigator:
             c = self.ctx
             inv = hunt_soc.investigate(alert, c["alerts"], c["findings"], c["owners"], cfg=self.cfg, identity=c["identity"], playbooks=c["playbooks"])
             hunt_service.save_investigation(inv, hunt_soc.render_markdown(alert, inv), "system")
+            decision_service.log_soc_verdict(alert, inv)
             case = soc_cases.auto_case(alert, inv)
             self.done += 1
             if alert["id"] not in {a["id"] for a in c["alerts"]}:
@@ -5202,6 +5242,7 @@ def api_soc_investigate(alert_id: int, body: InvestigateBody, user: dict = Depen
                                identity=_identity_map(), playbooks=soar_playbooks.list_all())
     md = hunt_soc.render_markdown(alert, inv)
     iid = hunt_service.save_investigation(inv, md, user["email"])
+    decision_service.log_soc_verdict(alert, inv)
     auto = soc_cases.auto_case(alert, inv)
     activity_log.record_activity(user["email"], "soc.alert.investigate", str(alert_id), {"verdict": inv["verdict"], "confidence": inv["confidence"],
                                                                                          "reputation": bool(lookup), "siem": bool(siem_run)})
