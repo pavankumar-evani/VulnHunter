@@ -2288,6 +2288,12 @@ select.searchable-select-native {
 }
 @media (prefers-reduced-motion: reduce) { .gv-node circle { transition: none; } }
 
+/* --- Environment banner (DEV / TEST / simulated data in PROD) --- */
+.env-banner { height: 26px; line-height: 26px; padding: 0 12px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-align: center; color: #0b1220; position: relative; z-index: 1000; }
+.env-banner-dev { background: #f5a524; }
+.env-banner-test { background: #38bdf8; }
+.env-banner-sim, .env-banner-invalid { background: #f43f5e; color: #fff; }
+body:has(#env-banner) .app-shell { height: calc(100vh - 26px); }
 /* ---- Security Posture Review (pages/posture.js) ---- */
 .ps-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
 .ps-tab { padding: 8px 14px; border-radius: 999px; border: 1px solid #263153; background: #10172a; color: #c5cde6; font: inherit; font-size: 0.84rem; cursor: pointer; min-height: 36px; }

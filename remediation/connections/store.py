@@ -43,6 +43,7 @@ def _public(row):
     r["config"] = json.loads(r["config"]) if r.get("config") else {}
     r["enabled"] = bool(r["enabled"])
     r["secrets_set"] = secret_names
+    r["mode"] = "simulation" if r["config"].get("mode") == "simulation" else "live"
     spec = registry.SPECS.get(r["type"]) or {}
     r["label"] = spec.get("label", r["type"])
     r["output"] = spec.get("output")

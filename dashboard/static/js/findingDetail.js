@@ -79,6 +79,7 @@ export function openFindingDetail(f) {
       <span class="badge badge-priority-${(f.priority || "").toLowerCase()}">${escapeHtml(f.priority || "—")}</span>
       &nbsp;<code>${escapeHtml(f.id)}</code>
       ${f.scan_type_label ? `&nbsp;<span class="category-tag">${escapeHtml(f.scan_type_label)}</span>` : ""}
+      ${f.source_mode === "simulation" ? `&nbsp;<span class="badge badge-outline" title="Recorded vendor responses replayed through the real connector code; not from a live system">Simulated</span>` : ""}
     </p>
 
     ${f.description ? `<p>${escapeHtml(f.description)}</p>` : ""}

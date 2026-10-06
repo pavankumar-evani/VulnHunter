@@ -182,7 +182,45 @@ def set_network_info(asset_name, ip=None, mac=None, actor=None, engine=None, loc
     return entry
 
 
-def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, engine=None):
+def _source_modes(engine=None):
+    """{asset_name: source_mode} for every stored asset row (None for live or human-entered)."""
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    t = db_module.asset_ownership
+    with engine.connect() as conn:
+        return {r.asset_name: r.source_mode for r in conn.execute(select(t.c.asset_name, t.c.source_mode))}
+
+
+def _set_source_mode(asset_name, mode, engine=None):
+    engine = engine or db_module.get_engine()
+    t = db_module.asset_ownership
+    with FileLock(LOCK_PATH), engine.begin() as conn:
+        conn.execute(update(t).where(t.c.asset_name == asset_name).values(source_mode=mode))
+
+
+def remove_simulated_assets(engine=None):
+    """Removes what simulated asset sources wrote: a row nothing else filled in is deleted, a row someone also edited keeps its owner/team and
+    loses only the simulated ip/mac. Live rows are never touched. Returns how many simulated rows were handled."""
+    engine = engine or db_module.get_engine()
+    db_module.ensure_schema(engine)
+    t = db_module.asset_ownership
+    others = [c for c in _COLUMNS if c not in ("ip", "mac")]
+    handled = 0
+    with FileLock(LOCK_PATH), engine.begin() as conn:
+        for r in conn.execute(select(t).where(t.c.source_mode == "simulation")).mappings().all():
+            handled += 1
+            if any(r[c] is not None and r[c] != "" for c in others):
+                conn.execute(update(t).where(t.c.asset_name == r["asset_name"]).values(ip=None, mac=None, source_mode=None))
+            else:
+                conn.execute(t.delete().where(t.c.asset_name == r["asset_name"]))
+    return handled
+
+
+def count_simulated_assets(engine=None):
+    return sum(1 for m in _source_modes(engine).values() if m == "simulation")
+
+
+def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, engine=None, source_mode=None):
     """Reconciles asset records pulled from a live connector (Infoblox/Axonius/Active
     Directory - see their fetch_and_normalize_*() output shape:
     {name, ip, mac, type, source, source_ref, extra}) against the real, finding-derived
@@ -197,9 +235,14 @@ def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, engine
 
     A pulled record with neither ip nor mac (e.g. an Infoblox host record with no IPs,
     or an AD computer object - which never carries either) is skipped rather than
-    calling set_network_info with nothing to actually set."""
+    calling set_network_info with nothing to actually set.
+
+    `source_mode` is the provenance of this pull ("simulation" marks demonstration data on the row). A simulated pull never changes a row that
+    live data or a person already wrote (it is skipped, "live record kept"); a live pull that meets a simulated row replaces it and clears the mark."""
     known_lower = {n.lower(): n for n in known_asset_names}
     matched, unmatched, skipped = [], [], []
+    simulated = source_mode == "simulation"
+    modes = _source_modes(engine)
 
     for pulled in pulled_assets:
         name = (pulled.get("name") or "").strip()
@@ -211,11 +254,17 @@ def reconcile_pulled_assets(pulled_assets, known_asset_names, actor=None, engine
             continue
 
         real_name = known_lower.get(name.lower(), name)
+        if simulated and real_name in modes and modes[real_name] != "simulation":
+            skipped.append({"reason": "A live record exists and was kept", "asset_name": real_name})
+            continue
         try:
             set_network_info(real_name, ip=pulled.get("ip"), mac=pulled.get("mac"), actor=actor, engine=engine)
         except ValueError as exc:
             skipped.append({"reason": str(exc), "asset_name": real_name})
             continue
+        if simulated or modes.get(real_name) == "simulation":
+            _set_source_mode(real_name, "simulation" if simulated else None, engine)
+            modes[real_name] = "simulation" if simulated else None
 
         entry = {"asset_name": real_name, "ip": pulled.get("ip"), "mac": pulled.get("mac")}
         (matched if real_name.lower() in known_lower else unmatched).append(entry)

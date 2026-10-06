@@ -391,6 +391,11 @@ def assert_no_demo_accounts():
 
 @app.on_event("startup")
 async def _validate_production_requirements():
+    from remediation.utils import environment as quanta_environment
+    try:
+        quanta_environment.name()
+    except quanta_environment.EnvironmentError_ as exc:
+        raise SystemExit(f"Quanta will not start: {exc}. Set QUANTA_ENV to dev, test or prod (or unset it).") from exc
     rbac.validate_production_requirements()
     observability.configure_logging()
     from remediation.utils import migrations
@@ -4429,6 +4434,22 @@ def _safe_check(fn, default):
         return default, str(exc)
 
 
+def _environment_info():
+    from remediation.utils import environment as quanta_environment
+    try:
+        return quanta_environment.info()
+    except quanta_environment.EnvironmentError_ as exc:
+        return {"environment": "invalid", "error": str(exc), "version": quanta_environment.version(),
+                "build_sha": None, "build_time": None, "simulation_allowed": False}
+
+
+@app.get("/api/features")
+def api_features(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """Which feature flags are on in this environment (remediation/config/features.yaml plus the QUANTA_FEATURES_ON/OFF overrides)."""
+    from remediation.utils import features
+    return features.snapshot()
+
+
 @app.get("/api/status")
 def api_status():
     """A real machine-readable health/status endpoint - every field below is an actual
@@ -4475,6 +4496,7 @@ def api_status():
         "uptime_seconds": round(time.monotonic() - _PROCESS_STARTED_AT, 1),
         "notification_scheduler_alive": _scheduler_task is not None and not _scheduler_task.done(),
         "data_stores": data_stores,
+        "environment": _environment_info(),
     }
 
 
@@ -5909,6 +5931,7 @@ app.include_router(appsec_api.build_router(require_api_key=require_api_key, scop
                                            read_upload=_read_upload, enrich_in_background=_enrich_in_background,
                                            queue_rescan_job=lambda connection_id, actor: job_queue.enqueue(job_worker.KIND_CONNECTION_SYNC, {"connection_id": connection_id, "actor": actor},
                                                                                                           dedupe_key=f"sync:{connection_id}")))
+app.include_router(__import__("simulation_api").build_router())  # demonstration data through the real connector code; see dashboard/simulation_api.py
 
 
 @app.get("/api/zero-day-watch")

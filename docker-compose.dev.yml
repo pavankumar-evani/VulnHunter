@@ -1,0 +1,23 @@
+# DEV override: build and try new features on one machine. Layer it on the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev.example up --build
+# Same image as test and prod; only these settings differ. See docs/ENVIRONMENTS.md.
+services:
+  quanta:
+    build:
+      context: .
+      args:
+        VERSION: ${QUANTA_VERSION:-1.0.0}
+        BUILD_SHA: ${QUANTA_BUILD_SHA:-dev}
+        BUILD_TIME: ${QUANTA_BUILD_TIME:-unknown}
+    environment:
+      QUANTA_ENV: dev
+      QUANTA_PRODUCTION: "false"
+      QUANTA_ALLOW_SIMULATION: "true"
+      QUANTA_FEATURES_ON: ${QUANTA_FEATURES_ON:-}
+    ports:
+      - "5050:5050"
+  db:
+    ports:
+      - "5433:5432"
+  caddy:
+    profiles: ["proxy"]

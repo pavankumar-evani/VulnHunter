@@ -1,0 +1,28 @@
+# Feature flags: new workflows can be tried in Dev and enabled later without a different build.
+#
+#   name:
+#     description: what the feature is
+#     enabled_in: [dev, test, prod]     # the environments where it is on
+#
+# The promotion rule (one step per release, never skipping):
+#   1. A new feature starts in  [dev]              built and tried by its authors.
+#   2. When it works in Dev it moves to [dev, test]  verified with the same build that will go to production.
+#   3. When Test signs it off it moves to [dev, test, prod].
+# Once a flag has been on in all three for a release or two, delete the flag and the code path it guards.
+#
+# Overrides, without editing this file (comma-separated names):
+#   QUANTA_FEATURES_ON    turn these on in this process whatever the file says
+#   QUANTA_FEATURES_OFF   turn these off (wins over ON, so an incident can switch a feature off at once)
+# An unknown name is off. Reading a flag never raises.
+
+relationship-graphs:
+  description: Relationship graph page for every module (clusters, choke points, single points of failure).
+  enabled_in: [dev, test, prod]
+
+security-posture-review:
+  description: Security Posture Review - frameworks assessed from recorded data with the evidence behind every score.
+  enabled_in: [dev, test, prod]
+
+simulation-connectors:
+  description: Simulated connectors that replay recorded vendor responses through the real connector code. Never in production unless QUANTA_ALLOW_SIMULATION is set.
+  enabled_in: [dev, test]

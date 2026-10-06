@@ -2,7 +2,18 @@
 # TLS-terminating reverse proxy (see docker-compose.yml and docs/PRODUCTION_GUIDE.md).
 FROM python:3.12-slim
 
+# One build, promoted unchanged dev -> test -> prod: the release pipeline passes these and tags the image with the
+# version and the commit. Nothing environment-specific is baked in; QUANTA_ENV and the rest arrive as configuration.
+ARG VERSION=1.0.0
+ARG BUILD_SHA=unknown
+ARG BUILD_TIME=unknown
+LABEL org.opencontainers.image.title="Quanta" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${BUILD_SHA}" \
+      org.opencontainers.image.created="${BUILD_TIME}"
+
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    QUANTA_BUILD_SHA=${BUILD_SHA} QUANTA_BUILD_TIME=${BUILD_TIME} \
     QUANTA_HOST=0.0.0.0 QUANTA_PORT=5050 QUANTA_DISABLE_TLS=true QUANTA_LOG_FORMAT=json
 
 WORKDIR /app
