@@ -27,7 +27,9 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, R
 from sqlalchemy import func, select
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator
+from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli"))
@@ -43,6 +45,11 @@ import quanta as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation import graphs as module_graphs  # noqa: E402
+from remediation.ontology import estate as ontology_estate  # noqa: E402
+from remediation.ontology import ontology as ontology_vocab  # noqa: E402
+from remediation.ontology import provenance as ontology_provenance  # noqa: E402
+from remediation.ontology import query as ontology_query  # noqa: E402
+from remediation.ontology import validate as ontology_validate  # noqa: E402
 from remediation.posture import engine as posture_engine  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.integrity import heal as integrity_heal, service as integrity_service  # noqa: E402
@@ -726,6 +733,77 @@ def api_module_graph(module: str, request: Request, user: dict = Depends(rbac.ge
         rbac.require_admin(request)
     findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
     return _fast_json(module_graphs.build(module, findings=findings))
+
+
+class OntologyQueryBody(BaseModel):
+    """Either a structured `pattern` (remediation/ontology/query.py) or the id of a named `question`; never free text."""
+    pattern: Optional[dict] = None
+    question: Optional[str] = Field(default=None, max_length=80)
+
+
+def _ontology_module_graphs(findings):
+    """Each module's graph for the ontology routes; a module whose data cannot be read is None (and named by the estate's `sources`)."""
+    out = {}
+    for m in module_graphs.MODULES:
+        try:
+            out[m] = module_graphs.build(m, findings=findings)
+        except Exception:  # noqa: BLE001
+            out[m] = None
+    return out
+
+
+@app.get("/api/ontology")
+def api_ontology():
+    """The ontology (remediation/config/ontology.yaml): classes, is-a, typed relations and how each module graph maps onto them. Public like the other
+    reads: it describes the vocabulary, not anyone's data."""
+    return _fast_json(ontology_vocab.load().describe())
+
+
+@app.get("/api/ontology/questions")
+def api_ontology_questions():
+    """The named multi-hop questions (remediation/config/ontology_questions.yaml), each as its structured pattern and a readable line."""
+    return {"questions": ontology_query.load_questions()}
+
+
+@app.get("/api/ontology/validate")
+def api_ontology_validate(request: Request, module: Optional[str] = None, user: dict = Depends(rbac.get_current_user)):
+    """Check the module graphs and the whole-estate graph against the ontology (a SHACL-like report; nothing is changed or dropped), with how much of the
+    estate's provenance is known. Administrator only: it builds every module's graph."""
+    rbac.require_admin(request)
+    if module is not None and module != "estate" and module not in module_graphs.MODULES:
+        raise HTTPException(status_code=404, detail="Unknown module")
+    findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    graphs = _ontology_module_graphs(findings)
+    reports = {m: ontology_validate.validate(g, m) for m, g in sorted(graphs.items()) if g is not None and module in (None, "estate", m)}
+    for r in reports.values():
+        r["violations"] = r["violations"][:100]
+    estate_graph = ontology_estate.build(findings=findings, graphs={m: g for m, g in graphs.items() if g is not None})
+    estate_report = ontology_validate.validate(estate_graph, "estate")
+    estate_report["violations"] = estate_report["violations"][:100]
+    facts = ontology_provenance.facts(estate_graph, "estate")
+    return _fast_json({"conforms": all(r["conforms"] for r in reports.values()) and estate_report["conforms"], "modules": reports, "estate": estate_report,
+                       "provenance": ontology_provenance.coverage(facts), "sources": estate_graph["sources"],
+                       "unavailable": sorted(m for m, g in graphs.items() if g is None)})
+
+
+@app.post("/api/ontology/query")
+def api_ontology_query(body: OntologyQueryBody, request: Request, user: dict = Depends(rbac.get_current_user)):
+    """Run a structured multi-hop pattern, or a named question, over the whole-estate graph. Administrator only. The pattern is parsed against the ontology
+    and bounded in depth, size and work; it is never evaluated as code."""
+    rbac.require_admin(request)
+    if (body.pattern is None) == (body.question is None):
+        raise HTTPException(status_code=400, detail="Send exactly one of pattern or question")
+    findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    graphs = {m: g for m, g in _ontology_module_graphs(findings).items() if g is not None}
+    estate_graph = ontology_estate.build(findings=findings, graphs=graphs)
+    try:
+        if body.question is not None:
+            return _fast_json(ontology_query.run_question(estate_graph, body.question))
+        return _fast_json(ontology_query.run(estate_graph, body.pattern))
+    except ontology_query.QueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Unknown question")
 
 
 @app.get("/api/dependencies")
