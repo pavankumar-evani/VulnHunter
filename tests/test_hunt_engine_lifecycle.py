@@ -198,8 +198,8 @@ class MigrationTests(unittest.TestCase):
         migrations.apply(e)
         self.assertTrue(inspect(e).has_table("hunt_hypotheses") and inspect(e).has_table("hunt_hypothesis_events"))
         self.assertEqual(migrations.apply(e), [])
-        migrations._m010_hunt_hypotheses(e)   # safe to run again directly
-        self.assertIn(10, migrations.applied(e))
+        migrations._m009_hunt_hypotheses(e)   # safe to run again directly
+        self.assertIn(9, migrations.applied(e))
 
 
 if __name__ == "__main__":

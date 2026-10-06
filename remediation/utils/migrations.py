@@ -79,7 +79,14 @@ def _m008_api_key_team(engine):
         _add_missing_columns(engine, db.api_keys)
 
 
-def _m009_soc_incidents(engine):
+def _m009_hunt_hypotheses(engine):
+    """New tables only (expand-only): the hunt engine's hypotheses and their event history. Safe if ensure_schema already created them."""
+    from remediation.utils import db
+    db.hunt_hypotheses.create(engine, checkfirst=True)
+    db.hunt_hypothesis_events.create(engine, checkfirst=True)
+
+
+def _m010_soc_incidents(engine):
     """Expand only: routing columns on soc_analysts, the three incident tables, and one incident per existing case so no case disappears from the new view."""
     from remediation.soc.incidents import migrate
     from remediation.utils import db
@@ -89,13 +96,6 @@ def _m009_soc_incidents(engine):
         table.create(engine, checkfirst=True)
     if inspect(engine).has_table("soc_cases"):
         migrate.backfill(engine)
-
-
-def _m010_hunt_hypotheses(engine):
-    """New tables only (expand-only): the hunt engine's hypotheses and their event history. Safe if ensure_schema already created them."""
-    from remediation.utils import db
-    db.hunt_hypotheses.create(engine, checkfirst=True)
-    db.hunt_hypothesis_events.create(engine, checkfirst=True)
 
 
 def _m011_investigation_reports(engine):
@@ -114,8 +114,8 @@ MIGRATIONS = [
     (6, "cvd_advisories_table", _m006_cvd_advisories),
     (7, "ai_asset_agent_mcp_lifecycle_fields", _m007_ai_asset_agent_fields),
     (8, "api_key_team_binding", _m008_api_key_team),
-    (9, "soc_incidents_and_analyst_routing", _m009_soc_incidents),
-    (10, "hunt_hypotheses_tables", _m010_hunt_hypotheses),
+    (9, "hunt_hypotheses_tables", _m009_hunt_hypotheses),
+    (10, "soc_incidents_and_analyst_routing", _m010_soc_incidents),
     (11, "investigation_reports_followups_allowlist", _m011_investigation_reports),
 ]
 

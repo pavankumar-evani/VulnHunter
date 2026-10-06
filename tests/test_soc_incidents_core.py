@@ -627,8 +627,8 @@ class Migration(Base):
         cases.resolve(c2["id"], "benign", NOTE, "x@t.test", e, at(5))
         self.assertEqual(migrate.backfill(e), 2)
         self.assertEqual(migrate.backfill(e), 0)
-        migrations._m009_soc_incidents(e)
-        migrations._m009_soc_incidents(e)
+        migrations._m010_soc_incidents(e)
+        migrations._m010_soc_incidents(e)
         incs = store.list_incidents(e)
         self.assertEqual(len(incs), 2)
         by = {i["case_id"]: i for i in incs}
@@ -641,7 +641,7 @@ class Migration(Base):
     def test_migration_registered_after_the_previous_highest(self):
         nums = [m[0] for m in migrations.MIGRATIONS]
         self.assertEqual(nums, list(range(1, len(nums) + 1)))
-        self.assertEqual(dict((m[0], m[1]) for m in migrations.MIGRATIONS)[9], "soc_incidents_and_analyst_routing")
+        self.assertEqual(dict((m[0], m[1]) for m in migrations.MIGRATIONS)[10], "soc_incidents_and_analyst_routing")
 
 
 if __name__ == "__main__":
