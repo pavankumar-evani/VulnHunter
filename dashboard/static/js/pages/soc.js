@@ -3,7 +3,7 @@ import { escapeHtml, flash } from "../dom.js";
 
 export const title = "SOC Operations";
 
-const TABS = [["queues", "Queues"], ["metrics", "Metrics"], ["analyse", "Logs and techniques"], ["analysts", "Analysts"], ["decisions", "Decisions"]];
+const TABS = [["queues", "Incidents"], ["metrics", "Metrics"], ["analyse", "Logs and techniques"], ["analysts", "Analysts"], ["decisions", "Decisions"]];
 const PRIO = { P1: "badge-critical", P2: "badge-high", P3: "badge-medium", P4: "badge-low" };
 const SLA = { ok: "badge-low", at_risk: "badge-high", breached: "badge-critical" };
 const NOTE = "Cases are worked in three queues: L1 triage, L2 investigation, L3 response and hunting. Priority is impact times urgency. Escalating, resolving or closing needs a written summary, so the next person never starts cold. Quanta records and measures the work; it never changes your systems.";
@@ -26,38 +26,81 @@ function bars(rows, key, color) {
 export async function render(container) {
   let tab = new URLSearchParams(window.location.search).get("tab") || "queues";
   let openCase = null;
+  let openIncident = null;
 
   const shell = (inner) => {
     container.innerHTML = `<p class="subtitle">${NOTE}</p>
-      <p>${TABS.map(([k, l]) => `<button type="button" class="${k === tab && !openCase ? "" : "secondary-button"}" data-tab="${k}">${l}</button>`).join(" ")}</p><div id="soc-body">${inner}</div>`;
-    container.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; openCase = null; show(); }));
+      <p>${TABS.map(([k, l]) => `<button type="button" class="${k === tab && !openCase && !openIncident ? "" : "secondary-button"}" data-tab="${k}">${l}</button>`).join(" ")}</p><div id="soc-body">${inner}</div>`;
+    container.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; openCase = null; openIncident = null; show(); }));
   };
   const act = (fn, msg) => async () => { try { await fn(); if (msg) flash(msg, "success"); show(); } catch (e) { flash(e.message, "error"); } };
 
+  // Incidents are created and routed automatically; this view is the work queue. Creating one by hand is an exception, behind the "More" menu, and needs a reason.
   async function queues() {
-    const { cases, policy } = await api.socCases({ open_only: "true" });
-    const col = (tier) => {
-      const rows = cases.filter((c) => c.tier === tier);
-      return `<div><h3>${escapeHtml(policy.tiers[tier].queue)} <span class="muted">${rows.length} open</span></h3><p class="muted">${escapeHtml(policy.tiers[tier].name)}</p>
-        ${rows.map((c) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:8px 12px;margin:8px 0">
-          <span class="badge ${PRIO[c.priority]}">${c.priority}</span> <a href="#" data-open="${c.id}"><strong>#${c.id} ${escapeHtml(c.title)}</strong></a><br>
-          <span class="muted">${escapeHtml(c.status)} &middot; ${escapeHtml(c.assignee || "unowned")} &middot; ${escapeHtml(c.impact)}</span><br>${slaCell(c)}</div>`).join("") || '<p class="empty-state">Empty.</p>'}</div>`;
-    };
-    shell(`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">${[1, 2, 3].map(col).join("")}</div>
-      <h3>Open a case</h3>
-      <form id="nc" class="run-form"><label>Title <input name="title" required maxlength="300"></label>
-        <label>Severity <select name="severity">${["Critical", "High", "Medium", "Low", "Informational"].map((s) => `<option ${s === "Medium" ? "selected" : ""}>${s}</option>`).join("")}</select></label>
-        <label>Hosts (comma separated) <input name="assets"></label><label>Alert ids (comma separated, optional) <input name="alerts"></label>
-        <div><button type="submit">Open case</button></div></form>`);
-    container.querySelectorAll("[data-open]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); openCase = Number(a.dataset.open); show(); }));
+    const [{ incidents }, lane] = await Promise.all([api.socIncidents({ open_only: "true" }), api.socIncidents({ status: "auto_closed" })]);
+    const row = (i) => `<tr>
+        <td><span class="badge ${PRIO[i.priority] || "badge-outline"}">${escapeHtml(i.priority)}</span></td>
+        <td><a href="#" data-inc="${i.id}"><strong>#${i.id} ${escapeHtml(i.title)}</strong></a><br><span class="muted">${escapeHtml(i.severity)} &middot; ${escapeHtml(i.status)}${i.confidence == null ? "" : " &middot; " + pct(i.confidence) + " likely real"}</span></td>
+        <td>${i.assignee ? escapeHtml(i.assignee) : `<span class="badge badge-high">${escapeHtml(i.queue || "unrouted")} queue</span>`}</td>
+        <td class="muted" style="max-width:360px">${escapeHtml((i.routing_reason || []).slice(-1)[0] || "")}</td>
+        <td>${slaCell(i)}</td></tr>`;
+    shell(`<p class="muted">Alerts are grouped into incidents and routed to the right analyst or queue automatically, with the reason shown. ${incidents.length} open.</p>
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Priority</th><th>Incident</th><th>Assigned to</th><th>Why routed here</th><th>Service level</th></tr></thead><tbody>
+      ${incidents.map(row).join("") || '<tr><td colspan="5" class="empty-state">No open incidents.</td></tr>'}</tbody></table></div>
+      <h3>Auto-closed <span class="muted">${lane.incidents.length}</span></h3><p class="muted">Closed automatically as likely false positives under the decision policy. Review them; undo returns one to the queue.</p>
+      ${lane.incidents.slice(0, 20).map((i) => `<p>#${i.id} ${escapeHtml(i.title)} <button type="button" class="secondary-button" data-undo="${i.id}">Undo</button></p>`).join("") || '<p class="muted">None.</p>'}
+      <details><summary class="muted">More</summary>
+        <h4>Create an incident by hand (exception)</h4><p class="muted">Use this only when no alert exists to start from. A reason is required and is recorded.</p>
+        <form id="nc" class="run-form"><label>Title <input name="title" required maxlength="300"></label>
+          <label>Severity <select name="severity">${["Critical", "High", "Medium", "Low", "Informational"].map((s) => `<option ${s === "Medium" ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+          <label>Hosts (comma separated) <input name="assets"></label><label>Reason <input name="reason" required minlength="10"></label>
+          <div><button type="submit" class="secondary-button">Create incident</button></div></form></details>`);
+    container.querySelectorAll("[data-inc]").forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); openIncident = Number(a.dataset.inc); show(); }));
+    container.querySelectorAll("[data-undo]").forEach((b) => b.addEventListener("click", act(() => api.socIncidentAct(b.dataset.undo, "undo-auto-close", {}), "Returned to the queue.")));
     container.querySelector("#nc").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const f = e.target, split = (v) => v.split(",").map((x) => x.trim()).filter(Boolean);
+      const f = e.target;
       try {
-        const c = await api.socCaseOpen({ title: f.title.value, severity: f.severity.value, assets: split(f.assets.value), alert_ids: split(f.alerts.value).map(Number).filter(Boolean) });
-        openCase = c.id; flash("Case opened.", "success"); show();
+        const i = await api.socIncidentManual({ title: f.title.value, severity: f.severity.value, assets: f.assets.value.split(",").map((x) => x.trim()).filter(Boolean), reason: f.reason.value });
+        openIncident = i.id; flash("Incident created.", "success"); show();
       } catch (err) { flash(err.message, "error"); }
     });
+  }
+
+  async function incidentView() {
+    const i = await api.socIncident(openIncident);
+    const live = ["new", "triaging", "investigating", "contained"].includes(i.status);
+    shell(`<p><a href="#" id="back">&larr; Incidents</a></p>
+      <h2><span class="badge ${PRIO[i.priority] || "badge-outline"}">${escapeHtml(i.priority)}</span> #${i.id} ${escapeHtml(i.title)}</h2>
+      <p>${escapeHtml(i.status)} &middot; ${escapeHtml(i.severity)}${i.severity !== i.base_severity ? ` (raised from ${escapeHtml(i.base_severity)})` : ""} &middot; L${i.tier} &middot; owner ${escapeHtml(i.assignee || "none, in the " + (i.queue || "") + " queue")} ${i.sla ? "&middot; " + slaCell(i) : ""}</p>
+      <h3>Summary</h3><p>${escapeHtml(i.summary || "")}</p>
+      <h3>Why it was routed here</h3><ul>${(i.routing_reason || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul>
+      <h3>Kill chain</h3><p>${(i.kill_chain || []).map((s) => escapeHtml(s.tactic)).join(" &rarr; ") || '<span class="muted">No mapped tactic yet.</span>'}</p>
+      <h3>Alerts (${i.alerts.length})</h3><ul>${i.alerts.map((a) => `<li>#${a.id} ${escapeHtml(a.title)} <span class="muted">${escapeHtml(a.role)}; ${escapeHtml(a.asset || "no host")}; ${(a.reasons || []).map((r) => escapeHtml(r.detail)).join(" ")}</span></li>`).join("")}</ul>
+      <h3>Recommended next</h3><ul>${(i.recommended.next_steps || []).map((s) => `<li>${escapeHtml(s)}</li>`).join("")}${(i.recommended.playbooks || []).map((p) => `<li>Playbook: ${escapeHtml(p.name)} <span class="muted">${escapeHtml(p.why)}</span></li>`).join("")}</ul>
+      ${live ? `<h3>Work it</h3><textarea id="txt" rows="3" style="width:100%" placeholder="Summary for escalate or resolve (at least 20 characters), or a note"></textarea>
+        <p><button type="button" data-do="accept">Accept</button>
+        <select id="adv">${["triaging", "investigating", "contained"].map((s) => `<option>${s}</option>`).join("")}</select> <button type="button" class="secondary-button" data-do="advance">Set status</button>
+        <button type="button" class="secondary-button" data-do="note">Add note</button>
+        ${i.tier < 3 ? `<button type="button" class="secondary-button" data-do="escalate">Escalate to L${i.tier + 1}</button>` : ""}</p>
+        <p>Verdict <select id="verdict">${["true-positive", "false-positive", "benign", "duplicate", "insufficient-data", "accepted-risk"].map((v) => `<option>${v}</option>`).join("")}</select> <button type="button" data-do="resolve">Resolve</button>
+        &nbsp; Reassign to <input id="who" type="email" placeholder="analyst email"> <button type="button" class="secondary-button" data-do="reassign">Reassign</button></p>` : ""}
+      ${i.status === "resolved" ? '<p><textarea id="txt" rows="2" style="width:100%" placeholder="Why reopen?"></textarea></p><p><button type="button" class="secondary-button" data-do="reopen">Reopen</button></p>' : ""}
+      ${i.status === "auto_closed" ? '<p><button type="button" data-do="undo-auto-close">Undo auto-close</button></p>' : ""}
+      ${i.case_id ? `<p class="muted"><a href="#" id="tocase">Open its case (#${i.case_id})</a> for log analysis and service-level detail.</p>` : ""}
+      <h3>Timeline</h3><ul>${i.timeline.map((e) => `<li><span class="muted">${when(e.created_at)}</span> <strong>${escapeHtml(e.kind.replace(/_/g, " "))}</strong> ${escapeHtml(e.actor || "")} ${e.body ? "&mdash; " + escapeHtml(e.body) : ""}</li>`).join("")}</ul>`);
+    container.querySelector("#back").addEventListener("click", (e) => { e.preventDefault(); openIncident = null; show(); });
+    const tc = container.querySelector("#tocase");
+    if (tc) tc.addEventListener("click", (e) => { e.preventDefault(); openCase = i.case_id; openIncident = null; show(); });
+    const txt = () => (container.querySelector("#txt") || {}).value || "";
+    const doit = {
+      accept: () => api.socIncidentAct(i.id, "accept", {}), advance: () => api.socIncidentAct(i.id, "advance", { status: container.querySelector("#adv").value }),
+      note: () => api.socIncidentAct(i.id, "note", { note: txt() }), escalate: () => api.socIncidentAct(i.id, "escalate", { summary: txt() }),
+      resolve: () => api.socIncidentAct(i.id, "resolve", { verdict: container.querySelector("#verdict").value, summary: txt() }),
+      reassign: () => api.socIncidentAct(i.id, "reassign", { assignee: container.querySelector("#who").value }), reopen: () => api.socIncidentAct(i.id, "reopen", { reason: txt() }),
+      "undo-auto-close": () => api.socIncidentAct(i.id, "undo-auto-close", {}),
+    };
+    container.querySelectorAll("[data-do]").forEach((b) => b.addEventListener("click", act(doit[b.dataset.do], "Done.")));
   }
 
   async function caseView() {
@@ -65,7 +108,7 @@ export async function render(container) {
     const { policy } = await api.socCases({ open_only: "true" });
     const isOpen = ["new", "in_progress", "pending", "escalated"].includes(c.status);
     const codes = policy.tiers[c.tier].may_resolve_as;
-    shell(`<p><a href="#" id="back">&larr; Queues</a></p>
+    shell(`<p><a href="#" id="back">&larr; Incidents</a></p>
       <h2><span class="badge ${PRIO[c.priority]}">${c.priority}</span> #${c.id} ${escapeHtml(c.title)}</h2>
       <p>${escapeHtml(c.queue)} queue &middot; ${escapeHtml(c.status)} &middot; owner ${escapeHtml(c.assignee || "none")} &middot; impact ${escapeHtml(c.impact)} &middot; severity ${escapeHtml(c.severity)} &middot; ${slaCell(c)}</p>
       <h3>Summary</h3><p>${escapeHtml(c.summary || c.generated_summary)}</p>${c.summary ? `<details><summary class="muted">Generated from the case facts</summary><p class="muted">${escapeHtml(c.generated_summary)}</p></details>` : ""}
@@ -148,7 +191,7 @@ export async function render(container) {
   async function analysts() {
     const { analysts: list } = await api.socAnalysts();
     shell(`<p class="muted">An analyst belongs to one tier and cannot be assigned a case in a higher queue. Suggestions go to the least-loaded analyst of the tier who is under the cap.</p>
-      <div class="table-scroll"><table class="data-table"><thead><tr><th>Analyst</th><th>Tier</th><th>Open cases</th><th></th></tr></thead><tbody>
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Analyst</th><th>Tier</th><th>Open cases</th><th>Specialties</th><th>Shift (UTC)</th><th>Available</th><th></th></tr></thead><tbody>
       ${list.map((a) => `<tr><td>${escapeHtml(a.email)}</td><td>L${a.tier}</td><td>${a.open_cases}${a.at_capacity ? ' <span class="badge badge-high">at capacity</span>' : ""}</td><td><button type="button" class="link-button danger-link" data-rm="${escapeHtml(a.email)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="4" class="empty-state">No analysts yet.</td></tr>'}</tbody></table></div>
       <form id="af" class="run-form"><label>Email <input name="email" type="email" required></label><label>Tier <select name="tier"><option value="1">L1</option><option value="2">L2</option><option value="3">L3</option></select></label><div><button type="submit">Add or move</button></div></form>`);
     container.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", act(() => api.socAnalystRemove(b.dataset.rm), "Removed.")));
@@ -174,6 +217,7 @@ export async function render(container) {
 
   async function show() {
     try {
+      if (openIncident) return await incidentView();
       if (openCase) return await caseView();
       return await ({ queues, metrics, analyse, analysts, decisions }[tab] || queues)();
     } catch (e) { container.innerHTML = `<p class="empty-state">${escapeHtml(e.message)}</p>`; }

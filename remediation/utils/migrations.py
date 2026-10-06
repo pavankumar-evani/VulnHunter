@@ -73,6 +73,18 @@ def _m007_ai_asset_agent_fields(engine):
         store.backfill_new_fields(engine)
 
 
+def _m008_soc_incidents(engine):
+    """Expand only: routing columns on soc_analysts, the three incident tables, and one incident per existing case so no case disappears from the new view."""
+    from remediation.soc.incidents import migrate
+    from remediation.utils import db
+    if inspect(engine).has_table("soc_analysts"):
+        _add_missing_columns(engine, db.soc_analysts)
+    for table in (db.soc_incidents, db.soc_incident_alerts, db.soc_incident_events):
+        table.create(engine, checkfirst=True)
+    if inspect(engine).has_table("soc_cases"):
+        migrate.backfill(engine)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
@@ -81,6 +93,7 @@ MIGRATIONS = [
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
     (6, "cvd_advisories_table", _m006_cvd_advisories),
     (7, "ai_asset_agent_mcp_lifecycle_fields", _m007_ai_asset_agent_fields),
+    (8, "soc_incidents_and_analyst_routing", _m008_soc_incidents),
 ]
 
 

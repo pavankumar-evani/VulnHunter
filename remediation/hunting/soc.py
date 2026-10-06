@@ -57,7 +57,8 @@ def history(alert, alerts, cfg=None, now=None):
     recur = now - datetime.timedelta(days=h.get("recurrence_days", 7))
     rule, host = alert.get("rule_name"), (alert.get("asset") or "").lower()
     others = [a for a in alerts if a["id"] != alert["id"]]
-    rule_closed = [a for a in others if rule and a.get("rule_name") == rule and a["status"] == "closed" and a.get("disposition") in ("true-positive", "benign", "false-positive")]
+    rule_closed = [a for a in others if rule and a.get("rule_name") == rule and a["status"] == "closed" and a.get("disposition") in ("true-positive", "benign", "false-positive")
+                   and a.get("action_taken") != "auto-closed"]   # an alert the system closed is not a person's judgement of the rule
     noise = [a for a in rule_closed if a["disposition"] in ("false-positive", "benign")]
     same_host = [a for a in others if host and (a.get("asset") or "").lower() == host and (_parse(a.get("received_at")) or now) >= window]
     recent_tp = [a for a in others if a.get("disposition") == "true-positive" and (_parse(a.get("closed_at") or a.get("received_at")) or now) >= recur
