@@ -1388,6 +1388,55 @@ soc_incident_events = Table(
     Column("created_at", String, nullable=False),
 )
 
+investigation_reports = Table(
+    "investigation_reports", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("incident_id", Integer, nullable=False, index=True),
+    Column("version", Integer, nullable=False),
+    Column("report_json", Text, nullable=False),
+    Column("live", Integer, nullable=False, default=0),            # 1 when the build used a confirmed live search or reputation lookup
+    Column("generated_by", String, nullable=True),
+    Column("generated_at", String, nullable=False),
+)
+
+incident_followups = Table(
+    "incident_followups", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("incident_id", Integer, nullable=False, index=True),
+    Column("kind", String, nullable=False),
+    Column("value", String, nullable=True),
+    Column("question", Text, nullable=False),
+    Column("answer", Text, nullable=False),
+    Column("data_json", Text, nullable=True),
+    Column("evidence_json", Text, nullable=True),                   # what the answer rests on: records, counts, searches
+    Column("answerable", Integer, nullable=False, default=1),
+    Column("merged", Integer, nullable=False, default=0),
+    Column("asked_by", String, nullable=True),
+    Column("asked_at", String, nullable=False),
+    Column("merged_by", String, nullable=True),
+    Column("merged_at", String, nullable=True),
+)
+
+hunt_allowlist = Table(
+    "hunt_allowlist", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lead_key", String, nullable=False, index=True),        # technique|lead name: applies to every later run of the same lead
+    Column("hunt_id", Integer, nullable=True),                     # the hunt it was recorded on
+    Column("field", String, nullable=False),
+    Column("value", String, nullable=False),
+    Column("note", Text, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
+hunt_report_meta = Table(
+    "hunt_report_meta", metadata,
+    Column("hunt_id", Integer, primary_key=True),
+    Column("time_box_hours", Integer, nullable=True),
+    Column("updated_by", String, nullable=True),
+    Column("updated_at", String, nullable=False),
+)
+
 decision_log = Table(
     "decision_log", metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -1433,7 +1482,7 @@ def ensure_schema(engine):
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
             hunts, hunt_hypotheses, hunt_hypothesis_events, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
-            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log, asm_assets, asm_runs, asm_changes, asm_scope, asm_settings, soc_incidents, soc_incident_alerts, soc_incident_events,
+            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log, asm_assets, asm_runs, asm_changes, asm_scope, asm_settings, soc_incidents, soc_incident_alerts, soc_incident_events, investigation_reports, incident_followups, hunt_allowlist, hunt_report_meta,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

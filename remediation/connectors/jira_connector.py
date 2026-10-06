@@ -17,6 +17,8 @@ publicly documented API contract and has NOT been exercised against a real Jira 
 site - no credentials were available while building it. See
 remediation/connectors/README.md for what "tested" means here.
 """
+import re
+
 import requests
 
 from remediation.connectors import url_safety
@@ -30,6 +32,9 @@ _RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exception
 
 class JiraError(RuntimeError):
     pass
+
+
+_KEY = re.compile(r"^[A-Z][A-Z0-9_]{1,30}-\d{1,9}$")
 
 
 def _idempotency_label(finding_id):
@@ -113,6 +118,16 @@ class JiraConnector:
 
         issues = retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("issues", [])
         return issues[0] if issues else None
+
+    def add_comment(self, key, text):
+        """Adds a comment to an existing issue (POST /rest/api/3/issue/{key}/comment, Atlassian document format). One call, not retried, so a timeout cannot
+        post it twice. Built against the public API; not exercised against a live site."""
+        if not _KEY.match(str(key or "")):
+            raise JiraError("The ticket reference is not a valid issue key")
+        paragraphs = [{"type": "paragraph", "content": [{"type": "text", "text": line}]} if line else {"type": "paragraph", "content": []} for line in str(text).split(chr(10))]
+        resp = self.session.post(f"{self.base_url}/rest/api/3/issue/{key}/comment", json={"body": {"type": "doc", "version": 1, "content": paragraphs}}, timeout=30)
+        resp.raise_for_status()
+        return {"ticket": key, "status": "commented", "id": (resp.json() or {}).get("id")}
 
     def create_issue(self, finding, skip_if_exists=True):
         """Creates one issue for a normalized finding (see

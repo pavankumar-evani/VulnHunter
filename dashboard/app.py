@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
 import appsec_api  # noqa: E402
+import investigation_api  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
 import reports  # noqa: E402
@@ -5320,16 +5321,6 @@ def api_soc_follow_up(alert_id: int, body: FollowUpBody, user: dict = Depends(rb
     return {"id": iid, **ans, "investigation": inv, "report_md": md}
 
 
-@app.get("/api/hunting/hunts/{hunt_id}/report")
-def api_hunting_report(hunt_id: int, format: str = "md", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
-    h = hunt_store.get_hunt(hunt_id)
-    if not h:
-        raise HTTPException(status_code=404, detail="No such hunt")
-    if format == "html":
-        return HTMLResponse(hunt_verdict.to_html(h), headers={"Content-Disposition": f'attachment; filename="hunt-{hunt_id}.html"'})
-    return PlainTextResponse(hunt_verdict.to_markdown(h), media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="hunt-{hunt_id}.md"'})
-
-
 @app.post("/api/ingest/alerts/ocsf")
 async def api_ingest_alerts_ocsf(request: Request, key: dict = Depends(require_api_key("soc:write"))):
     """OCSF Detection Finding events (class_uid 2004): one JSON object, a list, or {"events": [...]}."""
@@ -5728,6 +5719,11 @@ def api_soc_incident_ai_summary(incident_id: int, body: IncidentAiBody, user: di
         incident_store.add_event(incident_id, "ai_summary", user["email"], "A model-written summary was saved beside the deterministic one", None)
     activity_log.record_activity(user["email"], "soc.incident.ai_summary", str(incident_id), {"saved": body.save})
     return {"dry_run": False, "summary_ai": text, "saved": body.save, "note": "A suggestion. The deterministic summary stays the record."}
+
+
+# Investigation reports (docs/INVESTIGATION_REPORTS.md). Included here, before the generic /api/soc/incidents/{id}/{action} route, so its "follow-up" is not taken as an action.
+app.include_router(investigation_api.build_router(require_api_key=require_api_key, identity_map=lambda: _identity_map(), lookback_cfg=lambda *a, **k: _lookback_cfg(*a, **k),
+                                                  auto_investigator=lambda: _AutoInvestigator(), soar_auto=lambda row: _soar_auto(row)))
 
 
 @app.post("/api/soc/incidents/{incident_id}/{action}")

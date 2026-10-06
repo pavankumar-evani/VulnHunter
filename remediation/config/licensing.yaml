@@ -66,6 +66,7 @@ modules:
     - /api/threat-intel
     - /api/cortex-xsiam
     - /api/ingest/alerts
+    - /api/ingest/itsm-ticket   # a ticket from the ITSM tool becomes an investigated alert (docs/INVESTIGATION_REPORTS.md)
     - /api/ingest/threat-intel
     - /api/ingest/darkweb
   appsec:
