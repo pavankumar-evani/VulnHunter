@@ -3,7 +3,7 @@ import { escapeHtml, flash } from "../dom.js";
 
 export const title = "SOC Operations";
 
-const TABS = [["queues", "Queues"], ["metrics", "Metrics"], ["analyse", "Logs and techniques"], ["analysts", "Analysts"]];
+const TABS = [["queues", "Queues"], ["metrics", "Metrics"], ["analyse", "Logs and techniques"], ["analysts", "Analysts"], ["decisions", "Decisions"]];
 const PRIO = { P1: "badge-critical", P2: "badge-high", P3: "badge-medium", P4: "badge-low" };
 const SLA = { ok: "badge-low", at_risk: "badge-high", breached: "badge-critical" };
 const NOTE = "Cases are worked in three queues: L1 triage, L2 investigation, L3 response and hunting. Priority is impact times urgency. Escalating, resolving or closing needs a written summary, so the next person never starts cold. Quanta records and measures the work; it never changes your systems.";
@@ -155,10 +155,27 @@ export async function render(container) {
     container.querySelector("#af").addEventListener("submit", (e) => { e.preventDefault(); act(() => api.socAnalystAdd({ email: e.target.email.value, tier: Number(e.target.tier.value) }), "Saved.")(); });
   }
 
+  async function decisions() {
+    const r = await api.decisionCalibration();
+    const rows = Object.entries(r.decisions).map(([name, d]) => {
+      const bands = d.bands ? Object.entries(d.bands).map(([b, v]) => `${b}: ${v.override_rate == null ? `${v.n} outcome(s), too few` : `${pct(v.override_rate)} overridden of ${v.n}`}`).join("; ") : "";
+      const measured = d.status === "measured";
+      return `<tr><td>${escapeHtml(name)}</td><td>${d.logged}</td><td>${d.judged}</td>
+        <td>${measured ? `Brier ${d.brier}, ECE ${d.ece} ${d.calibrated ? "(within limit)" : "(<strong>not calibrated</strong>)"}, overridden ${pct(d.override_rate)}` : escapeHtml(d.message || "")}</td>
+        <td>${escapeHtml(bands)}</td><td>${Object.entries(d.routes).map(([k, n]) => `${k} ${n}`).join(", ")}</td></tr>`;
+    }).join("");
+    const recs = Object.entries(r.decisions).flatMap(([n, d]) => (d.recommendations || []).map((x) => `<li><strong>${escapeHtml(n)}</strong>: ${escapeHtml(x.message)}</li>`)).join("");
+    shell(`<p class="muted">Every typed decision (alert verdict, finding routing, change approval) is logged with its stated probability and, later, what the person did with it. Nothing is called calibrated until enough outcomes exist. ${escapeHtml(r.note)}</p>
+      <div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">Judged outcomes</div><div class="kpi-value">${r.judged_total}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Model calls avoided (estimate)</div><div class="kpi-value">${r.model_calls_avoided}</div></div></div>
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>Decision</th><th>Logged</th><th>Judged</th><th>Calibration</th><th>Override rate by confidence band</th><th>Routes</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <h3>Suggested changes</h3>${recs ? `<ul>${recs}</ul><p class="muted">Advice only. Edit remediation/config/decision_policy.yaml yourself if you agree.</p>` : '<p class="muted">None.</p>'}`);
+  }
+
   async function show() {
     try {
       if (openCase) return await caseView();
-      return await ({ queues, metrics, analyse, analysts }[tab] || queues)();
+      return await ({ queues, metrics, analyse, analysts, decisions }[tab] || queues)();
     } catch (e) { container.innerHTML = `<p class="empty-state">${escapeHtml(e.message)}</p>`; }
   }
   await show();

@@ -6,7 +6,7 @@ from the stores (hunting alerts and hunts, SOC cases); nothing is inferred and n
 """
 from sqlalchemy import select
 
-from remediation.graphs.schema import GraphBuilder, empty
+from remediation.graphs.schema import GraphBuilder, empty, prov
 from remediation.hunting import store as hunting_store
 from remediation.soc import cases as soc_cases
 from remediation.utils import db as db_module
@@ -76,11 +76,11 @@ def build(engine=None, findings=None, **context):
             nid = f"{kind}:{val}"
             entity_alerts.setdefault(nid, set()).add(a["id"])
             g.node(nid, val, kind, weight=0, sev=_sev(a["severity"]), href="/assets" if kind == "host" else None)
-            g.edge(aid, nid, "involves")
+            g.edge(aid, nid, "involves", prov=prov(source=a.get("source"), observed_at=a.get("occurred_at")))
         tech = (a.get("technique") or "").strip().upper()
         if tech:
             g.node(f"technique:{tech}", tech, "technique", href="/hunting?tab=proposals")
-            g.edge(aid, f"technique:{tech}", "tagged")
+            g.edge(aid, f"technique:{tech}", "tagged", prov=prov(source=a.get("source"), observed_at=a.get("occurred_at")))
     for nid, ids in entity_alerts.items():
         g.node(nid, nid, nid.split(":", 1)[0], weight=len(ids), meta={"alerts": len(ids)})
     case_ids = set()

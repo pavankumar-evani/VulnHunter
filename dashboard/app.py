@@ -27,7 +27,9 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, R
 from sqlalchemy import func, select
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator
+from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "cli"))
@@ -35,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
 import appsec_api  # noqa: E402
+import mcp_api  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
 import reports  # noqa: E402
@@ -42,6 +45,11 @@ import quanta as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation import graphs as module_graphs  # noqa: E402
+from remediation.ontology import estate as ontology_estate  # noqa: E402
+from remediation.ontology import ontology as ontology_vocab  # noqa: E402
+from remediation.ontology import provenance as ontology_provenance  # noqa: E402
+from remediation.ontology import query as ontology_query  # noqa: E402
+from remediation.ontology import validate as ontology_validate  # noqa: E402
 from remediation.posture import engine as posture_engine  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.integrity import heal as integrity_heal, service as integrity_service  # noqa: E402
@@ -65,10 +73,11 @@ from remediation.connectors import reputation_connector as hunt_rep, siem_search
 from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
-from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa: E402
+from remediation.aisec import rules as aisec_rules, rules_mcp as aisec_rules_mcp, store as aisec_store  # noqa: E402
 from remediation.apisec import cicd as api_cicd, classify as api_classify, config as api_config, generate as api_generate, identity as api_identity, logs as api_logs  # noqa: E402
 from remediation.apisec import metrics as api_metrics, openapi as api_openapi, policies as api_policies, rollout as api_rollout, rules as api_rules, store as api_store, waf as api_waf  # noqa: E402
 from remediation import capabilities as capabilities_mod  # noqa: E402
+from remediation.decisions import calibration as decision_calibration, registry as decision_registry, schema as decision_schema, service as decision_service  # noqa: E402
 from remediation.licensing import license as licensing  # noqa: E402
 from remediation.iam import model as iam_model, store as iam_store  # noqa: E402
 from remediation.firewall import analysis as fw_analysis, model as fw_model, store as fw_store  # noqa: E402
@@ -84,6 +93,7 @@ from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as 
 from remediation.hunting import ttp as hunt_ttp  # noqa: E402
 from remediation.connectors import darkweb_connector as dw_connector  # noqa: E402
 from remediation.darkweb import watch as dw_watch  # noqa: E402
+from remediation.asm import findings as asm_findings, parsers as asm_parsers, store as asm_store, summary as asm_summary  # noqa: E402
 from remediation.hunting import usecase_store as hunt_usecase_store, usecases as hunt_usecases  # noqa: E402
 from remediation.soar import ai_draft as soar_ai_draft, recommend as soar_recommend  # noqa: E402
 from remediation.soc import cases as soc_cases, loganalysis as soc_loganalysis, metrics as soc_metrics  # noqa: E402
@@ -379,6 +389,7 @@ async def _notification_scheduler_loop():
             _run_grc_evidence_if_due()
             _run_detection_assessment_if_due()
             _run_darkweb_if_due()
+            _run_asm_stale_if_due()
             _run_cvd_if_due()
             _run_gitops_sync_if_due()
             _run_integrity_checks_if_due()
@@ -709,6 +720,77 @@ def api_module_graph(module: str, request: Request, user: dict = Depends(rbac.ge
         rbac.require_admin(request)
     findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
     return _fast_json(module_graphs.build(module, findings=findings))
+
+
+class OntologyQueryBody(BaseModel):
+    """Either a structured `pattern` (remediation/ontology/query.py) or the id of a named `question`; never free text."""
+    pattern: Optional[dict] = None
+    question: Optional[str] = Field(default=None, max_length=80)
+
+
+def _ontology_module_graphs(findings):
+    """Each module's graph for the ontology routes; a module whose data cannot be read is None (and named by the estate's `sources`)."""
+    out = {}
+    for m in module_graphs.MODULES:
+        try:
+            out[m] = module_graphs.build(m, findings=findings)
+        except Exception:  # noqa: BLE001
+            out[m] = None
+    return out
+
+
+@app.get("/api/ontology")
+def api_ontology():
+    """The ontology (remediation/config/ontology.yaml): classes, is-a, typed relations and how each module graph maps onto them. Public like the other
+    reads: it describes the vocabulary, not anyone's data."""
+    return _fast_json(ontology_vocab.load().describe())
+
+
+@app.get("/api/ontology/questions")
+def api_ontology_questions():
+    """The named multi-hop questions (remediation/config/ontology_questions.yaml), each as its structured pattern and a readable line."""
+    return {"questions": ontology_query.load_questions()}
+
+
+@app.get("/api/ontology/validate")
+def api_ontology_validate(request: Request, module: Optional[str] = None, user: dict = Depends(rbac.get_current_user)):
+    """Check the module graphs and the whole-estate graph against the ontology (a SHACL-like report; nothing is changed or dropped), with how much of the
+    estate's provenance is known. Administrator only: it builds every module's graph."""
+    rbac.require_admin(request)
+    if module is not None and module != "estate" and module not in module_graphs.MODULES:
+        raise HTTPException(status_code=404, detail="Unknown module")
+    findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    graphs = _ontology_module_graphs(findings)
+    reports = {m: ontology_validate.validate(g, m) for m, g in sorted(graphs.items()) if g is not None and module in (None, "estate", m)}
+    for r in reports.values():
+        r["violations"] = r["violations"][:100]
+    estate_graph = ontology_estate.build(findings=findings, graphs={m: g for m, g in graphs.items() if g is not None})
+    estate_report = ontology_validate.validate(estate_graph, "estate")
+    estate_report["violations"] = estate_report["violations"][:100]
+    facts = ontology_provenance.facts(estate_graph, "estate")
+    return _fast_json({"conforms": all(r["conforms"] for r in reports.values()) and estate_report["conforms"], "modules": reports, "estate": estate_report,
+                       "provenance": ontology_provenance.coverage(facts), "sources": estate_graph["sources"],
+                       "unavailable": sorted(m for m, g in graphs.items() if g is None)})
+
+
+@app.post("/api/ontology/query")
+def api_ontology_query(body: OntologyQueryBody, request: Request, user: dict = Depends(rbac.get_current_user)):
+    """Run a structured multi-hop pattern, or a named question, over the whole-estate graph. Administrator only. The pattern is parsed against the ontology
+    and bounded in depth, size and work; it is never evaluated as code."""
+    rbac.require_admin(request)
+    if (body.pattern is None) == (body.question is None):
+        raise HTTPException(status_code=400, detail="Send exactly one of pattern or question")
+    findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    graphs = {m: g for m, g in _ontology_module_graphs(findings).items() if g is not None}
+    estate_graph = ontology_estate.build(findings=findings, graphs=graphs)
+    try:
+        if body.question is not None:
+            return _fast_json(ontology_query.run_question(estate_graph, body.question))
+        return _fast_json(ontology_query.run(estate_graph, body.pattern))
+    except ontology_query.QueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Unknown question")
 
 
 @app.get("/api/dependencies")
@@ -2604,6 +2686,7 @@ class ApiKeyBody(BaseModel):
     name: str
     scopes: list[str]
     expires_days: int | None = None
+    team: str | None = None   # optional: binds an `mcp:read` key's results to this team
 
 
 @app.get("/api/api-keys")
@@ -2615,7 +2698,7 @@ def api_list_api_keys(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
 def api_create_api_key(body: ApiKeyBody, user: dict = Depends(rbac.require_admin)):
     """Creates a key. The response contains the full key exactly once; it cannot be shown again."""
     try:
-        record, token = apikey_store.create(body.name, body.scopes, user["email"], body.expires_days)
+        record, token = apikey_store.create(body.name, body.scopes, user["email"], body.expires_days, team=body.team)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"key": token, "record": record, "warning": "Copy this key now. It is not stored and cannot be shown again."}
@@ -4883,7 +4966,45 @@ def api_soc_alert_update(alert_id: int, body: AlertUpdateBody, user: dict = Depe
     except (ValueError, KeyError) as exc:
         raise _hunt_400(exc) from exc
     activity_log.record_activity(user["email"], "soc.alert.update", str(alert_id), {"status": a["status"], "disposition": a["disposition"]})
+    if body.disposition:
+        decision_service.judge_soc_disposition(alert_id, a["disposition"])
     return a
+
+
+# ---------------------------------------------------------------- typed decisions: evaluate (dry), policy, calibration (docs/DECISIONS.md)
+class DecisionEvaluateBody(BaseModel):
+    decision: str
+    state: dict = {}
+    purpose: str = "decide"
+
+
+@app.post("/api/decisions/evaluate")
+def api_decisions_evaluate(body: DecisionEvaluateBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """Dry: evaluates one decision and returns the typed answers, the gate's route and whether a model would be needed. Writes nothing."""
+    try:
+        return decision_service.public(decision_service.evaluate(body.decision, body.state, purpose=body.purpose))
+    except decision_schema.SchemaViolation as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/decisions/policy")
+def api_decisions_policy(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    from remediation.decisions import gate as decision_gate
+    pol = decision_gate.load_policy()
+    decs = []
+    for name, d in decision_registry.DECISIONS.items():
+        dp = (pol.get("decisions") or {}).get(name) or {}
+        decs.append({"name": name, "title": d.title, "questions": [{"name": q.name, "kind": q.kind, "options": list(q.options), "prompt": q.prompt} for q in d.questions],
+                     "reversible": dp.get("reversible"), "local": dp.get("local"), "touches_environment": d.touches_environment,
+                     "auto_allowed": decision_gate.auto_allowed(d, dp), "thresholds": dp.get("thresholds")})
+    return {"decisions": decs, "calibration": pol.get("calibration")}
+
+
+@app.get("/api/decisions/calibration")
+def api_decisions_calibration(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return decision_calibration.report()
 
 
 # ---------------------------------------------------------------- SOC agents: hunt execution, threat intel, investigation, detection engineering
@@ -5012,6 +5133,7 @@ class _AutoInvestigator:
             c = self.ctx
             inv = hunt_soc.investigate(alert, c["alerts"], c["findings"], c["owners"], cfg=self.cfg, identity=c["identity"], playbooks=c["playbooks"])
             hunt_service.save_investigation(inv, hunt_soc.render_markdown(alert, inv), "system")
+            decision_service.log_soc_verdict(alert, inv)
             case = soc_cases.auto_case(alert, inv)
             self.done += 1
             if alert["id"] not in {a["id"] for a in c["alerts"]}:
@@ -5266,6 +5388,7 @@ def api_soc_investigate(alert_id: int, body: InvestigateBody, user: dict = Depen
                                identity=_identity_map(), playbooks=soar_playbooks.list_all())
     md = hunt_soc.render_markdown(alert, inv)
     iid = hunt_service.save_investigation(inv, md, user["email"])
+    decision_service.log_soc_verdict(alert, inv)
     auto = soc_cases.auto_case(alert, inv)
     activity_log.record_activity(user["email"], "soc.alert.investigate", str(alert_id), {"verdict": inv["verdict"], "confidence": inv["confidence"],
                                                                                          "reputation": bool(lookup), "siem": bool(siem_run)})
@@ -6119,6 +6242,11 @@ app.include_router(appsec_api.build_router(require_api_key=require_api_key, scop
                                            read_upload=_read_upload, enrich_in_background=_enrich_in_background,
                                            queue_rescan_job=lambda connection_id, actor: job_queue.enqueue(job_worker.KIND_CONNECTION_SYNC, {"connection_id": connection_id, "actor": actor},
                                                                                                           dedupe_key=f"sync:{connection_id}")))
+app.include_router(mcp_api.build_router(
+    load_findings=lambda: dashboard_data.load_live_queue(), load_assets=lambda: [dict(r) for r in dashboard_data._load_scored_assets()[1]],
+    scope_findings=lambda rows, user: _scope_to_team(_annotate_finding_teams(rows), user), scope_assets=lambda rows, user: _scope_to_team(rows, user),
+    attack_chains=lambda findings: dashboard_data.get_attack_chains(findings),
+    posture=lambda findings: posture_engine.assess(findings=findings, now=datetime.datetime.now(datetime.timezone.utc))))  # read-only MCP endpoint; see dashboard/mcp_api.py
 app.include_router(__import__("simulation_api").build_router())  # demonstration data through the real connector code; see dashboard/simulation_api.py
 
 
@@ -6138,6 +6266,136 @@ def api_zero_day_watch(days: int = 30, user: dict = Depends(rbac.require_login))
     return zero_day.watch(catalog, dashboard_data.load_live_queue(), comps, days)
 
 
+# ---------------------------------------------------------------- external attack surface (imported discovery output; Quanta never scans)
+class AsmScopeBody(BaseModel):
+    domains: list[str] = []
+    cidrs: list[str] = []
+
+
+class AsmPublishBody(BaseModel):
+    confirm: bool = False
+
+
+class AsmSettingsBody(BaseModel):
+    expected_cadence_hours: float | None = None
+
+
+def _run_asm_stale_if_due():
+    """Leader tick: if no import arrived within the expected cadence, raises one 'stale attack-surface data' SOC alert per episode. Never raises."""
+    try:
+        alert = asm_store.check_stale()
+        if alert:
+            activity_log.record_activity("system", "asm.stale", "attack-surface", {"alert_id": alert.get("id")})
+    except Exception:  # noqa: BLE001 - a bad check must never stop the tick
+        pass
+
+
+def _asm_state():
+    """The evaluation of the stored surface, judged against the asset inventory the queue and ownership records give."""
+    queue = findings_merge.load()
+    return asm_findings.evaluate(asm_store.all_assets(), asm_findings.known_assets(queue, asm_store.ownership()))
+
+
+def _asm_publish(actor, background):
+    res = _asm_state()
+    items = asm_findings.to_queue_items(res["findings"])
+    findings, errors = api_findings.normalise_batch(items)
+    result = findings_merge.merge(findings, "asm", reconcile=True)
+    activity_log.record_activity(actor, "asm.publish", "asm", {"findings": len(findings), "rejected": len(errors), **result})
+    if result["added"] or result["updated"]:
+        _enrich_in_background(background)
+    return {"published": len(findings), "rejected": len(errors), **result}
+
+
+def _asm_import(tool, data, scope, complete, publish, actor, allow_seeds, background):
+    try:
+        text = data.decode("utf-8", "replace")
+        out = asm_store.import_text(tool, text, scope_label=scope or None, complete=complete, actor=actor, allow_seeds=allow_seeds)
+    except asm_parsers.ParseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(actor, "asm.import", tool, {k: out[k] for k in ("records", "new", "changed", "disappeared", "out_of_scope", "skipped")})
+    if publish and tool != "seeds":
+        out["queue"] = _asm_publish(actor, background)
+    return out
+
+
+@app.post("/api/ingest/asm")
+async def api_ingest_asm(request: Request, background: BackgroundTasks, tool: str, scope: str = "", complete: bool = False, publish: bool = False, key: dict = Depends(require_api_key("asm:write"))):
+    """The raw output of subfinder, dnsx, httpx, naabu or nuclei as the request body (JSON lines or a JSON array). `complete=true` says the file is the whole answer for `scope`
+    (a domain or range), so assets it omits are marked disappeared. The scope itself cannot be changed here."""
+    return _asm_import(tool, await _read_upload(request), scope, complete, publish, f"apikey:{key['name']}", False, background)
+
+
+@app.post("/api/asm/import")
+async def api_asm_import(request: Request, background: BackgroundTasks, tool: str, scope: str = "", complete: bool = False, publish: bool = False, user: dict = Depends(rbac.require_admin)):
+    """The same import from the page. `tool=seeds` takes a CSV of domains and ranges and declares them as your scope."""
+    return _asm_import(tool, await _read_upload(request), scope, complete, publish, user["email"], True, background)
+
+
+@app.get("/api/asm/summary")
+def api_asm_summary(days: int = 7, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return asm_summary.build(queue_findings=findings_merge.load(), days=max(1, min(days, 365)))
+
+
+@app.get("/api/asm/assets")
+def api_asm_assets(kind: str | None = None, status: str | None = None, in_scope: bool | None = None, q: str | None = None, tag: str | None = None, tool: str | None = None,
+                   limit: int = 500, offset: int = 0, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    out = asm_store.list_assets(kind=kind, status=status, in_scope=in_scope, q=q, tag=tag, tool=tool, limit=limit, offset=max(0, offset))
+    out["data_age"] = asm_store.data_age()
+    return out
+
+
+@app.get("/api/asm/changes")
+def api_asm_changes(days: int | None = None, change: str | None = None, limit: int = 500, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"changes": asm_store.list_changes(days=days, change=change, limit=limit), "runs": asm_store.list_runs(limit=20), "data_age": asm_store.data_age()}
+
+
+@app.get("/api/asm/scope")
+def api_asm_scope(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    s = asm_store.get_scope()
+    return {**s, "declared": bool(s["domains"] or s["cidrs"]), "expected_cadence_hours": asm_store.get_cadence_hours(),
+            "note": "Anything outside this scope is recorded and flagged, never silently included, and never raises a finding. With nothing declared, everything is treated as in scope."}
+
+
+@app.put("/api/asm/scope")
+def api_asm_set_scope(body: AsmScopeBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        out = asm_store.set_scope(body.domains, body.cidrs, actor=user["email"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "asm.scope", None, {"domains": len(out["domains"]), "cidrs": len(out["cidrs"]), "rescoped": out["rescoped"]})
+    return out
+
+
+@app.put("/api/asm/settings")
+def api_asm_settings(body: AsmSettingsBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        h = asm_store.set_cadence_hours(body.expected_cadence_hours)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "asm.settings", None, {"expected_cadence_hours": h})
+    return {"expected_cadence_hours": h, "data_age": asm_store.data_age()}
+
+
+@app.get("/api/asm/findings")
+def api_asm_findings(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    res = _asm_state()
+    return {**res, "rules": asm_findings.RULES, "data_age": asm_store.data_age(),
+            "note": "Findings are raised by explicit rules from imported tool output. A rule with no data to judge raises nothing, and the gaps list says what is missing."}
+
+
+@app.post("/api/asm/publish")
+def api_asm_publish(body: AsmPublishBody, background: BackgroundTasks, user: dict = Depends(rbac.require_admin)):
+    """Sends the current attack-surface findings to the main queue (source asm). It is the complete set, so findings the data no longer shows are removed."""
+    if not body.confirm:
+        items = asm_findings.to_queue_items(_asm_state()["findings"])
+        return {"preview_only": True, "findings": len(items), "message": "This replaces the asm findings in the main queue with the current set. Send confirm: true to publish."}
+    return _asm_publish(user["email"], background)
+
+
+@app.get("/api/asm/how-to-feed")
+def api_asm_how_to_feed(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    return {"examples": asm_parsers.EXAMPLES, "post_example": asm_parsers.POST_EXAMPLE, "safety": asm_parsers.SAFETY, "tools": list(asm_parsers.TOOLS)}
 # ---------------------------------------------------------------- Anthropic CVD feed (public coordinated-disclosure payload, a threat-intel source)
 def cvd_connector_factory():
     return cvd_feed_connector.CvdFeedConnector()
@@ -6320,7 +6578,10 @@ class AiPublishBody(BaseModel):
 
 def _ai_meta():
     return {"kinds": aisec_rules.KINDS, "environments": aisec_rules.ENVIRONMENTS, "hosting": aisec_rules.HOSTING, "scopes": aisec_rules.SCOPES, "provenance": aisec_rules.PROVENANCE,
-            "serialization": aisec_rules.SERIALIZATION, "data_classes": aisec_rules.DATA_CLASSES, "questions": aisec_rules.QUESTIONS, "tri": aisec_rules.TRI}
+            "serialization": aisec_rules.SERIALIZATION, "data_classes": aisec_rules.DATA_CLASSES, "questions": aisec_rules.QUESTIONS, "tri": aisec_rules.TRI,
+            "agent": {"transports": aisec_rules_mcp.TRANSPORTS, "auth": aisec_rules_mcp.AUTH, "side_effects": aisec_rules_mcp.SIDE_EFFECTS, "categories": aisec_rules_mcp.CATEGORIES,
+                      "memory": aisec_rules_mcp.MEMORY, "eval_suites": aisec_rules_mcp.EVAL_SUITES, "server_questions": aisec_rules_mcp.SERVER_QUESTIONS, "asset_questions": aisec_rules_mcp.ASSET_QUESTIONS,
+                      "server_tri": aisec_rules_mcp.SERVER_TRI, "release": aisec_rules_mcp.RELEASE_TRI, "observability": aisec_rules_mcp.OBS_TRI, "audit_log": aisec_rules_mcp.AUDIT_TRI}}
 
 
 @app.get("/api/ai-security/overview")

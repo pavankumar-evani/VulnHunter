@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from remediation.aisec import rules_mcp
+
 KINDS = ("application", "agent", "model", "mcp-server", "vector-db", "dataset", "gateway", "plugin")
 ENVIRONMENTS = ("production", "staging", "development")
 HOSTING = ("vendor-api", "self-hosted", "on-device", "unknown")
@@ -120,6 +122,7 @@ def evaluate(asset, today=None, approved=None):
     vm = (a.get("vendor_model") or "").lower()
     if allowed and vm and kind in ("application", "agent", "model", "gateway") and not any(m in vm or vm in m for m in allowed):
         add("GOV", "Governance", "Medium", "Model is not on the approved list", f"'{a.get('vendor_model')}' is not in ai_usage_policy.yaml's allowed_models.", "Move to an approved model or have this one reviewed and added.")
+    out += rules_mcp.evaluate(a, today)
     return out
 
 
@@ -135,7 +138,7 @@ def unanswered(asset):
         relevant = relevant + ["rag_access_control"]
     if a.get("fine_tuned") is True:
         relevant = relevant + ["training_data_validated"]
-    return [(f, QUESTIONS[f]) for f in dict.fromkeys(relevant) if a.get(f) is None]
+    return [(f, QUESTIONS[f]) for f in dict.fromkeys(relevant) if a.get(f) is None] + rules_mcp.unanswered(a)
 
 
 def score(findings):

@@ -322,6 +322,7 @@ api_keys = Table(
     Column("expires_at", String, nullable=True),
     Column("last_used_at", String, nullable=True),
     Column("revoked_at", String, nullable=True),
+    Column("team", String, nullable=True),   # optional: binds the key's reads (MCP) to one team's findings and assets
 )
 
 # Links between a finding and a ticket in an external system (remediation/connections/links.py).
@@ -749,6 +750,66 @@ darkweb_sources = Table(
     Column("last_run_at", String, nullable=True),
     Column("last_status", String, nullable=True),
     Column("last_count", Integer, nullable=True),
+)
+
+asm_assets = Table(
+    "asm_assets", metadata,
+    Column("key", String, primary_key=True),  # kind:value, lower case
+    Column("kind", String, nullable=False),  # domain | subdomain | ip | service | url
+    Column("value", String, nullable=False),
+    Column("first_seen", String, nullable=False),
+    Column("last_seen", String, nullable=False),
+    Column("status", String, nullable=False),  # active | gone
+    Column("in_scope", Integer, nullable=False, default=1),
+    Column("sources_json", Text, nullable=False),
+    Column("tags_json", Text, nullable=False),
+    Column("tech_json", Text, nullable=False),
+    Column("ports_json", Text, nullable=False),
+    Column("data_json", Text, nullable=False),
+    Column("gone_at", String, nullable=True),
+)
+
+asm_runs = Table(
+    "asm_runs", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("imported_at", String, nullable=False),
+    Column("tool", String, nullable=False),
+    Column("scope_label", String, nullable=True),
+    Column("complete", Integer, nullable=False, default=0),
+    Column("records", Integer, nullable=False),
+    Column("skipped", Integer, nullable=False),
+    Column("new_count", Integer, nullable=False),
+    Column("changed_count", Integer, nullable=False),
+    Column("gone_count", Integer, nullable=False),
+    Column("out_of_scope", Integer, nullable=False),
+    Column("actor", String, nullable=True),
+    Column("note", Text, nullable=True),
+)
+
+asm_changes = Table(
+    "asm_changes", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("run_id", Integer, nullable=False),
+    Column("at", String, nullable=False),
+    Column("asset_key", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("change", String, nullable=False),  # new | changed | disappeared | reappeared
+    Column("detail", Text, nullable=True),
+    Column("in_scope", Integer, nullable=False, default=1),
+)
+
+asm_scope = Table(
+    "asm_scope", metadata,
+    Column("kind", String, primary_key=True),  # domain | cidr
+    Column("value", String, primary_key=True),
+    Column("added_by", String, nullable=True),
+    Column("added_at", String, nullable=False),
+)
+
+asm_settings = Table(
+    "asm_settings", metadata,
+    Column("name", String, primary_key=True),
+    Column("value", Text, nullable=True),
 )
 
 soc_analysts = Table(
@@ -1233,6 +1294,26 @@ devsecops_custom_controls = Table(
     Column("created_at", String, nullable=False),
 )
 
+# Counts and outcomes of typed decisions (remediation/decisions/calibration.py): never free text, never a prompt, never a person's identity.
+decision_log = Table(
+    "decision_log", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("decision", String, nullable=False),
+    Column("question", String, nullable=False),
+    Column("ref", String, nullable=True),            # an opaque id such as alert:12, never text
+    Column("logged_at", String, nullable=False),
+    Column("value", String, nullable=False),
+    Column("probability", Float, nullable=False),
+    Column("confidence", Float, nullable=False),
+    Column("route", String, nullable=False),
+    Column("evaluator", String, nullable=True),
+    Column("version", String, nullable=True),
+    Column("outcome", String, nullable=True),        # accepted | overridden
+    Column("outcome_value", String, nullable=True),
+    Column("outcome_at", String, nullable=True),
+    Column("model_calls_avoided", Integer, nullable=False, default=0),
+)
+
 
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
@@ -1259,7 +1340,7 @@ def ensure_schema(engine):
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
             hunts, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
-            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls,
+            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log, asm_assets, asm_runs, asm_changes, asm_scope, asm_settings,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

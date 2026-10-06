@@ -18,6 +18,7 @@ core:
   - /api/status
   - /api/license
   - /api/features
+  - /api/decisions
   - /api/capabilities
   - /api/overview
   - /api/queue
@@ -32,6 +33,8 @@ core:
   - /api/connections
   - /api/simulation
   - /api/api-keys
+  - /mcp
+  - /api/mcp
   - /api/admin
   - /api/integrity
   - /api/export
@@ -97,6 +100,8 @@ modules:
     - /api/active-directory
     - /api/assets
     - /api/firewall
+    - /api/asm
+    - /api/ingest/asm
     - /api/controls
     - /api/zero-day-watch
     - /api/attack-paths
@@ -139,6 +144,7 @@ shared:
   /api/splunk: [soc, remediation]
   /api/risk: [infra, grc]
   /api/graphs: [soc, appsec, devsecops, infra, ai, remediation, grc]   # the bare prefix; each module's own /api/graphs/<module> entry above is longer, so it decides
+  /api/ontology: [soc, appsec, devsecops, infra, ai, remediation, grc]   # reads every module's graph, so any one licensed module is enough (like /api/graphs)
 
 # Convenience bundles for the issuing tool (cli/quanta_license.py --edition). They are NOT prices and not the source of truth: a licence lists its modules explicitly.
 editions:
