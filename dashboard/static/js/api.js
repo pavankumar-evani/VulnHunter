@@ -190,6 +190,8 @@ export const api = {
   darkwebImport: (body) => request("POST", "/api/darkweb/import", body),
   darkwebHitStatus: (id, body) => request("POST", `/api/darkweb/hits/${id}/status`, body),
   socAlerts: () => request("GET", "/api/soc/alerts"),
+  decisionCalibration: () => request("GET", "/api/decisions/calibration"),
+  decisionPolicy: () => request("GET", "/api/decisions/policy"),
   socCases: (q = {}) => request("GET", "/api/soc/cases" + (Object.keys(q).length ? "?" + new URLSearchParams(q) : "")),
   socCase: (id) => request("GET", `/api/soc/cases/${id}`),
   socCaseOpen: (body) => request("POST", "/api/soc/cases", body),

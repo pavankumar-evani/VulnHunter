@@ -1,0 +1,47 @@
+# Confidence gate for the typed-decision layer (remediation/decisions/, docs/DECISIONS.md).
+#
+# Every decision has two thresholds on the answer's confidence (the lower of its probability and its confidence):
+#   >= auto    the code may act on the answer without a person, but ONLY when the decision is declared reversible and local here AND the decision
+#              does not touch a customer environment in code (that last part cannot be changed from this file).
+#   >= review  the answer is shown as a suggestion and a person confirms it.
+#   below      a person decides; the answer is shown only as context.
+# A decision that is not both `reversible: true` and `local: true` is never routed "auto", whatever its thresholds say.
+# Probabilities start as stated priors, not measured ones: raise `auto` only when the calibration report (GET /api/decisions/calibration) supports it.
+# Recommendations from that report are advice; nothing in this file is ever changed automatically.
+
+decisions:
+  soc-alert-triage:             # a verdict recommendation on one alert. Changes no system; a person still closes the alert.
+    reversible: true
+    local: true
+    thresholds: {auto: 0.95, review: 0.6}
+  finding-routing:              # which fixer domain and which team a finding goes to. A queue assignment, easily changed back.
+    reversible: true
+    local: true
+    thresholds: {auto: 0.9, review: 0.6}
+  change-approval-needed:       # whether a remediation needs a human change approval: skipping it affects a customer environment.
+    reversible: false
+    local: false
+    thresholds: {auto: 0.99, review: 0.7}
+
+# Starting probabilities (priors, not measured ones) used by the shipped deterministic evaluators. Calibration measures how right they are.
+evaluators:
+  soc-alert-triage:
+    band_probability: {high: 0.9, medium: 0.7, low: 0.5}   # by the confidence label soc_triage.yaml scoring gives the verdict
+  finding-routing:
+    explicit_domain: 0.95
+    derived_domain: 0.85
+    no_fixer: 0.9
+    unknown_type: 0.6
+    owner_known: 0.9
+    owner_unknown: 0.5
+  change-approval-needed:
+    policy_matched: 0.9
+    default_policy: 0.7
+    emergency: 0.98
+
+calibration:
+  min_outcomes: 30              # below this many judged decisions nothing is reported as calibrated
+  min_band_outcomes: 10         # below this a confidence band shows counts only
+  bins: 5                       # equal-width reliability bins over 0..1
+  max_override_rate_auto_band: 0.05   # recommend raising `auto` when people override more than this in the auto band
+  ece_warn: 0.10                # expected calibration error above this: do not treat probabilities as calibrated
