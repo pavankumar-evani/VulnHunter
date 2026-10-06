@@ -311,7 +311,7 @@ class MigrationTests(Base):
         self.assertIn("ai_asset_agent_mcp_lifecycle_fields", [n for _, n, _ in migrations.MIGRATIONS])
         migrations.apply(self.engine)
         self.assertEqual(migrations.pending(self.engine), [])
-        migrations._m006_ai_asset_agent_fields(self.engine)                                                   # re-running by hand is safe
+        migrations._m007_ai_asset_agent_fields(self.engine)                                                   # re-running by hand is safe
         migrations.apply(self.engine)
 
 

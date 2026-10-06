@@ -44,6 +44,7 @@ from auth import users as auth_users  # noqa: E402
 from remediation import graphs as module_graphs  # noqa: E402
 from remediation.posture import engine as posture_engine  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
+from remediation.integrity import heal as integrity_heal, service as integrity_service  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
 import observability  # noqa: E402
@@ -75,6 +76,8 @@ from remediation.devsecops import controls as dso_controls, factory as dso_facto
 from remediation.appsec import store as appsec_store  # noqa: E402
 from remediation.gitops import service as gitops_service  # noqa: E402
 from remediation.enrichment import sbom as sbom_mod, zero_day_watch as zero_day  # noqa: E402
+from remediation.connectors import cvd_feed_connector  # noqa: E402
+from remediation.cvd import store as cvd_store  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
 from remediation.hunting import ttp as hunt_ttp  # noqa: E402
@@ -355,6 +358,14 @@ def _run_gitops_sync_if_due():
     return gitops_service.sync_and_verify(dashboard_data.load_live_queue())
 
 
+def _run_integrity_checks_if_due():
+    """Hourly: code baseline, store consistency and host checks. A new or changed set of problems is written once to the activity log and mailed to
+    QUANTA_ALERT_EMAIL when SMTP is configured. Off with QUANTA_INTEGRITY_CHECKS=false. Never repairs anything: repairs are an admin action."""
+    to = [a.strip() for a in os.environ.get("QUANTA_ALERT_EMAIL", "").split(",") if a.strip()]
+    send = (lambda subject, body: email_sender.send_email(to, subject, body)) if to and email_sender.is_configured() else None
+    return integrity_service.run_tick(send=send)
+
+
 async def _notification_scheduler_loop():
     while True:
         await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
@@ -367,7 +378,9 @@ async def _notification_scheduler_loop():
             _run_grc_evidence_if_due()
             _run_detection_assessment_if_due()
             _run_darkweb_if_due()
+            _run_cvd_if_due()
             _run_gitops_sync_if_due()
+            _run_integrity_checks_if_due()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -2475,8 +2488,37 @@ def readyz():
         ok = False
     findings = dashboard_data.REPO_ROOT / "remediation" / "output" / "normalized-findings.json"
     checks["findings_file"] = "ok" if findings.exists() else "missing (no data ingested yet)"
+    last = integrity_service.last_summary()
+    # informational only: integrity warnings never make the instance not-ready (that would restart a pod over a stale lock file)
+    checks["integrity"] = ("not checked yet" if last is None else ("ok" if not last["problems"] else f"{last['status']}: {len(last['problems'])} issue(s) - see /api/integrity"))
     checks["scheduler"] = "ok" if (_scheduler_task is not None and not _scheduler_task.done()) else "not running"
     return JSONResponse({"status": "ready" if ok else "not-ready", "checks": checks}, status_code=200 if ok else 503)
+
+
+class IntegrityHealBody(BaseModel):
+    actions: list[str] | None = None
+    confirm: bool = False
+
+
+@app.get("/api/integrity")
+def api_integrity(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Code baseline (modified/missing/unexpected files vs the build-time manifest; 'no-baseline' when none exists) plus store consistency checks and the
+    safe repairs currently available. Read-only. See docs/INTEGRITY.md."""
+    report = integrity_service.full_report()
+    report["heal_actions"] = {name: {"title": spec["title"], "why": spec["why"]} for name, spec in integrity_heal.ACTIONS.items()}
+    return report
+
+
+@app.post("/api/integrity/heal")
+def api_integrity_heal(body: IntegrityHealBody, user: dict = Depends(rbac.require_admin)):
+    """Safe repairs only (stale locks, findings file from .bak, missing tables, file snapshots). Preview unless confirm=true; each executed action is written to
+    the activity log. Never deletes customer data."""
+    unknown = [a for a in (body.actions or []) if a not in integrity_heal.ACTIONS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown action(s): {', '.join(unknown)}")
+    result = integrity_heal.run(actions=body.actions, confirm=body.confirm, actor=user["email"])
+    integrity_service.full_report()   # refresh the summary /readyz shows
+    return result
 
 
 @app.get("/metrics")
@@ -6072,6 +6114,66 @@ def api_zero_day_watch(days: int = 30, user: dict = Depends(rbac.require_login))
     except Exception:  # noqa: BLE001 - the SBOM is optional
         comps = []
     return zero_day.watch(catalog, dashboard_data.load_live_queue(), comps, days)
+
+
+# ---------------------------------------------------------------- Anthropic CVD feed (public coordinated-disclosure payload, a threat-intel source)
+def cvd_connector_factory():
+    return cvd_feed_connector.CvdFeedConnector()
+
+
+def _cvd_refresh():
+    return cvd_store.upsert(cvd_connector_factory().fetch())
+
+
+_CVD_LAST_RUN = {"at": None}
+
+
+def _run_cvd_if_due():
+    """Leader tick: refreshes the public CVD feed at most hourly. OFF unless QUANTA_CVD_FEED_REFRESH=true. Never raises."""
+    if os.environ.get("QUANTA_CVD_FEED_REFRESH", "").lower() != "true":
+        return
+    try:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if _CVD_LAST_RUN["at"] and now - _CVD_LAST_RUN["at"] < datetime.timedelta(hours=1):
+            return
+        _CVD_LAST_RUN["at"] = now
+        _cvd_refresh()
+    except Exception:  # noqa: BLE001
+        logging.getLogger("quanta.scheduler").warning("CVD feed refresh failed")
+
+
+@app.post("/api/cvd/test-connection")
+def api_cvd_test_connection(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    try:
+        cvd_connector_factory().test_connection()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"The CVD feed could not be reached ({type(exc).__name__}: {exc})") from exc
+    return {"ok": True, "source": cvd_feed_connector.PAGE_URL}
+
+
+@app.post("/api/cvd/fetch")
+def api_cvd_fetch(body: ConfirmBody, user: dict = Depends(rbac.require_admin)):
+    if not body.confirm:
+        return {"preview_only": True, "source": cvd_feed_connector.DEFAULT_URL,
+                "message": "Would read Anthropic's public CVD payload (read only, nothing about your estate is sent) and store its records. Send confirm=true to proceed."}
+    try:
+        result = _cvd_refresh()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"The CVD feed could not be read ({type(exc).__name__}: {exc})") from exc
+    activity_log.record_activity(user["email"], "cvd.fetch", None, result)
+    return result
+
+
+@app.get("/api/cvd/advisories")
+def api_cvd_advisories(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    comps = []
+    try:
+        sb = sbom_mod.load_sbom()
+        comps = [sbom_mod.component_info(c) for c in sbom_mod._all_components(sb)] if sb else []
+    except Exception:  # noqa: BLE001 - the SBOM is optional
+        comps = []
+    advisories = cvd_store.list_advisories()
+    return {**cvd_store.summary(advisories, dashboard_data.load_live_queue(), comps), "advisories": advisories[:500], "source": cvd_feed_connector.PAGE_URL}
 
 
 # ---------------------------------------------------------------- firewall rules management

@@ -15,6 +15,11 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   gaps. Posture Review gains 11 observable checks (AI development lifecycle 23 to 30, AI supply chain 20 to 24; 194 in all) that read `unknown` until the register has the data. The AI relationship graph now
   draws tools, MCP servers and data sources (agent to tool to data source) and flags the untrusted-content path to an unapproved side-effect tool. Rules read what is recorded; Quanta does not connect to a
   server or probe an agent.
+- **Integrity checks and safe self-heal** (`remediation/integrity/`, `docs/INTEGRITY.md`, `GET /api/integrity`, `POST /api/integrity/heal`, `quanta-admin integrity-manifest` and `check-integrity [--heal --confirm]`): a SHA-256 manifest of the code and shipped config
+  built at image build time (code must not change; `remediation/config/*.yaml` policy is expected to, with the editor named where the activity log has one; no manifest reports "no baseline", never "ok"), store consistency checks (schema vs migrations,
+  missing tables, findings file validity and `.bak`, orphaned assignments and approvals, stale locks, file snapshot divergence, SQLite integrity or PostgreSQL probe, disk, clock, API key and licence expiry) and four repairs that preview unless confirmed and
+  are written to the activity log (stale locks of dead owners, findings file from `.bak` keeping the bad copy, missing tables, file snapshots). Summary in `/readyz` (never fails readiness), an hourly leader-tick check with once-per-problem alerts
+  (`QUANTA_INTEGRITY_CHECKS=false` turns it off) and an Integrity tab on the Activity Log page. Not run against a live PostgreSQL or multi-replica deployment.
 
 ### Documentation
 - **README rewritten around the eight modules**: an About section, a pick-your-path table, a real screenshot of every module page on fictional demo data (51 images in `docs/images/modules/`), a flowchart per module, and a researched comparison with commercial and open-source tools that says where Quanta stops.
@@ -25,6 +30,7 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   jitter instead of in lockstep. Twenty simultaneous writers under heavy CPU load used to lose 7 or 8 of their writes to `LockTimeoutError` (the intermittent failures of the concurrency tests); all twenty now land.
 
 ### Added
+- **Anthropic CVD feed** (`remediation/connectors/cvd_feed_connector.py`, `remediation/cvd/`, `/api/cvd/*`, a section on Zero-day Watch, `docs/CVD_FEED.md`): Anthropic's public coordinated-disclosure payload as a threat-intel source, stored in `cvd_advisories` (migration 6), matched to findings by exact CVE and to the estate by product name (not a version check). Confirm-gated fetch; optional hourly refresh with `QUANTA_CVD_FEED_REFRESH=true`. The payload schema is assumed (tolerant parser) and the feed has never been read live.
 - **Environments and releases** (`remediation/utils/environment.py`, `VERSION`, `cli/quanta_release.py`, `remediation/config/features.yaml`, `deploy/helm/quanta/values-{dev,test,prod}.yaml`, `docker-compose.{dev,test}.yml`, `.github/workflows/release.yml` and `rollback.yml`, `docs/ENVIRONMENTS.md`, `docs/RELEASE_PROCESS.md`):
   `QUANTA_ENV` (dev, test, prod; a typo is an error, not a silent dev), one immutable image promoted unchanged through the three with only configuration changing, a DEV or TEST banner and the version and build in the footer,
   `GET /api/status` and `GET /api/features`, per-environment feature flags (a feature starts in dev, then test, then prod), a release preflight (`quanta_release.py check --target prod` fails on a short session secret, bundled sample data, simulation on, pending

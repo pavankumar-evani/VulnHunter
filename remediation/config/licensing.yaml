@@ -32,6 +32,7 @@ core:
   - /api/simulation
   - /api/api-keys
   - /api/admin
+  - /api/integrity
   - /api/export
   - /api/analytics
   - /api/guidance
@@ -58,6 +59,7 @@ modules:
     - /api/detections
     - /api/soar
     - /api/darkweb
+    - /api/cvd
     - /api/threat-intel
     - /api/cortex-xsiam
     - /api/ingest/alerts

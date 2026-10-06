@@ -159,7 +159,7 @@ def assets(runs, recorded, findings):
     return sorted(names.values(), key=str.lower)
 
 
-def control_status(control, asset, runs, recorded, findings, threat_models=0, extras=None):
+def control_status(control, asset, runs, recorded, findings, threat_models=0, extras=None, now=None):
     ev = control.get("evidence") or {}
     a = _norm(asset)
     mine_runs = [r for r in runs if _norm(r["asset"]) == a]
@@ -187,7 +187,7 @@ def control_status(control, asset, runs, recorded, findings, threat_models=0, ex
                               else ("no-evidence", "No SBOM is stored for this application."))
         elif ev["quanta"] == "gate-runs":
             at = (extras.get("gate_runs") or {}).get(a)
-            now = datetime.datetime.now(datetime.timezone.utc)
+            now = now or datetime.datetime.now(datetime.timezone.utc)
             recent = bool(at) and (now - datetime.datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)).days <= GATE_RECENT_DAYS
             status, detail = (("evidenced", f"The release gate was last evaluated {at[:10]}.") if recent
                               else ("no-evidence", f"The release gate has not been evaluated for this application in the last {GATE_RECENT_DAYS} days."))
