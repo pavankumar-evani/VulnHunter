@@ -85,6 +85,8 @@ Headless (CI, cron, the dashboard's own Run page): `python cli/quanta.py --dry-r
 
 ## 🧩 What's inside
 
+Every page opens from the **Home** block: the **Dashboard** (KPIs, SLA status, coverage), **All modules** (browse by goal), **Ask Quanta** (free search over your live data, no AI call, never invents a number), **AI Assist** (explain a finding or draft guidance; the preview is free and you confirm to spend) and the **Inbox** (SLA breaches, new known-exploited CVEs, expiring exceptions). **Support** is a real helpdesk with SLAs and routing, and **FAQ** answers the usual questions.
+
 Quanta is organised into **eight modules**. The sidebar shows one at a time, and the module is also the unit of [licensing](docs/LICENSING.md). Expand any module.
 
 ```mermaid
@@ -113,7 +115,8 @@ flowchart LR
 - **Threat hunting**: a hunt per known-exploited CVE in your estate, with the ATT&CK techniques and queries to run in *your* SIEM.
 - **Detection engineering**: per-rule true-positive and noise rates, health tiers, Sigma drafts, ATT&CK coverage.
 - **SOAR**: validated playbooks; anything that changes your environment needs a second person's approval; responses are signed webhooks to endpoints you own.
-- **Threat intelligence and Dark Web Watch**: STIX and text intake, leak-site and credential-exposure matching.
+- **Threat intelligence, Intel Intake and Dark Web Watch**: STIX and text intake scored for relevance to your estate, leak-site and credential-exposure matching raised as alerts.
+- **Connector pages** for Splunk, Cortex XSIAM, CrowdStrike, and the reputation, SIEM-search and response endpoints.
 
 Details: [SOC reference](docs/enterprise-suite/soc-operations.html).
 </details>
@@ -123,14 +126,17 @@ Details: [SOC reference](docs/enterprise-suite/soc-operations.html).
 
 - **API security**: inventory from OpenAPI files and gateway logs, shadow and deprecated endpoints, OWASP API Top 10 findings with an evidence chain, caller activity, data sensitivity from *your* classification, protection policies sent as signed requests (Quanta changes no WAF). See [docs/API_SECURITY.md](docs/API_SECURITY.md).
 - **Threat models**: components, data flows and trust zones; STRIDE threats raised by explicit rules and joined to live findings.
-- **Code scan**: the `/quanta-scan` pipeline's results.
+- **Application Vulnerabilities**: the application findings queue, pre-filtered.
+- **Code scan** and **scanner uploads** (SARIF, coverage) with API keys for CI.
 </details>
 
 <details>
 <summary><b>3 · DevSecOps &amp; Supply Chain</b>: SBOMs, the graph, fix pull requests, the release gate</summary>
 
+- **Control Library**: 27 controls mapped to OWASP CI/CD and NIST SSDF, each with a CI snippet and per-repository status from real scan runs, plus a **Code Fix Queue** with a fix brief per finding.
 - **Applications and SBOMs**: CycloneDX and SPDX in, or generated from `requirements.txt`, `package.json`, a lock file, `pom.xml` or `go.mod`. Only a lock file gives transitive dependencies, and Quanta says so.
 - **Ranked work**: every finding scored with a visible breakdown (CVSS, EPSS, known-exploited, application criticality, package sensitivity, attack surface, network path). Findings that share one upgrade are grouped into it.
+- **Dependencies**: SBOM-derived blast radius for each vulnerable package.
 - **Interactive dependency and exposure graph**: plain SVG, pan and zoom, paths from the internet to the vulnerable package.
 - **Fix pull requests** (GitHub and GitLab): deterministic manifest edits, an evidence-carrying description, admin approval, a dry run first, then a new branch and a pull request. See [the lifecycle](#fix-pull-request-lifecycle).
 - **CI release gate**: `GET /api/gate/evaluate` returns pass, warn or fail with reasons; every evaluation is recorded and counts as evidence for a control.
@@ -142,20 +148,20 @@ Details: [SOC reference](docs/enterprise-suite/soc-operations.html).
 <details>
 <summary><b>4 · Infrastructure &amp; Exposure</b>: scanners, assets, firewalls, attack paths</summary>
 
-- Scanner and asset-source connectors, an **asset inventory** with owners, **firewall rule analysis** (FW001–FW013, access requests checked against the rules), **attack paths** from ATT&CK tactics, **dependency blast radius**, **zero-day watch** (new CISA KEV entries matched to your vendors), and quantum readiness.
+- **Infrastructure, OT and Certificate vulnerabilities** views, **asset inventory** and **asset and vulnerability mapping**, with scanner and asset-source connectors and owners, **firewall rule analysis** (FW001–FW013, access requests checked against the rules), **attack paths** from ATT&CK tactics, **dependency blast radius**, **zero-day watch** (new CISA KEV entries matched to your vendors), and quantum readiness.
 - Compensating-control coverage and network reachability are shown on every finding; with nothing recorded they say *unknown*, never a guess.
 </details>
 
 <details>
 <summary><b>5 · AI Security</b></summary>
 
-- A register of AI systems checked against the **OWASP LLM Top 10 (2025)**, MCP exposure and governance (an unanswered question is a gap, not a pass), **AI usage analytics** from provider usage APIs and OTLP (cost is reported, estimated or unknown, never zero), and discovery of unreviewed AI applications from proxy or DNS exports.
+- **AI Vulnerabilities** (findings on AI/ML systems) and **AI Security**: a register of AI systems checked against the **OWASP LLM Top 10 (2025)**, MCP exposure and governance (an unanswered question is a gap, not a pass), **AI usage analytics** from provider usage APIs and OTLP (cost is reported, estimated or unknown, never zero), and discovery of unreviewed AI applications from proxy or DNS exports.
 </details>
 
 <details>
 <summary><b>6 · Remediation &amp; Workflow</b>: plans, approvals, tickets</summary>
 
-- A live, re-scored **remediation queue** with SLA clocks, KEV and EPSS-aware priority, **risk tiers** (auto-approvable, needs change approval, manual only) and rollout rings.
+- A live, re-scored **remediation queue**, the **plan**, a **Run Pipeline** page (same dry-run and confirm gates as the CLI) and **ownership analytics**. Every finding is re-scored from the YAML on each load, with SLA clocks, KEV and EPSS-aware priority, **risk tiers** (auto-approvable, needs change approval, manual only) and rollout rings.
 - **Approvals** with an Active Directory group check, **exceptions** (time-boxed risk acceptance that expires), **assignments** to people and teams, **ServiceNow and Jira** push with state mapped back, and **closed-loop verification** from the next scan.
 </details>
 
@@ -163,6 +169,7 @@ Details: [SOC reference](docs/enterprise-suite/soc-operations.html).
 <summary><b>7 · Risk, Governance &amp; Compliance</b></summary>
 
 - **GRC**: framework catalogs (NIST 800-53, CSF 2.0, an AI-governance set, or a full OSCAL catalog), a risk register, automated control tests (too little data gives *n/a*, never a pass), attestations and versioned policies.
+- **Risk Dashboard** and **ML Insights** (scikit-learn anomaly detection and risk clustering: unsupervised, advisory, never a replacement for the deterministic priority rules).
 - **Cyber risk**: FAIR-style Monte Carlo (ALE, P90/P95, treatment ROI) and a cyber health score. Inputs are your estimates.
 - **Access governance** (leavers, dormant, separation of duties, manager reviews), **reports** and the activity log.
 - Quanta supplies evidence and workflow. It does not certify compliance.
@@ -171,7 +178,7 @@ Details: [SOC reference](docs/enterprise-suite/soc-operations.html).
 <details>
 <summary><b>8 · Administration</b> (always included)</summary>
 
-- Sign-in, teams, connections with encrypted credentials, API keys with scopes, support tickets with SLAs, search, notifications, and the licence.
+- Sign-in (local accounts, optional OIDC), **teams and users**, **connections** with encrypted credentials, API keys with scopes, and the admin-editable policy pages: **Priority Rules**, **Exploit Criteria**, **Remediation Policy**, **Asset Policy** and **Notification Settings**. Also the licence.
 </details>
 
 <details>
@@ -296,7 +303,27 @@ Expected on the bundled sample exports: 15 findings across 7 asset classes, enri
 | **Docker Compose** | the app, PostgreSQL and a Caddy TLS front | `docker-compose.yml`, `.env.production.example` |
 | **Kubernetes (Helm)** | several replicas, leader-elected scheduler, a durable job queue, secrets from a vault | [docs/KUBERNETES.md](docs/KUBERNETES.md), `deploy/helm/quanta` |
 
-Before real use: set `QUANTA_PRODUCTION=true` (refuses demo passwords and a missing session secret, and closes anonymous reads), a stable `QUANTA_SESSION_SECRET`, and `QUANTA_ENCRYPTION_KEY`. The operator tool is `python cli/quanta_admin.py` (`gen-key`, `init`, `bootstrap`, `create-admin`, `check`, `backup`, `restore`, `rotate-keys`, `migrate`).
+Before real use: set `QUANTA_PRODUCTION=true` (refuses demo passwords and a missing session secret, and closes anonymous reads), a stable `QUANTA_SESSION_SECRET`, and `QUANTA_ENCRYPTION_KEY`. The operator tool is `python cli/quanta_admin.py`; the table below lists its commands.
+<details>
+<summary><b>Operator commands</b> (<code>python cli/quanta_admin.py &lt;command&gt;</code>)</summary>
+
+| Command | Does |
+|---|---|
+| `gen-key`, `gen-secret` | a new `QUANTA_ENCRYPTION_KEY` / `QUANTA_SESSION_SECRET` |
+| `init`, `prepare` | create the schema (no demo data); first-run setup once per release |
+| `clear-sample-data --yes` | start empty: set the bundled sample data aside |
+| `migrate [--check]` | apply or list pending schema migrations |
+| `create-admin`, `bootstrap`, `reset-password`, `list-users` | accounts (passwords from `QUANTA_ADMIN_PASSWORD` or a prompt, never the command line) |
+| `check` | is this deployment configured safely? |
+| `backup`, `restore` | zip backup and restore |
+| `rotate-keys` | re-encrypt stored credentials under the newest key |
+| `worker`, `jobs` | run or inspect the durable job worker |
+| `scan-pipelines`, `import-sarif`, `import-coverage` | check CI files, import SARIF or coverage reports |
+| `seed-appsec-demo [--remove]` | the application-security demo data |
+
+Licences are issued with `python cli/quanta_license.py` ([docs/LICENSING.md](docs/LICENSING.md)).
+</details>
+
 Full checklist: [docs/PRODUCTION_GUIDE.md](docs/PRODUCTION_GUIDE.md). Module licences are signed, verified offline, and start in a non-blocking `warn` mode: [docs/LICENSING.md](docs/LICENSING.md).
 
 ---
