@@ -1975,6 +1975,8 @@ class RunBody(BaseModel):
             raise ValueError("path must not contain whitespace or control characters")
         if value.startswith("-"):
             raise ValueError("path must not start with '-'")
+        if "\\" in value or re.match(r"[A-Za-z]:", value):
+            raise ValueError("path must be a plain relative or absolute POSIX path, without backslashes or drive letters")
         if ".." in value:
             raise ValueError("path must not contain '..'")
         root = Path(cli.REPO_ROOT).resolve()
