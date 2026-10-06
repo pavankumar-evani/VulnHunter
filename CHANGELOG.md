@@ -6,6 +6,8 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Documentation
+- **README rewritten around the eight modules**: an About section, a pick-your-path table, a real screenshot of every module page on fictional demo data (51 images in `docs/images/modules/`), a flowchart per module, and a researched comparison with commercial and open-source tools that says where Quanta stops.
 ### Changed
 - **Store writes are about four times faster and no longer fail under load** (`remediation/utils/db.py`, `remediation/utils/file_lock.py`): `ensure_schema` runs on every store call (about 90 call sites) and re-checked
   more than 70 tables each time, which was most of a write and was done while holding the store's lock, so concurrent writers queued behind it. It now checks once per engine (`db.forget_schema(engine)` forces a
