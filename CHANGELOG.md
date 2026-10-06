@@ -6,6 +6,13 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Added
+- **Integrity checks and safe self-heal** (`remediation/integrity/`, `docs/INTEGRITY.md`, `GET /api/integrity`, `POST /api/integrity/heal`, `quanta-admin integrity-manifest` and `check-integrity [--heal --confirm]`): a SHA-256 manifest of the code and shipped config
+  built at image build time (code must not change; `remediation/config/*.yaml` policy is expected to, with the editor named where the activity log has one; no manifest reports "no baseline", never "ok"), store consistency checks (schema vs migrations,
+  missing tables, findings file validity and `.bak`, orphaned assignments and approvals, stale locks, file snapshot divergence, SQLite integrity or PostgreSQL probe, disk, clock, API key and licence expiry) and four repairs that preview unless confirmed and
+  are written to the activity log (stale locks of dead owners, findings file from `.bak` keeping the bad copy, missing tables, file snapshots). Summary in `/readyz` (never fails readiness), an hourly leader-tick check with once-per-problem alerts
+  (`QUANTA_INTEGRITY_CHECKS=false` turns it off) and an Integrity tab on the Activity Log page. Not run against a live PostgreSQL or multi-replica deployment.
+
 ### Documentation
 - **README rewritten around the eight modules**: an About section, a pick-your-path table, a real screenshot of every module page on fictional demo data (51 images in `docs/images/modules/`), a flowchart per module, and a researched comparison with commercial and open-source tools that says where Quanta stops.
 ### Changed
