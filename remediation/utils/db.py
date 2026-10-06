@@ -166,6 +166,7 @@ asset_ownership = Table(
     Column("remediation_schedule", Text, nullable=True),  # JSON-encoded dict
     Column("ip", String, nullable=True),
     Column("mac", String, nullable=True),
+    Column("source_mode", String, nullable=True),  # "simulation" for a row written by a simulated asset source; None for live/human-entered
 )
 
 
@@ -410,6 +411,7 @@ ai_usage_events = Table(
     Column("cost_usd", Float, nullable=True),
     Column("cost_basis", String, nullable=False, default="unknown"),
     Column("received_at", String, nullable=False),
+    Column("source_mode", String, nullable=True),  # "simulation" for demonstration data; None for live. Not part of the unique key.
     UniqueConstraint("source", "event_key", name="uq_ai_usage_event"),
 )
 

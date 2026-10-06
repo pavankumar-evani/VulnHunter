@@ -98,8 +98,10 @@ def merge(new_findings, source, path=None, reconcile=False, source_mode=None):
                         changed = True
                 updated += 1 if changed else 0
             else:
-                existing.append({"id": f"FIND-{next_n}", **{**n, "source": source}})
-                next_n += 1
+                # a connector that normalises straight into the Finding schema (Prisma Cloud, Cortex XSIAM, CrowdStrike) leaves id None: number it here
+                existing.append({**n, "id": n.get("id") or f"FIND-{next_n}", "source": source})
+                if not n.get("id"):
+                    next_n += 1
                 added += 1
         removed = 0
         if reconcile:

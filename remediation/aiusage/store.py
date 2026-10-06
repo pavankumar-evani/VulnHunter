@@ -97,16 +97,21 @@ def normalise(ev, source):
     return row
 
 
-def record(events, source, engine=None):
+def record(events, source, engine=None, source_mode=None):
     """Stores events, updating any already seen. Returns {recorded, updated, rejected, errors[:50]}. Estimated cost is filled from the
-    price table when the sender gave none and a price exists for the model."""
+    price table when the sender gave none and a price exists for the model.
+
+    `source_mode` is the provenance of this batch: "simulation" marks demonstration data (column `source_mode`; None is live). It is not part of
+    the unique key. A simulated batch never changes a live event that has the same key (counted as `kept_live`); a live batch that meets a
+    simulated event replaces it with the real one."""
     from remediation.aiusage import pricing
     if source not in SOURCES:
         raise UsageError(f"source must be one of {', '.join(SOURCES)}")
     if len(events) > MAX_BATCH:
         raise UsageError(f"At most {MAX_BATCH} events per request")
     engine, t = _engine(engine), db_module.ai_usage_events
-    table, recorded, updated, errors = pricing.load(), 0, 0, []
+    table, recorded, updated, kept_live, errors = pricing.load(), 0, 0, 0, []
+    mode = source_mode if source_mode == "simulation" else None
     with engine.begin() as conn:
         for i, ev in enumerate(events):
             try:
@@ -118,14 +123,36 @@ def record(events, source, engine=None):
                 est = pricing.estimate(row, table)
                 if est is not None:
                     row["cost_usd"], row["cost_basis"] = est, "estimated"
-            existing = conn.execute(select(t.c.id).where(t.c.source == source, t.c.event_key == row["event_key"])).scalar()
+            row["source_mode"] = mode
+            existing = conn.execute(select(t.c.id, t.c.source_mode).where(t.c.source == source, t.c.event_key == row["event_key"])).first()
             if existing:
-                conn.execute(update(t).where(t.c.id == existing).values(**row))
+                if mode == "simulation" and existing.source_mode != "simulation":
+                    kept_live += 1
+                    continue
+                conn.execute(update(t).where(t.c.id == existing.id).values(**row))
                 updated += 1
             else:
                 conn.execute(insert(t), {**row, "received_at": _now()})
                 recorded += 1
-    return {"recorded": recorded, "updated": updated, "rejected": len(errors), "errors": errors[:50]}
+    out = {"recorded": recorded, "updated": updated, "rejected": len(errors), "errors": errors[:50]}
+    if kept_live:
+        out["kept_live"] = kept_live
+    return out
+
+
+def remove_simulated(engine=None):
+    """Deletes every simulated usage event (live events are never touched). Returns how many were removed."""
+    from sqlalchemy import delete
+    engine, t = _engine(engine), db_module.ai_usage_events
+    with engine.begin() as conn:
+        return conn.execute(delete(t).where(t.c.source_mode == "simulation")).rowcount
+
+
+def count_simulated(engine=None):
+    from sqlalchemy import func
+    engine, t = _engine(engine), db_module.ai_usage_events
+    with engine.connect() as conn:
+        return conn.execute(select(func.count()).select_from(t).where(t.c.source_mode == "simulation")).scalar() or 0
 
 
 def fetch(since=None, until=None, engine=None):

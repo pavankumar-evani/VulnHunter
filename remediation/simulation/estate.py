@@ -106,6 +106,70 @@ VULNERABILITIES = [
 ]
 
 
+# Devices the vulnerability scanners do NOT see (no agent, no scan credentials): they show up only in the asset sources
+# (Infoblox, Axonius, Active Directory), which is exactly what makes those sources worth connecting. Fictional, corp.test.
+_UNMANAGED_PLAN = [
+    ("ws-01", "workstation", "Windows 11 Enterprise", "Endpoint Operations"),
+    ("ws-02", "workstation", "Windows 11 Enterprise", "Endpoint Operations"),
+    ("ws-03", "workstation", "Windows 10 Enterprise", "Endpoint Operations"),  # stale: disabled in the directory
+    ("cam-01", "iot", "Embedded Linux", "Facilities"),
+]
+
+# Cloud posture policies the simulated Prisma Cloud tenant evaluates (generic, AWS-style posture rules). `kind` says what resource they apply to.
+POSTURE_POLICIES = [
+    {"key": "sg-ssh", "name": "AWS Security Group allows internet traffic to SSH port (22)", "severity": "high", "kind": "instance", "roles": ["web", "app", "db"],
+     "description": "A security group attached to the instance allows inbound SSH from 0.0.0.0/0, exposing the administrative port to the internet."},
+    {"key": "ebs-unencrypted", "name": "AWS EBS volume is not encrypted", "severity": "medium", "kind": "instance", "roles": ["web", "app", "db"],
+     "description": "An EBS volume attached to the instance is not encrypted at rest."},
+    {"key": "imds-v1", "name": "AWS EC2 instance is not enforcing IMDSv2", "severity": "medium", "kind": "instance", "roles": ["web", "app"],
+     "description": "The instance metadata service accepts IMDSv1 requests, which are exposed to server-side request forgery."},
+    {"key": "rds-public", "name": "AWS RDS database instance is publicly accessible", "severity": "critical", "kind": "instance", "roles": ["db"],
+     "description": "The database instance is reachable from the internet."},
+    {"key": "s3-public", "name": "AWS S3 bucket is publicly readable", "severity": "high", "kind": "bucket", "roles": [],
+     "description": "The bucket policy or ACL allows public read access to its objects."},
+    {"key": "s3-logging", "name": "AWS S3 bucket has server access logging disabled", "severity": "low", "kind": "bucket", "roles": [],
+     "description": "Server access logging is not enabled, so requests to the bucket are not recorded."},
+    {"key": "flowlogs", "name": "AWS VPC flow logs are not enabled", "severity": "medium", "kind": "vpc", "roles": [],
+     "description": "Flow logs are not enabled on the VPC, so network traffic cannot be investigated after an incident."},
+    {"key": "iam-mfa", "name": "AWS IAM user has console access without MFA", "severity": "high", "kind": "iam", "roles": [],
+     "description": "An IAM user can sign in to the console with a password only, with no multi-factor authentication."},
+]
+_CLOUD_ONLY = [("bucket", "reports-archive-corp-test"), ("bucket", "portal-uploads-corp-test"), ("vpc", "vpc-corp-test-prod"), ("iam", "svc-deploy-corp-test")]
+
+# What the simulated Cortex XSIAM tenant raises for exploitation of each catalogued vulnerability: (incident name, severity, MITRE ATT&CK technique).
+INCIDENT_PLAN = {
+    "printnightmare": ("Suspicious child process of the Print Spooler service", "high", "T1068 - Exploitation for Privilege Escalation"),
+    "eternalblue": ("SMBv1 exploit attempt detected", "critical", "T1210 - Exploitation of Remote Services"),
+    "zerologon": ("Netlogon secure channel anomaly on a domain controller", "critical", "T1210 - Exploitation of Remote Services"),
+    "bluekeep": ("Anomalous inbound RDP connection attempt", "high", "T1210 - Exploitation of Remote Services"),
+    "sudo-baron": ("Local privilege escalation attempt through sudo", "high", "T1068 - Exploitation for Privilege Escalation"),
+    "dirty-pipe": ("Local privilege escalation attempt through the kernel", "high", "T1068 - Exploitation for Privilege Escalation"),
+    "regresshion": ("Repeated sshd connection timeouts", "medium", "T1190 - Exploit Public-Facing Application"),
+    "log4shell": ("JNDI lookup string in an inbound HTTP request", "critical", "T1190 - Exploit Public-Facing Application"),
+    "spring4shell": ("Possible Spring4Shell exploit attempt", "high", "T1190 - Exploit Public-Facing Application"),
+    "apache-41773": ("Path traversal request to a web server", "medium", "T1190 - Exploit Public-Facing Application"),
+    "iosxe-20198": ("Unexpected administrative account created on a network device", "high", "T1190 - Exploit Public-Facing Application"),
+    "panos-3400": ("Command injection attempt against GlobalProtect", "critical", "T1190 - Exploit Public-Facing Application"),
+}
+
+# The AI usage the simulated organisation generates: which models each application's workspace/project calls (real public model ids).
+AI_MODELS = {
+    "anthropic": {"Customer Portal": ["claude-3-5-haiku-20241022", "claude-sonnet-4-20250514"], "Order Service": ["claude-sonnet-4-20250514"],
+                  "Reporting": ["claude-sonnet-4-20250514", "claude-opus-4-1-20250805"]},
+    "openai": {"Customer Portal": ["gpt-4o-mini"], "Order Service": ["gpt-4.1", "gpt-4o-mini"], "Reporting": ["gpt-4.1"]},
+}
+
+
+def slug(text):
+    return "".join(c if c.isalnum() else "_" for c in text.lower()).strip("_")
+
+
+def epoch_ms(date_text, hour=3):
+    import calendar
+    d = datetime.date.fromisoformat(date_text)
+    return (calendar.timegm(d.timetuple()) + hour * 3600) * 1000
+
+
 def severity_for(cvss):
     return "Critical" if cvss >= 9.0 else "High" if cvss >= 7.0 else "Medium" if cvss >= 4.0 else "Low"
 
@@ -122,7 +186,7 @@ def _stamp(date, hour=3):
 class Estate:
     """The generated estate. Plain dicts and lists throughout, so it is easy to serialise and to read in a test."""
 
-    def __init__(self, seed, size, hosts, applications, vulnerabilities, detections, coverage):
+    def __init__(self, seed, size, hosts, applications, vulnerabilities, detections, coverage, unmanaged=None, cloud_alerts=None, incidents=None):
         self.seed = seed
         self.size = size
         self.reference_date = REFERENCE_DATE
@@ -131,8 +195,35 @@ class Estate:
         self.vulnerabilities = vulnerabilities
         self.detections = detections
         self.coverage = coverage  # source -> list of host ids that source can see
+        self.unmanaged = unmanaged or []  # devices only the asset sources know about
+        self.cloud_alerts = cloud_alerts or []  # Prisma Cloud posture alerts (a resource is a host fqdn or a cloud-only resource)
+        self.incidents = incidents or []  # Cortex XSIAM incidents referencing host fqdns
         self._hosts = {h["id"]: h for h in hosts}
         self._vulns = {v["key"]: v for v in vulnerabilities}
+
+    def now(self):
+        """The fixed 'current time' every simulated clock-dependent call uses (noon UTC on the reference date); never the real clock."""
+        return datetime.datetime.combine(self.reference_date, datetime.time(12, 0), tzinfo=datetime.timezone.utc)
+
+    def usage_workspaces(self, provider):
+        """[(application name, workspace/project id, key id, [models])] for an AI provider, one per estate application."""
+        out = []
+        for a in self.applications:
+            models = AI_MODELS[provider].get(a["name"]) or []
+            if models:
+                out.append((a["name"], f"{'wrkspc' if provider == 'anthropic' else 'proj'}_sim_{slug(a['name'])}", f"apikey_sim_{slug(a['name'])}_01", models))
+        return out
+
+    def usage_for(self, provider, date, app_name, workspace, model):
+        """One day's usage numbers for one application and model: a pure function of (seed, provider, date, workspace, model)."""
+        rng = random.Random(f"quanta-usage:{self.seed}:{provider}:{date.isoformat()}:{workspace}:{model}")
+        factor = 0.3 if date.weekday() >= 5 else 1.0
+        if "opus" in model or "gpt-4.1" == model:
+            factor *= 0.4  # the expensive models are used sparingly
+        requests_n = max(1, int(rng.randint(400, 3000) * factor))
+        return {"requests": requests_n, "uncached_input": int(requests_n * rng.randint(300, 900)), "output": int(requests_n * rng.randint(80, 400)),
+                "cache_read": int(requests_n * rng.randint(0, 2500)), "cache_5m": int(requests_n * rng.randint(0, 200)),
+                "cache_1h": int(requests_n * rng.randint(0, 40))}
 
     def host(self, host_id):
         return self._hosts[host_id]
@@ -160,7 +251,7 @@ class Estate:
     def to_dict(self):
         return {"seed": self.seed, "size": self.size, "reference_date": self.reference_date.isoformat(), "hosts": self.hosts,
                 "applications": self.applications, "vulnerabilities": self.vulnerabilities, "detections": self.detections,
-                "coverage": self.coverage}
+                "coverage": self.coverage, "unmanaged": self.unmanaged, "cloud_alerts": self.cloud_alerts, "incidents": self.incidents}
 
 
 def build(seed=1, size="small"):
@@ -211,7 +302,74 @@ def build(seed=1, size="small"):
     }
     vulns = [dict(v, severity=severity_for(v["cvss"]), plugin_id=str(100000 + n), qid=str(370000 + n),
                   oid=f"1.3.6.1.4.1.25623.1.0.{900000 + n}") for n, v in enumerate(VULNERABILITIES, 1)]
-    return Estate(seed, size, hosts, apps, vulns, detections, coverage)
+    # Everything below uses its own generators so adding a source never changes the hosts and detections above (a re-run stays byte-identical).
+    unmanaged = _build_unmanaged(seed, size)
+    coverage["infoblox"] = list(ids)
+    coverage["axonius"] = list(ids)
+    coverage["active-directory"] = [h["id"] for h in hosts if h["family"] == "windows"]
+    coverage["cortex-xsiam"] = [h["id"] for h in hosts if h["family"] in ("windows", "linux")]
+    return Estate(seed, size, hosts, apps, vulns, detections, coverage, unmanaged=unmanaged,
+                  cloud_alerts=_build_cloud_alerts(seed, size, hosts), incidents=_build_incidents(seed, size, hosts, detections, coverage["cortex-xsiam"]))
+
+
+def _build_unmanaged(seed, size):
+    rng = random.Random(f"quanta-estate-unmanaged:{seed}:{size}")
+    out = []
+    for n, (name, family, os_name, team) in enumerate(_UNMANAGED_PLAN, 1):
+        out.append({"id": f"U{n:03d}", "name": name, "fqdn": f"{name}.{DOMAIN}", "ip": f"10.90.{n}.{20 + n}", "mac": "02:00:0a:%02x:%02x:%02x" % (0xf0, n, rng.randint(0, 255)),
+                    "family": family, "os": os_name, "owner_team": team, "enabled": name != "ws-03"})
+    return out
+
+
+def _build_cloud_alerts(seed, size, hosts):
+    rng = random.Random(f"quanta-estate-cloud:{seed}:{size}")
+    account = "111122223333"
+    alerts = []
+
+    def add(policy, host, rtype, rid, rname):
+        n = len(alerts) + 1
+        first = REFERENCE_DATE - datetime.timedelta(days=rng.randint(3, 90))
+        last = REFERENCE_DATE - datetime.timedelta(days=rng.randint(0, 1))
+        alerts.append({"id": f"P-{10000 + n}", "policy": policy["key"], "host_id": host["id"] if host else None, "status": "resolved" if n % 7 == 0 else "open",
+                       "resource": {"id": rid, "name": rname, "cloudType": "aws", "region": "us-east-1", "account": account, "resourceType": rtype},
+                       "first_seen": first.isoformat(), "last_seen": last.isoformat()})
+
+    for h in hosts:
+        if h["role"] not in ("web", "app", "db"):
+            continue
+        cands = [p for p in POSTURE_POLICIES if p["kind"] == "instance" and h["role"] in p["roles"]]
+        for p in rng.sample(cands, k=min(len(cands), rng.randint(1, 2))):
+            add(p, h, "Instance", f"arn:aws:ec2:us-east-1:{account}:instance/i-{rng.getrandbits(68):017x}", h["fqdn"])
+    for kind, name in _CLOUD_ONLY:
+        cands = [p for p in POSTURE_POLICIES if p["kind"] == kind]
+        rid = {"bucket": f"arn:aws:s3:::{name}", "vpc": f"arn:aws:ec2:us-east-1:{account}:vpc/vpc-{rng.getrandbits(32):08x}",
+               "iam": f"arn:aws:iam::{account}:user/{name}"}[kind]
+        for p in rng.sample(cands, k=min(len(cands), rng.randint(1, 2))):
+            add(p, None, {"bucket": "Bucket", "vpc": "VPC", "iam": "IAM User"}[kind], rid, name)
+    return alerts
+
+
+def _build_incidents(seed, size, hosts, detections, covered):
+    rng = random.Random(f"quanta-estate-incidents:{seed}:{size}")
+    by_id = {h["id"]: h for h in hosts}
+    seen = set(covered)
+    out = []
+    for key, (name, severity, technique) in INCIDENT_PLAN.items():
+        hit = [d for d in detections if d["vuln"] == key and d["host_id"] in seen]
+        for i in range(0, len(hit), 2):
+            if rng.random() < 0.35:
+                continue  # not every exposed host is attacked
+            group = hit[i:i + 2]
+            last = max(datetime.date.fromisoformat(d["last_seen"]) for d in group)
+            created = last - datetime.timedelta(days=rng.randint(0, 3))
+            n = len(out) + 1
+            names = [by_id[d["host_id"]]["fqdn"] for d in group]
+            out.append({"incident_id": str(5000 + n), "incident_name": f"{name} on {names[0]}" + (f" and {len(names) - 1} other host" if len(names) > 1 else ""),
+                        "description": f"Correlated detection across {len(names)} host(s): {', '.join(names)}.", "severity": severity,
+                        "status": rng.choice(["new", "under_investigation", "under_investigation", "resolved_true_positive"]),
+                        "hosts": names, "alert_count": rng.randint(1, 6), "mitre": [technique], "vuln": key,
+                        "creation_time": created.isoformat(), "modification_time": (created + datetime.timedelta(days=rng.randint(0, 1))).isoformat()})
+    return out
 
 
 def timestamp(date_text, hour=3):

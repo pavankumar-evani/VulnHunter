@@ -4,9 +4,11 @@ each run through the SAME sync.run path a live connection uses (connector -> its
 merge -> enrich -> store). Shared by the dashboard route (dashboard/simulation_api.py) and the operator CLI
 (`quanta_admin seed-demo`). Nothing here knows how a vendor responds; that is the renderers' job.
 """
+from remediation.aiusage import store as usage_store
 from remediation.audit.activity_log import record_activity
 from remediation.connections import store, sync
 from remediation.ingest import merge
+from remediation.inventory import asset_inventory
 from remediation.simulation import estate as estate_mod
 from remediation.simulation import renderers
 from remediation.utils import environment
@@ -60,8 +62,10 @@ def remove(actor, engine=None, findings_path=None):
     for c in conns:
         store.delete_connection(c["id"], actor, engine)
     removed = merge.remove_simulated(findings_path or merge.DEFAULT_PATH)
-    record_activity(actor, "simulation.remove", None, {"connections": len(conns), "findings": removed}, engine=engine)
-    return {"connections_removed": len(conns), "findings_removed": removed}
+    usage = usage_store.remove_simulated(engine)
+    assets = asset_inventory.remove_simulated_assets(engine)
+    record_activity(actor, "simulation.remove", None, {"connections": len(conns), "findings": removed, "usage_events": usage, "assets": assets}, engine=engine)
+    return {"connections_removed": len(conns), "findings_removed": removed, "usage_events_removed": usage, "assets_removed": assets}
 
 
 def status(engine=None, findings_path=None):
@@ -70,4 +74,5 @@ def status(engine=None, findings_path=None):
     return {"allowed": environment.simulation_allowed(), "environment": environment.name(), "types": renderers.implemented(),
             "connections": [{"id": c["id"], "name": c["name"], "type": c["type"], "last_status": c["last_status"], "last_run_at": c["last_run_at"],
                              "last_count": c["last_count"]} for c in simulation_connections(engine)],
-            "simulated_findings": sim, "live_findings": len(rows) - sim}
+            "simulated_findings": sim, "live_findings": len(rows) - sim,
+            "simulated_usage_events": usage_store.count_simulated(engine), "simulated_assets": asset_inventory.count_simulated_assets(engine)}

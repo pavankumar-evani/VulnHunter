@@ -18,10 +18,10 @@ class SimulationRefused(RuntimeError):
     """A simulation connection was run where simulation is not allowed (a production process without QUANTA_ALLOW_SIMULATION)."""
 
 
-def _reconcile_assets(assets, findings_path):
+def _reconcile_assets(assets, findings_path, engine=None, mode=None):
     from remediation.inventory import asset_inventory
-    known = [a["name"] for a in asset_inventory.build_asset_inventory(merge.load(findings_path))]
-    return asset_inventory.reconcile_pulled_assets(assets, known)
+    known = [a["name"] for a in asset_inventory.build_asset_inventory(merge.load(findings_path), ownership=asset_inventory.load_ownership(engine))]
+    return asset_inventory.reconcile_pulled_assets(assets, known, engine=engine, source_mode=mode if mode == "simulation" else None)
 
 
 def test_connection(conn_type, values):
@@ -90,13 +90,13 @@ def run(connection_id, actor="scheduler", engine=None, findings_path=merge.DEFAU
                     message += f" Threat-intel refresh failed ({type(exc).__name__}); retry from the Overview page."
         elif pulled["kind"] == "ai_usage":
             from remediation.aiusage import store as usage_store
-            result = usage_store.record(pulled["events"], "provider-api", engine)
+            result = usage_store.record(pulled["events"], "provider-api", engine, source_mode=mode)
             detail = {**result, "fetched": len(pulled["events"])}
             message = (f"Fetched {detail['fetched']} usage bucket(s): {result['recorded']} new, {result['updated']} updated"
                        + (f", {result['rejected']} rejected" if result["rejected"] else "") + ".")
             count = detail["fetched"]
         else:
-            result = _reconcile_assets(pulled["assets"], findings_path)
+            result = _reconcile_assets(pulled["assets"], findings_path, engine, mode)
             detail = {"fetched": len(pulled["assets"]), "matched": len(result["matched"]), "unmatched": len(result["unmatched"]), "skipped": len(result["skipped"])}
             message = (f"Fetched {detail['fetched']} asset(s): {detail['matched']} matched an existing asset, "
                        f"{detail['unmatched']} stored for when a finding appears, {detail['skipped']} skipped.")

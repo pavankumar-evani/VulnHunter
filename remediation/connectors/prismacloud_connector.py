@@ -38,6 +38,8 @@ under real-world response volumes; replicating that pagination loop in full is o
 scope for this MVP connector (documented here, not silently dropped) - a real integration
 needs that loop the same way ArmisConnector.search_all_pages() implements one.
 """
+import datetime
+
 import requests
 
 from remediation.utils.retry import retry_with_backoff
@@ -51,6 +53,13 @@ _RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exception
 
 class PrismaCloudAuthError(RuntimeError):
     pass
+
+
+def _as_date(value):
+    """Prisma Cloud reports firstSeen/lastSeen as epoch milliseconds; the Finding schema holds an ISO date. Anything else passes through unchanged."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        return datetime.datetime.fromtimestamp(value / 1000, tz=datetime.timezone.utc).date().isoformat()
+    return value
 
 
 class PrismaCloudConnector:
@@ -148,8 +157,8 @@ class PrismaCloudConnector:
             "description": policy.get("description") or alert.get("reason"),
             "recommended_fix": None,
             "remediation_domain": None,
-            "first_seen": alert.get("firstSeen"),
-            "last_seen": alert.get("lastSeen"),
+            "first_seen": _as_date(alert.get("firstSeen")),
+            "last_seen": _as_date(alert.get("lastSeen")),
             "kev": None,
             "epss": None,
         }

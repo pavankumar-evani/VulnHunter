@@ -227,8 +227,271 @@ def render_openvas(estate, values=None):
     return SimulatedGmp(estate)
 
 
-RENDERERS = {"tenable": render_tenable, "qualys": render_qualys, "openvas": render_openvas}
-LABELS = {"tenable": "Tenable.io", "qualys": "Qualys VMDR", "openvas": "OpenVAS / Greenbone (GVM)"}
+def sim_now():
+    """The simulated 'current time' handed to connectors that take a `now` (the AI usage ones): fixed, never the clock."""
+    return estate_mod.build().now()
+
+
+def _header(req, name):
+    low = name.lower()
+    return next((v for k, v in req.headers.items() if k.lower() == low), None)
+
+
+def _unauthorized(req, *names):
+    if any(not _header(req, n) for n in names):
+        return 401, None, {"error": "unauthorized"}
+    return None
+
+
+# --------------------------------------------------------------------------- Prisma Cloud (CSPM)
+def render_prismacloud(estate, values=None):
+    policies = {p["key"]: p for p in estate_mod.POSTURE_POLICIES}
+
+    def login(req):
+        if not (req.json or {}).get("username"):
+            return 401, None, {"message": "invalid_credentials"}
+        return _json({"token": f"simulated-prisma-token-{estate.seed}", "message": "login_successful", "customerNames": [{"customerName": "Simulation", "prismaId": "0000000000"}]})
+
+    def alert(a):
+        p = policies[a["policy"]]
+        return {"id": a["id"], "status": a["status"], "reason": "RESOURCE_UPDATED", "firstSeen": estate_mod.epoch_ms(a["first_seen"]),
+                "lastSeen": estate_mod.epoch_ms(a["last_seen"], 4), "alertTime": estate_mod.epoch_ms(a["last_seen"], 4),
+                "policy": {"policyId": f"sim-{p['key']}", "name": p["name"], "policyType": "config", "severity": p["severity"], "description": p["description"],
+                           "recommendation": "Follow the cloud provider's guidance for this setting, then re-scan."},
+                "resource": a["resource"]}
+
+    def search(req):
+        bad = _unauthorized(req, "x-redlock-auth")
+        if bad:
+            return bad
+        status = next((f.get("value") for f in (req.json or {}).get("filters", []) if f.get("name") == "alert.status"), None)
+        items = [alert(a) for a in estate.cloud_alerts if status in (None, a["status"])]
+        return _json({"items": items, "totalRows": len(items)})
+
+    return ReplaySession([("POST", r"/login$", login), ("POST", r"/v2/alert$", search)])
+
+
+# --------------------------------------------------------------------------- Cortex XSIAM (incidents)
+def render_cortex_xsiam(estate, values=None):
+    def incident(i):
+        return {"incident_id": i["incident_id"], "incident_name": i["incident_name"], "description": i["description"], "status": i["status"],
+                "severity": i["severity"], "creation_time": estate_mod.epoch_ms(i["creation_time"], 8), "modification_time": estate_mod.epoch_ms(i["modification_time"], 14),
+                "detection_time": None, "hosts": list(i["hosts"]), "host_count": len(i["hosts"]), "alert_count": i["alert_count"],
+                "mitre_technique_id_and_name": list(i["mitre"]), "assigned_user_mail": None, "starred": False}
+
+    def get_incidents(req):
+        bad = _unauthorized(req, "x-xdr-auth-id", "Authorization")
+        if bad:
+            return bad
+        rd = (req.json or {}).get("request_data") or {}
+        start, stop = max(0, int(rd.get("search_from", 0))), max(0, int(rd.get("search_to", 100)))
+        wanted = next((f.get("value") for f in rd.get("filters", []) if f.get("field") == "status"), None)
+        rows = [i for i in estate.incidents if not wanted or i["status"] in wanted]
+        page = [incident(i) for i in rows[start:stop]]
+        return _json({"reply": {"total_count": len(rows), "result_count": len(page), "incidents": page}})
+
+    return ReplaySession([("POST", r"/public_api/v1/incidents/get_incidents$", get_incidents)])
+
+
+# --------------------------------------------------------------------------- Infoblox NIOS (WAPI)
+def _b64(text):
+    import base64
+    return base64.b64encode(text.encode()).decode().rstrip("=")
+
+
+def render_infoblox(estate, values=None):
+    records = [(h["fqdn"], h["ip"], {"Owner Team": {"value": h["owner_team"]}, "Environment": {"value": h["environment"]}}) for h in estate.hosts]
+    records += [(u["fqdn"], u["ip"], {"Owner Team": {"value": u["owner_team"]}}) for u in estate.unmanaged]
+
+    def host_records(req):
+        limit = int(req.params.get("_max_results", 1000))
+        out = []
+        for name, ip, ext in records[:max(1, limit)]:
+            ref = f"record:host/{_b64('dns.host$._default.test.corp.' + name)}:{name}/default"
+            out.append({"_ref": ref, "name": name, "view": "default", "extattrs": ext,
+                        "ipv4addrs": [{"_ref": f"record:host_ipv4addr/{_b64('dns.host_ipv4addr$.' + ip)}:{ip}/{name}/default", "configure_for_dhcp": False,
+                                       "host": name, "ipv4addr": ip}]})
+        return 200, None, out
+
+    return ReplaySession([("GET", r"/wapi/v[\d.]+/record:host$", host_records)])
+
+
+# --------------------------------------------------------------------------- Axonius (devices)
+_AXONIUS_OS = {"windows": "Windows", "linux": "Linux", "network": "Cisco IOS", "firewall": "PAN-OS", "workstation": "Windows", "iot": "Linux"}
+_AXONIUS_ADAPTERS = {"tenable": "tenable_io_adapter", "qualys": "qualys_adapter", "openvas": "openvas_adapter", "prismacloud": "aws_adapter",
+                     "infoblox": "infoblox_adapter", "active-directory": "active_directory_adapter", "cortex-xsiam": "cortex_xdr_adapter"}
+
+
+def render_axonius(estate, values=None):
+    import hashlib
+    devices = []
+    for h in estate.hosts:
+        adapters = [a for src, a in _AXONIUS_ADAPTERS.items() if h["id"] in set(estate.coverage.get(src, []))]
+        devices.append((h["fqdn"], h["ip"], h["mac"], _AXONIUS_OS[h["family"]], adapters))
+    for u in estate.unmanaged:  # only the directory and DNS know these; no scanner does
+        devices.append((u["fqdn"], u["ip"], u["mac"], _AXONIUS_OS[u["family"]], ["infoblox_adapter"] + (["active_directory_adapter"] if u["family"] == "workstation" else [])))
+
+    def search(req):
+        bad = _unauthorized(req, "api-key", "api-secret")
+        if bad:
+            return bad
+        page = (req.json or {}).get("page") or {}
+        offset, limit = max(0, int(page.get("offset", 0))), max(1, int(page.get("limit", 50)))
+        rows = [{"internal_axon_id": hashlib.sha256(f"quanta-sim:{name}".encode()).hexdigest()[:32], "hostname": name, "ips": [ip], "macs": [mac], "os_type": os_type,
+                 "adapters": adapters, "adapter_count": len(adapters)} for name, ip, mac, os_type, adapters in devices[offset:offset + limit]]
+        return _json({"assets": rows, "page": {"totalResources": len(devices), "pageSize": limit, "pageNumber": offset // limit}})
+
+    return ReplaySession([("POST", r"/api/devices$", search)])
+
+
+# --------------------------------------------------------------------------- Active Directory (LDAP, not HTTP)
+class _Attr:
+    def __init__(self, value):
+        self.value = value
+
+
+class _Entry:
+    """Stands in for an ldap3 Entry: only populated attributes exist, each with a `.value`."""
+
+    def __init__(self, **attrs):
+        for k, v in attrs.items():
+            if v is not None:
+                setattr(self, k, _Attr(v))
+
+
+class SimulatedLdap:
+    """A connection double with the surface remediation/connectors/active_directory_connector.py uses: `search(base, filter, attributes=, search_scope=)`,
+    `.entries`, `unbind()`. It answers a computer search with the directory's computer objects and a base-scope probe with the root object."""
+
+    def __init__(self, estate, base_dn="DC=corp,DC=test"):
+        self.estate = estate
+        self.base_dn = base_dn
+        self.entries = []
+        self.searches = []
+        self.unbound = False
+
+    def _computers(self):
+        e = self.estate
+        for h in e.hosts_for("active-directory"):
+            ou = "Domain Controllers" if h["role"] == "dc" else "Servers"
+            ver = {"2016": "10.0 (14393)", "2019": "10.0 (17763)", "2022": "10.0 (20348)"}[h["os"].split("Server ")[1][:4]]
+            yield _Entry(cn=h["name"].upper(), dNSHostName=h["fqdn"], operatingSystem=h["os"].replace("Microsoft ", ""), operatingSystemVersion=ver,
+                         distinguishedName=f"CN={h['name'].upper()},OU={ou},{self.base_dn}",
+                         managedBy=f"CN={h['owner_team']},OU=Groups,{self.base_dn}", userAccountControl=532480 if h["role"] == "dc" else 4096)
+        for u in e.unmanaged:
+            if u["family"] == "workstation":
+                yield _Entry(cn=u["name"].upper(), dNSHostName=u["fqdn"], operatingSystem=u["os"],
+                             operatingSystemVersion="10.0 (22631)" if "11" in u["os"] else "10.0 (19045)",
+                             distinguishedName=f"CN={u['name'].upper()},OU=Workstations,{self.base_dn}",
+                             managedBy=f"CN={u['owner_team']},OU=Groups,{self.base_dn}", userAccountControl=4096 if u["enabled"] else 4098)
+
+    def search(self, search_base, search_filter, attributes=None, search_scope=None):
+        self.searches.append((search_base, search_filter, tuple(attributes or ()), search_scope))
+        if "objectclass=computer" in search_filter.replace(" ", "").lower():
+            self.entries = list(self._computers())
+        else:  # a base-scope probe (the connection test): the root object itself
+            self.entries = [_Entry(distinguishedName=self.base_dn)]
+        return True
+
+    def unbind(self):
+        self.unbound = True
+
+
+def render_active_directory(estate, values=None):
+    return SimulatedLdap(estate)
+
+
+# --------------------------------------------------------------------------- AI usage (Anthropic Usage & Cost, OpenAI organization usage)
+_USAGE_PAGE = 3  # buckets per page, small so the connector's paging loop always runs
+
+
+def _day_start(date):
+    import datetime
+    return datetime.datetime.combine(date, datetime.time(0, 0), tzinfo=datetime.timezone.utc)
+
+
+def _days_in_window(start, end):
+    """The UTC days whose bucket overlaps [start, end)."""
+    import datetime
+    d = start.date()
+    out = []
+    while _day_start(d) < end:
+        if _day_start(d) + datetime.timedelta(days=1) > start:
+            out.append(d)
+        d += datetime.timedelta(days=1)
+    return out
+
+
+def _page_of(days, req):
+    """Opaque page tokens: the index of the first bucket of the page."""
+    limit = max(1, min(int(req.params.get("limit", _USAGE_PAGE)), _USAGE_PAGE))
+    token = req.params.get("page")
+    first = int(token.split("_", 1)[1]) if token and token.startswith("pg_") else 0
+    chunk = days[first:first + limit]
+    more = first + limit < len(days)
+    return chunk, more, (f"pg_{first + limit}" if more else None)
+
+
+def render_anthropic_usage(estate, values=None):
+    import datetime
+
+    def parse(text):
+        return datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+    def iso(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def report(req):
+        if not _header(req, "x-api-key") or not _header(req, "anthropic-version"):
+            return 401, None, {"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key"}}
+        start = parse(req.params["starting_at"])
+        end = parse(req.params["ending_at"]) if req.params.get("ending_at") else estate.now()
+        chunk, more, nxt = _page_of(_days_in_window(start, end), req)
+        data = []
+        for d in chunk:
+            results = []
+            for app, ws, key, models in estate.usage_workspaces("anthropic"):
+                for model in models:
+                    u = estate.usage_for("anthropic", d, app, ws, model)
+                    results.append({"uncached_input_tokens": u["uncached_input"], "cache_creation": {"ephemeral_1h_input_tokens": u["cache_1h"], "ephemeral_5m_input_tokens": u["cache_5m"]},
+                                    "cache_read_input_tokens": u["cache_read"], "output_tokens": u["output"], "server_tool_use": {"web_search_requests": 0},
+                                    "api_key_id": key, "workspace_id": ws, "model": model, "service_tier": "standard", "context_window": "0-200k"})
+            data.append({"starting_at": iso(_day_start(d)), "ending_at": iso(_day_start(d + datetime.timedelta(days=1))), "results": results})
+        return _json({"data": data, "has_more": more, "next_page": nxt})
+
+    return ReplaySession([("GET", r"/v1/organizations/usage_report/messages$", report)])
+
+
+def render_openai_usage(estate, values=None):
+    import datetime
+
+    def report(req):
+        auth = _header(req, "Authorization") or ""
+        if not auth.startswith("Bearer ") or len(auth) <= 7:
+            return 401, None, {"error": {"message": "Incorrect API key provided", "type": "invalid_request_error"}}
+        start = datetime.datetime.fromtimestamp(int(req.params["start_time"]), datetime.timezone.utc)
+        chunk, more, nxt = _page_of(_days_in_window(start, estate.now()), req)
+        data = []
+        for d in chunk:
+            results = []
+            for app, proj, key, models in estate.usage_workspaces("openai"):
+                for model in models:
+                    u = estate.usage_for("openai", d, app, proj, model)
+                    results.append({"object": "organization.usage.completions.result", "input_tokens": u["uncached_input"] + u["cache_read"], "input_cached_tokens": u["cache_read"],
+                                    "output_tokens": u["output"], "num_model_requests": u["requests"], "project_id": proj, "user_id": None, "api_key_id": None,
+                                    "model": model, "batch": False})
+            data.append({"object": "bucket", "start_time": int(_day_start(d).timestamp()), "end_time": int(_day_start(d + datetime.timedelta(days=1)).timestamp()), "results": results})
+        return _json({"object": "page", "data": data, "has_more": more, "next_page": nxt})
+
+    return ReplaySession([("GET", r"/v1/organization/usage/completions$", report)])
+
+
+RENDERERS = {"tenable": render_tenable, "qualys": render_qualys, "openvas": render_openvas, "prismacloud": render_prismacloud, "cortex-xsiam": render_cortex_xsiam,
+             "infoblox": render_infoblox, "axonius": render_axonius, "active-directory": render_active_directory,
+             "anthropic-usage": render_anthropic_usage, "openai-usage": render_openai_usage}
+LABELS = {"tenable": "Tenable.io", "qualys": "Qualys VMDR", "openvas": "OpenVAS / Greenbone (GVM)", "prismacloud": "Prisma Cloud", "cortex-xsiam": "Cortex XSIAM",
+          "infoblox": "Infoblox", "axonius": "Axonius", "active-directory": "Active Directory", "anthropic-usage": "Anthropic usage (AI spend)",
+          "openai-usage": "OpenAI usage (AI spend)"}
 
 
 def implemented():

@@ -231,6 +231,20 @@ def _days(values):
         raise ValueError("days must be a whole number from 1 to 31") from None
 
 
+def _usage_now(c, now):
+    """The clock the usage connectors read. Live: the real one (None lets the connector use it). Simulation: the estate's fixed reference time, so a
+    simulated pull is identical on any day."""
+    return now if now is not None else (renderers.sim_now() if is_simulation(c) else None)
+
+
+def _anthropic_usage(c, session=None, now=None):
+    return AnthropicUsageConnector(_v(c, "admin_key"), days=_days(c), session=session, now=_usage_now(c, now))
+
+
+def _openai_usage(c, session=None, now=None):
+    return OpenAIUsageConnector(_v(c, "admin_key"), days=_days(c), session=session, now=_usage_now(c, now))
+
+
 SPECS.update({
     "anthropic-usage": {
         "label": "Anthropic usage (AI spend)", "category": "AI usage", "output": "ai-usage",
@@ -239,9 +253,9 @@ SPECS.update({
         "docs": "Claude Console > Settings > Admin keys. A workspace API key does not work. Pulls daily token counts by model and workspace.",
         "note": "Aggregated daily buckets; a re-pull updates them. Cost is estimated only if you enter prices in ai_pricing.yaml.",
         "validate": _days,
-        "build": lambda c, session=None: AnthropicUsageConnector(_v(c, "admin_key"), days=_days(c), session=session),
-        "pull": lambda c, session=None: {"kind": "ai_usage", "events": AnthropicUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).fetch_events()},
-        "test": lambda c, session=None: AnthropicUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).test_connection(),
+        "build": lambda c, session=None, now=None: _anthropic_usage(c, session, now),
+        "pull": lambda c, session=None, now=None: {"kind": "ai_usage", "events": _anthropic_usage(c, session, now).fetch_events()},
+        "test": lambda c, session=None, now=None: _anthropic_usage(c, session, now).test_connection(),
     },
     "openai-usage": {
         "label": "OpenAI usage (AI spend)", "category": "AI usage", "output": "ai-usage",
@@ -250,9 +264,9 @@ SPECS.update({
         "docs": "OpenAI platform > Organization settings > Admin keys. A project API key does not work. Pulls daily token counts by model and project.",
         "note": "Aggregated daily buckets; a re-pull updates them. Cost is estimated only if you enter prices in ai_pricing.yaml.",
         "validate": _days,
-        "build": lambda c, session=None: OpenAIUsageConnector(_v(c, "admin_key"), days=_days(c), session=session),
-        "pull": lambda c, session=None: {"kind": "ai_usage", "events": OpenAIUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).fetch_events()},
-        "test": lambda c, session=None: OpenAIUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).test_connection(),
+        "build": lambda c, session=None, now=None: _openai_usage(c, session, now),
+        "pull": lambda c, session=None, now=None: {"kind": "ai_usage", "events": _openai_usage(c, session, now).fetch_events()},
+        "test": lambda c, session=None, now=None: _openai_usage(c, session, now).test_connection(),
     },
 })
 
