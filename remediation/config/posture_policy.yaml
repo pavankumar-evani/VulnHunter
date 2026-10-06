@@ -1,0 +1,29 @@
+# Security Posture Review: how checks become scores. See remediation/posture/engine.py and docs/POSTURE.md.
+#
+# These are disclosed choices, not standards. The frameworks (CISA Zero Trust Maturity Model 2.0, CISA Secure by Design, NIST SSDF and its AI profile,
+# SLSA, OWASP) describe what good looks like; none of them publishes a numeric score, so the numbers below are Quanta's own way of summarising what is
+# recorded. Change them to suit your organisation; the checks and their evidence do not change.
+
+# A framework is scored only when enough of it can be observed from recorded data. Below this share of check weight that Quanta can actually see,
+# the framework shows "not enough recorded to score" and lists what to connect, instead of a number built on almost nothing.
+min_observable_share: 0.30
+
+# Score (0-100) to maturity stage. The stage names follow the CISA Zero Trust Maturity Model and are used for every framework as a familiar scale.
+maturity:
+  - {stage: Traditional, below: 35}
+  - {stage: Initial, below: 60}
+  - {stage: Advanced, below: 85}
+  - {stage: Optimal, below: 101}
+
+# Shared thresholds the checks read, so one edit moves every check that uses it.
+thresholds:
+  stale_days: 90                    # a recorded state, review or model older than this no longer counts as current
+  kev_open_days: 14                 # a known-exploited finding open longer than this is a gap
+  critical_open_days: 30            # a Critical finding open longer than this is a gap
+  min_sbom_age_days: 90             # a stored SBOM older than this is stale
+  coverage_good: 0.90               # "most of the estate" for a coverage check to pass
+  coverage_partial: 0.50            # below this a coverage check fails; between the two it is partial
+  max_admins: 5                     # more administrator accounts than this is flagged as too many (fewer than 2 is flagged as a single point of failure)
+
+# How many actions the overview lists, highest impact first (weight x the gap that remains).
+top_actions: 12

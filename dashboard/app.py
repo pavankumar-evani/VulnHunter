@@ -42,6 +42,7 @@ import quanta as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation import graphs as module_graphs  # noqa: E402
+from remediation.posture import engine as posture_engine  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
@@ -635,6 +636,15 @@ def api_queue(user: dict = Depends(rbac.get_current_user)):
 def api_attack_paths(user: dict = Depends(rbac.get_current_user)):
     scoped = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
     return _fast_json({"chains": dashboard_data.get_attack_chains(scoped)})
+
+
+@app.get("/api/posture")
+def api_posture(request: Request, user: dict = Depends(rbac.get_current_user)):
+    """The Security Posture Review (remediation/posture): ten frameworks assessed from recorded data. Administrator only, because it reads settings of this
+    deployment as well as findings. Deterministic for the same recorded data; nothing is changed."""
+    rbac.require_admin(request)
+    findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    return _fast_json(posture_engine.assess(findings=findings, now=datetime.datetime.now(datetime.timezone.utc)))
 
 
 _GRAPH_ADMIN_MODULES = {"soc", "appsec", "ai", "grc", "admin"}   # the pages these graphs summarise are administrator pages
