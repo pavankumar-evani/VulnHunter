@@ -43,7 +43,7 @@ remediation/live-data/. This is a deliberate reuse decision, not an accidental
 coincidence - see fetch_and_write_csv() below.
 """
 import csv
-import xml.etree.ElementTree as ET
+from remediation.utils import safe_xml
 from pathlib import Path
 
 import requests
@@ -103,7 +103,7 @@ class QualysConnector:
             resp.raise_for_status()
             return resp.text
 
-        root = ET.fromstring(retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS))
+        root = safe_xml.fromstring(retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS))
 
         hosts = []
         for host_el in root.findall(".//HOST"):
@@ -163,7 +163,7 @@ class QualysConnector:
             resp.raise_for_status()
             return resp.text
 
-        root = ET.fromstring(retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS))
+        root = safe_xml.fromstring(retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS))
 
         kb = {}
         for vuln_el in root.findall(".//VULN"):

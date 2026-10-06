@@ -23,7 +23,7 @@ Decisions, stated so they can be challenged:
   properties when present. A container-image scanner (Trivy) keeps its CVEs as container-image findings.
 * Suppressed results (`suppressions`) and `kind` other than `fail` are skipped.
 """
-import hashlib
+from remediation.utils.digest import dedup_sha1
 import json
 import re
 
@@ -116,7 +116,7 @@ def _fingerprint(result, rule_id, uri, snippet):
     if fps:
         return f"{rule_id}:{sorted(fps.items())[0][1]}"
     basis = "|".join([rule_id or "", uri or "", re.sub(r"\s+", " ", snippet or _text(result.get("message")))[:300]])
-    return f"{rule_id}:{hashlib.sha1(basis.encode('utf-8', 'replace')).hexdigest()[:16]}"
+    return f"{rule_id}:{dedup_sha1(basis.encode('utf-8', 'replace')).hexdigest()[:16]}"
 
 
 def _host(uri):

@@ -44,6 +44,22 @@ class RateLimiter:
         hits.append(now)
         return True
 
+    def blocked(self, key, now=None):
+        """True if `key` already has max_requests hits in the window. Unlike allow(), records nothing - for
+        callers that count only some events (failed logins), so a successful one never uses up the quota."""
+        now = now if now is not None else time.monotonic()
+        hits = self._hits[key]
+        cutoff = now - self.window_seconds
+        while hits and hits[0] < cutoff:
+            hits.popleft()
+        return len(hits) >= self.max_requests
+
+    def record(self, key, now=None):
+        self._hits[key].append(now if now is not None else time.monotonic())
+
+    def reset(self, key):
+        self._hits.pop(key, None)
+
     def retry_after_seconds(self, key, now=None):
         """How many seconds until this key's oldest currently-counted hit ages out of
         the window - the honest value for a 429 response's Retry-After header, not a

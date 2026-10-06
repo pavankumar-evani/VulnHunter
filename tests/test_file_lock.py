@@ -9,10 +9,12 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from remediation.utils import file_lock  # noqa: E402
 from remediation.utils.file_lock import FileLock, LockTimeoutError  # noqa: E402
 
 
@@ -140,22 +142,148 @@ class FileLockTimeoutAndStaleness(unittest.TestCase):
         finally:
             holder.release()
 
-    def test_a_stale_lock_older_than_its_own_timeout_is_reclaimed(self):
-        # Simulate a crashed holder: create the lock file, then close its descriptor
-        # directly (what the OS does automatically when a real process dies, without
-        # it ever calling release()) and backdate the file's mtime past the timeout.
-        stale = FileLock(self.path, timeout=0.1)
-        stale.acquire()
-        os.close(stale._fd)
-        stale._fd = None
-        old_time = time.time() - 10
-        os.utime(stale.lock_path, (old_time, old_time))
-        # A new caller with the same timeout must reclaim it well within a couple of
-        # timeout windows, not hang for real wall-clock time.
+    def _write_lock(self, text, age_seconds):
+        lock = FileLock(self.path, timeout=0.1)
+        Path(lock.lock_path).write_text(text, encoding="utf-8")
+        old = time.time() - age_seconds
+        os.utime(lock.lock_path, (old, old))
+
+    @staticmethod
+    def _dead_pid():
+        import subprocess
+        import sys
+        proc = subprocess.Popen([sys.executable, "-c", "pass"])
+        proc.wait()
+        return proc.pid
+
+    def test_a_lock_left_by_a_dead_process_is_reclaimed_at_once(self):
+        # what a crashed process leaves behind: a lock file whose recorded owner no longer exists
+        self._write_lock(f"{self._dead_pid()} {file_lock._HOSTNAME}\n", age_seconds=0)
+        start = time.monotonic()
+        with FileLock(self.path, timeout=2.0):
+            pass
+        self.assertLess(time.monotonic() - start, 1.0)
+
+    def test_a_lock_with_no_owner_information_keeps_the_age_rule(self):
+        self._write_lock("", age_seconds=10)       # written by an older version, or on another host
         start = time.monotonic()
         with FileLock(self.path, timeout=0.1):
             pass
         self.assertLess(time.monotonic() - start, 1.0)
+
+    def test_a_lock_from_another_host_keeps_the_age_rule(self):
+        self._write_lock("4242 some-other-host\n", age_seconds=10)
+        with FileLock(self.path, timeout=0.1):
+            pass
+
+    def test_a_slow_but_live_holder_is_never_robbed(self):
+        # The defect this guards: a lock older than the waiter's timeout used to be taken, so a holder that was merely slow
+        # (creating the schema on a busy disk) ended up with a second writer inside its critical section.
+        holder = FileLock(self.path)
+        holder.acquire()
+        try:
+            old = time.time() - 120
+            os.utime(holder.lock_path, (old, old))      # far older than the waiter's timeout
+            with self.assertRaises(LockTimeoutError):
+                FileLock(self.path, timeout=0.2).acquire()
+            self.assertTrue(os.path.exists(holder.lock_path))   # still there: it was not stolen
+        finally:
+            holder.release()
+
+    def test_a_lock_records_its_owner(self):
+        with FileLock(self.path) as lock:
+            pid, host, token = Path(lock.lock_path).read_text(encoding="utf-8").split()
+        self.assertEqual((int(pid), host), (os.getpid(), file_lock._HOSTNAME))
+        self.assertTrue(token)
+
+    def test_release_never_deletes_a_lock_that_has_passed_to_someone_else(self):
+        # A is slow to release; meanwhile the lock was taken over and re-created for B. A's delayed release must leave B's lock alone,
+        # otherwise a third caller could acquire while B still holds it and two writers would be in the critical section.
+        a = FileLock(self.path)
+        a.acquire()
+        Path(a.lock_path).write_text(f"{os.getpid()} {file_lock._HOSTNAME} not-a-token\n", encoding="utf-8")   # B's lock
+        a.release()
+        self.assertTrue(os.path.exists(a.lock_path))
+
+    def test_twenty_threads_taking_turns_never_overlap(self):
+        import threading
+        inside = []
+        overlaps = []
+        guard = threading.Lock()
+
+        def work():
+            for _ in range(15):
+                with FileLock(self.path, timeout=30):
+                    with guard:
+                        inside.append(1)
+                        if len(inside) > 1:
+                            overlaps.append(len(inside))
+                    time.sleep(0.001)
+                    with guard:
+                        inside.pop()
+
+        threads = [threading.Thread(target=work) for _ in range(20)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        self.assertEqual(overlaps, [])
+
+    def test_pid_alive_is_true_for_this_process_and_false_for_a_finished_one(self):
+        self.assertTrue(file_lock._pid_alive(os.getpid()))
+        self.assertFalse(file_lock._pid_alive(self._dead_pid()))
+        self.assertFalse(file_lock._pid_alive(0))
+
+
+class SchemaCreationRaceTests(unittest.TestCase):
+    """Several threads touching a brand-new database at once, with table creation slower than the generic lock timeout."""
+
+    def test_slow_concurrent_first_use_creates_the_schema_once_and_loses_nothing(self):
+        import threading
+        from sqlalchemy import create_engine
+        from remediation.utils import db
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = create_engine(f"sqlite:///{Path(tmp) / 'race.db'}")
+            real_create_all = db.metadata.create_all
+            calls = []
+
+            def slow_create_all(*args, **kwargs):
+                calls.append(1)
+                time.sleep(0.6)            # a busy disk makes creating every table slow; every other thread waits meanwhile
+                return real_create_all(*args, **kwargs)
+
+            errors = []
+
+            def worker():
+                try:
+                    db.ensure_schema(engine)
+                except Exception as exc:      # noqa: BLE001 - the test is about any failure
+                    errors.append(repr(exc))
+
+            with mock.patch.object(db.metadata, "create_all", slow_create_all):
+                threads = [threading.Thread(target=worker) for _ in range(6)]
+                for th in threads:
+                    th.start()
+                for th in threads:
+                    th.join()
+            engine.dispose()
+        self.assertEqual(errors, [])
+        self.assertGreaterEqual(len(calls), 1)
+
+    def test_schema_creation_waits_longer_than_the_generic_five_seconds(self):
+        from sqlalchemy import create_engine
+        from remediation.utils import db
+        seen = {}
+        real = db.FileLock
+
+        def spy(path, timeout=file_lock.DEFAULT_TIMEOUT_SECONDS, local=False):
+            seen["timeout"] = timeout
+            return real(path, timeout=timeout, local=local)
+
+        with mock.patch.object(db, "FileLock", spy):
+            db.ensure_schema(create_engine("sqlite:///:memory:"))
+        self.assertGreaterEqual(seen["timeout"], 60)
 
 
 if __name__ == "__main__":

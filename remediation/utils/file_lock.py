@@ -21,11 +21,41 @@ multi-machine deployment needs a real client-server database with real distribut
 transactions instead of this).
 """
 import os
+import secrets
+import socket
 import time
 from pathlib import Path
 
 DEFAULT_TIMEOUT_SECONDS = 5.0
 _POLL_INTERVAL_SECONDS = 0.02
+# A lock whose recorded owner is a live process on this host is never taken over merely for being slow; this is only the
+# backstop against a recycled process id, so it is far longer than any real critical section.
+_OWNER_ALIVE_BACKSTOP_SECONDS = 3600.0
+_HOSTNAME = socket.gethostname()
+
+
+def _pid_alive(pid):
+    """Is a process with this id running? Never signals it (os.kill(pid, 0) would terminate the process on Windows)."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 class LockTimeoutError(RuntimeError):
@@ -44,6 +74,7 @@ class FileLock:
         self.local = local  # True: always a file lock (used where a database lease would be circular)
         self._fd = None
         self._lease = None
+        self._token = None
 
     def _use_lease(self):
         return not self.local and os.environ.get("QUANTA_LOCK_BACKEND", "file").strip().lower() == "db"
@@ -74,6 +105,13 @@ class FileLock:
         while True:
             try:
                 self._fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                # who holds it (so a slow holder is not mistaken for a dead one) and a token that is ours alone (so release
+                # never deletes a lock that has since passed to someone else)
+                self._token = secrets.token_hex(8)
+                try:
+                    os.write(self._fd, f"{os.getpid()} {_HOSTNAME} {self._token}\n".encode("utf-8"))
+                except OSError:
+                    pass
                 return
             except (FileExistsError, PermissionError):
                 # PermissionError (not just FileExistsError) is a real, observed
@@ -94,16 +132,32 @@ class FileLock:
                     )
                 time.sleep(_POLL_INTERVAL_SECONDS)
 
-    def _remove_if_stale(self):
-        # A lock file older than this lock's own timeout is almost certainly stale -
-        # the process that created it crashed or was killed without releasing it.
-        # Removing it lets a new caller proceed immediately instead of waiting out
-        # the full timeout on a lock nobody will ever release. time.time() (wall
-        # clock), not time.monotonic() (used for the acquire-loop deadline above) -
-        # os.path.getmtime() is a wall-clock epoch timestamp, and diffing it against
-        # a monotonic clock (an arbitrary, unrelated reference point) is meaningless.
+    def _owner(self):
         try:
-            if time.time() - os.path.getmtime(self.lock_path) > self.timeout:
+            with open(self.lock_path, "r", encoding="utf-8") as fh:
+                parts = fh.read().split()
+            return int(parts[0]), parts[1], (parts[2] if len(parts) > 2 else None)
+        except (OSError, ValueError, IndexError):
+            return None
+
+    def _remove_if_stale(self):
+        # Take over a lock only when its holder is gone. The previous rule (older than this lock's own timeout means abandoned)
+        # also took locks from holders that were merely slow, so two writers could be inside the same critical section: a
+        # first-use schema creation that outlasted the timeout lost a record and raised "table already exists".
+        # A lock records its owner's process id and host. On this host a live owner is never robbed (time.time(), the wall
+        # clock, is used for the age because os.path.getmtime() is a wall-clock epoch). A lock with no readable owner (written
+        # by an older version, or on another host) keeps the old age rule.
+        try:
+            age = time.time() - os.path.getmtime(self.lock_path)
+            owner = self._owner()
+            if owner and owner[1] == _HOSTNAME:
+                # Our own process counts as alive: a thread of this process that holds the lock is live, and a thread that
+                # leaked one is an in-process bug only the long backstop below recovers from.
+                alive = owner[0] == os.getpid() or _pid_alive(owner[0])
+                stale = (not alive) or age > _OWNER_ALIVE_BACKSTOP_SECONDS
+            else:
+                stale = age > self.timeout
+            if stale:
                 os.remove(self.lock_path)
         except OSError:
             pass  # already removed/replaced by someone else - fine, just retry
@@ -119,10 +173,22 @@ class FileLock:
         if self._fd is not None:
             os.close(self._fd)
             self._fd = None
-        try:
-            os.remove(self.lock_path)
-        except OSError:
-            pass  # already gone (e.g. a stale-lock takeover happened) - fine
+            token, self._token = self._token, None
+            owner = self._owner()
+            if owner and owner[2] and token and owner[2] != token:
+                return   # the lock was taken over and now belongs to someone else: deleting it would let a second writer in
+        # On Windows a file another thread has open cannot be deleted (a waiter reading the owner, for one), so retry briefly rather than leave
+        # the lock behind for everyone; elsewhere the first attempt succeeds.
+        for _ in range(200):
+            try:
+                os.remove(self.lock_path)
+                return
+            except FileNotFoundError:
+                return   # already gone (e.g. a stale-lock takeover happened) - fine
+            except PermissionError:
+                time.sleep(0.005)
+            except OSError:
+                return
 
     def __enter__(self):
         self.acquire()
