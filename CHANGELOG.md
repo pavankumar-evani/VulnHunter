@@ -6,6 +6,14 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Documentation
+- **README rewritten around the eight modules**: an About section, a pick-your-path table, a real screenshot of every module page on fictional demo data (51 images in `docs/images/modules/`), a flowchart per module, and a researched comparison with commercial and open-source tools that says where Quanta stops.
+### Changed
+- **Store writes are about four times faster and no longer fail under load** (`remediation/utils/db.py`, `remediation/utils/file_lock.py`): `ensure_schema` runs on every store call (about 90 call sites) and re-checked
+  more than 70 tables each time, which was most of a write and was done while holding the store's lock, so concurrent writers queued behind it. It now checks once per engine (`db.forget_schema(engine)` forces a
+  re-check after the database file is replaced), taking an approval write from 73 ms to 18 ms on an idle machine. A caller now waits up to 30 seconds for a store lock before failing (it was 5), and waiters poll with
+  jitter instead of in lockstep. Twenty simultaneous writers under heavy CPU load used to lose 7 or 8 of their writes to `LockTimeoutError` (the intermittent failures of the concurrency tests); all twenty now land.
+
 ### Added
 - **Security Posture Review** (`remediation/posture/`, `GET /api/posture`, page `/posture`, administrator only, `docs/POSTURE.md`): the recorded estate and this deployment assessed against ten frameworks (zero trust, secure by design,
   threat modelling, defence in depth, architecture, SDLC, AI lifecycle, software supply chain, AI supply chain, open-source dependencies), 183 checks. Every check is pass, partial, gap or not observable; what Quanta cannot see is listed
