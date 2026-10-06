@@ -47,6 +47,7 @@ export const api = {
   ownershipAnalytics: () => request("GET", "/api/analytics/ownership"),
 
   attackPaths: () => request("GET", "/api/attack-paths"),
+  graph: (module) => request("GET", `/api/graphs/${encodeURIComponent(module)}`),
   dependencies: () => request("GET", "/api/dependencies"),
   getPriorityRules: () => request("GET", "/api/priority-rules"),
   savePriorityRules: (rulesText) => request("POST", "/api/priority-rules", { rules_text: rulesText }),

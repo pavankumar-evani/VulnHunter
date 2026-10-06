@@ -10,6 +10,12 @@
   - number: '1.1'
     title: Threat Detection & Response
     items:
+    - id: graph-soc
+      title: Relationship graph
+      path: /graphs?module=soc
+      summary: Alerts, the hosts and users on them, the techniques they carry and the cases and hunts that share them, so a campaign shows as one cluster.
+      needs: []
+      admin: true
     - id: soc-cases
       title: Cases, queues and metrics
       path: /soc
@@ -88,6 +94,12 @@
   - number: '2.1'
     title: Application Security
     items:
+    - id: graph-appsec
+      title: Relationship graph
+      path: /graphs?module=appsec
+      summary: APIs, the endpoints they serve, the data each returns and the services that call each other, with shadow and open endpoints marked.
+      needs: []
+      admin: true
     - id: appsec
       title: Application Vulnerabilities
       path: /appsec
@@ -155,6 +167,11 @@
   - number: '3.1'
     title: DevSecOps & Supply Chain
     items:
+    - id: graph-devsecops
+      title: Relationship graph
+      path: /graphs?module=devsecops
+      summary: Applications and the packages they share, with vulnerable packages and the fix pull requests aimed at them, so concentration risk is visible.
+      needs: []
     - id: devsecops
       title: Control library and repository status
       path: /devsecops
@@ -214,6 +231,11 @@
   - number: '4.1'
     title: Infrastructure & Exposure
     items:
+    - id: graph-infra
+      title: Relationship graph
+      path: /graphs?module=infra
+      summary: The internet, firewall rules, network hops and assets that carry findings, with the pivots an attacker could use between them.
+      needs: []
     - id: infrastructure
       title: Infrastructure Vulnerabilities
       path: /infrastructure
@@ -313,6 +335,12 @@
   - number: '5.1'
     title: AI Security
     items:
+    - id: graph-ai
+      title: Relationship graph
+      path: /graphs?module=ai
+      summary: AI systems and the models, providers, tools and data they use, with unreviewed AI applications shown beside them.
+      needs: []
+      admin: true
     - id: ai-vulnerabilities
       title: AI Vulnerabilities
       path: /ai-vulnerabilities
@@ -344,6 +372,11 @@
   - number: '6.1'
     title: Remediation & Workflow
     items:
+    - id: graph-remediation
+      title: Relationship graph
+      path: /graphs?module=remediation
+      summary: Teams, people and assets with their exceptions, approvals and tickets, so assets nobody owns stand out as islands.
+      needs: []
     - id: queue
       title: Prioritised queue
       path: /queue
@@ -400,6 +433,12 @@
   - number: '7.1'
     title: Risk, Governance & Compliance
     items:
+    - id: graph-grc
+      title: Relationship graph
+      path: /graphs?module=grc
+      summary: Frameworks, controls, the evidence behind each control and the risks that depend on it, with controls shared across frameworks as one hub.
+      needs: []
+      admin: true
     - id: risk
       title: Risk Dashboard
       path: /risk
@@ -453,6 +492,12 @@
   - number: '8.1'
     title: Administration
     items:
+    - id: graph-admin
+      title: Relationship graph
+      path: /graphs?module=admin
+      summary: Every connection, API key scope and team around Quanta and the modules they feed, so a module with nothing feeding it is easy to see.
+      needs: []
+      admin: true
     - id: connections
       title: Connections and API keys
       path: /connections
