@@ -17,7 +17,7 @@ With auto-alerts on (watch settings), a new hit also creates a Quanta SOC alert 
 Quanta never visits a leak site and never stores a password.
 """
 import datetime
-import hashlib
+from remediation.utils.digest import dedup_sha1
 import json
 import re
 from pathlib import Path
@@ -102,7 +102,7 @@ def best_match(matches):
 
 
 def _key(*parts):
-    return hashlib.sha1("|".join(str(p).lower() for p in parts).encode()).hexdigest()[:24]
+    return dedup_sha1("|".join(str(p).lower() for p in parts).encode()).hexdigest()[:24]
 
 
 def hits_from_victims(victims, cfg=None):
