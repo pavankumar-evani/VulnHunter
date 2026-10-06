@@ -211,7 +211,7 @@ class ShapeTests(Base):
             self.assertTrue(c["evidence"], c["id"])
             if c["status"] in ("partial", "fail") and c["id"] not in ("aidlc-owner",):
                 self.assertRegex(" ".join(c["evidence"]), r"\d", c["id"])
-        self.assertEqual(len(res), 23)
+        self.assertEqual(len(res), 30)
 
     def test_deterministic(self):
         self.seeded()

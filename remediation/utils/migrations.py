@@ -60,12 +60,20 @@ def _m005_simulation_provenance(engine):
             _add_missing_columns(engine, table)
 
 
+def _m006_ai_asset_agent_fields(engine):
+    """Adds the agent, MCP server and lifecycle keys to stored AI asset records (they live in data_json, so no column changes). Expand-only and repeatable."""
+    from remediation.aisec import store
+    if inspect(engine).has_table("ai_assets"):
+        store.backfill_new_fields(engine)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
     (3, "soc_alert_rule_and_entities", _m003_soc_alert_columns),
     (4, "soc_alert_action_taken", _m004_soc_alert_action),
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
+    (6, "ai_asset_agent_mcp_lifecycle_fields", _m006_ai_asset_agent_fields),
 ]
 
 

@@ -63,7 +63,7 @@ from remediation.connectors import reputation_connector as hunt_rep, siem_search
 from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
-from remediation.aisec import rules as aisec_rules, store as aisec_store  # noqa: E402
+from remediation.aisec import rules as aisec_rules, rules_mcp as aisec_rules_mcp, store as aisec_store  # noqa: E402
 from remediation.apisec import cicd as api_cicd, classify as api_classify, config as api_config, generate as api_generate, identity as api_identity, logs as api_logs  # noqa: E402
 from remediation.apisec import metrics as api_metrics, openapi as api_openapi, policies as api_policies, rollout as api_rollout, rules as api_rules, store as api_store, waf as api_waf  # noqa: E402
 from remediation import capabilities as capabilities_mod  # noqa: E402
@@ -6196,7 +6196,10 @@ class AiPublishBody(BaseModel):
 
 def _ai_meta():
     return {"kinds": aisec_rules.KINDS, "environments": aisec_rules.ENVIRONMENTS, "hosting": aisec_rules.HOSTING, "scopes": aisec_rules.SCOPES, "provenance": aisec_rules.PROVENANCE,
-            "serialization": aisec_rules.SERIALIZATION, "data_classes": aisec_rules.DATA_CLASSES, "questions": aisec_rules.QUESTIONS, "tri": aisec_rules.TRI}
+            "serialization": aisec_rules.SERIALIZATION, "data_classes": aisec_rules.DATA_CLASSES, "questions": aisec_rules.QUESTIONS, "tri": aisec_rules.TRI,
+            "agent": {"transports": aisec_rules_mcp.TRANSPORTS, "auth": aisec_rules_mcp.AUTH, "side_effects": aisec_rules_mcp.SIDE_EFFECTS, "categories": aisec_rules_mcp.CATEGORIES,
+                      "memory": aisec_rules_mcp.MEMORY, "eval_suites": aisec_rules_mcp.EVAL_SUITES, "server_questions": aisec_rules_mcp.SERVER_QUESTIONS, "asset_questions": aisec_rules_mcp.ASSET_QUESTIONS,
+                      "server_tri": aisec_rules_mcp.SERVER_TRI, "release": aisec_rules_mcp.RELEASE_TRI, "observability": aisec_rules_mcp.OBS_TRI, "audit_log": aisec_rules_mcp.AUDIT_TRI}}
 
 
 @app.get("/api/ai-security/overview")
