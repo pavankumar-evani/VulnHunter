@@ -23,7 +23,7 @@ Lifecycle: proposed -> accepted (an engineer will build it) -> implemented (it i
 note. A draft is never counted as coverage.
 """
 import datetime
-import hashlib
+from remediation.utils.digest import dedup_sha1
 import uuid
 
 import yaml
@@ -46,7 +46,7 @@ def settings(policy):
 
 
 def _key(kind, subject):
-    return f"{kind}-{hashlib.sha1(subject.encode()).hexdigest()[:10]}"
+    return f"{kind}-{dedup_sha1(subject.encode()).hexdigest()[:10]}"
 
 
 def _level(score):

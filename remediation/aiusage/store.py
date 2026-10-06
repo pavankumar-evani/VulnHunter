@@ -15,7 +15,7 @@ identifiable in the report.
 Identity: (source, event_key) is unique, so re-sending the same bucket or request updates it rather than doubling the totals.
 """
 import datetime
-import hashlib
+from remediation.utils.digest import dedup_sha1
 
 from sqlalchemy import insert, select, update
 
@@ -92,7 +92,7 @@ def normalise(ev, source):
             raise UsageError("cost_usd cannot be negative")
         row["cost_basis"] = "reported"
     key = ev.get("event_key") or ev.get("request_id")
-    row["event_key"] = str(key)[:200] if key else hashlib.sha1("|".join(str(row[k]) for k in (
+    row["event_key"] = str(key)[:200] if key else dedup_sha1("|".join(str(row[k]) for k in (
         "ts", "model", "team", "application", "user_ref", "input_tokens", "output_tokens", "cache_read_tokens")).encode()).hexdigest()
     return row
 
