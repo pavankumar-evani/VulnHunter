@@ -58,6 +58,7 @@ modules:
     - /api/detections
     - /api/soar
     - /api/darkweb
+    - /api/cvd
     - /api/threat-intel
     - /api/cortex-xsiam
     - /api/ingest/alerts
