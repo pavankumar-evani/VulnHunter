@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
 import appsec_api  # noqa: E402
+import investigation_api  # noqa: E402
 import mcp_api  # noqa: E402
 import data as dashboard_data  # noqa: E402
 import rate_limit  # noqa: E402
@@ -98,6 +99,7 @@ from remediation.asm import findings as asm_findings, parsers as asm_parsers, st
 from remediation.hunting import usecase_store as hunt_usecase_store, usecases as hunt_usecases  # noqa: E402
 from remediation.soar import ai_draft as soar_ai_draft, recommend as soar_recommend  # noqa: E402
 from remediation.soc import cases as soc_cases, loganalysis as soc_loganalysis, metrics as soc_metrics  # noqa: E402
+from remediation.soc.incidents import roster as incident_roster, service as incident_service, store as incident_store, stream as incident_stream  # noqa: E402
 from remediation.grc import catalog as grc_catalog, evidence as grc_evidence, policies as grc_policies, report as grc_report, risks as grc_risks  # noqa: E402
 from remediation.threatmodel import engine as tm_engine, rules as tm_rules, seed as tm_seed, store as tm_store  # noqa: E402
 from remediation.aiusage import analytics as ai_analytics, discovery as ai_discovery, otlp as ai_otlp, store as ai_store  # noqa: E402
@@ -383,6 +385,11 @@ def _run_integrity_checks_if_due():
     return integrity_service.run_tick(send=send)
 
 
+def _run_incident_sweep():
+    """Hourly (leader only): the incident sweep, so an owner who went off shift or a clock that is breaching is acted on without anyone opening the page."""
+    return incident_service.sweep() if incident_store.enabled() else None
+
+
 async def _notification_scheduler_loop():
     while True:
         await asyncio.sleep(_NOTIFICATION_CHECK_INTERVAL_SECONDS)
@@ -400,6 +407,7 @@ async def _notification_scheduler_loop():
             _run_gitops_sync_if_due()
             _run_hunt_suggestions_if_due()
             _run_integrity_checks_if_due()
+            _run_incident_sweep()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
             import traceback
             traceback.print_exc()
@@ -5199,6 +5207,15 @@ def _lookback_cfg(days, justification, actor, subject):
     return cfg
 
 
+def _route_investigated_alert(alert, inv, ctx=None):
+    """An investigated alert goes to the incident layer (group, summarise, route) when it is on; otherwise the older one-case-per-alert rule applies."""
+    if incident_store.enabled():
+        findings = ctx["findings"] if ctx else dashboard_data.load_live_queue()
+        owners = ctx["owners"] if ctx else _owner_map()
+        return incident_service.ingest(alert, inv, incident_service.Context(findings, owners))
+    return soc_cases.auto_case(alert, inv)
+
+
 class _AutoInvestigator:
     """Investigates new alerts as they arrive: locally and free (no reputation lookup, no SIEM search), so the report is waiting when an analyst opens the alert.
     Context is loaded once per request, and at most max_per_request alerts are investigated in one call. Never raises."""
@@ -5223,7 +5240,7 @@ class _AutoInvestigator:
             inv = hunt_soc.investigate(alert, c["alerts"], c["findings"], c["owners"], cfg=self.cfg, identity=c["identity"], playbooks=c["playbooks"])
             hunt_service.save_investigation(inv, hunt_soc.render_markdown(alert, inv), "system")
             decision_service.log_soc_verdict(alert, inv)
-            case = soc_cases.auto_case(alert, inv)
+            case = _route_investigated_alert(alert, inv, c)
             self.done += 1
             if alert["id"] not in {a["id"] for a in c["alerts"]}:
                 c["alerts"].append(alert)
@@ -5406,16 +5423,6 @@ def api_soc_follow_up(alert_id: int, body: FollowUpBody, user: dict = Depends(rb
     return {"id": iid, **ans, "investigation": inv, "report_md": md}
 
 
-@app.get("/api/hunting/hunts/{hunt_id}/report")
-def api_hunting_report(hunt_id: int, format: str = "md", user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
-    h = hunt_store.get_hunt(hunt_id)
-    if not h:
-        raise HTTPException(status_code=404, detail="No such hunt")
-    if format == "html":
-        return HTMLResponse(hunt_verdict.to_html(h), headers={"Content-Disposition": f'attachment; filename="hunt-{hunt_id}.html"'})
-    return PlainTextResponse(hunt_verdict.to_markdown(h), media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="hunt-{hunt_id}.md"'})
-
-
 @app.post("/api/ingest/alerts/ocsf")
 async def api_ingest_alerts_ocsf(request: Request, key: dict = Depends(require_api_key("soc:write"))):
     """OCSF Detection Finding events (class_uid 2004): one JSON object, a list, or {"events": [...]}."""
@@ -5478,10 +5485,13 @@ def api_soc_investigate(alert_id: int, body: InvestigateBody, user: dict = Depen
     md = hunt_soc.render_markdown(alert, inv)
     iid = hunt_service.save_investigation(inv, md, user["email"])
     decision_service.log_soc_verdict(alert, inv)
-    auto = soc_cases.auto_case(alert, inv)
+    auto = _route_investigated_alert(alert, inv)
+    incident_id = None
+    if auto and "case_id" in auto:   # the incident layer answered: report its case (if it has one) and the incident itself
+        incident_id, auto = auto["id"], ({"id": auto["case_id"]} if auto["case_id"] else None)
     activity_log.record_activity(user["email"], "soc.alert.investigate", str(alert_id), {"verdict": inv["verdict"], "confidence": inv["confidence"],
                                                                                          "reputation": bool(lookup), "siem": bool(siem_run)})
-    return {"id": iid, "investigation": inv, "report_md": md, "case_id": auto["id"] if auto else None}
+    return {"id": iid, "investigation": inv, "report_md": md, "case_id": auto["id"] if auto else None, "incident_id": incident_id}
 
 
 @app.get("/api/soc/alerts/{alert_id}/investigation")
@@ -5644,7 +5654,36 @@ def api_soc_metrics(days: int = 30, user: dict = Depends(rbac.require_admin)):  
 
 @app.get("/api/soc/analysts")
 def api_soc_analysts(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
-    return {"analysts": soc_cases.list_analysts()}
+    extra = {r["email"]: r for r in incident_roster.list_roster()}
+    return {"analysts": [{**a, **{k: v for k, v in extra.get(a["email"], {}).items() if k not in a}} for a in soc_cases.list_analysts()]}
+
+
+class AnalystUpdateBody(BaseModel):
+    email: str
+    tier: int | None = None
+    skills: list[str] | None = None
+    available: bool | None = None
+    shift_start: str | None = None
+    shift_end: str | None = None
+    on_call: bool | None = None
+    capacity: int | None = None
+
+
+@app.put("/api/soc/analysts")
+def api_soc_analyst_update(body: AnalystUpdateBody, user: dict = Depends(rbac.require_admin)):
+    """Sets an analyst's routing attributes: specialties, availability, shift (UTC HH:MM), on-call, capacity and (optionally) tier. Only the fields sent change.
+    When the change means the analyst no longer qualifies for incidents they own, those are re-routed with the reason recorded."""
+    fields = body.model_dump(exclude_unset=True)
+    email = fields.pop("email")
+    try:
+        a = incident_roster.update_analyst(email, fields)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    moved = incident_service.rebalance_analyst(a["email"]) if incident_store.enabled() else []
+    activity_log.record_activity(user["email"], "soc.analyst.update", a["email"], {k: v for k, v in fields.items() if k != "skills"} | {"skills": a["skills"], "rerouted": len(moved)})
+    return {"analyst": a, "rerouted_incident_ids": moved}
 
 
 @app.post("/api/soc/analysts")
@@ -5661,6 +5700,171 @@ def api_soc_analyst_add(body: AnalystBody, user: dict = Depends(rbac.require_adm
 def api_soc_analyst_remove(email: str, user: dict = Depends(rbac.require_admin)):
     activity_log.record_activity(user["email"], "soc.analyst.remove", email, None)
     return {"analysts": soc_cases.remove_analyst(email)}
+
+
+# ---------------------------------------------------------------- SOC incidents: automatic grouping, routing and the analyst's work queue (docs/SOC_INCIDENTS.md)
+class IncidentActionBody(BaseModel):
+    note: str | None = None
+    summary: str | None = None
+    assignee: str | None = None
+    verdict: str | None = None
+    to_tier: int | None = None
+    reason: str | None = None
+    status: str | None = None
+    source_id: int | None = None
+    alert_ids: list[int] | None = None
+
+
+class ManualIncidentBody(BaseModel):
+    title: str
+    reason: str
+    severity: str = "Medium"
+    assets: list[str] = []
+    alert_ids: list[int] = []
+    summary: str | None = None
+
+
+class IncidentAiBody(BaseModel):
+    confirm: bool = False
+    save: bool = False
+
+
+def _incident_err(exc):
+    return HTTPException(status_code=404 if isinstance(exc, KeyError) else 400, detail=str(exc.args[0]) if isinstance(exc, KeyError) else str(exc))
+
+
+def _incident_ctx():
+    return incident_service.Context(dashboard_data.load_live_queue(), _owner_map())
+
+
+@app.get("/api/soc/incidents/stream")
+def api_soc_incidents_stream(request: Request, after: int | None = None, max_seconds: int | None = None, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Server-Sent Events: incident.created / incident.assigned / incident.updated plus heartbeat comments. Read-only. Resumes from the Last-Event-ID header (or ?after=)."""
+    last = request.headers.get("last-event-id")
+    after_id = int(last) if last and last.isdigit() else after
+    cap = incident_store.policy()["stream"]["max_seconds"]
+    return StreamingResponse(incident_stream.generate(after_id=after_id, max_seconds=min(cap, max_seconds) if max_seconds is not None else cap), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/soc/incidents")
+def api_soc_incidents(assignee: str | None = None, queue: str | None = None, status: str | None = None, severity: str | None = None, tier: int | None = None,
+                      mine: bool = False, unassigned: bool = False, open_only: bool = False, user: dict = Depends(rbac.require_admin)):
+    rows = incident_store.list_incidents(assignee=assignee, queue=queue, status=status, severity=severity, tier=tier, mine=user["email"] if mine else None,
+                                         open_only=open_only, unassigned=unassigned)
+    if status != "merged":
+        rows = [r for r in rows if r["status"] != "merged"]
+    counts = {}
+    for r in rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    return {"incidents": rows, "counts": counts, "enabled": incident_store.enabled(), "statuses": list(incident_store.STATUSES), "verdicts": list(incident_store.VERDICTS)}
+
+
+@app.get("/api/soc/incidents/{incident_id}")
+def api_soc_incident(incident_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    inc = incident_store.get_incident(incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail="No such incident")
+    pbs = soar_playbooks.list_all()
+    by_id = {p["id"]: p for p in pbs}
+    past = []
+    for run in soar_engine.list_runs(limit=300):
+        a, p = hunt_store.get_alert(run["alert_id"]), by_id.get(run["playbook_id"])
+        if a and p and not run["dry_run"]:
+            past.append({"alert": a, "run": run, "playbook": p})
+    inc["recommended"] = incident_service.recommended_actions(incident_id, pbs, past)
+    inc["related_incidents"] = incident_service.related_incidents(incident_id)
+    inc["alert_count"] = len(inc["alerts"])
+    return inc
+
+
+@app.post("/api/soc/incidents/manual")
+def api_soc_incident_manual(body: ManualIncidentBody, user: dict = Depends(rbac.require_admin)):
+    """The exception path (overflow menu): create an incident by hand. A reason is required and audited. Routed by the same rules as any other."""
+    try:
+        return incident_service.create_manual(body.model_dump(exclude={"reason"}), user["email"], body.reason)
+    except (ValueError, KeyError) as exc:
+        raise _incident_err(exc) from exc
+
+
+@app.post("/api/soc/incidents/sweep")
+def api_soc_incident_sweep(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Runs the periodic sweep now (the leader tick runs it hourly): sync tiers, escalate at-risk clocks, re-route owners who no longer qualify, retry queued ones."""
+    return incident_service.sweep()
+
+
+@app.get("/api/soc/routing/preview")
+def api_soc_routing_preview(alert_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """What would happen to an alert: which incident it would join (and why) or that it would start one, and who it would be routed to (and why). Writes nothing."""
+    alert = hunt_store.get_alert(alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="No such alert")
+    r = hunt_service.latest_investigation(alert_id)
+    return incident_service.preview(alert, inv=r["investigation"] if r else None, ctx=_incident_ctx())
+
+
+@app.post("/api/soc/incidents/{incident_id}/ai-summary")
+def api_soc_incident_ai_summary(incident_id: int, body: IncidentAiBody, user: dict = Depends(rbac.require_admin)):
+    """Optional model-written summary beside the deterministic one. Counts and labels only are sent; confirm-gated; saved only when save is true."""
+    from remediation.soc.incidents import summary as incident_summary
+    inc = incident_store.get_incident(incident_id)
+    if not inc:
+        raise HTTPException(status_code=404, detail="No such incident")
+    prompt = incident_summary.ai_prompt({**inc, "alert_count": len(inc["alerts"])})
+    if not body.confirm:
+        return {"dry_run": True, "prompt": prompt, "message": "Preview only. Nothing was sent. The prompt has counts and labels, never alert text, host or account names. Send confirm: true to ask the model; this spends API usage."}
+    governance = _enforce_ai_usage_limit(user["email"])
+    text = _run_ai_call_and_record_usage(prompt, "incident-summary", user["email"], governance)
+    text = text.strip() if isinstance(text, str) else str(text)
+    if body.save:
+        incident_store.write(incident_id, {"summary_ai": text})
+        incident_store.add_event(incident_id, "ai_summary", user["email"], "A model-written summary was saved beside the deterministic one", None)
+    activity_log.record_activity(user["email"], "soc.incident.ai_summary", str(incident_id), {"saved": body.save})
+    return {"dry_run": False, "summary_ai": text, "saved": body.save, "note": "A suggestion. The deterministic summary stays the record."}
+
+
+# Investigation reports (docs/INVESTIGATION_REPORTS.md). Included here, before the generic /api/soc/incidents/{id}/{action} route, so its "follow-up" is not taken as an action.
+app.include_router(investigation_api.build_router(require_api_key=require_api_key, identity_map=lambda: _identity_map(), lookback_cfg=lambda *a, **k: _lookback_cfg(*a, **k),
+                                                  auto_investigator=lambda: _AutoInvestigator(), soar_auto=lambda row: _soar_auto(row)))
+
+
+@app.post("/api/soc/incidents/{incident_id}/{action}")
+def api_soc_incident_action(incident_id: int, action: str, body: IncidentActionBody, user: dict = Depends(rbac.require_admin)):
+    me = user["email"]
+    try:
+        if action == "accept":
+            out = incident_service.accept(incident_id, me)
+        elif action == "advance":
+            out = incident_service.advance(incident_id, body.status, me, note=body.note)
+        elif action == "reassign":
+            out = incident_service.reassign(incident_id, body.assignee, me, body.reason)
+        elif action == "escalate":
+            out = incident_service.escalate(incident_id, body.summary, me, to_tier=body.to_tier)
+        elif action == "resolve":
+            out = incident_service.resolve(incident_id, body.verdict, body.summary or "", me)
+        elif action == "reopen":
+            out = incident_service.reopen(incident_id, body.reason, me)
+        elif action == "merge":
+            if not body.source_id:
+                raise ValueError("Give source_id: the incident to merge into this one")
+            out = incident_service.merge(incident_id, body.source_id, me)
+        elif action == "split":
+            out = incident_service.split(incident_id, body.alert_ids or [], me)
+        elif action == "undo-auto-close":
+            out = incident_service.undo_auto_close(incident_id, me, body.reason)
+        elif action == "note":
+            if not (body.note or "").strip():
+                raise ValueError("A note cannot be empty")
+            if not incident_store.raw_incident(incident_id):
+                raise KeyError("No such incident")
+            incident_store.add_event(incident_id, "note", me, body.note.strip())
+            out = incident_store.get_incident(incident_id)
+        else:
+            raise HTTPException(status_code=404, detail=f"No such action '{action}'")
+    except (ValueError, KeyError) as exc:
+        raise _incident_err(exc) from exc
+    activity_log.record_activity(me, f"soc.incident.{action}", str(incident_id), {"verdict": body.verdict, "assignee": body.assignee, "to_tier": body.to_tier})
+    return out
 
 
 class UseCaseStatusBody(BaseModel):

@@ -15,6 +15,8 @@ no credentials were available while building it. See remediation/connectors/READ
 """
 from pathlib import Path
 
+import re
+
 import requests
 
 from remediation.connectors import url_safety
@@ -32,6 +34,9 @@ _RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exception
 
 class ServiceNowError(RuntimeError):
     pass
+
+
+_REF = re.compile(r"^[A-Za-z0-9_.:-]{3,64}$")
 
 
 def build_incident_body(finding):
@@ -89,6 +94,24 @@ class ServiceNowConnector:
 
         results = retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("result", [])
         return results[0] if results else None
+
+    def add_comment(self, ref, text):
+        """Adds an internal work note to an existing incident, found by its number (INC...) or sys_id. One lookup, one PATCH; the write is not retried, so a timeout
+        can never post the note twice. Raises ServiceNowError if the incident is not found. Built against the public Table API; not exercised against a live instance."""
+        if not _REF.match(str(ref or "")):
+            raise ServiceNowError("The ticket reference is not a valid incident number")
+
+        def _do_get():
+            resp = self.session.get(f"{self.base_url}/api/now/table/{self.table}", params={"sysparm_query": f"number={ref}^ORsys_id={ref}", "sysparm_limit": 1, "sysparm_fields": "sys_id,number"}, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+
+        rows = retry_with_backoff(_do_get, retryable_exceptions=_RETRYABLE_EXCEPTIONS).get("result", [])
+        if not rows:
+            raise ServiceNowError(f"No incident {ref} was found")
+        resp = self.session.patch(f"{self.base_url}/api/now/table/{self.table}/{rows[0]['sys_id']}", json={"work_notes": text}, timeout=30)
+        resp.raise_for_status()
+        return {"ticket": rows[0].get("number") or ref, "status": "commented"}
 
     def create_incident(self, finding, skip_if_exists=True):
         """Creates one incident for a normalized finding (see

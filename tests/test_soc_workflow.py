@@ -81,7 +81,7 @@ class AutoInvestigate(Base):
         self.assertEqual(inv.status_code, 200)
         self.assertEqual(inv.json()["investigation"]["report"]["headline"], ALERT["title"])
         cases = self.client.get("/api/soc/cases").json()["cases"]
-        self.assertEqual((len(cases), cases[0]["source"], cases[0]["tier"]), (1, "auto", 1))
+        self.assertEqual((len(cases), cases[0]["source"], cases[0]["tier"]), (1, "auto", 2))   # routed by the incident layer: a High alert on a host with a known-exploited vulnerability needs L2
         self.assertEqual(hunt_store.get_alert(aid, self.engine)["status"], "investigating")
 
     def test_no_outside_calls_happen(self):

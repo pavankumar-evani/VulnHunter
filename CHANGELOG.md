@@ -7,6 +7,20 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Investigation reports and hunt reports** (`remediation/investigation/`, `remediation/hunting/hunt_report.py`, `dashboard/investigation_api.py`, `remediation/config/query_playbook.yaml`,
+  `docs/INVESTIGATION_REPORTS.md`). An incident now has a structured report an analyst opens already investigated: a verdict (true positive, false positive, action needed) with a rationale,
+  historical correlation over a bounded look-back ("None in 90 days" or exact counts), an entities table (owner, team, criticality, privilege from access records, each "unknown" when no record
+  says), indicators with reputation (confirm-gated, private addresses never sent) and blast radius (hosts, users, alerts, incidents carrying the same value), ATT&CK mapping with the next step per
+  technique, attack-flow data (nodes, edges, stages) and a timeline, a root-cause hypothesis labelled as one when evidence is partial, what each tool did (only from the alert), recommended actions
+  (which need a second person) and references (the exact searches and lookups with times). Every statement cites evidence listed in the report; a statement with no evidence is dropped and counted.
+  Live evidence comes from a fixed query playbook run only after a person confirms, through the read-only SIEM connection, with hard stops (query, row and time budgets, repeated errors; the stop reason
+  is recorded), no planning from results, and the existing look-back ceiling. Follow-ups are answered from stored data, recorded on the incident and merged into the report on request. A ticket from
+  ServiceNow or Jira (`POST /api/ingest/itsm-ticket`, key scope `soc:write`) becomes an alert with the ticket linked and flows through auto-investigation, incident grouping and routing with the report
+  waiting; a confirm-gated, dry-run-by-default comment (verdict, summary, actions, link) can be posted back to the linked ticket, never twice (new `add_comment` on the ServiceNow and Jira
+  connectors). The hunt report (`GET /api/hunting/hunts/{id}/report`, JSON, `.md`, print-friendly `.html`) adds the topic and gist, look-back, a trial-hit table (domain endpoint, network or
+  identity-email; source tool; no-hit, needs-investigation or not-run; hits; affected entities; link to the lead), per-domain results, the queries as SPL, Sigma and KQL, a benign-activity allow-list
+  that applies to later runs of the same lead (rows set aside are counted, never hidden), detection-deployment recommendations, a time-box and a time-to-report metric. Migration 11 (new tables only). The hunt report's default format is now JSON (`?format=md` for the old Markdown). Built against public documentation and fakes; never
+  run against a live SIEM, reputation service or ITSM.
 - **Proactive hunt engine** (`remediation/hunting/engine/`, `docs/HUNT_ENGINE.md`, `GET/POST /api/hunting/suggestions*`, migration 9, tables `hunt_hypotheses` and `hunt_hypothesis_events`,
   policy `remediation/config/hunt_engine.yaml`): hypothesis-driven suggestions (intel, coverage gaps, baseline/anomaly, exposure, identity, lessons learned, dark web, model-assisted) with the
   evidence chain, ATT&CK tactics, data readiness ("cannot tell" rather than guessing), SPL/KQL/Sigma leads, a scored priority with its working, a lifecycle through accept (creates the existing hunt),
@@ -28,6 +42,18 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   gaps. Posture Review gains 11 observable checks (AI development lifecycle 23 to 30, AI supply chain 20 to 24; 194 in all) that read `unknown` until the register has the data. The AI relationship graph now
   draws tools, MCP servers and data sources (agent to tool to data source) and flags the untrusted-content path to an unapproved side-effect tool. Rules read what is recorded; Quanta does not connect to a
   server or probe an agent.
+- **SOC incident automation** (`remediation/soc/incidents/`, `remediation/config/soc_routing.yaml`, `docs/SOC_INCIDENTS.md`, `/api/soc/incidents*`, `/api/soc/routing/preview`, `PUT /api/soc/analysts`, migration 10): analysts no longer create cases. Every investigated alert is
+  grouped into an incident automatically (shared host, account or public indicator, same-rule bursts, shared vulnerability, same technique, kill-chain progression, each with a stored plain-language reason; same-rule repeats on a host are grouped as
+  duplicates, never dropped), with a kill-chain view, a severity roll-up that rises with progression, a confidence from the decision layer and a deterministic one-paragraph summary (an optional model summary stays confirm-gated and unsaved unless asked).
+  A routing engine picks the tier from severity, known-exploited vulnerabilities, crown jewels, kill-chain stage and confidence, then the analyst by specialty, continuity, lowest sufficient tier and weighted load among those who are available, in shift (or on
+  call for P1/P2) and under capacity, storing a "why routed here" list; with nobody qualified it queues the incident and alerts the lead. The hourly leader tick escalates breached clocks, re-routes owners who stopped qualifying and retries queued work.
+  Alerts the decision layer rates a likely false positive with `auto` confidence are auto-closed only under its reversible-and-local rule (never Critical, never with a known-exploited vulnerability on the host), into a reviewable lane with undo that
+  records an override. Resolving needs a verdict, which feeds calibration. Read-only Server-Sent Events feed, merge/split/reassign/escalate/reopen routes, and a minimal incident queue on the SOC page (manual creation is an audited exception under "More").
+  Existing cases, routes and tests are kept (one assertion in `test_soc_workflow` now expects the incident layer's tier). With the shipped decision policy nothing auto-closes. Not run against a live SIEM or deployment.
+- **Proactive hunt engine** (`remediation/hunting/engine/`, `docs/HUNT_ENGINE.md`, `GET/POST /api/hunting/suggestions*`, migration 7, tables `hunt_hypotheses` and `hunt_hypothesis_events`,
+  policy `remediation/config/hunt_engine.yaml`): hypothesis-driven suggestions (intel, coverage gaps, baseline/anomaly, exposure, identity, lessons learned, dark web, model-assisted) with the
+  evidence chain, ATT&CK tactics, data readiness ("cannot tell" rather than guessing), SPL/KQL/Sigma leads, a scored priority with its working, a lifecycle through accept (creates the existing hunt),
+  conclude and promote-to-detection, dismissal memory and a learning loop from past outcomes. The Threat Hunting page opens on a "Suggested hunts" tab. Nothing is run automatically.
 - **Integrity checks and safe self-heal** (`remediation/integrity/`, `docs/INTEGRITY.md`, `GET /api/integrity`, `POST /api/integrity/heal`, `quanta-admin integrity-manifest` and `check-integrity [--heal --confirm]`): a SHA-256 manifest of the code and shipped config
   built at image build time (code must not change; `remediation/config/*.yaml` policy is expected to, with the editor named where the activity log has one; no manifest reports "no baseline", never "ok"), store consistency checks (schema vs migrations,
   missing tables, findings file validity and `.bak`, orphaned assignments and approvals, stale locks, file snapshot divergence, SQLite integrity or PostgreSQL probe, disk, clock, API key and licence expiry) and four repairs that preview unless confirmed and
