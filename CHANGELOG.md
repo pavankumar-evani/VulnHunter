@@ -7,6 +7,21 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Investigation reports and hunt reports** (`remediation/investigation/`, `remediation/hunting/hunt_report.py`, `dashboard/investigation_api.py`, `remediation/config/query_playbook.yaml`,
+  `docs/INVESTIGATION_REPORTS.md`). An incident now has a structured report an analyst opens already investigated: a verdict (true positive, false positive, action needed) with a rationale,
+  historical correlation over a bounded look-back ("None in 90 days" or exact counts), an entities table (owner, team, criticality, privilege from access records, each "unknown" when no record
+  says), indicators with reputation (confirm-gated, private addresses never sent) and blast radius (hosts, users, alerts, incidents carrying the same value), ATT&CK mapping with the next step per
+  technique, attack-flow data (nodes, edges, stages) and a timeline, a root-cause hypothesis labelled as one when evidence is partial, what each tool did (only from the alert), recommended actions
+  (which need a second person) and references (the exact searches and lookups with times). Every statement cites evidence listed in the report; a statement with no evidence is dropped and counted.
+  Live evidence comes from a fixed query playbook run only after a person confirms, through the read-only SIEM connection, with hard stops (query, row and time budgets, repeated errors; the stop reason
+  is recorded), no planning from results, and the existing look-back ceiling. Follow-ups are answered from stored data, recorded on the incident and merged into the report on request. A ticket from
+  ServiceNow or Jira (`POST /api/ingest/itsm-ticket`, key scope `soc:write`) becomes an alert with the ticket linked and flows through auto-investigation, incident grouping and routing with the report
+  waiting; a confirm-gated, dry-run-by-default comment (verdict, summary, actions, link) can be posted back to the linked ticket, never twice (new `add_comment` on the ServiceNow and Jira
+  connectors). The hunt report (`GET /api/hunting/hunts/{id}/report`, JSON, `.md`, print-friendly `.html`) adds the topic and gist, look-back, a trial-hit table (domain endpoint, network or
+  identity-email; source tool; no-hit, needs-investigation or not-run; hits; affected entities; link to the lead), per-domain results, the queries as SPL, Sigma and KQL, a benign-activity allow-list
+  that applies to later runs of the same lead (rows set aside are counted, never hidden), detection-deployment recommendations, a time-box and a time-to-report metric. Migration 10 (new tables only);
+  the incident and hunt-engine migrations are numbered 8 and 9. The hunt report's default format is now JSON (`?format=md` for the old Markdown). Built against public documentation and fakes; never
+  run against a live SIEM, reputation service or ITSM.
 - **AI Security: agents, tools, MCP servers and the AI lifecycle** (`remediation/aisec/rules_mcp.py`, `remediation/config/ai_security_rules.yaml`). The AI register now records provider, model ids, tools (scope,
   side effect, whether a person approves each call), MCP servers (transport, authentication, token audience, per-tool authorisation, allowlist, sandbox, egress, mounted secrets), data sources (trusted or
   not), agent memory, step and budget limits, prompt versioning, evaluation suite, release (rollback, canary, shadow), observability and audit-log integrity. Fields live in the record's JSON and are
