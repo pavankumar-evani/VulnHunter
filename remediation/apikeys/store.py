@@ -18,6 +18,8 @@ Scopes:
   tickets:update  report ticket state changes back (ServiceNow, Jira and similar)
   read:findings   read the findings export
   api:write       push API specifications, traffic records and CI test results, and report a protection policy's edge result
+  mcp:read        connect an AI assistant to the read-only MCP endpoint (/mcp); each tool also needs the scope that covers its data (read:findings today).
+                  An optional `team` binds the key to one team's findings and assets.
 """
 import datetime
 import hashlib
@@ -31,7 +33,7 @@ from sqlalchemy import insert, select, update
 from remediation.audit.activity_log import record_activity
 from remediation.utils import db as db_module
 
-SCOPES = ("ingest:write", "tickets:update", "read:findings", "controls:write", "ai-usage:write", "soc:write", "darkweb:write", "api:write", "asm:write")
+SCOPES = ("ingest:write", "tickets:update", "read:findings", "controls:write", "ai-usage:write", "soc:write", "darkweb:write", "api:write", "asm:write", "mcp:read")
 _FORMAT = re.compile(r"^qk_([0-9a-f]{8})_([A-Za-z0-9_-]{43})$")
 LAST_USED_RESOLUTION_SECONDS = 60
 
@@ -66,7 +68,7 @@ def _public(row):
     return r
 
 
-def create(name, scopes, created_by, expires_days=None, engine=None, now=None):
+def create(name, scopes, created_by, expires_days=None, engine=None, now=None, team=None):
     """Returns (public record, the full key). The full key cannot be recovered later."""
     name = (name or "").strip()
     if not name or len(name) > 80:
@@ -76,15 +78,18 @@ def create(name, scopes, created_by, expires_days=None, engine=None, now=None):
         raise ValueError(f"Choose at least one scope from: {', '.join(SCOPES)}")
     if expires_days is not None and not 1 <= int(expires_days) <= 3650:
         raise ValueError("Expiry must be between 1 and 3650 days (or none)")
+    team = (team or "").strip() or None
+    if team and len(team) > 80:
+        raise ValueError("A team name is at most 80 characters")
     token = f"qk_{secrets.token_hex(4)}_{secrets.token_urlsafe(32)}"
     current = _now(now)
     row = {"name": name, "prefix": token[3:11], "key_hash": _hash(token), "scopes": json.dumps(scopes), "created_by": created_by,
            "created_at": _fmt(current), "expires_at": _fmt(current + datetime.timedelta(days=int(expires_days))) if expires_days else None,
-           "last_used_at": None, "revoked_at": None}
+           "last_used_at": None, "revoked_at": None, "team": team}
     engine = _engine(engine)
     with engine.begin() as conn:
         new_id = conn.execute(insert(db_module.api_keys), row).inserted_primary_key[0]
-    record_activity(created_by, "apikey.create", name, {"scopes": scopes, "prefix": row["prefix"], "expires_at": row["expires_at"]}, engine=engine)
+    record_activity(created_by, "apikey.create", name, {"scopes": scopes, "prefix": row["prefix"], "expires_at": row["expires_at"], "team": team}, engine=engine)
     return _public({**row, "id": new_id}), token
 
 

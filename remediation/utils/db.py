@@ -322,6 +322,7 @@ api_keys = Table(
     Column("expires_at", String, nullable=True),
     Column("last_used_at", String, nullable=True),
     Column("revoked_at", String, nullable=True),
+    Column("team", String, nullable=True),   # optional: binds the key's reads (MCP) to one team's findings and assets
 )
 
 # Links between a finding and a ticket in an external system (remediation/connections/links.py).

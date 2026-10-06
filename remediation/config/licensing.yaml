@@ -32,6 +32,8 @@ core:
   - /api/connections
   - /api/simulation
   - /api/api-keys
+  - /mcp
+  - /api/mcp
   - /api/admin
   - /api/integrity
   - /api/export

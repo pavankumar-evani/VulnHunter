@@ -73,6 +73,12 @@ def _m007_ai_asset_agent_fields(engine):
         store.backfill_new_fields(engine)
 
 
+def _m008_api_key_team(engine):
+    from remediation.utils import db
+    if inspect(engine).has_table("api_keys"):
+        _add_missing_columns(engine, db.api_keys)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
@@ -81,6 +87,7 @@ MIGRATIONS = [
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
     (6, "cvd_advisories_table", _m006_cvd_advisories),
     (7, "ai_asset_agent_mcp_lifecycle_fields", _m007_ai_asset_agent_fields),
+    (8, "api_key_team_binding", _m008_api_key_team),
 ]
 
 
