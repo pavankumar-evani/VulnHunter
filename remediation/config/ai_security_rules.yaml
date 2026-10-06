@@ -1,0 +1,22 @@
+# Thresholds for the agent, MCP and AI-lifecycle rules in remediation/aisec/rules_mcp.py (MCP001-MCP008, AGT001-AGT004, AIDLC001-AIDLC004).
+# Admin editable; read fresh on every assessment. A missing or unreadable file falls back to these same defaults.
+
+# More tools than this behind one MCP server is "too many exposed tools" (MCP003). Every extra tool is more the model can be steered into calling.
+max_exposed_tools: 10
+
+# A tool whose side effect is in this list must require approval (MCP008) and must not be reachable from untrusted content without it (AGT003).
+side_effects_requiring_approval: [write, external-send, destructive, financial]
+
+# Side effects that make a missing allowlist, approval or sandbox more serious.
+severe_side_effects: [destructive, financial]
+
+# A tool is treated as running code, a shell or touching the file system when its category says so, or (when no category is recorded) when its name
+# contains one of these words. Name matching is a heuristic: record the category on the tool to be exact.
+sandbox_categories: [code, shell, file]
+sandbox_name_keywords: [shell, bash, exec, eval, python, code_interpreter, terminal, filesystem, file_write, write_file, run_command]
+
+# Environments where a missing prompt version, eval suite, rollback path or progressive rollout counts as a production gap (higher severity).
+production_environments: [production]
+
+# A recorded step limit above this is flagged as too loose (Low). An agent loop with no step limit and no budget cap is flagged (AGT001).
+max_steps_ceiling: 100

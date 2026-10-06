@@ -7,6 +7,14 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **AI Security: agents, tools, MCP servers and the AI lifecycle** (`remediation/aisec/rules_mcp.py`, `remediation/config/ai_security_rules.yaml`). The AI register now records provider, model ids, tools (scope,
+  side effect, whether a person approves each call), MCP servers (transport, authentication, token audience, per-tool authorisation, allowlist, sandbox, egress, mounted secrets), data sources (trusted or
+  not), agent memory, step and budget limits, prompt versioning, evaluation suite, release (rollback, canary, shadow), observability and audit-log integrity. Fields live in the record's JSON and are
+  backfilled by an expand-only, repeatable migration (6); a blank stays unknown. New rules: the six MCP controls (MCP001-MCP008), agent-harness rules (AGT001-AGT004, including untrusted content reaching a
+  side-effect tool with no approval) and AI lifecycle rules (AIDLC001-AIDLC004), each with a plain "why", the exact setting that closes it, and OWASP LLM and MITRE ATLAS ids. Unanswered questions are listed as
+  gaps. Posture Review gains 11 observable checks (AI development lifecycle 23 to 30, AI supply chain 20 to 24; 194 in all) that read `unknown` until the register has the data. The AI relationship graph now
+  draws tools, MCP servers and data sources (agent to tool to data source) and flags the untrusted-content path to an unapproved side-effect tool. Rules read what is recorded; Quanta does not connect to a
+  server or probe an agent.
 - **Integrity checks and safe self-heal** (`remediation/integrity/`, `docs/INTEGRITY.md`, `GET /api/integrity`, `POST /api/integrity/heal`, `quanta-admin integrity-manifest` and `check-integrity [--heal --confirm]`): a SHA-256 manifest of the code and shipped config
   built at image build time (code must not change; `remediation/config/*.yaml` policy is expected to, with the editor named where the activity log has one; no manifest reports "no baseline", never "ok"), store consistency checks (schema vs migrations,
   missing tables, findings file validity and `.bak`, orphaned assignments and approvals, stale locks, file snapshot divergence, SQLite integrity or PostgreSQL probe, disk, clock, API key and licence expiry) and four repairs that preview unless confirmed and
