@@ -20,6 +20,8 @@ from urllib.parse import quote
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 _RETRY = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
@@ -40,8 +42,13 @@ class _Base:
             raise GitHostError("A token is required")
         self._token = token
         self.base_url = (base_url or self.DEFAULT_URL).rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self._defaults = {}
+
+    @staticmethod
+    def _rp(repo):
+        """owner/repo with each path segment percent-encoded (GitLab overrides the whole shape with a single encoded project id)."""
+        return "/".join(quote(seg, safe="") for seg in repo.split("/"))
 
     # -- transport -------------------------------------------------------------------------------------------------
     def _headers(self):
@@ -87,8 +94,8 @@ class GitHubConnector(_Base):
         return {"user": d.get("login"), "provider": self.provider}
 
     def test_connection(self, repo):
-        """The cheapest authenticated call that proves the token can see the repository: GET /repos/{repo}."""
-        d = self._request("GET", f"/repos/{repo}", retry=True)
+        """The cheapest authenticated call that proves the token can see the repository: GET /repos/{self._rp(repo)}."""
+        d = self._request("GET", f"/repos/{self._rp(repo)}", retry=True)
         perms = d.get("permissions") or {}
         self._defaults[repo] = d.get("default_branch") or "main"
         return {"default_branch": self._defaults[repo], "can_write": bool(perms.get("push") or perms.get("admin") or perms.get("maintain")), "private": bool(d.get("private")),
@@ -96,7 +103,7 @@ class GitHubConnector(_Base):
 
     def branch_sha(self, repo, branch):
         try:
-            return self._request("GET", f"/repos/{repo}/git/ref/heads/{quote(branch, safe='/')}", retry=True)["object"]["sha"]
+            return self._request("GET", f"/repos/{self._rp(repo)}/git/ref/heads/{quote(branch, safe='/')}", retry=True)["object"]["sha"]
         except GitHostError as exc:
             if exc.status == 404:
                 return None
@@ -107,12 +114,12 @@ class GitHubConnector(_Base):
         sha = self.branch_sha(repo, from_branch)
         if sha is None:
             raise GitHostError(f"The base branch {from_branch} does not exist")
-        self._request("POST", f"/repos/{repo}/git/refs", json={"ref": f"refs/heads/{branch}", "sha": sha})
+        self._request("POST", f"/repos/{self._rp(repo)}/git/refs", json={"ref": f"refs/heads/{branch}", "sha": sha})
         return sha
 
     def get_file(self, repo, path, ref):
         try:
-            d = self._request("GET", f"/repos/{repo}/contents/{quote(path, safe='/')}", retry=True, params={"ref": ref})
+            d = self._request("GET", f"/repos/{self._rp(repo)}/contents/{quote(path, safe='/')}", retry=True, params={"ref": ref})
         except GitHostError as exc:
             if exc.status == 404:
                 return None
@@ -132,35 +139,35 @@ class GitHubConnector(_Base):
             body = {"message": message, "content": base64.b64encode(f["content"].encode("utf-8")).decode("ascii"), "branch": branch}
             if existing:
                 body["sha"] = existing["sha"]
-            d = self._request("PUT", f"/repos/{repo}/contents/{quote(f['path'], safe='/')}", json=body)
+            d = self._request("PUT", f"/repos/{self._rp(repo)}/contents/{quote(f['path'], safe='/')}", json=body)
             ids.append((d.get("commit") or {}).get("sha"))
         return ids
 
     def open_change_request(self, repo, head, base, title, body, draft=False, labels=None, reviewers=None):
         if head == base:
             raise GitHostError("The branch to merge and its target are the same")
-        d = self._request("POST", f"/repos/{repo}/pulls", json={"title": title, "head": head, "base": base, "body": body, "draft": bool(draft)})
+        d = self._request("POST", f"/repos/{self._rp(repo)}/pulls", json={"title": title, "head": head, "base": base, "body": body, "draft": bool(draft)})
         number = d["number"]
         warn = []
         if labels:
             try:
-                self._request("POST", f"/repos/{repo}/issues/{number}/labels", json={"labels": list(labels)})
+                self._request("POST", f"/repos/{self._rp(repo)}/issues/{number}/labels", json={"labels": list(labels)})
             except GitHostError as exc:
                 warn.append(f"labels not added: {exc}")
         if reviewers:
             try:
-                self._request("POST", f"/repos/{repo}/pulls/{number}/requested_reviewers", json={"reviewers": list(reviewers)})
+                self._request("POST", f"/repos/{self._rp(repo)}/pulls/{number}/requested_reviewers", json={"reviewers": list(reviewers)})
             except GitHostError as exc:
                 warn.append(f"reviewers not requested: {exc}")
         return {"number": number, "url": d.get("html_url"), "warnings": warn}
 
     def get_change_request(self, repo, number):
-        d = self._request("GET", f"/repos/{repo}/pulls/{int(number)}", retry=True)
+        d = self._request("GET", f"/repos/{self._rp(repo)}/pulls/{int(number)}", retry=True)
         state = "merged" if d.get("merged") or d.get("merged_at") else ("closed" if d.get("state") == "closed" else "open")
         review = "none"
         checks = "none"
         if state == "open":
-            reviews = self._request("GET", f"/repos/{repo}/pulls/{int(number)}/reviews", retry=True)
+            reviews = self._request("GET", f"/repos/{self._rp(repo)}/pulls/{int(number)}/reviews", retry=True)
             latest = {}
             for r in reviews if isinstance(reviews, list) else []:
                 if r.get("state") in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
@@ -173,7 +180,7 @@ class GitHubConnector(_Base):
                 review = "review-requested"
             sha = (d.get("head") or {}).get("sha")
             if sha:
-                runs = (self._request("GET", f"/repos/{repo}/commits/{sha}/check-runs", retry=True) or {}).get("check_runs") or []
+                runs = (self._request("GET", f"/repos/{self._rp(repo)}/commits/{sha}/check-runs", retry=True) or {}).get("check_runs") or []
                 if runs:
                     done = [r for r in runs if r.get("status") == "completed"]
                     if any(r.get("conclusion") in ("failure", "timed_out", "cancelled", "action_required") for r in done):

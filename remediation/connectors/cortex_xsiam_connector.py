@@ -43,6 +43,8 @@ import datetime
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_BASE_URL = None  # no honest default - see module docstring
@@ -71,7 +73,7 @@ class CortexXsiamConnector:
         if not base_url:
             raise ValueError("base_url is required - Cortex XSIAM has no single default API URL, see module docstring")
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.headers.update({
             "x-xdr-auth-id": str(api_key_id),
             "Authorization": api_key,

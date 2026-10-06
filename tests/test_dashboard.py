@@ -96,6 +96,8 @@ TEST_ADMIN_EMAIL = "admin@test.local"
 TEST_ADMIN_PASSWORD = "admin-test-password-1"
 TEST_USER_EMAIL = "user@test.local"
 TEST_USER_PASSWORD = "user-test-password-1"
+SECOND_ADMIN_EMAIL = "admin2@test.local"
+FUTURE_EXPIRY = (datetime.date.today() + datetime.timedelta(days=90)).isoformat()
 
 _auth_tmpdir = None
 _db_engine_patcher = None
@@ -681,6 +683,7 @@ class ApiRunTriggersRemediation(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
+        auth_users.create_user(SECOND_ADMIN_EMAIL, "second-admin-password-1", "Second Admin", role="admin")
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
 
     def tearDown(self):
@@ -691,7 +694,11 @@ class ApiRunTriggersRemediation(unittest.TestCase):
 
     def _create_and_approve(self, finding_id="FIND-1"):
         created = client.post("/api/remediation-approvals", json={"finding_id": finding_id, "requested_by": "eng@example.com"}).json()
-        client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
+        _logout()
+        _login(SECOND_ADMIN_EMAIL, "second-admin-password-1")  # a requester cannot approve their own request
+        client.post(f"/api/remediation-approvals/{created['id']}/approve", json={})
+        _logout()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
         return created["id"]
 
     def test_confirm_true_with_finding_id_marks_the_approval_triggered(self):
@@ -751,6 +758,37 @@ class ApiRunTriggersRemediation(unittest.TestCase):
             "finding_id": "FIND-1", "confirm": True,
         })
         self.assertEqual(resp.status_code, 401)
+
+
+class ApiRunInputValidation(unittest.TestCase):
+    """path and finding_id are interpolated into a prompt for an agent that can edit files."""
+
+    def _post(self, **fields):
+        return client.post("/api/run", json={"pipeline": "scan", **fields})
+
+    def test_bad_paths_are_rejected(self):
+        for bad in ("", "-rf", "../outside", "a/../../b", "has space", "tab\tchar", "line\nbreak", "x" * 301,
+                    "C:\\Windows", "/etc", str(Path(REPO_ROOT).parent)):
+            resp = self._post(path=bad)
+            self.assertEqual(resp.status_code, 422, bad)
+
+    def test_good_relative_path_still_gets_a_dry_run(self):
+        resp = self._post(path="vulnerable-demo-app")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["dry_run"])
+
+    def test_absolute_path_inside_the_repo_is_allowed_when_it_has_no_spaces(self):
+        with patch("app.cli.REPO_ROOT", Path("/srv/quanta")):
+            resp = self._post(path="/srv/quanta/vulnerable-demo-app")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_finding_id_must_have_the_expected_shape(self):
+        for bad in ("FIND-1; rm -rf /", "find-1", "FIND-", "FIND-1 extra", "../FIND-1"):
+            resp = client.post("/api/run", json={"pipeline": "remediate", "finding_id": bad})
+            self.assertEqual(resp.status_code, 422, bad)
+        for good in ("FIND-12", "VULN-3"):
+            resp = client.post("/api/run", json={"pipeline": "remediate", "finding_id": good})
+            self.assertEqual(resp.status_code, 200, good)
 
 
 class ApiStatus(unittest.TestCase):
@@ -2071,16 +2109,17 @@ class ApiTeamScopedRbac(unittest.TestCase):
         unfiltered = client.get("/api/queue").json()["findings"]
         own_team_finding = next(f for f in unfiltered if f.get("team") == self.real_team)
         other_team_finding = next(f for f in unfiltered if f.get("team") and f.get("team") != self.real_team)
+        auth_users.create_user(SECOND_ADMIN_EMAIL, "second-admin-password-1", "Second Admin", role="admin")
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
         client.post("/api/exceptions", json={
             "finding_id": own_team_finding["id"], "reason": "rbac test - own team",
-            "requested_by": "tester@test.local", "approved_by": "manager@test.local",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         })
         client.post("/api/exceptions", json={
             "finding_id": other_team_finding["id"], "reason": "rbac test - other team",
-            "requested_by": "tester@test.local", "approved_by": "manager@test.local",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         })
         _logout()
         _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
@@ -2102,6 +2141,149 @@ class ApiTeamScopedRbac(unittest.TestCase):
         finding_ids = {a["finding_id"] for a in approvals}
         self.assertIn(own_team_finding["id"], finding_ids)
         self.assertNotIn(other_team_finding["id"], finding_ids)
+
+    def test_asset_writes_are_limited_to_the_users_own_team_scope(self):
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        own = client.post("/api/assets/WIN-DC01/environment", json={"environment": "dev"})
+        self.assertEqual(own.status_code, 200)
+        for path, body in (("owner", {"owner": "x", "team": "y"}), ("facing", {"facing": "internal"}),
+                           ("environment", {"environment": "dev"}), ("network-info", {"ip": "10.0.0.1"}),
+                           ("remediation-schedule", {"cadence": "weekly"})):
+            resp = client.post(f"/api/assets/LNX-DB03/{path}", json=body)
+            self.assertEqual(resp.status_code, 403, path)
+
+    def test_non_admin_without_a_team_cannot_write_assets(self):
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post("/api/assets/WIN-DC01/owner", json={"owner": "x", "team": "y"})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_cmdb_import_apply_is_admin_only_and_validates_entries(self):
+        entry = {"asset_name": "WIN-DC01", "owner": "A", "team": "T"}
+        _login(self.TEAM_USER_EMAIL, self.TEAM_USER_PASSWORD)
+        self.assertEqual(client.post("/api/assets/cmdb-import/apply", json={"entries": [entry]}).status_code, 403)
+        _logout()
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+        self.assertEqual(client.post("/api/assets/cmdb-import/apply", json={"entries": [entry]}).status_code, 200)
+        bad_batches = ([{"asset_name": "", "owner": "A"}], [{"asset_name": "x" * 201}], [{"owner": "A"}],
+                       [{"asset_name": "A", "owner": "o" * 201}], [{"asset_name": "A", "team": 5}],
+                       [{"asset_name": "A"}] * 5001)
+        for entries in bad_batches:
+            self.assertEqual(client.post("/api/assets/cmdb-import/apply", json={"entries": entries}).status_code, 400)
+
+
+class ReadUploadStreaming(unittest.TestCase):
+    """_read_upload rejects on the declared length, and while streaming, instead of buffering first."""
+
+    class _Req:
+        def __init__(self, chunks, content_length=None):
+            self.headers = {} if content_length is None else {"content-length": str(content_length)}
+            self._chunks = chunks
+            self.streamed = 0
+
+        async def stream(self):
+            for c in self._chunks:
+                self.streamed += 1
+                yield c
+
+    def _run(self, req):
+        import asyncio
+        return asyncio.run(dashboard_app_module._read_upload(req))
+
+    def test_small_upload_is_returned_whole(self):
+        self.assertEqual(self._run(self._Req([b"ab", b"cd"], 4)), b"abcd")
+
+    def test_declared_length_over_the_limit_is_413_before_reading(self):
+        from fastapi import HTTPException
+        req = self._Req([b"x"], dashboard_app_module.MAX_UPLOAD_BYTES + 1)
+        with self.assertRaises(HTTPException) as ctx:
+            self._run(req)
+        self.assertEqual(ctx.exception.status_code, 413)
+        self.assertEqual(req.streamed, 0)
+
+    def test_stream_is_aborted_once_the_running_count_passes_the_limit(self):
+        from fastapi import HTTPException
+        with patch.object(dashboard_app_module, "MAX_UPLOAD_BYTES", 10):
+            req = self._Req([b"x" * 6, b"x" * 6, b"x" * 6])  # no Content-Length header at all
+            with self.assertRaises(HTTPException) as ctx:
+                self._run(req)
+        self.assertEqual(ctx.exception.status_code, 413)
+        self.assertEqual(req.streamed, 2)
+
+
+class OidcCallbackHardening(unittest.TestCase):
+    """State binding, pending-state expiry/cap, email_verified, generic errors. oidc's own
+    network functions are patched; nothing leaves the process."""
+
+    def setUp(self):
+        app_mod = dashboard_app_module
+        self.pending = app_mod._oidc_pending_logins
+        self.pending.clear()
+        self.addCleanup(self.pending.clear)
+        for target, value in (("is_configured", True), ("build_authorize_url", "https://idp.example.com/authorize?x=1")):
+            p = patch.object(app_mod.oidc, target, return_value=value)
+            p.start()
+            self.addCleanup(p.stop)
+        _logout()
+
+    def _login_start(self):
+        resp = client.get("/api/auth/oidc/login", follow_redirects=False)
+        self.assertEqual(resp.status_code, 307)
+        state = resp.cookies.get("quanta_oidc_state")
+        self.assertIn(state, self.pending)
+        return state, resp
+
+    def _callback(self, state, userinfo=None, exchange_error=None):
+        app_mod = dashboard_app_module
+        with patch.object(app_mod.oidc, "exchange_code_for_token", side_effect=exchange_error,
+                          return_value={"access_token": "at"}),              patch.object(app_mod.oidc, "fetch_userinfo", return_value=userinfo or {"email": "p@example.com", "name": "P"}):
+            return client.get("/api/auth/oidc/callback", params={"code": "c", "state": state}, follow_redirects=False)
+
+    def test_login_sets_an_httponly_lax_state_cookie(self):
+        _, resp = self._login_start()
+        header = resp.headers["set-cookie"].lower()
+        self.assertIn("httponly", header)
+        self.assertIn("samesite=lax", header)
+
+    def test_callback_succeeds_with_a_matching_state_cookie(self):
+        state, _ = self._login_start()
+        resp = self._callback(state)
+        self.assertEqual(resp.status_code, 307)
+        self.assertNotIn(state, self.pending)
+        _logout()
+
+    def test_callback_without_the_state_cookie_is_rejected(self):
+        state, _ = self._login_start()
+        client.cookies.clear()
+        self.assertEqual(self._callback(state).status_code, 400)
+
+    def test_callback_with_a_different_state_cookie_is_rejected(self):
+        state, _ = self._login_start()
+        client.cookies.set("quanta_oidc_state", "not-the-state")
+        self.assertEqual(self._callback(state).status_code, 400)
+
+    def test_expired_pending_state_is_rejected_and_pruned(self):
+        state, _ = self._login_start()
+        verifier, _exp = self.pending[state]
+        self.pending[state] = (verifier, 0)
+        self.assertEqual(self._callback(state).status_code, 400)
+        self.assertNotIn(state, self.pending)
+
+    def test_pending_dict_is_capped(self):
+        for i in range(dashboard_app_module.OIDC_PENDING_MAX + 50):
+            client.get("/api/auth/oidc/login", follow_redirects=False)
+        self.assertLessEqual(len(self.pending), dashboard_app_module.OIDC_PENDING_MAX)
+
+    def test_unverified_email_is_refused(self):
+        state, _ = self._login_start()
+        resp = self._callback(state, userinfo={"email": "p@example.com", "email_verified": False})
+        self.assertEqual(resp.status_code, 403)
+        self.assertNotIn("quanta_session", resp.headers.get("set-cookie", ""))
+
+    def test_provider_failure_returns_a_generic_message_not_the_exception_text(self):
+        state, _ = self._login_start()
+        resp = self._callback(state, exchange_error=RuntimeError("secret internal detail https://idp/token"))
+        self.assertEqual(resp.status_code, 502)
+        self.assertEqual(resp.json()["detail"], "Sign-in failed. Try again or contact your administrator.")
 
 
 class RequireLoginForReadsMiddleware(unittest.TestCase):
@@ -2272,8 +2454,9 @@ class ApiExceptions(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
-        # Create requires any logged-in user, revoke requires admin - log in as admin so
-        # both work in these tests; the 401/403 tests below explicitly log out/switch.
+        # Create and revoke both require an administrator, and the approver must be a
+        # different administrator account than the requester.
+        auth_users.create_user(SECOND_ADMIN_EMAIL, "second-admin-password-1", "Second Admin", role="admin")
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
 
     def tearDown(self):
@@ -2290,8 +2473,8 @@ class ApiExceptions(unittest.TestCase):
     def test_create_then_list_shows_the_new_exception_with_computed_status(self):
         create_resp = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "Compensating control in place",
-            "requested_by": "eng@example.com", "approved_by": "secops@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         })
         self.assertEqual(create_resp.status_code, 200)
         self.assertEqual(create_resp.json()["finding_id"], "FIND-7")
@@ -2304,7 +2487,7 @@ class ApiExceptions(unittest.TestCase):
     def test_create_with_past_expiry_is_rejected(self):
         resp = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "r",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
             "expires_on": "2020-01-01",
         })
         self.assertEqual(resp.status_code, 400)
@@ -2312,16 +2495,16 @@ class ApiExceptions(unittest.TestCase):
     def test_create_with_blank_reason_is_rejected(self):
         resp = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "   ",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         })
         self.assertEqual(resp.status_code, 400)
 
     def test_revoke_an_existing_exception(self):
         created = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "r",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         }).json()
 
         revoke_resp = client.post(f"/api/exceptions/{created['id']}/revoke")
@@ -2335,8 +2518,8 @@ class ApiExceptions(unittest.TestCase):
     def test_queue_reflects_an_active_exception_on_its_finding(self):
         client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "Isolated OT VLAN",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         })
         resp = client.get("/api/queue")
         findings_by_id = {f["id"]: f for f in resp.json()["findings"]}
@@ -2349,27 +2532,66 @@ class ApiExceptions(unittest.TestCase):
         _logout()
         resp = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "r",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         })
         self.assertEqual(resp.status_code, 401)
 
-    def test_create_as_a_regular_logged_in_user_is_allowed(self):
-        """Create only requires login, not admin - unlike revoke below."""
+    def test_create_as_a_regular_logged_in_user_is_forbidden(self):
+        """Recording a waiver needs an administrator (it suppresses a finding)."""
         _logout()
         _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
         resp = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "r",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         })
+        self.assertEqual(resp.status_code, 403)
+
+    def _exc(self, **over):
+        body = {"finding_id": "FIND-7", "reason": "r", "requested_by": TEST_ADMIN_EMAIL,
+                "approved_by": SECOND_ADMIN_EMAIL, "expires_on": FUTURE_EXPIRY}
+        body.update(over)
+        return client.post("/api/exceptions", json=body)
+
+    def test_requested_by_defaults_to_the_signed_in_admin(self):
+        resp = self._exc(requested_by="")
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["requested_by"], TEST_ADMIN_EMAIL)
+
+    def test_requested_by_must_be_an_existing_user(self):
+        self.assertEqual(self._exc(requested_by="nobody@example.com").status_code, 400)
+
+    def test_approved_by_must_be_an_existing_administrator(self):
+        self.assertEqual(self._exc(approved_by="nobody@example.com").status_code, 400)
+        self.assertEqual(self._exc(approved_by=TEST_USER_EMAIL).status_code, 400)  # exists, not an admin
+
+    def test_approver_must_differ_from_requester(self):
+        resp = self._exc(approved_by=TEST_ADMIN_EMAIL)
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("different", resp.json()["detail"])
+
+    def test_admin_can_record_on_behalf_of_another_existing_user(self):
+        resp = self._exc(requested_by=TEST_USER_EMAIL)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["requested_by"], TEST_USER_EMAIL)
+
+    def test_finding_must_exist_in_the_live_queue(self):
+        self.assertEqual(self._exc(finding_id="FIND-9999999").status_code, 400)
+
+    def test_expiry_is_capped_at_365_days(self):
+        too_far = (datetime.date.today() + datetime.timedelta(days=366)).isoformat()
+        resp = self._exc(expires_on=too_far)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("365", resp.json()["detail"])
+        ok = (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
+        self.assertEqual(self._exc(expires_on=ok).status_code, 200)
 
     def test_revoke_without_login_is_rejected(self):
         created = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "r",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         }).json()
         _logout()
         resp = client.post(f"/api/exceptions/{created['id']}/revoke")
@@ -2380,8 +2602,8 @@ class ApiExceptions(unittest.TestCase):
         (tested above) but not revoke one."""
         created = client.post("/api/exceptions", json={
             "finding_id": "FIND-7", "reason": "r",
-            "requested_by": "a@example.com", "approved_by": "b@example.com",
-            "expires_on": "2099-01-01",
+            "requested_by": TEST_ADMIN_EMAIL, "approved_by": SECOND_ADMIN_EMAIL,
+            "expires_on": FUTURE_EXPIRY,
         }).json()
         _logout()
         _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
@@ -2416,7 +2638,14 @@ class ApiRemediationApprovals(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
+        auth_users.create_user(SECOND_ADMIN_EMAIL, "second-admin-password-1", "Second Admin", role="admin")
         _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
+
+    def _as_second_admin(self):
+        """The signed-in account is always the requester/decider, and a requester cannot
+        approve their own request - so approvals are made as a different administrator."""
+        _logout()
+        _login(SECOND_ADMIN_EMAIL, "second-admin-password-1")
 
     def tearDown(self):
         _logout()
@@ -2453,10 +2682,13 @@ class ApiRemediationApprovals(unittest.TestCase):
         # real shipped remediation_policy.yaml, unlike FIND-1 below (default domain,
         # which does require a group) - see remediation_policy_engine.py's docstring.
         created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-8229", "requested_by": "eng@example.com"}).json()
-        resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
+        self.assertEqual(created["requested_by"], TEST_ADMIN_EMAIL)  # the body value is ignored
+        self._as_second_admin()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "someone-else@example.com"})
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertEqual(payload["approval"]["status"], "approved")
+        self.assertEqual(payload["approval"]["approved_by"], SECOND_ADMIN_EMAIL)
         self.assertIsNone(payload["approval"]["ad_group_validated"])
 
     def test_approve_with_a_required_approval_group_but_ad_not_configured_is_honest(self):
@@ -2465,12 +2697,24 @@ class ApiRemediationApprovals(unittest.TestCase):
         set, the response must say so plainly rather than silently skip the check or
         fabricate a passing validation."""
         created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        self._as_second_admin()
         resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "approver@example.com"})
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
         self.assertFalse(payload["ad_configured"])
         self.assertIsNone(payload["approval"]["ad_group_validated"])
         self.assertIn("AD not configured", payload["message"])
+
+    def test_requester_cannot_approve_their_own_request_even_naming_someone_else(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/approve", json={"decided_by": "someone-else@example.com"})
+        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(client.get("/api/remediation-approvals").json()["approvals"][0]["status"], "pending")
+
+    def test_reject_records_the_session_user_not_the_body_value(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1"}).json()
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/reject", json={"decided_by": "forged@example.com", "reason": "x"})
+        self.assertEqual(resp.json()["approval"]["rejected_by"], TEST_ADMIN_EMAIL)
 
     def test_approve_unknown_id_returns_404(self):
         resp = client.post("/api/remediation-approvals/APR-999/approve", json={"decided_by": "approver@example.com"})
@@ -2537,17 +2781,19 @@ class ApiRemediationApprovals(unittest.TestCase):
         resp = client.post(f"/api/remediation-approvals/{created['id']}/staging-validated", json={"validated_by": "tester@example.com"})
         self.assertEqual(resp.status_code, 200)
         payload = resp.json()
-        self.assertEqual(payload["approval"]["staging_validated_by"], "tester@example.com")
+        self.assertEqual(payload["approval"]["staging_validated_by"], TEST_ADMIN_EMAIL)  # body value ignored
         self.assertIsNotNone(payload["approval"]["staging_validated_at"])
 
     def test_mark_staging_validated_unknown_approval_returns_404(self):
         resp = client.post("/api/remediation-approvals/APR-999/staging-validated", json={"validated_by": "tester@example.com"})
         self.assertEqual(resp.status_code, 404)
 
-    def test_mark_staging_validated_blank_validator_returns_400(self):
-        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
-        resp = client.post(f"/api/remediation-approvals/{created['id']}/staging-validated", json={"validated_by": "   "})
-        self.assertEqual(resp.status_code, 400)
+    def test_mark_staging_validated_as_non_admin_is_forbidden(self):
+        created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1"}).json()
+        _logout()
+        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        resp = client.post(f"/api/remediation-approvals/{created['id']}/staging-validated", json={})
+        self.assertEqual(resp.status_code, 403)
 
     def test_mark_staging_validated_requires_login(self):
         created = client.post("/api/remediation-approvals", json={"finding_id": "FIND-1", "requested_by": "eng@example.com"}).json()
@@ -2588,7 +2834,7 @@ class ApiActivityLog(unittest.TestCase):
         # isolates both instead of needing a second DEFAULT_OWNERSHIP_PATH patch.
         self.activity_patcher = _patch_db_engine(self.tmpdir.name)
         self.activity_patcher.start()
-        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
 
     def tearDown(self):
         _logout()
@@ -2608,13 +2854,13 @@ class ApiActivityLog(unittest.TestCase):
     def test_login_attempt_is_recorded(self):
         entries = client.get("/api/activity-log?action=login.success").json()["entries"]
         self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0]["actor"], TEST_USER_EMAIL)
+        self.assertEqual(entries[0]["actor"], TEST_ADMIN_EMAIL)
 
     def test_a_real_asset_edit_appears_with_the_real_actor(self):
         client.post("/api/assets/WIN-DC01/owner", json={"owner": "Priya Nair", "team": "Identity"})
         entries = client.get("/api/activity-log?action=asset.set_owner").json()["entries"]
         self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0]["actor"], TEST_USER_EMAIL)
+        self.assertEqual(entries[0]["actor"], TEST_ADMIN_EMAIL)
         self.assertEqual(entries[0]["action"], "asset.set_owner")
         self.assertEqual(entries[0]["target"], "WIN-DC01")
 
@@ -2647,7 +2893,7 @@ class ApiAssets(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.patcher = _patch_db_engine(self.tmpdir.name)
         self.patcher.start()
-        _login(TEST_USER_EMAIL, TEST_USER_PASSWORD)  # owner/facing only require login
+        _login(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)  # asset edits are team-scoped; admins are unrestricted
 
     def tearDown(self):
         _logout()

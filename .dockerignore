@@ -9,3 +9,13 @@ scripts/doc-pdf-pipeline/_build
 dashboard/certs
 .env
 *.pdf
+*.pem
+keys/
+.env.*
+!.env.example
+!.env.production.example
+.quanta/
+tests/
+docs/images/
+.claude/
+!remediation/licensing/vendor_public_key.pem

@@ -24,6 +24,8 @@ in normalize_host_record() below.
 """
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_API_VERSION = "v2.12"
@@ -39,7 +41,7 @@ _RETRYABLE_EXCEPTIONS = (requests.exceptions.ConnectionError, requests.exception
 class InfobloxConnector:
     def __init__(self, grid_master, username, password, api_version=DEFAULT_API_VERSION, session=None):
         self.base_url = f"https://{grid_master}/wapi/{api_version}"
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         # WAPI supports either Basic auth per-request or an initial session-cookie
         # login; Basic auth per request is simpler and equally real/documented (and
         # matches how ServiceNowConnector already does Basic auth in this repo).

@@ -22,6 +22,8 @@ import datetime
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_BASE_URL = "https://api.crowdstrike.com"
@@ -50,7 +52,7 @@ class CrowdStrikeConnector:
         self.client_id = client_id
         self.client_secret = client_secret
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self._access_token = None
 
     def authenticate(self):

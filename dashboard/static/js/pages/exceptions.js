@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { getCurrentUser } from "../auth.js";
 import { escapeHtml, flash } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
 import { paginate, paginationHtml, wirePagination } from "../pagination.js";
@@ -89,6 +90,7 @@ function groupedRowsHtml(pagedRows, allFilteredRows) {
 }
 
 export async function render(container) {
+  const signedInEmail = ((await getCurrentUser()) || {}).email || "";
   container.innerHTML = `<div class="empty-state">Loading…</div>`;
   const [{ exceptions }, queue, { approvals }] = await Promise.all([
     api.exceptionsList(), api.queue(), api.remediationApprovalsList(),
@@ -172,10 +174,10 @@ export async function render(container) {
       <fieldset class="exception-form-section">
         <legend>3. Approval chain</legend>
         <label>Requested by
-          <input type="text" name="requested_by" placeholder="you@example.com" required>
+          <input type="text" name="requested_by" placeholder="you@example.com" value="${escapeHtml(signedInEmail)}" required>
         </label>
         <label>Approved by
-          <input type="text" name="approved_by" placeholder="approver@example.com" required>
+          <input type="text" name="approved_by" placeholder="another administrator's email" required>
         </label>
       </fieldset>
 

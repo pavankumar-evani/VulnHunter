@@ -24,6 +24,8 @@ import time
 
 import requests
 
+from remediation.connectors import url_safety
+
 DEFAULT_MAX_ROWS = 25
 HARD_MAX_ROWS = 100
 DEFAULT_DEADLINE_SECONDS = 90
@@ -69,7 +71,7 @@ class SplunkSearchConnector:
         if not token and not (username and password):
             raise ValueError("A Splunk token, or a username and password, is required")
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.verify = bool(verify_tls)
         if token:
             self.session.headers["Authorization"] = f"Bearer {token}"

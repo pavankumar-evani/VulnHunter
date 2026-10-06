@@ -25,6 +25,8 @@ import re
 
 import requests
 
+from remediation.connectors import url_safety
+
 TIMEOUT = 25
 MAX_RECORDS = 200
 
@@ -67,7 +69,7 @@ class RansomwareLive:
     URL = "https://api.ransomware.live/v2/recentvictims"
 
     def __init__(self, session=None):
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
 
     def fetch(self):
         data = _get_json(self.session, "GET", self.URL)
@@ -108,7 +110,7 @@ class IntelX:
     HOST = "https://2.intelx.io"
 
     def __init__(self, api_key, host=None, session=None):
-        self.key, self.host, self.session = api_key, (host or self.HOST).rstrip("/"), session or requests.Session()
+        self.key, self.host, self.session = api_key, (host or self.HOST).rstrip("/"), session or url_safety.safe_session()
 
     def _h(self):
         return {"x-key": self.key}
@@ -133,7 +135,7 @@ class DeHashed:
     URL = "https://api.dehashed.com/v2/search"
 
     def __init__(self, api_key, session=None):
-        self.key, self.session = api_key, session or requests.Session()
+        self.key, self.session = api_key, session or url_safety.safe_session()
 
     def test_connection(self):
         d = _get_json(self.session, "POST", self.URL, headers={"Dehashed-Api-Key": self.key}, json={"query": "domain:example.invalid", "page": 1, "size": 1})
@@ -153,7 +155,7 @@ class LeakCheck:
     BASE = "https://leakcheck.io/api/v2"
 
     def __init__(self, api_key, session=None):
-        self.key, self.session = api_key, session or requests.Session()
+        self.key, self.session = api_key, session or url_safety.safe_session()
 
     def test_connection(self):
         d = _get_json(self.session, "GET", f"{self.BASE}/query/example.invalid", headers={"X-API-Key": self.key}, params={"type": "domain", "limit": 1})
@@ -174,7 +176,7 @@ class Snusbase:
     URL = "https://api.snusbase.com/data/search"
 
     def __init__(self, api_key, session=None):
-        self.key, self.session = api_key, session or requests.Session()
+        self.key, self.session = api_key, session or url_safety.safe_session()
 
     def test_connection(self):
         d = _get_json(self.session, "GET", "https://api.snusbase.com/data/stats", headers={"Auth": self.key})

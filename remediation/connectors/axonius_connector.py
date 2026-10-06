@@ -35,6 +35,8 @@ normalize_device() below.
 """
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_PAGE_SIZE = 1000
@@ -54,7 +56,7 @@ OS_TYPE_TO_ASSET_TYPE = {
 class AxoniusConnector:
     def __init__(self, base_url, api_key, api_secret, session=None):
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         # Axonius's documented auth pattern: api-key/api-secret sent as headers on
         # every request (not query params, not a login/token-exchange flow).
         self.session.headers.update({

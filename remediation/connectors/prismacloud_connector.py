@@ -40,6 +40,8 @@ needs that loop the same way ArmisConnector.search_all_pages() implements one.
 """
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_BASE_URL = None  # no honest default - see module docstring
@@ -60,7 +62,7 @@ class PrismaCloudConnector:
         self.access_key_id = access_key_id
         self.secret_key = secret_key
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self._token = None
 
     def authenticate(self):

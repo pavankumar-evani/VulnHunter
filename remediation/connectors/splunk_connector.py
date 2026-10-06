@@ -27,6 +27,8 @@ import time as _time
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_SOURCETYPE = "quanta:finding"
@@ -76,7 +78,7 @@ def build_hec_event(finding, sourcetype=DEFAULT_SOURCETYPE, index=None):
 class SplunkConnector:
     def __init__(self, hec_url, hec_token, session=None):
         self.hec_url = hec_url
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.headers["Authorization"] = f"Splunk {hec_token}"
 
     def send_event(self, finding, sourcetype=DEFAULT_SOURCETYPE, index=None):

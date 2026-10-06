@@ -216,7 +216,7 @@ def _csp_enabled():
         return False
     if raw in ("1", "true", "yes"):
         return True
-    return os.environ.get("QUANTA_PRODUCTION", "").strip().lower() in ("1", "true", "yes")
+    return rbac.production_enabled()
 
 
 def _cookie_secure(request):
@@ -285,7 +285,7 @@ def _require_login_for_reads_enabled():
     # tests can toggle this with patch.dict(os.environ, ...) without reloading the
     # whole app module.
     def flag(name):
-        return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
+        return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
     # QUANTA_PRODUCTION makes the safe choice the default: every /api route needs a session
     # unless QUANTA_ALLOW_PUBLIC_READS is set on purpose.
     return flag("QUANTA_REQUIRE_LOGIN_FOR_READS") or (flag("QUANTA_PRODUCTION") and not flag("QUANTA_ALLOW_PUBLIC_READS"))
@@ -378,7 +378,7 @@ DEMO_PASSWORD = "ChangeMe123!"
 def assert_no_demo_accounts():
     """In production, refuse to start while a seeded demo account still has its published
     password. Cheap, and it removes the most common way a demo becomes a breach."""
-    if os.environ.get("QUANTA_PRODUCTION", "").strip().lower() not in ("1", "true", "yes"):
+    if not rbac.production_enabled():
         return
     for email in DEMO_ACCOUNTS:
         if auth_users.verify_login(email, DEMO_PASSWORD):
@@ -600,6 +600,36 @@ def _annotate_finding_teams(findings, team_by_asset_name=None, with_assignment=F
     return findings
 
 
+def _require_asset_write(asset_name, user):
+    """Write access to one asset's metadata. Administrators: unrestricted. A non-admin
+    with a team: only assets that appear in findings routed to their team (the same
+    team-scoped view /api/queue shows them). A non-admin with no team: no writes."""
+    if user.get("role") == "admin":
+        return
+    if not user.get("team"):
+        raise HTTPException(status_code=403, detail="Changing asset details needs an administrator or membership of a team that owns the asset.")
+    scoped = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    if asset_name not in {(f.get("asset") or {}).get("name") for f in scoped}:
+        raise HTTPException(status_code=403, detail="That asset is not in your team's scope.")
+
+
+_CMDB_MAX_ENTRIES = 5000
+_CMDB_MAX_FIELD = 200
+
+
+def _validate_cmdb_entries(entries):
+    if len(entries) > _CMDB_MAX_ENTRIES:
+        raise HTTPException(status_code=400, detail=f"Too many entries (maximum {_CMDB_MAX_ENTRIES}).")
+    for i, e in enumerate(entries, 1):
+        name = e.get("asset_name")
+        if not isinstance(name, str) or not name.strip() or len(name) > _CMDB_MAX_FIELD:
+            raise HTTPException(status_code=400, detail=f"Entry {i}: asset_name must be a non-empty string of at most {_CMDB_MAX_FIELD} characters.")
+        for field in ("owner", "team", "environment"):
+            v = e.get(field, "")
+            if v is not None and (not isinstance(v, str) or len(v) > _CMDB_MAX_FIELD):
+                raise HTTPException(status_code=400, detail=f"Entry {i}: {field} must be a string of at most {_CMDB_MAX_FIELD} characters.")
+
+
 def _finding_team_by_id(queue_findings, team_by_asset_name=None):
     """{finding_id: team} for every real finding in the live queue - the join
     exceptions/remediation-approvals need to team-scope their own records, since
@@ -796,33 +826,36 @@ def api_remediation_evidence(approval_id: str, user: dict = Depends(rbac.require
 
 class RemediationApprovalRequestBody(BaseModel):
     finding_id: str
-    requested_by: str
+    requested_by: str = ""  # accepted for compatibility, ignored: the signed-in user is always the requester
 
 
 @app.post("/api/remediation-approvals")
-def api_create_remediation_approval(body: RemediationApprovalRequestBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+def api_create_remediation_approval(body: RemediationApprovalRequestBody, user: dict = Depends(rbac.require_login)):
     findings = {f["id"]: f for f in dashboard_data.load_live_queue()}
     finding = findings.get(body.finding_id)
     if not finding:
         raise HTTPException(status_code=404, detail=f"No finding with id {body.finding_id!r}")
     scheduled_window = finding["remediation_policy"]["next_window"]
     try:
-        return remediation_approvals_store.create_approval_request(body.finding_id, body.requested_by, scheduled_window)
+        return remediation_approvals_store.create_approval_request(body.finding_id, user["email"], scheduled_window)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 class RemediationApprovalDecisionBody(BaseModel):
-    decided_by: str
+    decided_by: str = ""  # accepted for compatibility, ignored: the signed-in administrator is always the decider
     reason: str = ""
 
 
 @app.post("/api/remediation-approvals/{approval_id}/approve")
-def api_approve_remediation(approval_id: str, body: RemediationApprovalDecisionBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+def api_approve_remediation(approval_id: str, body: RemediationApprovalDecisionBody, user: dict = Depends(rbac.require_admin)):
     approvals = {a["id"]: a for a in remediation_approvals_store.load_approvals()}
     approval = approvals.get(approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail=f"No approval request with id {approval_id!r}")
+    decided_by = user["email"]
+    if (approval.get("requested_by") or "").strip().lower() == decided_by.strip().lower():
+        raise HTTPException(status_code=403, detail="Separation of duties: you requested this change, so a different administrator must approve it.")
 
     findings = {f["id"]: f for f in dashboard_data.load_live_queue()}
     finding = findings.get(approval["finding_id"])
@@ -831,7 +864,7 @@ def api_approve_remediation(approval_id: str, body: RemediationApprovalDecisionB
     ad_group_validated = None
     if required_group and ad_directory.is_configured():
         try:
-            ad_group_validated = ad_directory.is_member_of_group(body.decided_by, required_group)
+            ad_group_validated = ad_directory.is_member_of_group(decided_by, required_group)
         except Exception as exc:  # noqa: BLE001 - a real AD failure must not silently look like "validated"
             raise HTTPException(status_code=502, detail=f"AD group lookup failed: {exc}") from exc
 
@@ -845,7 +878,7 @@ def api_approve_remediation(approval_id: str, body: RemediationApprovalDecisionB
                                 + "; ".join(f"{i['rule']} {i['message']}" for i in lint["errors"]))
 
     try:
-        result = remediation_approvals_store.approve(approval_id, body.decided_by, ad_group_validated)
+        result = remediation_approvals_store.approve(approval_id, decided_by, ad_group_validated)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError as exc:
@@ -857,15 +890,15 @@ def api_approve_remediation(approval_id: str, body: RemediationApprovalDecisionB
             "Approved." if not required_group else
             "Approved - AD not configured, group membership not validated." if not ad_directory.is_configured() else
             f"Approved - verified member of {required_group}." if ad_group_validated else
-            f"Approved - WARNING: {body.decided_by} is NOT a verified member of {required_group}."
+            f"Approved - WARNING: {decided_by} is NOT a verified member of {required_group}."
         ),
     }
 
 
 @app.post("/api/remediation-approvals/{approval_id}/reject")
-def api_reject_remediation(approval_id: str, body: RemediationApprovalDecisionBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+def api_reject_remediation(approval_id: str, body: RemediationApprovalDecisionBody, user: dict = Depends(rbac.require_admin)):
     try:
-        result = remediation_approvals_store.reject(approval_id, body.decided_by, body.reason)
+        result = remediation_approvals_store.reject(approval_id, user["email"], body.reason)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError as exc:
@@ -874,13 +907,13 @@ def api_reject_remediation(approval_id: str, body: RemediationApprovalDecisionBo
 
 
 class StagingValidatedBody(BaseModel):
-    validated_by: str
+    validated_by: str = ""  # accepted for compatibility, ignored: the signed-in administrator is recorded
 
 
 @app.post("/api/remediation-approvals/{approval_id}/staging-validated")
-def api_mark_staging_validated(approval_id: str, body: StagingValidatedBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+def api_mark_staging_validated(approval_id: str, body: StagingValidatedBody, user: dict = Depends(rbac.require_admin)):
     try:
-        result = remediation_approvals_store.mark_staging_validated(approval_id, body.validated_by)
+        result = remediation_approvals_store.mark_staging_validated(approval_id, user["email"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except KeyError as exc:
@@ -1905,6 +1938,36 @@ class RunBody(BaseModel):
     # dashboard/static/js/pages/remediationApprovals.js.
     finding_id: str | None = None
 
+    @field_validator("finding_id")
+    @classmethod
+    def _finding_id_has_the_expected_shape(cls, value):
+        """finding_id is interpolated into a prompt for an agent that can write files."""
+        if value is not None and not re.fullmatch(r"(FIND|VULN)-[0-9]+", value):
+            raise ValueError("finding_id must look like FIND-123 or VULN-123")
+        return value
+
+    @field_validator("path")
+    @classmethod
+    def _path_stays_inside_the_repository(cls, value):
+        """path is interpolated into a prompt for an agent that can edit files and push
+        branches: keep it a plain, short, single-token path that resolves inside the
+        repository root. (Registered applications record only a Git repository name, not
+        a local directory, so the repository root is the only allowed base today.)"""
+        if not value or len(value) > 300:
+            raise ValueError("path must be between 1 and 300 characters")
+        if re.search(r"\s", value) or any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError("path must not contain whitespace or control characters")
+        if value.startswith("-"):
+            raise ValueError("path must not start with '-'")
+        if ".." in value:
+            raise ValueError("path must not contain '..'")
+        root = Path(cli.REPO_ROOT).resolve()
+        target = Path(value)
+        resolved = (target if target.is_absolute() else root / target).resolve()
+        if resolved != root and root not in resolved.parents:
+            raise ValueError("path must be inside the Quanta repository")
+        return value
+
 
 @app.post("/api/run")
 def api_run_post(body: RunBody, request: Request):
@@ -2510,10 +2573,17 @@ def api_ingest_findings(body: IngestFindingsBody, background: BackgroundTasks, k
 
 
 async def _read_upload(request: Request):
-    body = await request.body()
-    if len(body) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (50 MB maximum)")
-    return body
+    too_large = HTTPException(status_code=413, detail="File too large (50 MB maximum)")
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+        raise too_large
+    chunks, total = [], 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            raise too_large
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _ingest_csv_bytes(data, source, reconcile, actor):
@@ -3312,16 +3382,36 @@ def api_list_exceptions(user: dict = Depends(rbac.get_current_user)):
 class ExceptionCreateBody(BaseModel):
     finding_id: str
     reason: str
-    requested_by: str
+    requested_by: str = ""
     approved_by: str
     expires_on: str
 
 
+MAX_EXCEPTION_DAYS = 365
+
+
 @app.post("/api/exceptions")
-def api_create_exception(body: ExceptionCreateBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+def api_create_exception(body: ExceptionCreateBody, user: dict = Depends(rbac.require_admin)):
+    requested_by = (body.requested_by or "").strip().lower() or user["email"].strip().lower()
+    approved_by = (body.approved_by or "").strip().lower()
+    if requested_by != user["email"].strip().lower() and not auth_users.find_user(requested_by):
+        raise HTTPException(status_code=400, detail=f"requested_by {requested_by!r} is not an existing user account.")
+    approver = auth_users.find_user(approved_by) if approved_by else None
+    if not approver or approver.get("role") != "admin":
+        raise HTTPException(status_code=400, detail="approved_by must be an existing administrator account.")
+    if approved_by == requested_by:
+        raise HTTPException(status_code=403, detail="Separation of duties: the approver must be a different person from the requester.")
+    if body.finding_id not in {f["id"] for f in dashboard_data.load_live_queue()}:
+        raise HTTPException(status_code=400, detail=f"No live finding with id {body.finding_id!r}.")
+    try:
+        expires = datetime.date.fromisoformat(body.expires_on)
+    except (TypeError, ValueError):
+        expires = None  # the store reports the malformed date with its own message
+    if expires and expires > datetime.date.today() + datetime.timedelta(days=MAX_EXCEPTION_DAYS):
+        raise HTTPException(status_code=400, detail=f"expires_on cannot be more than {MAX_EXCEPTION_DAYS} days ahead.")
     try:
         record = exceptions_store.create_exception(
-            body.finding_id, body.reason, body.requested_by, body.approved_by, body.expires_on,
+            body.finding_id, body.reason, requested_by, approved_by, body.expires_on,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -3954,6 +4044,7 @@ class AssetOwnerBody(BaseModel):
 
 @app.post("/api/assets/{asset_name}/owner")
 def api_set_asset_owner(asset_name: str, body: AssetOwnerBody, user: dict = Depends(rbac.require_login)):
+    _require_asset_write(asset_name, user)
     return asset_inventory.set_owner(asset_name, body.owner, body.team, actor=user["email"])
 
 
@@ -3963,6 +4054,7 @@ class AssetFacingBody(BaseModel):
 
 @app.post("/api/assets/{asset_name}/facing")
 def api_set_asset_facing(asset_name: str, body: AssetFacingBody, user: dict = Depends(rbac.require_login)):
+    _require_asset_write(asset_name, user)
     try:
         return asset_inventory.set_facing(asset_name, body.facing, actor=user["email"])
     except ValueError as exc:
@@ -3975,6 +4067,7 @@ class AssetEnvironmentBody(BaseModel):
 
 @app.post("/api/assets/{asset_name}/environment")
 def api_set_asset_environment(asset_name: str, body: AssetEnvironmentBody, user: dict = Depends(rbac.require_login)):
+    _require_asset_write(asset_name, user)
     try:
         return asset_inventory.set_environment(asset_name, body.environment, actor=user["email"])
     except ValueError as exc:
@@ -3988,6 +4081,7 @@ class AssetNetworkInfoBody(BaseModel):
 
 @app.post("/api/assets/{asset_name}/network-info")
 def api_set_asset_network_info(asset_name: str, body: AssetNetworkInfoBody, user: dict = Depends(rbac.require_login)):
+    _require_asset_write(asset_name, user)
     try:
         return asset_inventory.set_network_info(asset_name, body.ip, body.mac, actor=user["email"])
     except ValueError as exc:
@@ -4001,6 +4095,7 @@ class AssetRemediationScheduleBody(BaseModel):
 
 @app.post("/api/assets/{asset_name}/remediation-schedule")
 def api_set_asset_remediation_schedule(asset_name: str, body: AssetRemediationScheduleBody, user: dict = Depends(rbac.require_login)):
+    _require_asset_write(asset_name, user)
     try:
         return asset_inventory.set_remediation_schedule(
             asset_name, body.cadence, body.maintenance_window, actor=user["email"],
@@ -4031,7 +4126,8 @@ class CmdbImportApplyBody(BaseModel):
 
 
 @app.post("/api/assets/cmdb-import/apply")
-def api_cmdb_import_apply(body: CmdbImportApplyBody, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+def api_cmdb_import_apply(body: CmdbImportApplyBody, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    _validate_cmdb_entries(body.entries)
     return cmdb_import.apply_import(body.entries)
 
 
@@ -4182,7 +4278,7 @@ def api_ingest_generic(body: GenericIngestBody, request: Request):
     there's no cap on how often it's called or how much data it can accumulate - a
     real deployment needs request throttling/a size cap alongside the auth mentioned
     above, not implemented here either."""
-    if os.environ.get("QUANTA_PRODUCTION", "").strip().lower() in ("1", "true", "yes"):
+    if rbac.production_enabled():
         # in a production deployment this webhook is no longer open: it needs an ingest:write API key
         require_api_key("ingest:write")(request)
     # Locked for the full read-existing/assign-ids/write cycle: two concurrent
@@ -4302,41 +4398,66 @@ def api_directory_status():
     return {"configured": ad_directory.is_configured()}
 
 
-# state -> PKCE code_verifier, in-memory only. Fine for a single-process dev server;
-# a real multi-worker deployment needs this in a shared store (Redis, a DB row) instead,
-# and should expire abandoned entries - neither done here, this is the MVP version.
+# state -> (PKCE code_verifier, expiry), in-memory only. Fine for a single-process dev
+# server; a real multi-worker deployment needs this in a shared store (Redis, a DB row)
+# instead. Entries expire after 10 minutes and the dict is capped at 1000 entries.
 _oidc_pending_logins = {}
+OIDC_PENDING_TTL_SECONDS = 600
+OIDC_PENDING_MAX = 1000
+OIDC_STATE_COOKIE = "quanta_oidc_state"
+OIDC_GENERIC_ERROR = "Sign-in failed. Try again or contact your administrator."
+
+
+def _oidc_prune_pending(now=None):
+    now = now if now is not None else time.time()
+    for st in [k for k, (_, exp) in _oidc_pending_logins.items() if exp <= now]:
+        _oidc_pending_logins.pop(st, None)
+    while len(_oidc_pending_logins) >= OIDC_PENDING_MAX:  # dicts keep insertion order: drop the oldest
+        _oidc_pending_logins.pop(next(iter(_oidc_pending_logins)))
 
 
 @app.get("/api/auth/oidc/login")
-def api_auth_oidc_login():
+def api_auth_oidc_login(request: Request):
     if not oidc.is_configured():
         raise HTTPException(status_code=503, detail="OIDC is not configured on this server.")
+    _oidc_prune_pending()
     state = secrets.token_urlsafe(24)
     verifier, challenge = oidc.generate_pkce_pair()
-    _oidc_pending_logins[state] = verifier
-    return RedirectResponse(oidc.build_authorize_url(state, challenge))
+    _oidc_pending_logins[state] = (verifier, time.time() + OIDC_PENDING_TTL_SECONDS)
+    redirect = RedirectResponse(oidc.build_authorize_url(state, challenge))
+    # Binds the state to this browser: the callback must present the same value back.
+    redirect.set_cookie(OIDC_STATE_COOKIE, state, httponly=True, samesite="lax", secure=_cookie_secure(request),
+                        max_age=OIDC_PENDING_TTL_SECONDS)
+    return redirect
 
 
 @app.get("/api/auth/oidc/callback")
 def api_auth_oidc_callback(code: str, state: str, request: Request):
     if not oidc.is_configured():
         raise HTTPException(status_code=503, detail="OIDC is not configured on this server.")
-    verifier = _oidc_pending_logins.pop(state, None)
-    if not verifier:
+    _oidc_prune_pending()
+    entry = _oidc_pending_logins.pop(state, None)
+    cookie_state = request.cookies.get(OIDC_STATE_COOKIE) or ""
+    if not entry or not secrets.compare_digest(cookie_state.encode(), state.encode()):
         raise HTTPException(
             status_code=400,
             detail="Unknown or expired OIDC login attempt - please try signing in again.",
         )
+    verifier = entry[0]
     try:
         token_response = oidc.exchange_code_for_token(code, verifier)
         userinfo = oidc.fetch_userinfo(token_response["access_token"])
-    except Exception as exc:  # noqa: BLE001 - surface any provider/network failure
-        raise HTTPException(status_code=502, detail=f"OIDC login failed: {exc}") from exc
+    except Exception:  # noqa: BLE001 - any provider/network failure; detail goes to the log, not the browser
+        logging.getLogger("quanta.oidc").exception("OIDC token exchange or userinfo request failed")
+        raise HTTPException(status_code=502, detail=OIDC_GENERIC_ERROR) from None
 
+    if userinfo.get("email_verified") in (False, "false", "False"):
+        logging.getLogger("quanta.oidc").warning("OIDC sign-in refused: provider reports the email as unverified")
+        raise HTTPException(status_code=403, detail=OIDC_GENERIC_ERROR)
     email = (userinfo.get("email") or "").strip().lower()
     if not email:
-        raise HTTPException(status_code=502, detail="OIDC provider did not return an email claim.")
+        logging.getLogger("quanta.oidc").warning("OIDC provider did not return an email claim")
+        raise HTTPException(status_code=502, detail=OIDC_GENERIC_ERROR)
     # Every OIDC-authenticated user lands as role "user", never "admin" - there's no
     # reliable, provider-agnostic way to know someone's real org role from a generic
     # userinfo claim set. A real deployment would map the IdP's own group/role claims
@@ -4349,6 +4470,7 @@ def api_auth_oidc_callback(code: str, state: str, request: Request):
         rbac.SESSION_COOKIE_NAME, cookie_value, httponly=True, samesite="lax", secure=_cookie_secure(request),
         max_age=sessions.DEFAULT_MAX_AGE_SECONDS,
     )
+    redirect.delete_cookie(OIDC_STATE_COOKIE)
     return redirect
 
 

@@ -23,14 +23,27 @@ from remediation.licensing import license as lic  # noqa: E402
 def cmd_keygen(a):
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    priv_path = out / "vendor_private.pem"
+    if priv_path.exists() and not a.force:
+        sys.exit(f"{priv_path} already exists; refusing to overwrite a signing key. Use --force to replace it (licences signed with the old key stop verifying).")
     priv, pub = lic.generate_keypair()
-    (out / "vendor_private.pem").write_bytes(priv)
-    try:
-        os.chmod(out / "vendor_private.pem", 0o600)
-    except OSError:
-        pass
+    if a.force and priv_path.exists():
+        priv_path.unlink()
+    # Created with 0600 from the start so the key is never world-readable, not even briefly.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    fd = os.open(priv_path, flags, 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(priv)
+    if os.name == "nt":
+        print(f"WARNING: could not confirm that {priv_path} is private: Windows does not enforce POSIX file modes. "
+              "Restrict its ACL yourself (icacls) or keep it on an encrypted volume.", file=sys.stderr)
+    else:
+        try:
+            os.chmod(priv_path, 0o600)
+        except OSError as exc:
+            print(f"WARNING: could not restrict permissions on {priv_path}: {exc}", file=sys.stderr)
     (out / "vendor_public.pem").write_bytes(pub)
-    print(f"Wrote {out / 'vendor_private.pem'} (keep secret) and {out / 'vendor_public.pem'} (ships with the product).")
+    print(f"Wrote {priv_path} (keep secret) and {out / 'vendor_public.pem'} (ships with the product).")
 
 
 def cmd_issue(a):
@@ -66,6 +79,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     k = sub.add_parser("keygen")
     k.add_argument("--out-dir", default="keys")
+    k.add_argument("--force", action="store_true", help="replace an existing vendor_private.pem")
     k.set_defaults(fn=cmd_keygen)
     i = sub.add_parser("issue")
     i.add_argument("--private-key", required=True)

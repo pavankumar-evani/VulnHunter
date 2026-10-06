@@ -340,7 +340,30 @@ class OidcFlow(unittest.TestCase):
         mock_session = MagicMock()
         mock_session.get.return_value.json.return_value = self.DISCOVERY_DOC
         oidc.discover("https://idp.example.com", session=mock_session)
-        mock_session.get.assert_called_once_with("https://idp.example.com/.well-known/openid-configuration")
+        mock_session.get.assert_called_once_with("https://idp.example.com/.well-known/openid-configuration", timeout=10)
+
+    def test_every_outbound_request_has_a_timeout(self):
+        mock_session = MagicMock()
+        mock_session.post.return_value.json.return_value = {"access_token": "at"}
+        mock_session.get.return_value.json.return_value = {"email": "a@b.c"}
+        oidc.exchange_code_for_token("c", "v", discovery_doc=self.DISCOVERY_DOC, session=mock_session)
+        oidc.fetch_userinfo("at", discovery_doc=self.DISCOVERY_DOC, session=mock_session)
+        self.assertEqual(mock_session.post.call_args.kwargs["timeout"], 10)
+        self.assertEqual(mock_session.get.call_args.kwargs["timeout"], 10)
+
+    def test_discovery_document_is_cached_for_ten_minutes_when_no_session_is_injected(self):
+        oidc._discovery_cache.clear()
+        self.addCleanup(oidc._discovery_cache.clear)
+        with patch.object(oidc.requests, "get") as fake_get:
+            fake_get.return_value.json.return_value = self.DISCOVERY_DOC
+            first = oidc.discover("https://idp.example.com")
+            second = oidc.discover("https://idp.example.com")
+            self.assertEqual(first, second)
+            self.assertEqual(fake_get.call_count, 1)
+            self.assertEqual(fake_get.call_args.kwargs["timeout"], 10)
+            with patch.object(oidc.time, "time", return_value=oidc.time.time() + 601):
+                oidc.discover("https://idp.example.com")
+            self.assertEqual(fake_get.call_count, 2)
 
 
 class ProductionRequirementsValidation(unittest.TestCase):
@@ -368,7 +391,7 @@ class ProductionRequirementsValidation(unittest.TestCase):
 
     def test_passes_when_the_reads_flag_is_on_with_a_real_secret(self):
         os.environ["QUANTA_REQUIRE_LOGIN_FOR_READS"] = "true"
-        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret"
+        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret-of-at-least-32-chars"
         rbac.validate_production_requirements()  # must not raise
 
     def test_flag_value_is_case_insensitive(self):
@@ -391,7 +414,7 @@ class ProductionRequirementsValidation(unittest.TestCase):
 
     def test_passes_when_production_flag_is_on_with_a_real_secret(self):
         os.environ["QUANTA_PRODUCTION"] = "true"
-        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret"
+        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret-of-at-least-32-chars"
         rbac.validate_production_requirements()  # must not raise
 
     def test_production_flag_value_is_case_insensitive(self):
@@ -408,7 +431,7 @@ class ProductionRequirementsValidation(unittest.TestCase):
         os.environ["QUANTA_PRODUCTION"] = "true"
         with self.assertRaises(RuntimeError):
             rbac.validate_production_requirements()
-        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret"
+        os.environ["QUANTA_SESSION_SECRET"] = "a-real-stable-secret-of-at-least-32-chars"
         rbac.validate_production_requirements()  # must not raise, one real secret covers both
 
 

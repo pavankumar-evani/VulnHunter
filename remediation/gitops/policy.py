@@ -71,10 +71,16 @@ def check_files(pol, files):
         raise PolicyError(f"The change touches {len(files)} files; the policy allows {fp['max_files']}")
     for f in files:
         path = f["path"]
-        if path.startswith("/") or ".." in path.split("/") or "\\" in path:
-            raise PolicyError(f"{path}: must be a relative path inside the repository")
+        if not isinstance(path, str) or not path or path.startswith("/") or "\\" in path or "\x00" in path:
+            raise PolicyError(f"{path!r}: must be a relative path inside the repository")
+        segments = path.split("/")
+        if any(seg in ("", ".", "..") for seg in segments) or posixpath.normpath(path) != path:
+            raise PolicyError(f"{path}: must be a canonical relative path inside the repository (no empty, '.' or '..' segments)")
+        # The path is canonical here, so this exact string is what gets committed.
+        low = path.lower()
         for pat in fp.get("denied") or []:
-            if fnmatch.fnmatch(path, pat) or fnmatch.fnmatch("x/" + path, pat):
+            lpat = pat.lower()
+            if fnmatch.fnmatchcase(low, lpat) or fnmatch.fnmatchcase("x/" + low, lpat):
                 raise PolicyError(f"{path}: the policy does not allow Quanta to change files matching {pat}")
         if len(f["content"].encode("utf-8")) > fp["max_bytes_per_file"]:
             raise PolicyError(f"{path}: the file is larger than the policy allows")

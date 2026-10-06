@@ -24,6 +24,8 @@ from pathlib import Path
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_BASE_URL = "https://YOUR_INSTANCE.armis.com"
@@ -40,7 +42,7 @@ class ArmisConnector:
     def __init__(self, secret_key, base_url=DEFAULT_BASE_URL, session=None):
         self.secret_key = secret_key
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self._access_token = None
 
     def authenticate(self):
