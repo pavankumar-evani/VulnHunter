@@ -6,6 +6,9 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Documentation
+- **README rewritten around the eight modules**: an About section, a pick-your-path table, a real screenshot of every module page on fictional demo data (51 images in `docs/images/modules/`), a flowchart per module, and a researched comparison with commercial and open-source tools that says where Quanta stops.
+
 ### Added
 - **Module licensing** (`remediation/licensing/`, `docs/LICENSING.md`): the module is the licence unit. Ed25519-signed, offline-verifiable licences (`cli/quanta_license.py` keygen / issue / verify), modes off (default) /
   warn / enforce, a 403 for routes of an unlicensed module, `GET /api/license`, locked modules in the sidebar picker and on All modules, and a route-to-module map in `config/licensing.yaml` that a test keeps complete.
