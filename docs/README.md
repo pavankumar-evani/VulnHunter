@@ -22,6 +22,9 @@ that context.
 | [VR_PLATFORM_COMPARISON.md](VR_PLATFORM_COMPARISON.md) | Quanta vs. ServiceNow VR and four modern alternatives (Nucleus Security, DefectDojo, Brinqa, ArmorCode) — independently-verified connector/pricing facts, Quanta's real current gaps (no dedup, only 8 unverified connectors), and a prioritized roadmap. |
 | [API_SECURITY.md](API_SECURITY.md) | The API Security area end to end: inventory from specifications and imported logs, OWASP API Top 10 findings with evidence and a request to confirm, caller activity, your own data classes, protection policies sent as signed requests to an endpoint you own (Quanta changes no WAF), the CI gate, metrics and the rollout checklist. |
 | [LICENSING.md](LICENSING.md) | How module licensing works: the module as the licence unit, signed offline licences, off / warn / enforce, what is always included, how to issue and install a licence, and its honest limits. |
+| [ENVIRONMENTS.md](ENVIRONMENTS.md), [RELEASE_PROCESS.md](RELEASE_PROCESS.md) | The dev, test and prod environments (one image, per-environment configuration, data policy), and how a change is released, promoted and rolled back. |
+| [SIMULATION.md](SIMULATION.md) | Simulated connectors: demonstration data that goes through the real connector code, tagged and refused in production. |
+| [REVIEWER_GUIDE.md](REVIEWER_GUIDE.md) | For outside reviewers, human or AI: where things are, which command proves which claim, and what has not been verified. |
 | [SUPPORT.md](SUPPORT.md) | How to get help, report a bug, or report a security issue — and where to look first. |
 
 ## Also see
