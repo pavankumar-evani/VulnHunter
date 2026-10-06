@@ -110,6 +110,7 @@ export const NAV = [
   ] },
   { group: "Risk, Governance & Compliance", id: "grc", number: "7", icon: "risk", summary: "Put risk in money, show control evidence, govern who has access and keep the audit trail.", items: [
     { path: "/capabilities?area=grc", label: "Module overview", icon: "dashboard", tip: "Put risk in money, show control evidence, govern who has access and keep the audit trail." },
+    { path: "/posture", label: "Security Posture Review", icon: "risk", tip: "Admin: the estate and this deployment assessed against zero trust, secure by design, threat modelling, defence in depth, architecture, SDLC, the AI lifecycle, supply chain, AI supply chain and open-source exposure, with the exact setting that closes each gap." },
     { path: "/graphs?module=grc", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/risk", label: "Risk Dashboard", icon: "risk", tip: "MITRE ATT&CK heat map, top critical assets, and internal/external-facing exposure." },
     { path: "/cyber-risk", label: "Cyber Risk", icon: "rules", tip: "Admin: risk in money. Loss scenarios simulated into an average and a bad-year loss, which treatment is worth its cost, and a cyber health score." },

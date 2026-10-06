@@ -120,6 +120,7 @@ modules:
     - /api/inbound/ticket-status
   grc:
     - /api/graphs/grc
+    - /api/posture
     - /api/grc
     - /api/cyber-risk
     - /api/ml-insights

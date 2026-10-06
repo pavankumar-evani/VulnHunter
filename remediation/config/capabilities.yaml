@@ -433,6 +433,12 @@
   - number: '7.1'
     title: Risk, Governance & Compliance
     items:
+    - id: posture
+      title: Security Posture Review
+      path: /posture
+      summary: The estate and this deployment assessed against ten frameworks (zero trust, secure by design, threat modelling, defence in depth, architecture, SDLC, the AI lifecycle, supply chain, AI supply chain and open-source exposure), with the evidence behind every score and the exact setting that closes each gap.
+      needs: []
+      admin: true
     - id: graph-grc
       title: Relationship graph
       path: /graphs?module=grc
