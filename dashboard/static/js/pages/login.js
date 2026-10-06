@@ -49,8 +49,9 @@ export async function render(container) {
           </form>
 
           <div class="callout" style="margin-top:18px">
-            This is a local demo build. Seed credentials are documented in
-            <code>dashboard/README.md</code> — replace them before any real deployment.
+            Access is limited to authorised users and activity is logged. Data comes from your connected scanners and
+            sources; a fresh install shows simulated sample data until you connect them. First-time setup and the
+            demo accounts are in <code>dashboard/README.md</code> — replace them before any real deployment.
           </div>
         </div>
       </div>
