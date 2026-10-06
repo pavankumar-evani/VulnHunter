@@ -6,6 +6,15 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Added
+- **Relationship graphs for every module** (`remediation/graphs/`, `GET /api/graphs/<module>`, page `/graphs?module=<id>`, the first entry of each module's menu): one interactive plain-SVG component
+  (`graphView.js`) draws a graph built from that module's own stored data: alerts and the entities and techniques they share (SOC), APIs, endpoints and data classes (Application Security), the portfolio
+  of applications and shared vulnerable packages with their fix pull requests (DevSecOps), the internet, firewall rules, hops and assets (Infrastructure), AI systems and what they use (AI Security),
+  teams, people, assets, exceptions and approvals (Remediation), controls, evidence and risks (GRC), and connections, key scopes and modules (Administration). `graphTheory.js` computes clusters, shortest routes,
+  betweenness (choke points), articulation points and bridges (single points of failure), PageRank and loops; `graphLayout.js` is a deterministic force layout that packs clusters apart. Pan, zoom, drag,
+  search, kind filters, colour and size modes, neighbourhood focus, a table view, and JSON and SVG export. Administrator modules' graphs need an administrator and every graph is licensed with its module.
+  An empty module says what to connect and never draws an invented picture; a graph is capped at the 400 best-connected nodes and says so.
+
 ### Security
 - **Hardening from a static-analysis and dependency scan** (`bandit`, `pip-audit`; the audit found no vulnerable dependency, transitive ones included): every place Quanta parses
   XML from outside (firewall rulebases, vendor API responses, manifests, coverage reports) now refuses entity declarations through one guard (`remediation/utils/safe_xml.py`);
