@@ -7,7 +7,7 @@ package spread across many applications stands out. Built only from stored SBOMs
 """
 from remediation.appsec import graph as dep_graph, store as app_store
 from remediation.gitops import proposals
-from remediation.graphs.schema import SEVERITIES, GraphBuilder
+from remediation.graphs.schema import SEVERITIES, GraphBuilder, prov
 
 MODULE = "devsecops"
 MAX_PARENTS = 3
@@ -72,6 +72,8 @@ def build(engine=None, findings=None, **context):
     app_sev = {}
     for app, st, hits, sev_by_id in sorted(loaded, key=lambda x: x[0]["name"]):
         app_id = f"app:{app['name']}"
+        sb = sboms.get(app["name"]) or {}
+        sbom_prov = prov(source=f"SBOM ({sb.get('source') or sb.get('format') or 'upload'})", observed_at=sb.get("uploaded_at"), confidence="declared") if sb else None
         vuln_refs = set(hits)
         keep = {r for r in st["comps"] if r in vuln_refs or len(users[_pkg_key(st["comps"][r])]) >= 2}
         for ref in sorted(keep):
@@ -87,7 +89,7 @@ def build(engine=None, findings=None, **context):
             info["findings"] += len(ids)
             b.node(key, info["label"], "package", weight=1, sev=sev,
                    meta={"ecosystem": c.get("ecosystem"), "applications": len(users[key]), "vulnerable": bool(ids) or None}, href="/dependencies")
-            b.edge(app_id, key, "uses", label=c.get("version"))
+            b.edge(app_id, key, "uses", label=c.get("version"), prov=sbom_prov)
             app_sev[app["name"]] = _worst(app_sev.get(app["name"]), sev)
             if ids:  # direct parents of a vulnerable transitive package: where a developer can act
                 parents = sorted((p for p in dep_graph.ancestors(st, ref) if st["depth"].get(p) == 1), key=lambda p: st["comps"][p]["name"])[:MAX_PARENTS]
@@ -96,8 +98,8 @@ def build(engine=None, findings=None, **context):
                     pkey = _pkg_key(pc)
                     b.node(pkey, ((pc.get("group") + ":") if pc.get("group") and ":" not in pc["name"] else "") + pc["name"], "package", weight=0,
                            meta={"ecosystem": pc.get("ecosystem")}, href="/dependencies")
-                    b.edge(pkey, key, "depends_on")
-                    b.edge(app_id, pkey, "uses", label=pc.get("version"))
+                    b.edge(pkey, key, "depends_on", prov=sbom_prov)
+                    b.edge(app_id, pkey, "uses", label=pc.get("version"), prov=sbom_prov)
         b.node(app_id, app["name"], "application", weight=max(1, len(vuln_refs)), sev=app_sev.get(app["name"]),
                meta={"environment": app.get("environment"), "criticality": app.get("business_criticality"), "team": app.get("team"), "vulnerable_packages": len(vuln_refs)},
                href="/applications")

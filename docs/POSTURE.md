@@ -13,12 +13,12 @@ with the exact setting that closes it. It reads what Quanta already holds and ad
 | Defence in depth | layered controls | perimeter, network, host, application, data, identity, monitoring, response | 14 |
 | Architecture review | exposure, concentration, ownership, segmentation, resilience | | 16 |
 | Secure development lifecycle | NIST SSDF (SP 800-218) | prepare, protect, produce, respond | 18 |
-| AI development lifecycle | NIST SP 800-218A, OWASP Top 10 for LLM applications (2025) | govern, data, model, deploy, operate | 23 |
+| AI development lifecycle | NIST SP 800-218A, OWASP Top 10 for LLM applications (2025) | govern, data, model, deploy, operate | 30 |
 | Software supply chain | SLSA v1.1, OpenSSF Scorecard | inventory, integrity, provenance, delivery | 16 |
-| AI supply chain | CycloneDX ML-BOM, MITRE ATLAS | models, tools, data, providers, assurance | 20 |
+| AI supply chain | CycloneDX ML-BOM, MITRE ATLAS | models, tools, data, providers, assurance | 24 |
 | Open-source dependencies | exposure, exploitation, remediation, hygiene | | 12 |
 
-183 checks in all. Each reads recorded data (findings, the firewall, controls, applications and SBOMs, the API inventory, threat models, the AI register, the identity roster, GRC records, scan runs, gate decisions,
+194 checks in all. Each reads recorded data (findings, the firewall, controls, applications and SBOMs, the API inventory, threat models, the AI register, the identity roster, GRC records, scan runs, gate decisions,
 connections) or this deployment's environment settings. Nothing is probed or scanned.
 
 ## How a check answers

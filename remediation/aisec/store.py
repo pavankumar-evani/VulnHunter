@@ -10,7 +10,7 @@ import json
 
 from sqlalchemy import delete, insert, select, update
 
-from remediation.aisec import rules
+from remediation.aisec import rules, rules_mcp
 from remediation.utils import db as db_module
 
 TEXT_FIELDS = ("owner", "vendor_model")
@@ -62,11 +62,121 @@ def clean(data):
     else:
         out["last_reviewed"] = None
     out["notes"] = (str(data.get("notes") or "")[:1000]) or None
+    out.update(_clean_agent_fields(data))
     return out
+
+
+def _tri(v, label):
+    if v not in (None, True, False):
+        raise ValueError(f"{label} must be true, false or unknown")
+    return v
+
+
+def _choice(v, allowed, label):
+    if v in (None, ""):
+        return None
+    if v not in allowed:
+        raise ValueError(f"{label} must be one of {', '.join(allowed)}")
+    return v
+
+
+def _text(v, n=120):
+    return (str(v or "").strip()[:n]) or None
+
+
+def _list_of(v, label, cap):
+    if v in (None, ""):
+        return []
+    if not isinstance(v, list) or len(v) > cap:
+        raise ValueError(f"{label} must be a list of at most {cap} entries")
+    return v
+
+
+def _unique(items, label):
+    names = [i["name"].lower() for i in items]
+    if len(set(names)) != len(names):
+        raise ValueError(f"{label} names must be unique")
+    return items
+
+
+def empty_agent_fields():
+    """The agent, MCP and lifecycle fields of a record with nothing stated. Also what the expand-only migration backfills."""
+    return {"provider": None, "model_ids": [], "tools": [], "mcp_servers": [], "data_sources": [], "memory": None, "memory_provenance": None, "memory_poisoning_controls": None,
+            "max_steps": None, "budget_cap": None, "prompt_versioning": None, "eval_suite": None, "release": {k: None for k in rules_mcp.RELEASE_TRI},
+            "observability": {k: None for k in rules_mcp.OBS_TRI}, "audit_log": {k: None for k in rules_mcp.AUDIT_TRI}}
+
+
+def _clean_agent_fields(data):
+    """Validates the agent, MCP and lifecycle fields. A missing field is unknown (None, [] or all-None), never a default 'no'."""
+    out = empty_agent_fields()
+    out["provider"] = _text(data.get("provider"), 120)
+    ids = _list_of(data.get("model_ids"), "model_ids", 20)
+    out["model_ids"] = [x for x in dict.fromkeys(_text(i, 120) for i in ids) if x]
+    tools = []
+    for t in _list_of(data.get("tools"), "tools", 100):
+        if not isinstance(t, dict) or not _text(t.get("name"), 80):
+            raise ValueError("each tool needs a name")
+        tools.append({"name": _text(t["name"], 80), "scope": _text(t.get("scope"), 120), "side_effect": _choice(t.get("side_effect"), rules_mcp.SIDE_EFFECTS, "tool side_effect"),
+                      "requires_approval": _tri(t.get("requires_approval"), "tool requires_approval"), "category": _choice(t.get("category"), rules_mcp.CATEGORIES, "tool category"),
+                      "server": _text(t.get("server"), 80),
+                      "reads": [x for x in dict.fromkeys(_text(i, 120) for i in _list_of(t.get("reads"), "tool reads", 20)) if x]})
+    out["tools"] = _unique(tools, "tool")
+    servers = []
+    for s in _list_of(data.get("mcp_servers"), "mcp_servers", 30):
+        if not isinstance(s, dict) or not _text(s.get("name"), 80):
+            raise ValueError("each MCP server needs a name")
+        n = s.get("tool_count")
+        if n in (None, ""):
+            n = None
+        elif isinstance(n, bool) or not isinstance(n, int) or not 0 <= n <= 10000:
+            raise ValueError("tool_count must be a whole number from 0 to 10000")
+        rec = {"name": _text(s["name"], 80), "transport": _choice(s.get("transport"), rules_mcp.TRANSPORTS, "MCP transport"), "auth": _choice(s.get("auth"), rules_mcp.AUTH, "MCP auth"), "tool_count": n}
+        for f in rules_mcp.SERVER_TRI:
+            rec[f] = _tri(s.get(f), f"MCP {f}")
+        servers.append(rec)
+    out["mcp_servers"] = _unique(servers, "MCP server")
+    sources = []
+    for d in _list_of(data.get("data_sources"), "data_sources", 100):
+        d = {"name": d} if isinstance(d, str) else d
+        if not isinstance(d, dict) or not _text(d.get("name"), 120):
+            raise ValueError("each data source needs a name")
+        sources.append({"name": _text(d["name"], 120), "trusted": _tri(d.get("trusted"), "data source trusted")})
+    out["data_sources"] = _unique(sources, "data source")
+    out["memory"] = _choice(data.get("memory"), rules_mcp.MEMORY, "memory")
+    out["eval_suite"] = _choice(data.get("eval_suite"), rules_mcp.EVAL_SUITES, "eval_suite")
+    for f in ("memory_provenance", "memory_poisoning_controls", "budget_cap", "prompt_versioning"):
+        out[f] = _tri(data.get(f), f)
+    ms = data.get("max_steps")
+    if ms not in (None, ""):
+        if isinstance(ms, bool) or not isinstance(ms, int) or not 0 <= ms <= 100000:
+            raise ValueError("max_steps must be a whole number from 0 (no limit) to 100000")
+        out["max_steps"] = ms
+    for field, keys in (("release", rules_mcp.RELEASE_TRI), ("observability", rules_mcp.OBS_TRI), ("audit_log", rules_mcp.AUDIT_TRI)):
+        block = data.get(field) or {}
+        if not isinstance(block, dict):
+            raise ValueError(f"{field} must be an object")
+        out[field] = {k: _tri(block.get(k), f"{field}.{k}") for k in keys}
+    return out
+
+
+def backfill_new_fields(engine=None):
+    """Expand-only migration: adds the agent/MCP/lifecycle keys to stored records that lack them, leaving every existing value alone. Safe to run again; returns how many changed."""
+    engine, t = engine or db_module.get_engine(), db_module.ai_assets   # no ensure_schema: this runs from inside it (migrations), which would recurse
+    changed = 0
+    with engine.begin() as conn:
+        for r in conn.execute(select(t.c.id, t.c.data_json)).mappings().all():
+            d = json.loads(r["data_json"])
+            fresh = {k: v for k, v in empty_agent_fields().items() if k not in d}
+            if fresh:
+                conn.execute(update(t).where(t.c.id == r["id"]).values(data_json=json.dumps({**d, **fresh})))
+                changed += 1
+    return changed
 
 
 def _row(r):
     d = json.loads(r["data_json"])
+    for k, v in empty_agent_fields().items():
+        d.setdefault(k, v)
     d.update({"id": r["id"], "created_at": r["created_at"], "updated_at": r["updated_at"], "updated_by": r["updated_by"]})
     return d
 

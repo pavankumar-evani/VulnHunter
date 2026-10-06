@@ -8,8 +8,14 @@ Only recorded facts become edges; a blank answer is a gap, never a guessed link:
   system -> data-source   'reads'      names recorded on the record (`data_sources`) or passed as context `links`
   shadow app -> provider  'talks to'   an unreviewed AI application found in proxy/DNS data (AI Usage page), joined to the provider by name or domain
 
-The register today stores no tool/MCP/data-source link fields, so those three edge kinds appear only when a record carries them or the caller passes
-`links={"<system name>": {"tools": [...], "mcp_servers": [...], "data_sources": [...], "provider": "..."}}`. Registered plugins, MCP servers, vector
+A record carries `tools` (name, side effect, approval, optional `server` and `reads`), `mcp_servers` and `data_sources` (name, trusted), and the caller may also pass
+`links={"<system name>": {"tools": [...], "mcp_servers": [...], "data_sources": [...], "provider": "..."}}` (plain names, or the same objects).
+
+The path to look for is  untrusted content -> system -> tool that changes things with no approval:
+  tool -> mcp-server   'served by'   the `server` named on the tool
+  tool -> data-source  'reads'       the names in the tool's `reads`
+A tool that changes things (write, external-send, destructive, financial) with `requires_approval` false is drawn high severity, and critical when the same
+system takes untrusted input, retrieves from a store or reads a source recorded as untrusted (meta.untrusted_path), which is the prompt-injection-to-tool-call path. Registered plugins, MCP servers, vector
 stores and datasets are always drawn as nodes (isolated when nothing links to them). A tool or data source many systems share is the blast radius.
 """
 import datetime
@@ -17,7 +23,7 @@ import datetime
 from remediation.aisec import store as aisec_store
 from remediation.aiusage import discovery
 from remediation.aiusage import store as usage_store
-from remediation.graphs.schema import SEVERITIES, GraphBuilder
+from remediation.graphs.schema import SEVERITIES, GraphBuilder, prov
 from remediation.utils import db as db_module
 
 MODULE = "ai"
@@ -26,8 +32,17 @@ DESCRIPTION = "What each AI system runs on, who hosts it, and which tools and da
 NOTE_EMPTY = ("No AI systems recorded. Add them on AI Security (or copy in the applications found on AI Usage), and connect an AI usage source "
               "or send events to /api/ingest/ai-usage so models and providers can be linked.")
 SYSTEM_KINDS = ("application", "agent", "gateway")
+SIDE_EFFECT_TOOLS = ("write", "external-send", "destructive", "financial")
 # register kind -> graph node kind
 OTHER_KINDS = {"model": "model", "mcp-server": "mcp-server", "plugin": "tool", "vector-db": "data-source", "dataset": "data-source"}
+_REGISTER = prov(source="AI security register", source_kind="user", confidence="declared")
+
+
+def _usage(ev):
+    """Provenance of a link seen in a recorded usage event."""
+    return prov(source=ev.get("source"), observed_at=ev.get("ts"), confidence="observed")
+
+
 PAGE = {"system": "/ai-security", "model": "/ai-security", "provider": "/ai-usage", "tool": "/ai-security", "mcp-server": "/ai-security",
         "data-source": "/ai-security", "shadow": "/ai-usage"}
 
@@ -42,6 +57,19 @@ def _names(v):
     return [str(x).strip() for x in (v or []) if str(x or "").strip()]
 
 
+def _entries(v):
+    """Names or objects -> [{"name": ..., ...}], skipping blanks, so records and caller-supplied links share one path."""
+    if isinstance(v, (str, dict)):
+        v = [v]
+    out = []
+    for x in v or []:
+        x = {"name": x} if isinstance(x, str) else dict(x or {})
+        if str(x.get("name") or "").strip():
+            x["name"] = str(x["name"]).strip()
+            out.append(x)
+    return out
+
+
 def _worst(sevs):
     sevs = [s for s in sevs if s in SEVERITIES]
     return min(sevs, key=SEVERITIES.index) if sevs else None
@@ -53,7 +81,7 @@ def build(engine=None, findings=None, **context):
     g = GraphBuilder(MODULE, TITLE, DESCRIPTION, directed=True)
     for k, label in (("system", "AI system"), ("model", "Model"), ("provider", "Provider"), ("tool", "Tool or plugin"), ("mcp-server", "MCP server"),
                      ("data-source", "Data source"), ("shadow", "Unreviewed AI application"), ("runs", "Runs"), ("hosted_by", "Hosted by"),
-                     ("can_call", "Can call"), ("reads", "Reads"), ("talks_to", "Talks to")):
+                     ("can_call", "Can call"), ("reads", "Reads"), ("served_by", "Served by"), ("talks_to", "Talks to")):
         g.kind(k, label)
 
     assets = aisec_store.list_all(engine)
@@ -86,15 +114,15 @@ def build(engine=None, findings=None, **context):
 
     done = set()
 
-    def link(src, dst, kind, label):
+    def link(src, dst, kind, label, p=None):
         """One edge per (source, target, kind); the target's weight counts how many systems use it."""
         if (src, dst, kind) not in done:
             done.add((src, dst, kind))
-            g.edge(src, dst, kind, label)
+            g.edge(src, dst, kind, label, prov=p)
             g.node(dst, "", "", weight=1)  # merged into the existing node: weight = number of systems that use it
 
-    def used(kind, name):
-        return g.node(f"{kind}:{_slug(name)}", name, kind, weight=0, href=PAGE[kind])
+    def used(kind, name, meta=None, sev=None):
+        return g.node(f"{kind}:{_slug(name)}", name, kind, weight=0, sev=sev, meta=meta, href=PAGE[kind])
 
     systems = {}
     for a in assets:
@@ -111,13 +139,30 @@ def build(engine=None, findings=None, **context):
     for key, (sid, a) in sorted(systems.items()):
         ln = links.get(key, {})
         if a.get("vendor_model"):
-            link(sid, used("model", a["vendor_model"]), "runs", "runs")
+            link(sid, used("model", a["vendor_model"]), "runs", "runs", _REGISTER)
         for name in _names(ln.get("provider") or a.get("provider")):
-            link(sid, provider(name), "hosted_by", "hosted by")
-        for kind, field, edge, label in (("tool", "tools", "can_call", "can call"), ("mcp-server", "mcp_servers", "can_call", "can call"),
-                                         ("data-source", "data_sources", "reads", "reads")):
-            for name in _names(ln.get(field) or a.get(field)):
-                link(sid, used(kind, name), edge, label)
+            link(sid, provider(name), "hosted_by", "hosted by", _REGISTER)
+        sources = _entries(ln.get("data_sources")) + _entries(a.get("data_sources"))
+        tools = _entries(ln.get("tools")) + _entries(a.get("tools"))
+        untrusted = a.get("untrusted_input") is True or a.get("uses_rag") is True or any(d.get("trusted") is False for d in sources)
+        for srv in _entries(ln.get("mcp_servers")) + _entries(a.get("mcp_servers")):
+            weak = srv.get("transport") == "http" and srv.get("auth") == "none"
+            link(sid, used("mcp-server", srv["name"], {"transport": srv.get("transport"), "auth": srv.get("auth")}, "high" if weak else None), "can_call", "can call", _REGISTER)
+        for src in sources:
+            link(sid, used("data-source", src["name"], {"trusted": src.get("trusted")}), "reads", "reads", _REGISTER)
+        for tool in tools:
+            effect = tool.get("side_effect")
+            bad = effect in SIDE_EFFECT_TOOLS and tool.get("requires_approval") is False
+            tid = used("tool", tool["name"], {"side_effect": effect, "requires_approval": tool.get("requires_approval"), "scope": tool.get("scope")},
+                       ("critical" if untrusted else "high") if bad else None)
+            if bad and untrusted:
+                g.node(tid, "", "", weight=0, meta={"untrusted_path": True})
+                g.node(sid, "", "", weight=0, meta={"untrusted_path": True})
+            link(sid, tid, "can_call", "can call", _REGISTER)
+            if tool.get("server"):
+                link(tid, used("mcp-server", tool["server"]), "served_by", "served by", _REGISTER)
+            for name in _entries(tool.get("reads")):
+                link(tid, used("data-source", name["name"]), "reads", "reads", _REGISTER)
 
     # Recorded usage: the application name ties a system to the model and provider it was actually seen using
     seen = set()
@@ -128,10 +173,10 @@ def build(engine=None, findings=None, **context):
         sid = systems[key][0]
         if ev.get("model") and (sid, "m", _slug(ev["model"])) not in seen:
             seen.add((sid, "m", _slug(ev["model"])))
-            link(sid, used("model", ev["model"]), "runs", "runs")
+            link(sid, used("model", ev["model"]), "runs", "runs", _usage(ev))
         if ev.get("provider") and (sid, "p", _slug(ev["provider"])) not in seen:
             seen.add((sid, "p", _slug(ev["provider"])))
-            link(sid, provider(ev["provider"]), "hosted_by", "hosted by")
+            link(sid, provider(ev["provider"]), "hosted_by", "hosted by", _usage(ev))
 
     # Unreviewed applications found in traffic, joined to a provider already in the graph by name or domain, else to the service itself
     for app in shadows:

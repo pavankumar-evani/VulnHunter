@@ -1,0 +1,406 @@
+# The Quanta ontology: the vocabulary of things Quanta records and the typed ways they can be related.
+#
+# It does not store data. It is the contract the relationship graphs (remediation/graphs) and the whole-estate graph
+# (remediation/ontology/estate.py) are checked against (remediation/ontology/validate.py) and the vocabulary multi-hop questions are written in
+# (remediation/ontology/query.py, ontology_questions.yaml). Edit it to teach Quanta a new kind of thing; nothing is generated from it.
+#
+# classes:    id -> {is_a, description, attributes, required}. `is_a` is the single parent class. `attributes` declares the facts a question may filter
+#             on (type bool|string|number|enum; enum lists `values`). `required` lists attributes that must be present on every node of the class
+#             (checked on the whole-estate graph, where Quanta writes them itself).
+# relations:  id -> {description, signatures: [{domain, range}], inverse_of, transitive, sub_relation_of, source_cardinality, target_cardinality}.
+#             A signature says "an edge of this relation runs from a node of class `domain` (or a subclass) to a node of class `range`".
+#             `inverse_of` names the relation this one reverses (its signatures are the swapped ones). `transitive` documents that a chain
+#             A-r->B-r->C implies A-r->C (queries follow chains with the `star` and `plus` repeats). `sub_relation_of` makes this relation a special
+#             case of another (a question about `reaches` also follows `routes-to`). `source_cardinality` / `target_cardinality` bound how many
+#             edges of the relation leave / enter one node ({min, max}; omit a bound for none).
+# mappings:   how each module graph's own node and edge kinds (remediation/graphs/*) are read as ontology classes and relations. Per module:
+#             nodes: {kind: Class}, edges: {kind: relation}. A kind with no entry is reported as unknown, never guessed.
+
+version: 1
+
+classes:
+  Thing:
+    description: The root of every class; anything Quanta can draw as a node.
+  Asset:
+    is_a: Thing
+    description: A host, device, cloud resource or other thing that can carry findings and be owned and protected.
+    attributes:
+      type: {type: string, description: "The asset type from the finding schema (windows-server, application, ...)."}
+      internet_facing: {type: bool, description: "True when a recorded path leads from the internet to it; absent when no internet path data exists at all."}
+      owned: {type: bool, description: "True when a team or person owns it or is assigned work on it, false when none is recorded."}
+      verified_controls: {type: number, description: "How many recorded controls on it are verified (zero means none recorded as verified, not none present)."}
+      open_findings: {type: number, description: "Open findings recorded against it."}
+      environment: {type: string, description: "Production, staging and so on, as recorded."}
+  Application:
+    is_a: Thing
+    description: A piece of software or an API service that Quanta tracks as one unit, with its own SBOM, endpoints or owner.
+    attributes:
+      environment: {type: string, description: "As recorded on the application."}
+      criticality: {type: string, description: "Business criticality as recorded."}
+  Endpoint:
+    is_a: Thing
+    description: One API operation (a method and a path) served by an application.
+    attributes:
+      state: {type: string, description: "documented, shadow or zombie, from the API inventory."}
+      auth: {type: string, description: "The authentication state observed or declared."}
+  DataClass:
+    is_a: Thing
+    description: A kind of data (as named by the customer's own classification framework) that an endpoint returns.
+  Component:
+    is_a: Thing
+    description: A unit of software or system design that something can depend on.
+  Package:
+    is_a: Component
+    description: A third-party software package, as listed in an SBOM.
+    attributes:
+      ecosystem: {type: string, description: "npm, pypi, maven and so on."}
+      vulnerable: {type: bool, description: "True when a finding names it and the SBOM confirms it."}
+  ModelComponent:
+    is_a: Component
+    description: A component of a threat-modelled system (a service, store or actor) with its trust zone.
+    attributes:
+      internet_facing: {type: bool, description: "As declared in the threat model."}
+  Finding:
+    is_a: Thing
+    description: One recorded weakness on one asset, as reported by a scanner or analysis.
+    attributes:
+      severity: {type: enum, values: [critical, high, medium, low, info], description: "As recorded."}
+      scan_type: {type: string, description: "sca, sast, dast, container, cicd, ... as recorded."}
+      source: {type: string, description: "The connector or scanner that reported it."}
+      first_seen: {type: string, description: "ISO date it was first seen."}
+      last_seen: {type: string, description: "ISO date it was last seen."}
+      kev: {type: bool, description: "On the CISA KEV list; absent when it has no CVE or was not enriched."}
+      epss: {type: number, description: "EPSS probability; absent when it has no CVE or was not enriched."}
+    required: [severity]
+  FindingSet:
+    is_a: Thing
+    description: A reference to a group of findings that a risk cites, not one finding.
+  Vulnerability:
+    is_a: Thing
+    description: A publicly identified weakness (a CVE) that findings are instances of.
+    attributes:
+      cve: {type: string, description: "The CVE identifier."}
+      kev: {type: bool, description: "On the CISA KEV list; absent when not enriched."}
+      epss: {type: number, description: "EPSS probability; absent when not enriched."}
+    required: [cve]
+  Technique:
+    is_a: Thing
+    description: A MITRE ATT&CK technique that findings, alerts, cases and hunts are tagged with.
+    attributes:
+      tactic: {type: string, description: "The ATT&CK tactic, when known."}
+  Control:
+    is_a: Thing
+    description: A deployed safeguard recorded in the controls inventory (a firewall, an EDR policy, a patching process).
+    attributes:
+      control_class: {type: string, description: "The control class from the attack mitigations vocabulary."}
+      state: {type: enum, values: [verified, claimed], description: "Verified by a connector, or claimed by a person or file."}
+    required: [state]
+  ControlRequirement:
+    is_a: Thing
+    description: A control objective of a governance framework (for example one NIST 800-53 control) that evidence is collected against.
+  Framework:
+    is_a: Policy
+    description: A catalog of control requirements, built in or imported, that Quanta reports status against.
+  Policy:
+    is_a: Thing
+    description: A rule set that governs behaviour, whether an organisational policy or a catalog of requirements.
+  Evidence:
+    is_a: Thing
+    description: An automated test whose latest result backs a control requirement.
+    attributes:
+      result: {type: string, description: "pass, fail, na and so on, as recorded."}
+  Risk:
+    is_a: Thing
+    description: An entry in the risk register with a likelihood, an impact and a treatment.
+  Threat:
+    is_a: Thing
+    description: A threat raised by a threat model that a risk cites.
+  Team:
+    is_a: Thing
+    description: A group of people that owns assets and works findings.
+  Person:
+    is_a: Thing
+    description: A user of Quanta or a recorded owner who can own assets and be assigned work.
+  Account:
+    is_a: Thing
+    description: A user name or account seen in an alert; not necessarily a person Quanta knows.
+  Indicator:
+    is_a: Thing
+    description: An observable such as an IP address or a domain seen in an alert.
+  Alert:
+    is_a: Thing
+    description: A detection received from a SIEM or XDR.
+    attributes:
+      status: {type: string, description: "new, investigating or closed."}
+  Case:
+    is_a: Thing
+    description: A SOC case that gathers alerts for a person to work.
+  Hunt:
+    is_a: Thing
+    description: A threat hunt proposed from exploited vulnerabilities or intelligence.
+  Playbook:
+    is_a: Thing
+    description: A SOAR playbook, a validated list of response steps.
+  AIAsset:
+    is_a: Asset
+    description: An AI system (an application, agent or gateway) registered in the AI security register, or an unreviewed AI application found in traffic.
+    attributes:
+      kind: {type: string, description: "application, agent, gateway or shadow."}
+      reviewed: {type: bool, description: "False for an AI application found in traffic that nobody reviewed."}
+  Model:
+    is_a: Thing
+    description: A machine-learning model that an AI system runs.
+  Provider:
+    is_a: Thing
+    description: An organisation that hosts a model or AI service.
+  Tool:
+    is_a: Thing
+    description: A plugin or function an AI system can call.
+    attributes:
+      side_effects: {type: enum, values: [none, read, write], description: "Not recorded by Quanta today; a question on it is honestly empty until a record carries it."}
+  McpServer:
+    is_a: Tool
+    description: A Model Context Protocol server that exposes tools to AI systems.
+  DataSource:
+    is_a: Thing
+    description: A dataset or vector store an AI system reads.
+    attributes:
+      trust: {type: enum, values: [trusted, untrusted], description: "Not recorded by Quanta today; a question on it is honestly empty until a record carries it."}
+  NetworkNode:
+    is_a: Thing
+    description: A point on a network path, such as a firewall, router or the internet itself.
+    attributes:
+      hop_type: {type: string, description: "firewall, router, load balancer and so on."}
+  Internet:
+    is_a: NetworkNode
+    description: The public internet, the starting point of every exposure path.
+  NetworkHop:
+    is_a: NetworkNode
+    description: A device between the internet and an asset, as declared in the network topology.
+  FirewallRule:
+    is_a: Thing
+    description: A firewall rule that lets internet traffic reach a destination.
+    attributes:
+      wide_open: {type: bool, description: "True for an any-any rule."}
+  Port:
+    is_a: Thing
+    description: A risky network port that a firewall rule opens to the internet.
+  ExternalDomain:
+    is_a: Thing
+    description: A domain or subdomain seen from the outside by imported discovery output.
+  ExternalAddress:
+    is_a: Thing
+    description: An internet address seen from the outside by imported discovery output.
+  ExposedService:
+    is_a: Thing
+    description: A service or web endpoint reachable from the internet according to imported discovery output.
+  DetectedTechnology:
+    is_a: Thing
+    description: A product or framework that discovery output reports on an exposed service (name only, not a version check).
+  FixProposal:
+    is_a: Thing
+    description: A drafted or opened pull request that upgrades a dependency or fixes code.
+    attributes:
+      status: {type: string, description: "draft, approved, pr-opened, merged and so on."}
+  Exception:
+    is_a: Thing
+    description: A time-limited waiver that accepts a finding's risk.
+  Approval:
+    is_a: Thing
+    description: A recorded approval (or refusal) for a remediation to run.
+  Ticket:
+    is_a: Thing
+    description: A ticket in an external system (ServiceNow, Jira) that tracks work on an asset.
+  Platform:
+    is_a: Thing
+    description: The Quanta core that every module and connection attaches to.
+  Module:
+    is_a: Thing
+    description: One of the eight Quanta modules.
+  Connection:
+    is_a: Thing
+    description: A stored connection to an external system that feeds Quanta or receives from it.
+    attributes:
+      status: {type: string, description: "As reported by the connection store."}
+  AccessScope:
+    is_a: Thing
+    description: A group of API keys sharing a scope, or a team's access to Quanta.
+
+relations:
+  affects:
+    description: A finding is recorded against exactly one asset.
+    signatures: [{domain: Finding, range: Asset}]
+    source_cardinality: {min: 1, max: 1}
+  affected-by:
+    description: An asset carries a finding (the reverse of affects).
+    inverse_of: affects
+  instance-of:
+    description: A finding is an occurrence of a publicly identified vulnerability.
+    signatures: [{domain: Finding, range: Vulnerability}]
+    source_cardinality: {max: 1}
+  tagged-with:
+    description: A finding, alert or case is tagged with an ATT&CK technique.
+    signatures: [{domain: Finding, range: Technique}, {domain: Alert, range: Technique}, {domain: Case, range: Technique}]
+  exploits:
+    description: A vulnerability is exploited through a software component, matched by package name.
+    signatures: [{domain: Vulnerability, range: Component}]
+  mitigates:
+    description: A deployed control reduces the chance of a technique, or a control requirement addresses a risk.
+    signatures: [{domain: Control, range: Technique}, {domain: ControlRequirement, range: Risk}]
+  mitigated-by:
+    description: A technique or risk is addressed by a control or control requirement (the reverse of mitigates).
+    inverse_of: mitigates
+  protects:
+    description: A recorded control applies to an asset.
+    signatures: [{domain: Control, range: Asset}]
+  runs:
+    description: An asset runs an application, or an AI system runs a model.
+    signatures: [{domain: Asset, range: Application}, {domain: AIAsset, range: Model}]
+  runs-on:
+    description: An application is run by an asset, or a model by an AI system (the reverse of runs).
+    inverse_of: runs
+  depends-on:
+    description: An application or component needs a component to work; a chain of dependencies is transitive.
+    signatures: [{domain: Application, range: Component}, {domain: Component, range: Component}]
+    transitive: true
+  depended-on-by:
+    description: A component is needed by an application or another component (the reverse of depends-on).
+    inverse_of: depends-on
+    transitive: true
+  owns:
+    description: A team or person owns an asset or application and answers for its findings.
+    signatures: [{domain: Team, range: Asset}, {domain: Person, range: Asset}, {domain: Team, range: Application}]
+  owned-by:
+    description: An asset or application is owned by a team or person (the reverse of owns).
+    inverse_of: owns
+  member-of:
+    description: A person belongs to a team.
+    signatures: [{domain: Person, range: Team}]
+  assigned-to:
+    description: A person has been handed work on an asset.
+    signatures: [{domain: Person, range: Asset}]
+  reaches:
+    description: Traffic or an attacker can get from one point to another; a chain of reaches is transitive.
+    signatures: [{domain: Asset, range: Asset}, {domain: NetworkNode, range: NetworkNode}, {domain: NetworkNode, range: FirewallRule}]
+    transitive: true
+  routes-to:
+    description: A network hop or firewall rule forwards traffic on to the next hop or to an asset (a special case of reaches).
+    signatures: [{domain: NetworkNode, range: NetworkNode}, {domain: NetworkNode, range: Asset}, {domain: FirewallRule, range: Asset}]
+    sub_relation_of: reaches
+  exposes:
+    description: An external address or domain exposes a service.
+    signatures: [{domain: ExternalAddress, range: ExposedService}, {domain: ExternalDomain, range: ExposedService}]
+  resolves-to:
+    description: An external domain resolves to an address.
+    signatures: [{domain: ExternalDomain, range: ExternalAddress}]
+  runs-technology:
+    description: An exposed service reports a technology.
+    signatures: [{domain: ExposedService, range: DetectedTechnology}]
+  opens:
+    description: A firewall rule exposes a risky port.
+    signatures: [{domain: FirewallRule, range: Port}]
+  involves:
+    description: An alert names an asset, account or indicator as one of its entities.
+    signatures: [{domain: Alert, range: Asset}, {domain: Alert, range: Account}, {domain: Alert, range: Indicator}]
+  contains:
+    description: A case gathers an alert.
+    signatures: [{domain: Case, range: Alert}]
+  hunts:
+    description: A hunt looks for an ATT&CK technique.
+    signatures: [{domain: Hunt, range: Technique}]
+  covers:
+    description: A hunt covers an asset.
+    signatures: [{domain: Hunt, range: Asset}]
+  responds-to:
+    description: A playbook is the response to an alert.
+    signatures: [{domain: Playbook, range: Alert}]
+  serves:
+    description: An application serves an API endpoint, or the platform serves a module.
+    signatures: [{domain: Application, range: Endpoint}, {domain: Platform, range: Module}]
+  returns:
+    description: An endpoint returns a class of data.
+    signatures: [{domain: Endpoint, range: DataClass}]
+  calls:
+    description: One application calls another.
+    signatures: [{domain: Application, range: Application}]
+  flows-to:
+    description: Data flows from one threat-model component to another.
+    signatures: [{domain: ModelComponent, range: ModelComponent}]
+  fixes:
+    description: A fix proposal upgrades a vulnerable package.
+    signatures: [{domain: FixProposal, range: Component}]
+  proposed-for:
+    description: A fix proposal is made for an application.
+    signatures: [{domain: FixProposal, range: Application}]
+    source_cardinality: {max: 1}
+  invokes:
+    description: An AI system can call a tool or MCP server.
+    signatures: [{domain: AIAsset, range: Tool}]
+  reads:
+    description: An AI system reads a data source.
+    signatures: [{domain: AIAsset, range: DataSource}]
+  hosted-by:
+    description: An AI system is hosted by a provider.
+    signatures: [{domain: AIAsset, range: Provider}]
+  talks-to:
+    description: An unreviewed AI application was seen sending traffic to a provider.
+    signatures: [{domain: AIAsset, range: Provider}]
+  waives:
+    description: An exception accepts the risk of findings on an asset.
+    signatures: [{domain: Exception, range: Asset}]
+  approves-fix-for:
+    description: An approval allows a remediation on an asset.
+    signatures: [{domain: Approval, range: Asset}]
+  tracks:
+    description: A ticket in an external system tracks work on an asset.
+    signatures: [{domain: Ticket, range: Asset}]
+  part-of:
+    description: A control requirement belongs to a framework.
+    signatures: [{domain: ControlRequirement, range: Framework}]
+  evidences:
+    description: An automated test provides evidence for a control requirement.
+    signatures: [{domain: Evidence, range: ControlRequirement}]
+  cites:
+    description: A risk cites a threat or a group of findings as its source.
+    signatures: [{domain: Risk, range: Threat}, {domain: Risk, range: FindingSet}]
+  sends-to:
+    description: The platform or a module sends data out to a connection.
+    signatures: [{domain: Platform, range: Connection}, {domain: Module, range: Connection}]
+  feeds:
+    description: A connection supplies data to the platform or a module.
+    signatures: [{domain: Connection, range: Platform}, {domain: Connection, range: Module}]
+  calls-into:
+    description: A group of API keys calls into the platform.
+    signatures: [{domain: AccessScope, range: Platform}]
+  ingests-into:
+    description: A group of API keys writes data into a module.
+    signatures: [{domain: AccessScope, range: Module}]
+  works-in:
+    description: A team has access to the platform.
+    signatures: [{domain: AccessScope, range: Platform}]
+
+mappings:
+  soc:
+    nodes: {alert: Alert, case: Case, hunt: Hunt, technique: Technique, host: Asset, user: Account, ip: Indicator, domain: Indicator}
+    edges: {involves: involves, tagged: tagged-with, contains: contains, hunts: hunts, covers: covers}
+  appsec:
+    nodes: {service: Application, endpoint: Endpoint, data-class: DataClass, component: ModelComponent}
+    edges: {serves: serves, returns: returns, calls: calls, "flows to": flows-to}
+  devsecops:
+    nodes: {application: Application, package: Package, proposal: FixProposal}
+    edges: {uses: depends-on, depends_on: depends-on, fixes: fixes, for: proposed-for}
+  infra:
+    nodes: {internet: Internet, hop: NetworkHop, asset: Asset, rule: FirewallRule, port: Port, asm_domain: ExternalDomain, asm_ip: ExternalAddress, asm_service: ExposedService, asm_tech: DetectedTechnology}
+    edges: {reaches: reaches, routes_to: routes-to, opens: opens, pivot: reaches, exposes: exposes, resolves_to: resolves-to, runs: runs-technology}
+  ai:
+    nodes: {system: AIAsset, shadow: AIAsset, model: Model, provider: Provider, tool: Tool, mcp-server: McpServer, data-source: DataSource}
+    edges: {runs: runs, hosted_by: hosted-by, can_call: invokes, reads: reads, talks_to: talks-to}
+  remediation:
+    nodes: {team: Team, person: Person, asset: Asset, exception: Exception, approval: Approval, ticket: Ticket}
+    edges: {member_of: member-of, assigned: assigned-to, owns: owns, waives: waives, approves: approves-fix-for, tracks: tracks}
+  grc:
+    nodes: {framework: Framework, control: ControlRequirement, evidence: Evidence, risk: Risk, threat: Threat, findings: FindingSet}
+    edges: {part-of: part-of, evidences: evidences, mitigated-by: mitigated-by, cites: cites}
+  admin:
+    nodes: {core: Platform, module: Module, connection: Connection, access: AccessScope}
+    edges: {serves: serves, sends-to: sends-to, feeds: feeds, calls-into: calls-into, ingests-into: ingests-into, works-in: works-in}
