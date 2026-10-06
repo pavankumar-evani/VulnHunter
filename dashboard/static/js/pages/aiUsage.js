@@ -20,6 +20,8 @@ export async function render(container) {
   async function load() {
     const [s, apps] = await Promise.all([api.aiUsageSummary(days), api.aiApps()]);
     const t = s.totals;
+    let avoided = null;
+    try { avoided = (await api.decisionCalibration()).model_calls_avoided; } catch (e) { avoided = null; }
     container.innerHTML = `
       <p class="subtitle">AI usage across the organization: tokens and spend by team, application and model, budgets, unusual days, and AI tools nobody has reviewed.
       Quanta stores counts only, never prompts or responses.</p>
@@ -32,6 +34,7 @@ export async function render(container) {
         <div class="kpi-card"><div class="kpi-label">requests</div><div class="kpi-value">${fmt(t.requests)}</div></div>
         <div class="kpi-card"><div class="kpi-label">known cost${t.requests_with_unknown_cost ? ` (+ ${fmt(t.requests_with_unknown_cost)} requests of unknown cost)` : ""}</div><div class="kpi-value">${usd(t.cost_usd)}</div></div>
         <div class="kpi-card"><div class="kpi-label">input served from cache</div><div class="kpi-value">${t.cache_hit_pct === null ? "-" : `${t.cache_hit_pct}%`}</div></div>
+        ${avoided === null ? "" : `<div class="kpi-card" title="Decisions Quanta's rules made without asking a model (an estimate of calls a model-every-time design would have made)"><div class="kpi-label">model calls avoided by the decision gate</div><div class="kpi-value">${fmt(avoided)}</div></div>`}
       </div>
       ${t.requests_with_unknown_cost ? `<p class="muted">Cost is shown only where the source reported it or you entered a price for the model in <code>ai_pricing.yaml</code>. Requests without either are counted separately, never as zero.</p>` : ""}
       <h2>Tokens per day (millions; the label is the day of the month)</h2>

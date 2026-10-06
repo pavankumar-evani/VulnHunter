@@ -65,7 +65,7 @@ class Base(unittest.TestCase):
 class NoAiTests(Base):
     def test_empty_estate_has_no_pass(self):
         res = self.checks()
-        self.assertEqual(len(res), 20)
+        self.assertEqual(len(res), 24)
         for c in res.values():
             self.assertIn(c["status"], ("unknown", "na"), c["id"])
             self.assertIsNone(c["score"])
@@ -242,7 +242,7 @@ class ShapeTests(Base):
         ids = [c["id"] for c in res]
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual({c["area"] for c in res}, {a for a, _ in aisc.FRAMEWORK["areas"]})
-        self.assertEqual(len(res), 20)
+        self.assertEqual(len(res), 24)
         for c in res:
             self.assertEqual(set(c), keys)
             self.assertEqual(c["framework"], "ai-supply-chain")

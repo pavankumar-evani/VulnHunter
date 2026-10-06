@@ -96,6 +96,22 @@ def _tri_check(cid, area, title, pool, answered, bad, what, rec, weight=3, chang
     return _chk(cid, area, title, "pass", weight=weight, evidence=[f"All {n} systems answered and none is {bad_means}."], detail=what, recommendation=rec, data_used=list(data_used))
 
 
+def derived(assets, fn, kinds=None, only=None):
+    """(pool, answered, bad) for a question whose answer is computed from a record (a nested field, or several fields together).
+
+    fn(asset) returns True (in place), False (explicitly not) or None (not answered). Copies carry the answer in `_v` so the shared yes/no rule applies unchanged.
+    """
+    pool = [{**a, "_v": fn(a)} for a in assets if (kinds is None or a.get("kind") in kinds) and (only is None or only(a))]
+    return pool, [a for a in pool if a["_v"] is not None], [a for a in pool if a["_v"] is False]
+
+
+def all_of(*vals):
+    """True when every answer is True, False when any is False, otherwise unknown: one explicit 'no' counts, a blank never counts as a 'yes'."""
+    if any(v is False for v in vals):
+        return False
+    return True if all(v is True for v in vals) else None
+
+
 def _age_days(first_seen, now):
     try:
         return (now.date() - datetime.date.fromisoformat(str(first_seen)[:10])).days
@@ -379,4 +395,65 @@ def run(ctx):
         return _chk("unusual-usage", "operate", "AI usage has no unexplained spikes", "partial", score=max(0.0, 1 - len(an) / max(len(summary["daily"]), 1)), weight=2,
                     evidence=[f"{len(an)} unusual event(s) in 30 days across {len(summary['daily'])} days: {an[0]['detail']}"], recommendation="Find out what drove each one.", change=ch, data_used=["AI usage"])
     out.append(guard("unusual-usage", "operate", "AI usage has no unexplained spikes", unusual, 2, needs_assets=False))
+
+    # ---- agents, memory and release (read from the register's agent and lifecycle fields; blank is a gap)
+    ch_reg = lambda key, value, effect: _page(PAGE_REGISTER, key, value, effect)  # noqa: E731
+    acting = lambda a: a.get("kind") == "agent" or a.get("can_take_actions") is True  # noqa: E731
+
+    def memory():
+        pool, ans, bad = derived(assets, lambda a: all_of(a.get("memory_provenance"), a.get("memory_poisoning_controls")), only=lambda a: a.get("memory") == "persistent")
+        return _tri_check("memory-controls", "data", "Persistent agent memory records its source and has poisoning controls (LLM04)", pool, ans, bad, "systems with persistent memory",
+                          "Record where each memory entry came from, never store instructions from untrusted content, and review or expire entries.", 3,
+                          ch_reg("memory_poisoning_controls", True, "Records that memory is validated and reviewable."), "missing provenance or poisoning controls", thr=thr)
+    out.append(guard("memory-controls", "data", "Persistent agent memory records its source and has poisoning controls (LLM04)", memory, 3))
+
+    def loops():
+        def v(a):
+            ms, cap = a.get("max_steps"), a.get("budget_cap")
+            if cap is True or (isinstance(ms, int) and ms > 0):
+                return True
+            return False if (ms == 0 and cap is False) else None
+        pool, ans, bad = derived(assets, v, kinds=APP_KINDS, only=acting)
+        return _tri_check("agent-loop-limits", "deploy", "Agent loops have a step limit or a budget (LLM10)", pool, ans, bad, "agents and systems that can act",
+                          "Set a maximum number of steps per run and a token or cost cap per run.", 3, ch_reg("max_steps", 20, "Bounds one run."), "unbounded", thr=thr)
+    out.append(guard("agent-loop-limits", "deploy", "Agent loops have a step limit or a budget (LLM10)", loops, 3))
+
+    def pv():
+        pool, ans, bad = derived(assets, lambda a: a.get("prompt_versioning"), kinds=APP_KINDS)
+        return _tri_check("prompt-versioning", "deploy", "System prompts are versioned and reviewed (NIST 800-218A)", pool, ans, bad, "applications, agents and gateways",
+                          "Keep prompts in version control and record the prompt version of each release.", 3, ch_reg("prompt_versioning", True, "Records that prompts are versioned."), "not versioned", thr=thr)
+    out.append(guard("prompt-versioning", "deploy", "System prompts are versioned and reviewed (NIST 800-218A)", pv, 3))
+
+    def ev():
+        pool, ans, bad = derived(assets, lambda a: None if a.get("eval_suite") is None else a["eval_suite"] != "none", kinds=APP_KINDS)
+        return _tri_check("eval-suite", "deploy", "Systems have an evaluation suite that runs on change (NIST 800-218A)", pool, ans, bad, "applications, agents and gateways",
+                          "Build an offline evaluation suite that includes injection and tool-misuse cases, and run it on every prompt, model or tool change.", 4,
+                          ch_reg("eval_suite", "offline", "Records that an evaluation suite exists."), "without an evaluation suite", thr=thr)
+    out.append(guard("eval-suite", "deploy", "Systems have an evaluation suite that runs on change (NIST 800-218A)", ev, 4))
+
+    def rb():
+        pool, ans, bad = derived(assets, lambda a: (a.get("release") or {}).get("rollback_path"), kinds=APP_KINDS, only=lambda a: a.get("environment") == "production")
+        return _tri_check("rollback-path", "operate", "Production AI releases can be rolled back", pool, ans, bad, "production applications, agents and gateways",
+                          "Keep the previous prompt, model id and tool configuration deployable and rehearse the switch back.", 4,
+                          ch_reg("release.rollback_path", True, "Records a tested rollback path."), "without a rollback path", thr=thr)
+    out.append(guard("rollback-path", "operate", "Production AI releases can be rolled back", rb, 4))
+
+    def pr():
+        def v(a):
+            r = a.get("release") or {}
+            if r.get("canary") is True or r.get("shadow") is True:
+                return True
+            return False if (r.get("canary") is False and r.get("shadow") is False) else None
+        pool, ans, bad = derived(assets, v, kinds=APP_KINDS, only=lambda a: a.get("environment") == "production")
+        return _tri_check("progressive-rollout", "operate", "Production AI changes are released progressively (canary or shadow)", pool, ans, bad, "production applications, agents and gateways",
+                          "Release to a small share of traffic or run in shadow first, and widen after evaluations and traces look right.", 2,
+                          ch_reg("release.canary", True, "Records progressive release."), "released all at once", thr=thr)
+    out.append(guard("progressive-rollout", "operate", "Production AI changes are released progressively (canary or shadow)", pr, 2))
+
+    def obs():
+        pool, ans, bad = derived(assets, lambda a: all_of(*[(a.get("observability") or {}).get(k) for k in ("traces", "cost", "latency", "tool_failures")]), kinds=APP_KINDS, only=acting)
+        return _tri_check("agent-observability", "operate", "Agents are traced, with cost, latency and tool failures tracked", pool, ans, bad, "agents and systems that can act",
+                          "Trace each run step by step and track cost, latency and tool failures per run, with alerts.", 3,
+                          ch_reg("observability.traces", True, "Records run tracing."), "missing at least one of tracing, cost, latency or tool-failure tracking", thr=thr)
+    out.append(guard("agent-observability", "operate", "Agents are traced, with cost, latency and tool failures tracked", obs, 3))
     return out
