@@ -28,6 +28,8 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
+import requests
+
 # Real, publicly documented cloud-provider metadata hostnames/IPs - the single most
 # dangerous class of SSRF target, since they hand back real cloud credentials.
 _BLOCKED_HOSTNAMES = {"metadata.google.internal", "metadata", "instance-data"}
@@ -58,10 +60,19 @@ class UnsafeTargetError(ValueError):
     pass
 
 
+_BLOCKED_NETWORKS = (ipaddress.ip_network("fd00:ec2::/32"),)  # AWS IPv6 metadata range
+
+
 def _is_blocked_ip(ip):
+    # An IPv4-mapped IPv6 address (::ffff:a.b.c.d) reaches the embedded IPv4 host.
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
     if ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
         return True
     if str(ip) in _BLOCKED_IPS:
+        return True
+    if ip.version == 6 and any(ip in net for net in _BLOCKED_NETWORKS):
         return True
     return False
 
@@ -75,6 +86,10 @@ def assert_safe_target(host_or_url):
     candidate = host_or_url.strip()
     if "://" not in candidate:
         candidate = f"//{candidate}"
+    else:
+        scheme = urlparse(candidate).scheme.lower()
+        if scheme not in ("http", "https"):
+            raise UnsafeTargetError(f"Refusing to connect using the {scheme!r} scheme; only http and https are allowed.")
     hostname = urlparse(candidate).hostname
     if not hostname:
         raise UnsafeTargetError(f"Could not parse a hostname from {host_or_url!r}.")
@@ -108,3 +123,22 @@ def assert_safe_instance_label(label, field_name="instance"):
             f"{field_name!r} must be a bare instance name (letters, digits, hyphens "
             f"only) - got {label!r}.",
         )
+
+
+class SafeSession(requests.Session):
+    """A requests.Session that re-checks every redirect hop. requests calls rebuild_auth()
+    for each redirect before the follow-up request is sent, so a public host that answers
+    with a 302 to a metadata or loopback address is refused instead of followed, and an
+    https -> http downgrade is refused."""
+
+    def rebuild_auth(self, prepared_request, response):
+        new_url = prepared_request.url or ""
+        old_scheme = urlparse(response.url or "").scheme.lower()
+        if old_scheme == "https" and urlparse(new_url).scheme.lower() != "https":
+            raise UnsafeTargetError(f"Refusing a redirect from https to {new_url!r} (downgrade).")
+        assert_safe_target(new_url)
+        return super().rebuild_auth(prepared_request, response)
+
+
+def safe_session():
+    return SafeSession()

@@ -67,6 +67,31 @@ def _env_flag(name):
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes")
 
 
+_TRUE = ("1", "true", "yes", "on")
+_FALSE = ("0", "false", "no", "off")
+
+
+def production_enabled():
+    """The one definition of "this is a production deployment" (QUANTA_PRODUCTION). The startup check, the demo-account refusal, the public-read default
+    and the generic-ingest key requirement all use it, so they cannot disagree about what counts as on."""
+    return os.environ.get("QUANTA_PRODUCTION", "").strip().lower() in _TRUE
+MIN_SESSION_SECRET_LENGTH = 32
+
+
+def _session_secret_value():
+    value = os.environ.get("QUANTA_SESSION_SECRET", "").strip()
+    if value:
+        return value
+    path = os.environ.get("QUANTA_SESSION_SECRET_FILE", "").strip()
+    if path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.read().rstrip("\r\n")
+        except OSError:
+            return ""
+    return ""
+
+
 def validate_production_requirements():
     """Raises RuntimeError if either of two things is true without a real
     QUANTA_SESSION_SECRET configured:
@@ -88,9 +113,22 @@ def validate_production_requirements():
     Called from app.py's startup event (not at import time here), so a test can
     exercise this directly with controlled env vars rather than needing to reload
     this whole module."""
+    raw_production = os.environ.get("QUANTA_PRODUCTION", "").strip().lower()
+    if raw_production and raw_production not in _TRUE + _FALSE:
+        raise RuntimeError(
+            "QUANTA_PRODUCTION has an unrecognised value - refusing to start rather than silently "
+            "treating it as off. Use 1/true/yes/on to enable production mode or 0/false/no/off to disable it.",
+        )
     require_login_for_reads = _env_flag("QUANTA_REQUIRE_LOGIN_FOR_READS")
-    production = _env_flag("QUANTA_PRODUCTION")
-    if (require_login_for_reads or production) and not os.environ.get("QUANTA_SESSION_SECRET"):
+    production = raw_production in _TRUE
+    secret = _session_secret_value()
+    if production and secret and len(secret) < MIN_SESSION_SECRET_LENGTH:
+        raise RuntimeError(
+            f"QUANTA_PRODUCTION is set but the session secret is shorter than {MIN_SESSION_SECRET_LENGTH} "
+            "characters - refusing to start. Use a random value of at least 32 characters "
+            "(for example: python -c \"import secrets; print(secrets.token_urlsafe(48))\").",
+        )
+    if (require_login_for_reads or production) and not secret:
         trigger = "QUANTA_REQUIRE_LOGIN_FOR_READS" if require_login_for_reads else "QUANTA_PRODUCTION"
         raise RuntimeError(
             f"{trigger} is set but QUANTA_SESSION_SECRET is not - refusing to "

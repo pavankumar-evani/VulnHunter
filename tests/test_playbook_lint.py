@@ -133,6 +133,7 @@ class ApiWiring(unittest.TestCase):
         for p in self.patches:
             p.start()
         auth_users.create_user("admin@t.local", "test-password-123", "Admin", role="admin", engine=self.engine)
+        auth_users.create_user("second@t.local", "test-password-123", "Second", role="admin", engine=self.engine)
         self.client = TestClient(fastapi_app)
 
     def tearDown(self):
@@ -142,8 +143,8 @@ class ApiWiring(unittest.TestCase):
         self.engine.dispose()
         self.tmp.cleanup()
 
-    def login(self):
-        r = self.client.post("/api/auth/login", json={"email": "admin@t.local", "password": "test-password-123"})
+    def login(self, email="admin@t.local"):
+        r = self.client.post("/api/auth/login", json={"email": email, "password": "test-password-123"})
         self.assertEqual(r.status_code, 200)
 
     def request_approval(self):
@@ -164,6 +165,7 @@ class ApiWiring(unittest.TestCase):
         self.login()
         approval = self.request_approval()
         self.content["v"] = BAD
+        self.login("second@t.local")        # a different administrator must approve
         r = self.client.post(f"/api/remediation-approvals/{approval['id']}/approve", json={"decided_by": "admin@t.local"})
         self.assertEqual(r.status_code, 400)
         self.assertIn("PB003", r.json()["detail"])

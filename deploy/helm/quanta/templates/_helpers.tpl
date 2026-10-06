@@ -69,6 +69,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/* Refuse unsafe or incomplete configurations at render time */}}
 {{- define "quanta.validate" -}}
+{{- if and .Values.web.trustForwardedHeaders (not .Values.networkPolicy.enabled) -}}
+{{- fail "web.trustForwardedHeaders=true is only safe with networkPolicy.enabled=true: without it any pod in the cluster can reach the web pods directly and forge X-Forwarded-For. Enable networkPolicy or leave trustForwardedHeaders false." -}}
+{{- end -}}
 {{- $modes := list "externalSecrets" "csi" "existingSecret" "inline" -}}
 {{- if not (has .Values.secrets.mode $modes) -}}
 {{- fail (printf "secrets.mode must be one of %s" (join ", " $modes)) -}}
@@ -206,6 +209,9 @@ seccompProfile:
 allowPrivilegeEscalation: false
 capabilities:
   drop: ["ALL"]
+{{- if .Values.containerSecurityContext.readOnlyRootFilesystem }}
+readOnlyRootFilesystem: true
+{{- end }}
 {{- end -}}
 
 {{/* Init containers: seed the shared config volume once, then create the schema / first admin exactly once */}}

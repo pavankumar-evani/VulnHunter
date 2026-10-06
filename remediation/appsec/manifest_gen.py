@@ -12,10 +12,10 @@ decided by the package manager. Matching vulnerabilities against it is therefore
 """
 import json
 import re
-import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 from remediation.appsec.sbom_parse import SbomError
+from remediation.utils import safe_xml
 
 MAX_FILE = 5_000_000
 
@@ -148,8 +148,10 @@ def from_pom(text, fname="pom.xml"):
     if re.search(r"<!DOCTYPE|<!ENTITY", text, re.I):
         raise SbomError("pom.xml with a DOCTYPE or entity declaration is refused")
     try:
-        root = ET.fromstring(text)
-    except ET.ParseError as exc:
+        root = safe_xml.fromstring(text)
+    except safe_xml.UnsafeXml as exc:
+        raise SbomError("pom.xml with a DOCTYPE or entity declaration is refused") from exc
+    except safe_xml.ParseError as exc:
         raise SbomError(f"pom.xml is not valid XML: {exc}") from exc
 
     def tag(e):

@@ -19,6 +19,8 @@ import datetime
 
 import requests
 
+from remediation.connectors import url_safety
+
 ANTHROPIC_URL = "https://api.anthropic.com/v1/organizations/usage_report/messages"
 OPENAI_URL = "https://api.openai.com/v1/organization/usage/completions"
 MAX_PAGES = 200
@@ -36,7 +38,7 @@ class AnthropicUsageConnector:
     def __init__(self, admin_key, days=7, session=None, now=None):
         self.admin_key = admin_key
         self.days = max(1, min(int(days), 31))
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.now = now or datetime.datetime.now(datetime.timezone.utc)
 
     def _get(self, params):
@@ -81,7 +83,7 @@ class OpenAIUsageConnector:
     def __init__(self, admin_key, days=7, session=None, now=None):
         self.admin_key = admin_key
         self.days = max(1, min(int(days), 31))
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.now = now or datetime.datetime.now(datetime.timezone.utc)
 
     def _get(self, params):

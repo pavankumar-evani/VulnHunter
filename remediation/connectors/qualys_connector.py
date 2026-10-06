@@ -48,6 +48,8 @@ from pathlib import Path
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.connectors.tenable_connector import CSV_FIELDNAMES
 from remediation.utils.retry import retry_with_backoff
 
@@ -71,7 +73,7 @@ def _text(el, tag):
 class QualysConnector:
     def __init__(self, username, password, platform_url=DEFAULT_PLATFORM_URL, session=None):
         self.base_url = platform_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.auth = (username, password)
         # Qualys requires a non-empty, real identifier on every API call via this
         # header (a documented requirement, not optional) - requests without it are

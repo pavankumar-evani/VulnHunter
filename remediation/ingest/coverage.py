@@ -11,7 +11,8 @@ The path match is a heuristic (it looks at file and folder names), stated as suc
 tune the patterns and threshold. A file with no executable lines is ignored.
 """
 import re
-import xml.etree.ElementTree as ET  # noqa: S405 - input is a report file the caller uploads; DOCTYPE/entities rejected below
+
+from remediation.utils import safe_xml
 
 SECURITY_PATH = re.compile(
     r"(auth|login|logout|session|token|jwt|oauth|saml|sso|password|passwd|credential|crypt|cipher|hash|sign(?:ing|ature)?|verify|"
@@ -26,12 +27,12 @@ class CoverageError(ValueError):
 
 def _safe_xml(text):
     # Real JaCoCo reports carry a DOCTYPE that only names a DTD, which ElementTree never fetches, so that is allowed.
-    # Entity declarations and an internal subset are how XML bombs and entity attacks are written, so those are refused.
-    if re.search(r"<!ENTITY|<!DOCTYPE[^>]*\[", text, re.I):
-        raise CoverageError("Entity declarations and internal DTD subsets are not accepted in a coverage report.")
+    # Entity declarations and an internal subset are refused by the shared safe parser.
     try:
-        return ET.fromstring(text)  # noqa: S314 - entity declarations refused above
-    except ET.ParseError as exc:
+        return safe_xml.fromstring(text)
+    except safe_xml.UnsafeXml as exc:
+        raise CoverageError("Entity declarations and internal DTD subsets are not accepted in a coverage report.") from exc
+    except safe_xml.ParseError as exc:
         raise CoverageError(f"Not valid XML: {exc}") from exc
 
 

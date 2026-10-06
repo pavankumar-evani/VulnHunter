@@ -22,6 +22,8 @@ import time
 
 import requests
 
+from remediation.connectors import url_safety
+
 ACTIONS = {
     # action: (label, destructive)
     "create-ticket": ("Open a ticket in your ITSM", False),
@@ -48,7 +50,7 @@ class ResponseWebhook:
     def __init__(self, url, signing_secret, allowed_actions=None, session=None, clock=time.time):
         if not signing_secret:
             raise ValueError("A signing secret is required")
-        self.url, self.secret, self.session, self.clock = url, signing_secret, session or requests.Session(), clock
+        self.url, self.secret, self.session, self.clock = url, signing_secret, session or url_safety.safe_session(), clock
         self.allowed = set(allowed_actions) if allowed_actions else set(ACTIONS)
 
     def send(self, action, target, context=None, timeout=20):
@@ -71,7 +73,7 @@ class ResponseWebhook:
 
 class NotifyWebhook:
     def __init__(self, url, session=None):
-        self.url, self.session = url, session or requests.Session()
+        self.url, self.session = url, session or url_safety.safe_session()
 
     def send(self, text, timeout=20):
         resp = self.session.post(self.url, json={"text": str(text)[:3500]}, timeout=timeout)
@@ -95,7 +97,7 @@ class PolicyWebhook:
     def __init__(self, url, signing_secret, session=None, clock=time.time):
         if not signing_secret:
             raise ValueError("A signing secret is required")
-        self.url, self.secret, self.session, self.clock = url, signing_secret, session or requests.Session(), clock
+        self.url, self.secret, self.session, self.clock = url, signing_secret, session or url_safety.safe_session(), clock
 
     def _post(self, body_obj, delivery_id, timeout=20):
         body = json.dumps(body_obj, sort_keys=True)

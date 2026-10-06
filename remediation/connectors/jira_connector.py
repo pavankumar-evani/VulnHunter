@@ -19,6 +19,8 @@ remediation/connectors/README.md for what "tested" means here.
 """
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_ISSUE_TYPE = "Bug"
@@ -92,7 +94,7 @@ class JiraConnector:
         # base_url (e.g. "https://yourcompany.atlassian.net") directly.
         self.base_url = base_url.rstrip("/")
         self.project_key = project_key
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.auth = (email, api_token)
         self.session.headers.update({"Accept": "application/json", "Content-Type": "application/json"})
 

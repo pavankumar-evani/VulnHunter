@@ -24,6 +24,8 @@ from pathlib import Path
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_BASE_URL = "https://cloud.tenable.com"
@@ -43,7 +45,7 @@ class TenableExportError(RuntimeError):
 class TenableConnector:
     def __init__(self, access_key, secret_key, base_url=DEFAULT_BASE_URL, session=None):
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.headers.update({
             "X-ApiKeys": f"accessKey={access_key};secretKey={secret_key}",
             "Accept": "application/json",

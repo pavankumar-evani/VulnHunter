@@ -114,6 +114,13 @@ class ChartTests(unittest.TestCase):
             self.assertIn(needle, h)
         self.assertIn("automountServiceAccountToken: false", (CHART / "templates" / "serviceaccount.yaml").read_text(encoding="utf-8"))
 
+    def test_forwarded_headers_guard_and_readonly_option(self):
+        h = (CHART / "templates" / "_helpers.tpl").read_text(encoding="utf-8")
+        self.assertRegex(h, r"if and \.Values\.web\.trustForwardedHeaders \(not \.Values\.networkPolicy\.enabled\)")
+        self.assertIn("only safe with networkPolicy.enabled=true", h)
+        self.assertIs(self.values["containerSecurityContext"]["readOnlyRootFilesystem"], False)
+        self.assertIn("readOnlyRootFilesystem: true", h)
+
 
 if __name__ == "__main__":
     unittest.main()

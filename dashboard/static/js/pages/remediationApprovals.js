@@ -297,15 +297,13 @@ export async function render(container) {
       const body = openModal(`
         <h2>Request approval - ${escapeHtml(findingId)}</h2>
         <form class="run-form" id="request-approval-form">
-          <label>Requested by
-            <input type="text" name="requested_by" placeholder="you@example.com" required>
-          </label>
+          <p class="subtitle">The request is recorded under your signed-in account.</p>
           <button type="submit">Request</button>
         </form>`);
       body.querySelector("#request-approval-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         try {
-          await api.remediationApprovalCreate(findingId, event.target.requested_by.value);
+          await api.remediationApprovalCreate(findingId);
           closeModal();
           flash(`Approval requested for ${findingId}.`, "success");
           render(container);
@@ -357,15 +355,13 @@ export async function render(container) {
       const body = openModal(`
         <h2>Approve ${escapeHtml(approvalId)}</h2>
         <form class="run-form" id="approve-form">
-          <label>Your name/email (approver)
-            <input type="text" name="decided_by" placeholder="approver@example.com" required>
-          </label>
+          <p class="subtitle">The approval is recorded under your signed-in account. You cannot approve a request you made yourself.</p>
           <button type="submit">Approve</button>
         </form>`);
       body.querySelector("#approve-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         try {
-          const result = await api.remediationApprovalApprove(approvalId, event.target.decided_by.value);
+          const result = await api.remediationApprovalApprove(approvalId);
           closeModal();
           flash(result.message, "success");
           render(container);
@@ -431,15 +427,13 @@ export async function render(container) {
           not a live staging-environment integration. See the FAQ.
         </p>
         <form class="run-form" id="staging-validated-form">
-          <label>Your name/email
-            <input type="text" name="validated_by" placeholder="you@example.com" required>
-          </label>
+          <p class="subtitle">Recorded under your signed-in administrator account.</p>
           <button type="submit">Record</button>
         </form>`);
       body.querySelector("#staging-validated-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         try {
-          const result = await api.remediationApprovalMarkStagingValidated(approvalId, event.target.validated_by.value);
+          const result = await api.remediationApprovalMarkStagingValidated(approvalId);
           closeModal();
           flash(result.message, "success");
           render(container);
@@ -456,9 +450,6 @@ export async function render(container) {
       const body = openModal(`
         <h2>Reject ${escapeHtml(approvalId)}</h2>
         <form class="run-form" id="reject-form">
-          <label>Your name/email
-            <input type="text" name="decided_by" placeholder="approver@example.com" required>
-          </label>
           <label>Reason
             <textarea name="reason" rows="3"></textarea>
           </label>
@@ -467,7 +458,7 @@ export async function render(container) {
       body.querySelector("#reject-form").addEventListener("submit", async (event) => {
         event.preventDefault();
         try {
-          const result = await api.remediationApprovalReject(approvalId, event.target.decided_by.value, event.target.reason.value);
+          const result = await api.remediationApprovalReject(approvalId, event.target.reason.value);
           closeModal();
           flash(result.message, "success");
           render(container);

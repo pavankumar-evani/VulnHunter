@@ -216,6 +216,11 @@ securityContext:
   runAsGroup: 10001
   fsGroup: 10001
 
+containerSecurityContext:
+  # Set true only after mounting emptyDir volumes for every writable path (/tmp, the data and
+  # config directories, the local HTTPS cert directory); the app writes to these at runtime.
+  readOnlyRootFilesystem: false
+
 # metrics: /metrics is served only when QUANTA_METRICS_TOKEN is set (add it to optionalKeys)
 serviceMonitor:
   enabled: false                             # requires the Prometheus Operator CRDs and a metrics token Secret

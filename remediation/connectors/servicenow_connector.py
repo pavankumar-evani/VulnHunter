@@ -17,6 +17,8 @@ from pathlib import Path
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.utils.retry import retry_with_backoff
 
 DEFAULT_TABLE = "incident"
@@ -68,7 +70,7 @@ class ServiceNowConnector:
     def __init__(self, instance, username, password, table=DEFAULT_TABLE, session=None):
         self.base_url = f"https://{instance}.service-now.com"
         self.table = table
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.auth = (username, password)
         self.session.headers.update({"Accept": "application/json", "Content-Type": "application/json"})
 

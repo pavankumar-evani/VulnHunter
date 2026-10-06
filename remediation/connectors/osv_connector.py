@@ -18,6 +18,8 @@ import re
 
 import requests
 
+from remediation.connectors import url_safety
+
 from remediation.appsec import versions
 from remediation.utils.retry import retry_with_backoff
 
@@ -37,7 +39,9 @@ class OsvError(RuntimeError):
 class OsvConnector:
     def __init__(self, base_url=BASE_URL, session=None):
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        if self.base_url != BASE_URL:
+            url_safety.assert_safe_target(self.base_url)
+        self.session = session or url_safety.safe_session()
 
     def _post(self, path, body):
         def call():

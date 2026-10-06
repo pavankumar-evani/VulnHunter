@@ -21,18 +21,25 @@ Honest scope limit: this client does NOT verify the ID token's JWT signature aga
 provider's JWKS - it trusts the userinfo endpoint's response over TLS instead (a common,
 simpler pattern for a first-party confidential client, but a real production hardening
 pass should add JWKS-based ID token signature verification too, e.g. via a real JWT
-library once one is actually needed).
+library once one is actually needed). This remains a KNOWN LIMIT: the ID token is not
+validated here (no signature, issuer, audience or nonce check); only the userinfo response
+is used. Outbound requests have a 10 second timeout and the discovery document is cached
+for 10 minutes (only when no session is injected, so tests stay deterministic).
 """
 import base64
 import hashlib
 import os
 import secrets
+import time
 from urllib.parse import urlencode
 
 import requests
 
 REQUIRED_ENV_VARS = ("OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URI")
 DEFAULT_SCOPE = "openid profile email"
+REQUEST_TIMEOUT_SECONDS = 10
+DISCOVERY_TTL_SECONDS = 600
+_discovery_cache = {}  # issuer -> (document, expiry)
 
 
 def is_configured():
@@ -55,10 +62,18 @@ def _config():
 def discover(issuer, session=None):
     """Fetches the provider's real discovery document - the endpoints below are read
     from here, never hardcoded, since they differ per provider."""
+    cacheable = session is None
+    if cacheable:
+        hit = _discovery_cache.get(issuer)
+        if hit and hit[1] > time.time():
+            return hit[0]
     session = session or requests
-    resp = session.get(f"{issuer}/.well-known/openid-configuration")
+    resp = session.get(f"{issuer}/.well-known/openid-configuration", timeout=REQUEST_TIMEOUT_SECONDS)
     resp.raise_for_status()
-    return resp.json()
+    doc = resp.json()
+    if cacheable:
+        _discovery_cache[issuer] = (doc, time.time() + DISCOVERY_TTL_SECONDS)
+    return doc
 
 
 def generate_pkce_pair():
@@ -96,7 +111,7 @@ def exchange_code_for_token(code, code_verifier, discovery_doc=None, session=Non
         "client_id": cfg["client_id"],
         "client_secret": cfg["client_secret"],
         "code_verifier": code_verifier,
-    })
+    }, timeout=REQUEST_TIMEOUT_SECONDS)
     resp.raise_for_status()
     return resp.json()
 
@@ -108,6 +123,7 @@ def fetch_userinfo(access_token, discovery_doc=None, session=None):
     resp = session.get(
         discovery_doc["userinfo_endpoint"],
         headers={"Authorization": f"Bearer {access_token}"},
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
     resp.raise_for_status()
     return resp.json()

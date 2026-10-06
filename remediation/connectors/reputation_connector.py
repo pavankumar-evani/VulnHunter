@@ -22,6 +22,8 @@ import re
 
 import requests
 
+from remediation.connectors import url_safety
+
 BASE = "https://www.virustotal.com/api/v3"
 _HASH = re.compile(r"^(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$")
 _DOMAIN = re.compile(r"^(?=.{4,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$")
@@ -56,7 +58,7 @@ class ReputationConnector:
     def __init__(self, api_key, session=None):
         if not api_key:
             raise ValueError("An API key is required")
-        self.session = session or requests.Session()
+        self.session = session or url_safety.safe_session()
         self.session.headers["x-apikey"] = api_key
 
     def test_connection(self):
