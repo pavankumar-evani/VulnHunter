@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from remediation.assignments import store as assignments_store
 from remediation.exceptions import store as exceptions_store
-from remediation.graphs.schema import SEVERITIES, GraphBuilder
+from remediation.graphs.schema import SEVERITIES, GraphBuilder, prov
 from remediation.inventory import asset_inventory
 from remediation.remediation_approvals import store as approvals_store
 from remediation.utils import db as db_module
@@ -134,7 +134,7 @@ def build(engine=None, findings=None, **context):
         entry = ownership.get(name) or {}
         aid = "asset:" + name
         if (entry.get("team") or "").strip():
-            g.edge(team_node(entry["team"].strip()), aid, "owns", "owns")
+            g.edge(team_node(entry["team"].strip()), aid, "owns", "owns", prov=prov(source="asset ownership record", confidence="declared"))
             owned.add(name)
         owner = (entry.get("owner") or "").strip()
         if owner:
@@ -150,7 +150,7 @@ def build(engine=None, findings=None, **context):
         name = _asset_name(f)
         aid = "asset:" + name
         if a.get("assignee_email"):
-            g.edge(person_node(a["assignee_email"]), aid, "assigned", "assigned")
+            g.edge(person_node(a["assignee_email"]), aid, "assigned", "assigned", prov=prov(source="finding assignment", source_kind="user", observed_at=a.get("updated_at") or a.get("assigned_at"), confidence="declared"))
             owned.add(name)
         if a.get("assigned_team"):
             g.edge(team_node(a["assigned_team"]), aid, "owns", "owns")

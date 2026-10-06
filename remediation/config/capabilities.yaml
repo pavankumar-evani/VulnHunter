@@ -273,6 +273,13 @@
       summary: Which firewalls, EDR and other controls protect which assets, so the advice for a finding that cannot be patched yet is specific to you.
       needs:
       - Controls recorded or reported by an EDR or firewall
+    - id: attack-surface
+      title: External attack surface
+      path: /attack-surface
+      admin: true
+      summary: Domains, addresses, ports, services and technologies imported from subfinder, dnsx, httpx, naabu and nuclei output, what changed since the last import, and findings for risky exposure. Quanta never scans; it reads what your tools wrote.
+      needs:
+      - Output of discovery tools you run against your own infrastructure
     - id: firewall
       title: Firewall rules management
       path: /firewall

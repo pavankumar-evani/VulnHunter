@@ -12,6 +12,7 @@ const KEY_SCOPES = [
   ["soc:write", "Send SIEM / XDR alerts for triage"],
   ["darkweb:write", "Send dark-web monitoring output"],
   ["mcp:read", "Let an AI assistant read findings (MCP, read-only; also tick \"Read findings out\")"],
+  ["asm:write", "Send attack-surface discovery output"],
 ];
 
 const SCHEDULES = [[0, "Manual only"], [15, "Every 15 minutes"], [60, "Hourly"], [360, "Every 6 hours"], [1440, "Daily"], [10080, "Weekly"]];

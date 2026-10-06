@@ -338,6 +338,12 @@ curl "https://quanta.example.com/api/export/findings?severity=critical&kev=true&
 
 Filters: `source`, `severity`, `kev`. Paged with `limit` (at most 5,000) and `offset`.
 
+### Attack-surface discovery output
+
+`POST /api/ingest/asm?tool=<subfinder|dnsx|httpx|naabu|nuclei>&scope=<domain or range>&complete=<bool>&publish=<bool>` (scope `asm:write`): the tool's raw JSON output (JSON lines or an array) as the
+request body. `complete=true` says the file is the whole answer for `scope`, so assets it omits are marked disappeared; a partial file never removes anything. `publish=true` refreshes the `asm` findings in the
+queue. The declared scope cannot be changed here (`tool=seeds` is refused). Quanta never scans; see `docs/ATTACK_SURFACE.md`.
+
 ### Dark-web monitoring output
 
 `POST /api/ingest/darkweb` (scope `darkweb:write`): `{"source": "<catalog id, e.g. torbot>", "text": "<the tool's output>"}`. Only lines that name a term in
