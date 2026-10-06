@@ -1,0 +1,26 @@
+# Proactive hunt engine policy (remediation/hunting/engine/). Read fresh on each refresh.
+# industry: the sector used to pick MITRE threat-actor groups relevant to you (one of the names in
+# remediation/enrichment/threat_actor_groups.py INDUSTRIES, e.g. "Financial Services & Banking"). Empty means actor relevance
+# to your sector is NOT assessed (the engine says so rather than guessing).
+industry: null
+max_suggestions: 25            # suggestions shown at once (the rest are kept, ranked, and appear as others are decided)
+refresh_minutes: 360           # the leader tick refreshes at most this often
+kev_recent_days: 45            # a KEV listing newer than this counts as fresh
+intel_min_priority: medium     # intel reports at or above this priority become hypotheses
+material_new_refs: 3           # a dismissed hypothesis returns only if this many new evidence items appear (or one strong item)
+business_hours_utc: [6, 20]    # alerts outside [start, end) UTC on a privileged identity are "off hours" (adjust to your region)
+low_and_slow: {min_alerts: 4, min_days: 3, max_severity: Medium}
+exposure: {max_assets: 15}
+identity: {max_identities: 15}
+lessons: {max_per_run: 10}
+learning:
+  min_samples: 2               # concluded hunts needed before a pattern's history changes any score
+  suppress_after_benign: 3     # this many benign conclusions and no true positive hides the pattern
+weights:
+  likelihood_max: 30
+  impact_max: 25
+  coverage_gap_max: 15
+  freshness_max: 10
+  learned_min: -15
+  learned_max: 10
+  effort_penalty: {S: 0, M: 4, L: 9}

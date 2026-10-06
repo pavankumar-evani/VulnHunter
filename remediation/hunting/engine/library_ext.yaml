@@ -1,0 +1,26 @@
+# Additional hunt-library entries used only by the hunt engine (identity and command-and-control behaviours the base library lacks).
+# Same shape as ../library.yaml; field names are Sigma's and must be mapped to your data model.
+T1078:
+  hunt: Valid accounts used outside their normal pattern
+  domain: identity
+  data_sources: [authentication logs (Windows 4624, identity provider sign-ins), VPN logs]
+  detections:
+    - name: Interactive or remote sign-ins by the accounts in scope
+      selection: {"EventID": [4624], "LogonType": [2, 3, 10]}
+  notes: Compare each sign-in with the account's usual source, hour and systems; an account that has left or has been unused for months should have none at all.
+T1110:
+  hunt: Password guessing, spraying or credential stuffing
+  domain: identity
+  data_sources: [authentication logs (Windows 4625/4624, identity provider sign-ins), VPN and web authentication logs]
+  detections:
+    - name: Failed sign-ins for the accounts in scope
+      selection: {"EventID": [4625]}
+  notes: Aggregate by source address and account over 10 minutes; many accounts from one source is spraying, many sources against one account is stuffing; a success after failures is the finding.
+T1071:
+  hunt: Command and control over application protocols
+  domain: network
+  data_sources: [DNS logs, web proxy logs, firewall or flow logs]
+  detections:
+    - name: Rare external destinations contacted by the hosts in scope
+      selection: {"dest_category": ["uncategorized", "newly-registered"]}
+  notes: Beaconing shows as regular intervals to one destination; compare to the host's usual destinations and to the destination's age.
