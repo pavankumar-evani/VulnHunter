@@ -232,6 +232,7 @@ provider is configured. Full detail (every env var, every edge case) is in
   `_scope_to_team()`); admins and accounts with no team assigned see everything
   unfiltered. There's no granular permission matrix (no separate analyst/approver/
   read-only roles).
+- **Identities come from the session, never the request body.** Exception and approval routes take the requester, approver and validator from `user["email"]`; creating an exception is administrator-only with a different administrator as approver. A new state-changing route must do the same and must not trust a name the caller sends.
 - **Reads are public by default.** Every state-changing route is gated per-route with an
   explicit RBAC dependency, but every `GET`/`/api/*` read route returns real data with no
   login at all (`curl`, etc.) unless `QUANTA_REQUIRE_LOGIN_FOR_READS=true` is set —

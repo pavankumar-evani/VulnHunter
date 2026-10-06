@@ -7,6 +7,16 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Security
+- **Quanta scanned itself and the findings were fixed.** Its own `vuln-scanner` agent reviewed the dashboard and front end, the engine and connectors, and the CLI, deployment and CI files: 25 findings, each read in the code and confirmed before fixing, and every one was real.
+  - *Dashboard access control:* creating a risk exception needed only a login and recorded any requester and approver the caller typed (High); approvals took the requester, approver and validator from the request body, defeating requester != approver; asset owner, environment and
+    schedule writes had no team scoping. Now the identities come from the session, creating an exception needs an administrator and a different administrator as approver (and the finding must exist, with the expiry capped), approving needs a person other than the requester,
+    `staging-validated` is administrator-only, and asset writes are limited to the caller's team (the CMDB import to administrators, validated).
+  - *Inputs and sessions:* `/api/run` validates `path` and `finding_id` (they went into an agent prompt); OIDC state expires and is capped, is bound to the browser by a short-lived cookie, honours `email_verified`, has timeouts and returns a generic error; uploads are rejected on `Content-Length` and streamed with a running cap instead of buffered first.
+  - *Connectors and Git:* every connector's default session now re-validates each redirect and refuses an https to http downgrade; IPv4-mapped IPv6 and the AWS IPv6 metadata range are blocked and only http(s) is accepted; the OSV base URL is checked; denied-path matching works on canonical paths (`./.github//workflows/x.yml` no longer slips through); repository names cannot contain dot segments; the XML guard is shared.
+  - *Deployment and CLI:* the licence signing key is created with mode 0600 and never overwritten silently (`--force`); production needs a session secret of at least 32 characters and refuses an unrecognised `QUANTA_PRODUCTION` value, with one definition of production (`rbac.production_enabled`) for the startup check and the runtime; the Helm chart refuses to render with trusted forwarded headers and no network policy and has an opt-in `readOnlyRootFilesystem`; `.dockerignore` keeps key material and environment files out of the image.
+  - *Known limits, not fixed (documented in `docs/REVIEWER_GUIDE.md`):* session cookies cannot be revoked server-side before their 12 hours; the API-spec fetch resolves DNS once and does not pin the address; anonymous generic ingest and public reads remain the default outside production (deliberate, documented); images and third-party Actions are pinned by tag, not digest.
+
+### Security
 - **Hardening from a static-analysis and dependency scan** (`bandit`, `pip-audit`; the audit found no vulnerable dependency, transitive ones included): every place Quanta parses
   XML from outside (firewall rulebases, vendor API responses, manifests, coverage reports) now refuses entity declarations through one guard (`remediation/utils/safe_xml.py`);
   the SHA-1 de-duplication keys are declared non-security without changing their output (`remediation/utils/digest.py`); failed sign-ins are throttled per account and per
