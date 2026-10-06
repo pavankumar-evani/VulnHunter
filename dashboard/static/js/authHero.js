@@ -77,11 +77,12 @@ export function authHeroHtml() {
   return `
     <div class="auth-hero-copy">
       <div class="auth-hero-brand">Quanta</div>
-      <p class="auth-hero-tagline">Vulnerability management that closes the loop — from first scan to a verified fix.</p>
+      <p class="auth-hero-tagline">One platform for detection, response and remediation — from the first alert to a verified fix.</p>
       <ul class="auth-hero-points">
-        <li>Findings ranked by real-world exploitability, using live CISA KEV and FIRST.org EPSS data</li>
-        <li>Every remediation reviewed and approved by a human before it ships</li>
-        <li>Anomaly detection that surfaces what a severity score alone would miss</li>
+        <li>Eight modules: threat detection &amp; response, application security, DevSecOps, infrastructure, AI security, remediation, governance and administration</li>
+        <li>Findings ranked by real-world exploitability (CISA KEV, EPSS) and shown as relationship graphs, attack paths and dependency blast radius</li>
+        <li>A Security Posture Review that scores ten frameworks from your recorded data and names the exact setting that closes each gap</li>
+        <li>Every fix proposed, linted and approved by a person before it ships — Quanta never changes your systems itself</li>
       </ul>
     </div>`;
 }
