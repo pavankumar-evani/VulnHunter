@@ -14,6 +14,7 @@ grace_days: 14         # after the end date the modules keep working for this lo
 # Always available whatever the licence says: signing in, the platform shell, the findings store every module writes into, support, and the administration needed to apply a licence.
 core:
   - /api/auth
+  - /api/graphs/admin
   - /api/status
   - /api/license
   - /api/capabilities
@@ -49,6 +50,7 @@ core:
 # A route belongs to the module whose prefix is its longest match. A prefix under `shared` is available when ANY of the listed modules is licensed.
 modules:
   soc:
+    - /api/graphs/soc
     - /api/soc
     - /api/hunting
     - /api/detections
@@ -60,6 +62,7 @@ modules:
     - /api/ingest/threat-intel
     - /api/ingest/darkweb
   appsec:
+    - /api/graphs/appsec
     - /api/api-security
     - /api/threat-models
     - /api/quanta-scan
@@ -68,6 +71,7 @@ modules:
     - /api/ingest/api-test-results
     - /api/inbound/api-policy-status
   devsecops:
+    - /api/graphs/devsecops
     - /api/devsecops
     - /api/applications
     - /api/gitops
@@ -79,6 +83,7 @@ modules:
     - /api/inbound/pr-status
     - /api/inbound/git-webhook
   infra:
+    - /api/graphs/infra
     - /api/tenable
     - /api/qualys
     - /api/openvas
@@ -93,12 +98,14 @@ modules:
     - /api/quantum-readiness
     - /api/ingest/controls
   ai:
+    - /api/graphs/ai
     - /api/ai-security
     - /api/ai-usage
     - /api/ai-vulnerabilities
     - /api/ingest/ai-usage
     - /api/ingest/otlp
   remediation:
+    - /api/graphs/remediation
     - /api/remediate
     - /api/remediation-approvals
     - /api/remediation-policy
@@ -112,6 +119,7 @@ modules:
     - /api/jira
     - /api/inbound/ticket-status
   grc:
+    - /api/graphs/grc
     - /api/grc
     - /api/cyber-risk
     - /api/ml-insights
@@ -124,6 +132,7 @@ shared:
   /api/prismacloud: [infra, appsec]
   /api/splunk: [soc, remediation]
   /api/risk: [infra, grc]
+  /api/graphs: [soc, appsec, devsecops, infra, ai, remediation, grc]   # the bare prefix; each module's own /api/graphs/<module> entry above is longer, so it decides
 
 # Convenience bundles for the issuing tool (cli/quanta_license.py --edition). They are NOT prices and not the source of truth: a licence lists its modules explicitly.
 editions:

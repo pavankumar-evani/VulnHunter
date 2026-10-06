@@ -34,6 +34,14 @@ _SCHEMA_LOCK_PATH = Path(__file__).resolve().parent / ".db_schema.lock"
 
 _default_engine = None
 _MIGRATED = weakref.WeakSet()  # engines whose pending migrations have already been applied
+_SCHEMA_READY = weakref.WeakSet()  # engines whose tables have already been checked and created: ensure_schema runs on every store call (about 90 call sites)
+# and re-checking 70+ tables each time cost most of a store write and, under a file lock, made every concurrent writer wait for it
+
+
+def forget_schema(engine):
+    """Make the next ensure_schema(engine) check the tables again (after the database file was replaced, or a table dropped by hand)."""
+    _SCHEMA_READY.discard(engine)
+    _MIGRATED.discard(engine)
 
 
 def get_engine():
@@ -1221,6 +1229,8 @@ def ensure_schema(engine):
     against a fresh on-disk DB hit it directly). This lock is scoped to schema
     creation specifically, separate from every store's own lock, since it's the one
     piece every store's first-ever access shares."""
+    if engine in _SCHEMA_READY and engine in _MIGRATED:
+        return
     with FileLock(_SCHEMA_LOCK_PATH, timeout=120.0, local=True), _cluster_schema_lock(engine):   # creating every table can take seconds on a slow disk
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
@@ -1236,5 +1246,6 @@ def ensure_schema(engine):
         with _cluster_schema_lock(engine):
             migrations.apply(engine)
         _MIGRATED.add(engine)
+    _SCHEMA_READY.add(engine)
 
 

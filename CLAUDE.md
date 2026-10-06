@@ -173,7 +173,7 @@ these were previously flat JSON files with real, committed seed/example data
 two demo accounts) — `scripts/migrate_json_to_db.py` is the one-time, idempotent
 migration that carries that seed content into the DB; run it once on a fresh checkout
 (see "Running things" above). `remediation/utils/file_lock.py` — a real, dependency-free,
-cross-platform advisory file lock, not a placeholder (a lock records its owner's process id and host and is taken over only when that process is gone, never merely because the holder is slow) — still guards every one of these
+cross-platform advisory file lock, not a placeholder (a lock records its owner's process id and host and is taken over only when that process is gone, never merely because the holder is slow; a caller waits up to 30 s for it, and `ensure_schema` checks the tables once per engine, not on every call) — still guards every one of these
 stores' own read-modify-write cycle (e.g. compute-next-id-then-insert) even though the
 storage backend is now a real database: SQLite's own locking gives atomicity for a
 single statement, but a caller whose critical section spans more than one statement (or
@@ -673,6 +673,8 @@ Ed25519-signed claim set (customer, edition label, modules, issued, expires, opt
 unlicensed module). `licensing.yaml` maps every API route prefix to `core` or a module (longest prefix; `shared` prefixes need any one of several modules) and a test fails if an API route has no entry,
 so add new route prefixes there when you add a feature. Core (sign-in, findings store, support, connections, administration) is never blocked. An expired licence keeps working for a grace period, then only core
 remains. A technical guardrail and a clear contract, not copy protection; never used with a real issued licence.
+
+**Relationship graphs** (`remediation/graphs/`, `GET /api/graphs/<module>`, page `/graphs?module=<id>`, `dashboard/static/js/graphView.js`, `graphTheory.js`, `graphLayout.js`): every module has one graph built from its own stored data. `schema.py` is the shared shape (`GraphBuilder`: nodes with kind, weight, severity, meta and a page link; edges; deterministic; capped at 400 best-connected nodes; an honest empty state with a note) and one builder per module (`soc.py`, `appsec.py`, `devsecops.py`, `infra.py`, `ai.py`, `remediation.py`, `grc.py`, `admin.py`) takes `(engine=None, findings=None, **context)` and never invents a node. Graph theory runs in the browser, not on the server: clusters, shortest route, betweenness, articulation points and bridges, PageRank, loops (`graphTheory.js` is pure and tested under Node by `tests/test_graph_theory_js.py`; the layout by `tests/test_graph_layout_js.py`). The route is administrator-only for the soc, appsec, ai, grc and admin graphs; `licensing.yaml` licenses each graph with its module (`/api/graphs/<module>`; `/api/graphs/admin` is core). To add a graph for a new area, add a builder, register its id in `remediation/graphs/__init__.py` and add the menu and catalog entries in BOTH `nav.js` and `capabilities.yaml`.
 
 **Capabilities page / All modules** (`remediation/capabilities.py`, `config/capabilities.yaml`, page `/capabilities`): the eight modules above, each listing its capabilities with a live count,
 what to connect when it is empty, and its connectors. Add a capability to the YAML and it appears.

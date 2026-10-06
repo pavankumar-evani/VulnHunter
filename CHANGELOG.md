@@ -8,6 +8,20 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ### Documentation
 - **README rewritten around the eight modules**: an About section, a pick-your-path table, a real screenshot of every module page on fictional demo data (51 images in `docs/images/modules/`), a flowchart per module, and a researched comparison with commercial and open-source tools that says where Quanta stops.
+### Changed
+- **Store writes are about four times faster and no longer fail under load** (`remediation/utils/db.py`, `remediation/utils/file_lock.py`): `ensure_schema` runs on every store call (about 90 call sites) and re-checked
+  more than 70 tables each time, which was most of a write and was done while holding the store's lock, so concurrent writers queued behind it. It now checks once per engine (`db.forget_schema(engine)` forces a
+  re-check after the database file is replaced), taking an approval write from 73 ms to 18 ms on an idle machine. A caller now waits up to 30 seconds for a store lock before failing (it was 5), and waiters poll with
+  jitter instead of in lockstep. Twenty simultaneous writers under heavy CPU load used to lose 7 or 8 of their writes to `LockTimeoutError` (the intermittent failures of the concurrency tests); all twenty now land.
+
+### Added
+- **Relationship graphs for every module** (`remediation/graphs/`, `GET /api/graphs/<module>`, page `/graphs?module=<id>`, the first entry of each module's menu): one interactive plain-SVG component
+  (`graphView.js`) draws a graph built from that module's own stored data: alerts and the entities and techniques they share (SOC), APIs, endpoints and data classes (Application Security), the portfolio
+  of applications and shared vulnerable packages with their fix pull requests (DevSecOps), the internet, firewall rules, hops and assets (Infrastructure), AI systems and what they use (AI Security),
+  teams, people, assets, exceptions and approvals (Remediation), controls, evidence and risks (GRC), and connections, key scopes and modules (Administration). `graphTheory.js` computes clusters, shortest routes,
+  betweenness (choke points), articulation points and bridges (single points of failure), PageRank and loops; `graphLayout.js` is a deterministic force layout that packs clusters apart. Pan, zoom, drag,
+  search, kind filters, colour and size modes, neighbourhood focus, a table view, and JSON and SVG export. Administrator modules' graphs need an administrator and every graph is licensed with its module.
+  An empty module says what to connect and never draws an invented picture; a graph is capped at the 400 best-connected nodes and says so.
 
 ### Security
 - **Hardening from a static-analysis and dependency scan** (`bandit`, `pip-audit`; the audit found no vulnerable dependency, transitive ones included): every place Quanta parses

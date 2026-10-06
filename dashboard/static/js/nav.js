@@ -20,6 +20,7 @@ export const NAV = [
   ] },
   { group: "Threat Detection & Response", id: "soc", number: "1", icon: "signal", summary: "The SOC in one place: triage alerts, hunt, engineer detections, run threat intelligence and respond through playbooks that need a second person for anything that changes your environment.", items: [
     { path: "/capabilities?area=soc", label: "Module overview", icon: "dashboard", tip: "The SOC in one place: triage alerts, hunt, engineer detections, run threat intelligence and respond through playbooks that need a second person for anything that changes your environment." },
+    { path: "/graphs?module=soc", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/soc", label: "SOC Operations", icon: "rules", tip: "Admin: cases in L1, L2 and L3 queues with priority, service-level clocks, escalation with hand-off notes, case summaries, log investigation, technique identification and SOC metrics." },
     { path: "/hunting?tab=alerts", label: "Alert Triage", icon: "signal", tip: "Alerts from your SIEM or XDR ranked with vulnerability context, investigated step by step, with a recommended verdict a person validates." },
     { path: "/hunting?tab=proposals", label: "Threat Hunting", icon: "search", tip: "Hunts proposed from known-exploited vulnerabilities in your estate, with queries to run in your own SIEM and verdicts that need an outcome to close." },
@@ -36,6 +37,7 @@ export const NAV = [
   ] },
   { group: "Application Security", id: "appsec", number: "2", icon: "appsec", summary: "Everything found in your own applications: static and dynamic testing, secrets, containers, APIs and the threats to a design, with fixes handed to developers.", items: [
     { path: "/capabilities?area=appsec", label: "Module overview", icon: "dashboard", tip: "Everything found in your own applications: static and dynamic testing, secrets, containers, APIs and the threats to a design, with fixes handed to developers." },
+    { path: "/graphs?module=appsec", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/appsec", label: "Application Vulnerabilities", icon: "appsec", tip: "Hub view across SAST, DAST, SCA, Secrets, Container, and API sub-categories - counts and links into each." },
     { path: "/quanta-scan", label: "Code Scan", icon: "scan", tip: "Source-code findings from /quanta-scan - agentless static analysis, no target install." },
     { path: "/api-security", label: "API Security", icon: "rules", tip: "Admin: API inventory from specifications and access logs, OWASP API Top 10 findings with evidence and a request to confirm each, caller activity, your data classes, and protection policies sent as signed requests to an endpoint you own. Quanta changes no firewall." },
@@ -46,6 +48,7 @@ export const NAV = [
   ] },
   { group: "DevSecOps & Supply Chain", id: "devsecops", number: "3", icon: "iac", summary: "The delivery pipeline: the controls it needs, SBOMs and the dependency graph, fix pull requests and the release gate.", items: [
     { path: "/capabilities?area=devsecops", label: "Module overview", icon: "dashboard", tip: "The delivery pipeline: the controls it needs, SBOMs and the dependency graph, fix pull requests and the release gate." },
+    { path: "/graphs?module=devsecops", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/devsecops", label: "Control Library", icon: "rules", tip: "The controls a secure delivery pipeline needs, where each repository stands from uploaded scans and pipeline checks, a policy-to-control check, and the code fix queue." },
     { path: "/devsecops?tab=queue", label: "Code Fix Queue", icon: "queue", tip: "Static analysis, dependency, secret and infrastructure-as-code findings tracked with a fix brief until a later scan stops reporting them." },
     { path: "/applications", label: "Applications & SBOM", icon: "assets", tip: "Each application with its SBOM, an interactive dependency and exposure graph, and its findings ranked with the upgrade that closes the most. Generate or upload the SBOM, check it against public advisories, and propose the fix." },
@@ -58,6 +61,7 @@ export const NAV = [
   ] },
   { group: "Infrastructure & Exposure", id: "infra", number: "4", icon: "infra", summary: "Hosts, networks, OT, certificates and cryptography: what is vulnerable, what is exposed, what already protects it, and how an attacker could chain it.", items: [
     { path: "/capabilities?area=infra", label: "Module overview", icon: "dashboard", tip: "Hosts, networks, OT, certificates and cryptography: what is vulnerable, what is exposed, what already protects it, and how an attacker could chain it." },
+    { path: "/graphs?module=infra", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/infrastructure", label: "Infrastructure Vulnerabilities", icon: "infra", tip: "Hub view across OS, Network, Network Security, OT/IoT, and Cloud sub-categories (Tenable/Armis-style asset scanning)." },
     { path: "/ot-vulnerabilities", label: "OT Vulnerabilities", icon: "container", tip: "Dedicated hub for Operational Technology/IoT device findings (PLCs, SCADA/HMI, building automation, cameras, sensor gateways) - the same real data as Infrastructure Vulnerabilities' own OT/IoT sub-category, broken out for teams who own OT/ICS specifically." },
     { path: "/certificate-vulnerabilities", label: "Certificate Vulnerabilities", icon: "certmgmt", tip: "Hub view for Certificate & TLS Lifecycle Management findings - KPIs, severity/aging charts, top rankings, and AI trend analysis, same shape as the other Security Domains hubs." },
@@ -82,6 +86,7 @@ export const NAV = [
   ] },
   { group: "AI Security", id: "ai", number: "5", icon: "aiVuln", summary: "Risks in and around AI: model and prompt vulnerabilities, a register of AI systems checked against the OWASP LLM Top 10, and who is spending what.", items: [
     { path: "/capabilities?area=ai", label: "Module overview", icon: "dashboard", tip: "Risks in and around AI: model and prompt vulnerabilities, a register of AI systems checked against the OWASP LLM Top 10, and who is spending what." },
+    { path: "/graphs?module=ai", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/ai-vulnerabilities", label: "AI Vulnerabilities", icon: "aiVuln", tip: "Prompt injection, model poisoning, and other AI/ML risks - with an illustrative MITRE ATLAS heat map, summaries, and remediation guidance." },
     { path: "/ai-security", label: "AI Security", icon: "rules", tip: "Admin: your AI systems, what each can do and how it is defended, checked against the OWASP Top 10 for LLM Applications and MCP hygiene; publish the findings to the queue." },
     { path: "/ai-usage", label: "AI Usage", icon: "rules", tip: "Admin: AI spend and tokens across the organization by team, application and model, budgets, unusual days, and AI tools nobody reviewed." },
@@ -90,6 +95,7 @@ export const NAV = [
   ] },
   { group: "Remediation & Workflow", id: "remediation", number: "6", icon: "plan", summary: "Turn findings into finished work: a prioritised queue, plans and approvals, owners, exceptions and the tickets that carry it.", items: [
     { path: "/capabilities?area=remediation", label: "Module overview", icon: "dashboard", tip: "Turn findings into finished work: a prioritised queue, plans and approvals, owners, exceptions and the tickets that carry it." },
+    { path: "/graphs?module=remediation", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/queue", label: "Remediation Queue", icon: "queue", tip: "The live, re-scored queue - priority, SLA, KEV/EPSS, and ATT&CK tags per finding." },
     { path: "/remediate", label: "Remediation Plan", icon: "plan", tip: "The static plan snapshot from the last /remediate run, linked to generated playbooks." },
     { path: "/remediation-approvals", label: "Remediation Approvals", icon: "exception", tip: "Human-in-the-loop approve/reject for normal/emergency-change-type findings - AD-group-validated when Active Directory is configured." },
@@ -104,6 +110,7 @@ export const NAV = [
   ] },
   { group: "Risk, Governance & Compliance", id: "grc", number: "7", icon: "risk", summary: "Put risk in money, show control evidence, govern who has access and keep the audit trail.", items: [
     { path: "/capabilities?area=grc", label: "Module overview", icon: "dashboard", tip: "Put risk in money, show control evidence, govern who has access and keep the audit trail." },
+    { path: "/graphs?module=grc", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/risk", label: "Risk Dashboard", icon: "risk", tip: "MITRE ATT&CK heat map, top critical assets, and internal/external-facing exposure." },
     { path: "/cyber-risk", label: "Cyber Risk", icon: "rules", tip: "Admin: risk in money. Loss scenarios simulated into an average and a bad-year loss, which treatment is worth its cost, and a cyber health score." },
     { path: "/grc", label: "Risk & Compliance", icon: "rules", tip: "Admin: control framework coverage with automated evidence, the risk register, attestations and policies. Evidence and workflow; not a certification." },
@@ -115,6 +122,7 @@ export const NAV = [
     { path: "/connections", label: "Entitlement and HR roster imports", icon: "adaptor", tip: "Access governance reads exports; evidence comes from the modules above" },
   ] },
   { group: "Administration", id: "admin", number: "8", icon: "users", summary: "Connections and API keys, policies, notifications, users and teams.", items: [
+    { path: "/graphs?module=admin", label: "Relationship graph", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/connections", label: "Connections", icon: "adaptor", tip: "Admin: store your scanner and asset-source credentials (encrypted) and schedule automatic syncs." },
     { path: "/adaptors", label: "Connectors / Adaptors", icon: "adaptor", tip: "Every external system Quanta talks to (or has researched), in one place - pick a connector from the dropdown." },
     { path: "/priority-rules", label: "Priority Rules", icon: "rules", tip: "Tune severity/asset/KEV/EPSS weights and SLA windows - takes effect immediately." },

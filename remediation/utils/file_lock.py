@@ -21,12 +21,15 @@ multi-machine deployment needs a real client-server database with real distribut
 transactions instead of this).
 """
 import os
+import random
 import secrets
 import socket
 import time
 from pathlib import Path
 
-DEFAULT_TIMEOUT_SECONDS = 5.0
+# How long a caller waits for a store's lock before giving up with LockTimeoutError. Five seconds was too short under load: twenty writers queued behind
+# one another each wait for all the ones ahead, and the ones at the back were failing (and losing their write) while the machine was merely busy.
+DEFAULT_TIMEOUT_SECONDS = 30.0
 _POLL_INTERVAL_SECONDS = 0.02
 # A lock whose recorded owner is a live process on this host is never taken over merely for being slow; this is only the
 # backstop against a recycled process id, so it is far longer than any real critical section.
@@ -98,7 +101,7 @@ class FileLock:
             while not leases.acquire(self._lease_name(), holder, max(self.timeout * 2, 120.0)):
                 if time.monotonic() >= deadline:
                     raise LockTimeoutError(f"Could not acquire lock {self._lease_name()!r} within {self.timeout}s - another replica is holding it.")
-                time.sleep(_POLL_INTERVAL_SECONDS)
+                time.sleep(_POLL_INTERVAL_SECONDS * (0.5 + random.random()))   # jitter: waiters that retry in lockstep keep colliding
             self._lease = holder
             return
         deadline = time.monotonic() + self.timeout
@@ -130,7 +133,7 @@ class FileLock:
                         f"Could not acquire lock {self.lock_path!r} within {self.timeout}s - "
                         "another request is holding it, or a stale lock wasn't cleaned up.",
                     )
-                time.sleep(_POLL_INTERVAL_SECONDS)
+                time.sleep(_POLL_INTERVAL_SECONDS * (0.5 + random.random()))   # jitter: waiters that retry in lockstep keep colliding
 
     def _owner(self):
         try:
