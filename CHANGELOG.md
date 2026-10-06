@@ -6,6 +6,12 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Changed
+- **Store writes are about four times faster and no longer fail under load** (`remediation/utils/db.py`, `remediation/utils/file_lock.py`): `ensure_schema` runs on every store call (about 90 call sites) and re-checked
+  more than 70 tables each time, which was most of a write and was done while holding the store's lock, so concurrent writers queued behind it. It now checks once per engine (`db.forget_schema(engine)` forces a
+  re-check after the database file is replaced), taking an approval write from 73 ms to 18 ms on an idle machine. A caller now waits up to 30 seconds for a store lock before failing (it was 5), and waiters poll with
+  jitter instead of in lockstep. Twenty simultaneous writers under heavy CPU load used to lose 7 or 8 of their writes to `LockTimeoutError` (the intermittent failures of the concurrency tests); all twenty now land.
+
 ### Added
 - **Relationship graphs for every module** (`remediation/graphs/`, `GET /api/graphs/<module>`, page `/graphs?module=<id>`, the first entry of each module's menu): one interactive plain-SVG component
   (`graphView.js`) draws a graph built from that module's own stored data: alerts and the entities and techniques they share (SOC), APIs, endpoints and data classes (Application Security), the portfolio
