@@ -192,8 +192,42 @@ class FileLockTimeoutAndStaleness(unittest.TestCase):
 
     def test_a_lock_records_its_owner(self):
         with FileLock(self.path) as lock:
-            pid, host = Path(lock.lock_path).read_text(encoding="utf-8").split()
+            pid, host, token = Path(lock.lock_path).read_text(encoding="utf-8").split()
         self.assertEqual((int(pid), host), (os.getpid(), file_lock._HOSTNAME))
+        self.assertTrue(token)
+
+    def test_release_never_deletes_a_lock_that_has_passed_to_someone_else(self):
+        # A is slow to release; meanwhile the lock was taken over and re-created for B. A's delayed release must leave B's lock alone,
+        # otherwise a third caller could acquire while B still holds it and two writers would be in the critical section.
+        a = FileLock(self.path)
+        a.acquire()
+        Path(a.lock_path).write_text(f"{os.getpid()} {file_lock._HOSTNAME} not-a-token\n", encoding="utf-8")   # B's lock
+        a.release()
+        self.assertTrue(os.path.exists(a.lock_path))
+
+    def test_twenty_threads_taking_turns_never_overlap(self):
+        import threading
+        inside = []
+        overlaps = []
+        guard = threading.Lock()
+
+        def work():
+            for _ in range(15):
+                with FileLock(self.path, timeout=30):
+                    with guard:
+                        inside.append(1)
+                        if len(inside) > 1:
+                            overlaps.append(len(inside))
+                    time.sleep(0.001)
+                    with guard:
+                        inside.pop()
+
+        threads = [threading.Thread(target=work) for _ in range(20)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        self.assertEqual(overlaps, [])
 
     def test_pid_alive_is_true_for_this_process_and_false_for_a_finished_one(self):
         self.assertTrue(file_lock._pid_alive(os.getpid()))

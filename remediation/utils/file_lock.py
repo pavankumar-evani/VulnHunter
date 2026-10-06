@@ -21,8 +21,8 @@ multi-machine deployment needs a real client-server database with real distribut
 transactions instead of this).
 """
 import os
+import secrets
 import socket
-import threading
 import time
 from pathlib import Path
 
@@ -32,8 +32,6 @@ _POLL_INTERVAL_SECONDS = 0.02
 # backstop against a recycled process id, so it is far longer than any real critical section.
 _OWNER_ALIVE_BACKSTOP_SECONDS = 3600.0
 _HOSTNAME = socket.gethostname()
-_HELD_HERE = set()            # lock files currently held by some thread of THIS process
-_HELD_HERE_GUARD = threading.Lock()
 
 
 def _pid_alive(pid):
@@ -76,6 +74,7 @@ class FileLock:
         self.local = local  # True: always a file lock (used where a database lease would be circular)
         self._fd = None
         self._lease = None
+        self._token = None
 
     def _use_lease(self):
         return not self.local and os.environ.get("QUANTA_LOCK_BACKEND", "file").strip().lower() == "db"
@@ -106,12 +105,13 @@ class FileLock:
         while True:
             try:
                 self._fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                # who holds it (so a slow holder is not mistaken for a dead one) and a token that is ours alone (so release
+                # never deletes a lock that has since passed to someone else)
+                self._token = secrets.token_hex(8)
                 try:
-                    os.write(self._fd, f"{os.getpid()} {_HOSTNAME}\n".encode("utf-8"))   # who holds it, so a slow holder is not mistaken for a dead one
+                    os.write(self._fd, f"{os.getpid()} {_HOSTNAME} {self._token}\n".encode("utf-8"))
                 except OSError:
                     pass
-                with _HELD_HERE_GUARD:
-                    _HELD_HERE.add(self.lock_path)
                 return
             except (FileExistsError, PermissionError):
                 # PermissionError (not just FileExistsError) is a real, observed
@@ -136,7 +136,7 @@ class FileLock:
         try:
             with open(self.lock_path, "r", encoding="utf-8") as fh:
                 parts = fh.read().split()
-            return int(parts[0]), parts[1]
+            return int(parts[0]), parts[1], (parts[2] if len(parts) > 2 else None)
         except (OSError, ValueError, IndexError):
             return None
 
@@ -151,12 +151,9 @@ class FileLock:
             age = time.time() - os.path.getmtime(self.lock_path)
             owner = self._owner()
             if owner and owner[1] == _HOSTNAME:
-                pid = owner[0]
-                if pid == os.getpid():
-                    with _HELD_HERE_GUARD:
-                        alive = self.lock_path in _HELD_HERE
-                else:
-                    alive = _pid_alive(pid)
+                # Our own process counts as alive: a thread of this process that holds the lock is live, and a thread that
+                # leaked one is an in-process bug only the long backstop below recovers from.
+                alive = owner[0] == os.getpid() or _pid_alive(owner[0])
                 stale = (not alive) or age > _OWNER_ALIVE_BACKSTOP_SECONDS
             else:
                 stale = age > self.timeout
@@ -176,12 +173,22 @@ class FileLock:
         if self._fd is not None:
             os.close(self._fd)
             self._fd = None
-            with _HELD_HERE_GUARD:
-                _HELD_HERE.discard(self.lock_path)
-        try:
-            os.remove(self.lock_path)
-        except OSError:
-            pass  # already gone (e.g. a stale-lock takeover happened) - fine
+            token, self._token = self._token, None
+            owner = self._owner()
+            if owner and owner[2] and token and owner[2] != token:
+                return   # the lock was taken over and now belongs to someone else: deleting it would let a second writer in
+        # On Windows a file another thread has open cannot be deleted (a waiter reading the owner, for one), so retry briefly rather than leave
+        # the lock behind for everyone; elsewhere the first attempt succeeds.
+        for _ in range(200):
+            try:
+                os.remove(self.lock_path)
+                return
+            except FileNotFoundError:
+                return   # already gone (e.g. a stale-lock takeover happened) - fine
+            except PermissionError:
+                time.sleep(0.005)
+            except OSError:
+                return
 
     def __enter__(self):
         self.acquire()
