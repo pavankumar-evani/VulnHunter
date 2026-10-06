@@ -578,11 +578,11 @@ class Storage(unittest.TestCase):
     def test_the_migration_is_idempotent_and_registered(self):
         db_module.metadata.create_all(self.e, tables=[db_module.schema_migrations] if hasattr(db_module, "schema_migrations") else None)
         for _ in range(3):
-            migrations._m010_investigation_reports(self.e)
+            migrations._m011_investigation_reports(self.e)
         from sqlalchemy import inspect
         names = set(inspect(self.e).get_table_names())
         self.assertTrue({"investigation_reports", "incident_followups", "hunt_allowlist", "hunt_report_meta"} <= names)
-        self.assertIn(10, [m[0] for m in migrations.MIGRATIONS])
+        self.assertIn(11, [m[0] for m in migrations.MIGRATIONS])
 
 
 if __name__ == "__main__":
