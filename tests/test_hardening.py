@@ -171,5 +171,49 @@ class CookieAndHeaderTests(unittest.TestCase):
         self.assertEqual(r.headers.get("x-frame-options"), "DENY")
 
 
+class SelfHostedFontTests(unittest.TestCase):
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    STATIC = os.path.join(ROOT, "dashboard", "static")
+
+    def _read(self, *parts):
+        with open(os.path.join(self.STATIC, *parts), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_the_page_loads_no_third_party_font_service(self):
+        html = self._read("index.html")
+        self.assertNotIn("fonts.googleapis.com", html)
+        self.assertNotIn("fonts.gstatic.com", html)
+
+    def test_every_font_file_the_stylesheet_names_exists(self):
+        import re
+        css = self._read("style.css")
+        files = re.findall(r"url\('/static/fonts/([^']+)'\)", css)
+        self.assertGreaterEqual(len(files), 10)
+        for name in files:
+            path = os.path.join(self.STATIC, "fonts", name)
+            self.assertTrue(os.path.isfile(path), name)
+            with open(path, "rb") as fh:
+                self.assertEqual(fh.read(4), b"wOF2", name)  # a real woff2, not an error page
+
+    def test_all_five_weights_are_covered(self):
+        import re
+        css = self._read("style.css")
+        self.assertEqual(sorted(set(re.findall(r"font-weight: (\d+);\s*font-display", css))), ["300", "400", "500", "600", "700"])
+
+    def test_the_font_licence_ships_with_the_font(self):
+        self.assertIn("SIL OPEN FONT LICENSE", self._read("fonts", "OFL.txt").upper())
+
+    def test_the_policy_names_no_external_origin(self):
+        with patch.dict(os.environ, {"QUANTA_ENABLE_CSP": "true"}):
+            policy = TestClient(dash.app).get("/healthz").headers["content-security-policy"]
+        self.assertNotIn("http", policy)
+        self.assertIn("font-src 'self' data:", policy)
+
+    def test_the_server_serves_a_font_file(self):
+        r = TestClient(dash.app).get("/static/fonts/chakra-petch-400-latin.woff2")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.content[:4], b"wOF2")
+
+
 if __name__ == "__main__":
     unittest.main()
