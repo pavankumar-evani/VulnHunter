@@ -559,4 +559,9 @@
       summary: 'Admin-only: which real Claude Code model to use, per-user daily token limits (enforced server-side), real usage/cost by user, and read-only system health.'
       needs: []
       admin: true
+    - id: design-system
+      title: Design system
+      path: /design-system
+      summary: The living style guide - every interface component with a live example, the keyboard shortcuts, and the page contract.
+      needs: []
   connectors: []

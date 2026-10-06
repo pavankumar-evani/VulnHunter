@@ -8,6 +8,8 @@
 import { api } from "./api.js";
 import { escapeHtml } from "./dom.js";
 import { icon } from "./icons.js";
+import { live } from "./live.js";
+import { toast } from "./ui.js";
 
 const READ_KEY = "quanta_read_notifications";
 const CACHE_TTL_MS = 20000;
@@ -84,22 +86,46 @@ export function initNotificationBell() {
   const badge = root.querySelector("#notif-badge");
   const dropdown = root.querySelector("#notif-dropdown");
 
+  let seen = null; // ids already known; the first load is a silent baseline so opening the app never toasts the whole backlog
   async function refreshBadge() {
     const notifications = await loadNotifications();
+    if (seen) {
+      const fresh = notifications.filter((n) => !seen.has(n.id) && n.severity === "danger");
+      fresh.slice(0, 2).forEach((n) => toast(n.message, { tone: "bad", href: n.link || "/inbox", action: "Open" }));
+      if (fresh.length > 2) toast(`${fresh.length - 2} more critical notifications`, { tone: "bad", href: "/inbox", action: "Inbox" });
+    }
+    seen = new Set(notifications.map((n) => n.id));
     const count = unreadCount(notifications);
     badge.hidden = count === 0;
     badge.textContent = count > 9 ? "9+" : String(count);
   }
 
+  // Grouped by category (SLA, Threat intel, Exception ...), unread first inside each group, with a mark-all-read control.
   async function renderDropdown() {
     const notifications = await loadNotifications();
     if (!notifications.length) {
       dropdown.innerHTML = `<div class="search-empty">No notifications - everything is on track.</div>`;
       return;
     }
-    const top = notifications.slice(0, 8);
-    dropdown.innerHTML = top.map((n) => notificationItemHtml(n, { compact: true })).join("") +
-      `<a class="notif-view-all" href="/inbox" data-link>View all in Inbox</a>`;
+    const readIds = getReadIds();
+    const groups = new Map();
+    for (const n of notifications) {
+      if (!groups.has(n.category)) groups.set(n.category, []);
+      groups.get(n.category).push(n);
+    }
+    const unread = unreadCount(notifications);
+    let shown = 0;
+    const body = [...groups.entries()].map(([cat, list]) => {
+      const sorted = [...list].sort((a, b) => Number(readIds.has(a.id)) - Number(readIds.has(b.id)));
+      const take = sorted.slice(0, Math.max(0, 10 - shown));
+      shown += take.length;
+      if (!take.length) return "";
+      return `<div class="notif-group-head" role="presentation">${escapeHtml(cat)} (${list.length})</div>` + take.map((n) => notificationItemHtml(n, { compact: true })).join("");
+    }).join("");
+    dropdown.innerHTML = `<div class="notif-tools"><span class="notif-live" data-mode="${live.state.mode}" title="${live.state.mode === "sse" ? "Live" : "Checking regularly"}">${unread} unread</span><button type="button" id="notif-mark-all"${unread ? "" : " disabled"}>Mark all read</button></div>` +
+      body + `<a class="notif-view-all" href="/inbox" data-link>View all in Inbox</a>`;
+    const markAll = dropdown.querySelector("#notif-mark-all");
+    if (markAll) markAll.addEventListener("click", (ev) => { ev.stopPropagation(); markAllRead(notifications); renderDropdown(); });
   }
 
   button.addEventListener("click", async (e) => {
@@ -121,5 +147,10 @@ export function initNotificationBell() {
   window.addEventListener(READ_CHANGED_EVENT, refreshBadge);
 
   refreshBadge();
-  setInterval(refreshBadge, CACHE_TTL_MS);
+  // Live: any recorded activity or notification event re-checks straight away; otherwise a slow, backing-off poll (live.js pauses it in a hidden tab).
+  const recheck = () => { cache = null; refreshBadge().catch(() => {}); };
+  live.subscribe("activity", recheck);
+  live.subscribe("notifications", recheck);
+  live.poll("notifications.poll", async () => { const n = await loadNotifications(true); return n.map((x) => x.id); }, { every: 30000 });
+  live.subscribe("notifications.poll", () => refreshBadge().catch(() => {}));
 }
