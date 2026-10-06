@@ -82,6 +82,7 @@ from remediation.cvd import store as cvd_store  # noqa: E402
 from remediation.hunting import detection as hunt_detection, generate as hunt_generate, intel as hunt_intel, ocsf as hunt_ocsf, service as hunt_service  # noqa: E402
 from remediation.hunting import soc as hunt_soc, store as hunt_store, triage as hunt_triage, verdict as hunt_verdict  # noqa: E402
 from remediation.hunting import ttp as hunt_ttp  # noqa: E402
+from remediation.hunting.engine import service as hunt_engine  # noqa: E402
 from remediation.connectors import darkweb_connector as dw_connector  # noqa: E402
 from remediation.darkweb import watch as dw_watch  # noqa: E402
 from remediation.asm import findings as asm_findings, parsers as asm_parsers, store as asm_store, summary as asm_summary  # noqa: E402
@@ -361,6 +362,11 @@ def _run_gitops_sync_if_due():
     return gitops_service.sync_and_verify(dashboard_data.load_live_queue())
 
 
+def _run_hunt_suggestions_if_due():
+    """Refreshes the proactive hunt suggestions at most every `refresh_minutes` (hunt_engine.yaml). Cheap and idempotent; never runs a search."""
+    return hunt_engine.refresh_if_due(dashboard_data.load_live_queue())
+
+
 def _run_integrity_checks_if_due():
     """Hourly: code baseline, store consistency and host checks. A new or changed set of problems is written once to the activity log and mailed to
     QUANTA_ALERT_EMAIL when SMTP is configured. Off with QUANTA_INTEGRITY_CHECKS=false. Never repairs anything: repairs are an admin action."""
@@ -389,6 +395,7 @@ async def _notification_scheduler_loop():
             _run_asm_stale_if_due()
             _run_cvd_if_due()
             _run_gitops_sync_if_due()
+            _run_hunt_suggestions_if_due()
             _run_integrity_checks_if_due()
             _run_incident_sweep()
         except Exception:  # noqa: BLE001 - a bad tick must never kill the whole loop
@@ -4789,6 +4796,88 @@ def api_hunting_accept(body: HuntProposalBody, user: dict = Depends(rbac.require
         raise _hunt_400(exc) from exc
     activity_log.record_activity(user["email"], "hunt.create", str(h["id"]), {"title": h["title"], "source": "generated"})
     return h
+
+
+class SuggestionDismissBody(BaseModel):
+    reason: str
+    notes: str | None = None
+
+
+class SuggestionAcceptBody(BaseModel):
+    owner: str | None = None
+
+
+class SuggestionConcludeBody(BaseModel):
+    outcome: str
+    notes: str
+
+
+def _suggestion_error(exc):
+    if isinstance(exc, KeyError):
+        return HTTPException(status_code=404, detail="No such suggestion")
+    return HTTPException(status_code=409 if isinstance(exc, hunt_engine.TransitionError) else 400, detail=str(exc))
+
+
+@app.get("/api/hunting/suggestions")
+def api_hunting_suggestions(type: str | None = None, tactic: str | None = None, status: str | None = None, include_suppressed: bool = False, limit: int | None = None,
+                            user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    hunt_engine.sync_with_hunts()
+    return hunt_engine.listing(status=status, hunt_type=type, tactic=tactic, include_suppressed=include_suppressed, limit=limit)
+
+
+@app.post("/api/hunting/suggestions/refresh")
+def api_hunting_suggestions_refresh(user: dict = Depends(rbac.require_admin)):
+    result = hunt_engine.refresh(dashboard_data.load_live_queue(), actor=user["email"])
+    activity_log.record_activity(user["email"], "hunt.suggestions.refresh", "", {k: v for k, v in result.items() if k != "gaps"})
+    return result
+
+
+@app.get("/api/hunting/suggestions/{hid}")
+def api_hunting_suggestion(hid: str, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    d = hunt_engine.detail(hid)
+    if not d:
+        raise HTTPException(status_code=404, detail="No such suggestion")
+    return d
+
+
+@app.post("/api/hunting/suggestions/{hid}/accept")
+def api_hunting_suggestion_accept(hid: str, body: SuggestionAcceptBody | None = None, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = hunt_engine.accept(hid, user["email"], owner=body.owner if body else None)
+    except (KeyError, ValueError) as exc:
+        raise _suggestion_error(exc) from exc
+    activity_log.record_activity(user["email"], "hunt.suggestion.accept", hid, {"hunt_id": r["hunt_id"]})
+    return r
+
+
+@app.post("/api/hunting/suggestions/{hid}/dismiss")
+def api_hunting_suggestion_dismiss(hid: str, body: SuggestionDismissBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = hunt_engine.dismiss(hid, body.reason, body.notes, user["email"])
+    except (KeyError, ValueError) as exc:
+        raise _suggestion_error(exc) from exc
+    activity_log.record_activity(user["email"], "hunt.suggestion.dismiss", hid, {"reason": body.reason})
+    return r
+
+
+@app.post("/api/hunting/suggestions/{hid}/conclude")
+def api_hunting_suggestion_conclude(hid: str, body: SuggestionConcludeBody, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = hunt_engine.conclude(hid, body.outcome, body.notes, user["email"])
+    except (KeyError, ValueError) as exc:
+        raise _suggestion_error(exc) from exc
+    activity_log.record_activity(user["email"], "hunt.suggestion.conclude", hid, {"outcome": body.outcome})
+    return r
+
+
+@app.post("/api/hunting/suggestions/{hid}/promote")
+def api_hunting_suggestion_promote(hid: str, user: dict = Depends(rbac.require_admin)):
+    try:
+        r = hunt_engine.promote(hid, user["email"])
+    except (KeyError, ValueError) as exc:
+        raise _suggestion_error(exc) from exc
+    activity_log.record_activity(user["email"], "hunt.suggestion.promote", hid, {"use_case": r["promoted_key"]})
+    return r
 
 
 @app.get("/api/hunting/hunts")
