@@ -37,11 +37,22 @@ class CatalogTests(unittest.TestCase):
         self.cat = capabilities.catalog()
         self.items = [i for d in self.cat for g in d["groups"] for i in g["items"]]
 
-    def test_five_areas_numbered_one_to_five(self):
-        self.assertEqual([d["number"] for d in self.cat], ["1", "2", "3", "4", "5"])
+    def test_eight_modules_numbered_in_order(self):
+        self.assertEqual([d["id"] for d in self.cat], ["soc", "appsec", "devsecops", "infra", "ai", "remediation", "grc", "admin"])
+        self.assertEqual([d["number"] for d in self.cat], [str(n) for n in range(1, 9)])
         self.assertTrue(all(g["number"].startswith(d["number"] + ".") for d in self.cat for g in d["groups"]))
-        self.assertEqual([g["number"] for g in self.cat[0]["groups"]], ["1.1", "1.2", "1.3"])  # vulnerability management, the DevSecOps library, then API security
-        self.assertEqual([g["number"] for g in self.cat[2]["groups"]], ["3.1", "3.2"])  # detection and hunting, then AI security
+        self.assertTrue(all(isinstance(d["connectors"], list) for d in self.cat))
+
+    def test_each_module_lists_the_connectors_that_feed_it(self):
+        by = {d["id"]: d for d in self.cat}
+        self.assertTrue({"/tenable", "/qualys", "/openvas", "/infoblox", "/axonius", "/active-directory"} <= {c["path"] for c in by["infra"]["connectors"]})
+        self.assertTrue({"/servicenow", "/jira"} <= {c["path"] for c in by["remediation"]["connectors"]})
+        self.assertIn("/splunk", {c["path"] for c in by["soc"]["connectors"]})
+        pats = routes()
+        for d in self.cat:
+            for c in d["connectors"]:
+                self.assertTrue(c["title"] and c["summary"], (d["id"], c))
+                self.assertTrue(any(p.match(c["path"].split("?")[0]) for p in pats), c["path"])
 
     def test_ids_are_unique_and_every_item_is_described(self):
         ids = [i["id"] for i in self.items]
@@ -58,13 +69,67 @@ class CatalogTests(unittest.TestCase):
 
     def test_every_new_page_is_in_the_catalog(self):
         paths = {i["path"].split("?")[0] for i in self.items}
-        for page in ("/devsecops", "/cyber-risk", "/hunting", "/soar", "/ai-security", "/firewall", "/access-governance", "/zero-day-watch", "/grc", "/threat-models", "/ai-usage", "/controls", "/api-security"):
+        for page in ("/devsecops", "/cyber-risk", "/hunting", "/soar", "/ai-security", "/firewall", "/access-governance", "/zero-day-watch", "/grc", "/threat-models", "/ai-usage", "/controls", "/api-security",
+                     "/soc", "/dark-web-watch", "/appsec", "/infrastructure", "/applications", "/fix-prs", "/queue", "/remediation-approvals"):
             self.assertIn(page, paths)
 
     def test_the_page_module_each_route_loads_exists(self):
         src = (JS / "app.js").read_text(encoding="utf-8")
         for mod in re.findall(r'import\("\./pages/([A-Za-z0-9_-]+)\.js"\)', src):
             self.assertTrue((JS / "pages" / f"{mod}.js").exists(), mod)
+
+
+def nav_modules():
+    """{module id: [item paths including connectors]} read from nav.js (the sidebar's one definition)."""
+    src = (JS / "nav.js").read_text(encoding="utf-8")
+    block = src[src.index("export const NAV = ["):src.index("// Splits a nav item")]
+    out = {}
+    for m in re.finditer(r'\{ group: "[^"]+", id: "([a-z]+)"(.*?)(?=\n  \{ group:|\n\];)', block, re.S):
+        out[m.group(1)] = re.findall(r'path: "([^"]+)"', m.group(2))
+    return out
+
+
+class SidebarModuleTests(unittest.TestCase):
+    """The sidebar and the All modules catalog are two views of the same eight modules and must not drift apart."""
+
+    def setUp(self):
+        self.nav = nav_modules()
+        self.cat = {d["id"]: d for d in capabilities.catalog()}
+
+    def test_the_same_modules_in_the_same_order(self):
+        self.assertEqual([k for k in self.nav if k not in ("home", "help")], list(self.cat))
+        self.assertEqual(list(self.nav)[0], "home")
+        self.assertEqual(list(self.nav)[-1], "help")
+
+    def test_every_catalog_page_is_in_its_module_in_the_sidebar(self):
+        for mid, area in self.cat.items():
+            for g in area["groups"]:
+                for i in g["items"]:
+                    self.assertIn(i["path"].split("?")[0], {p.split("?")[0] for p in self.nav[mid]}, f"{i['path']} is in module {mid} of the catalog but not of the sidebar")
+            for c in area["connectors"]:
+                self.assertIn(c["path"], self.nav[mid], f"connector {c['path']} missing from {mid}")
+
+    def test_every_sidebar_path_opens_a_real_page_and_appears_once_per_module(self):
+        pats = routes()
+        for mid, paths_ in self.nav.items():
+            self.assertEqual(len(paths_), len(set(paths_)), f"duplicate entry in {mid}")
+            for p in paths_:
+                self.assertTrue(any(r.match(p.split("?")[0]) for r in pats), f"{p} has no route")
+
+    def test_no_page_was_lost_in_the_reorganisation(self):
+        every = {p.split("?")[0] for ps in self.nav.values() for p in ps}
+        for page in ("/", "/queue", "/remediate", "/remediation-approvals", "/assignments", "/ownership", "/exceptions", "/assets", "/risk", "/risk/blast-radius", "/vulnerability-mapping", "/asset-mapping",
+                     "/compensating-controls", "/attack-paths", "/dependencies", "/applications", "/ml-insights", "/activity-log", "/priority-rules", "/exploit-criteria", "/notification-settings",
+                     "/remediation-policy", "/asset-policy", "/admin/people", "/admin", "/connections", "/adaptors", "/run", "/reports", "/support", "/faq", "/ai-assist", "/ask", "/inbox", "/capabilities",
+                     "/appsec", "/infrastructure", "/ot-vulnerabilities", "/ai-vulnerabilities", "/certificate-vulnerabilities", "/quantum-readiness", "/threat-intel", "/quanta-scan",
+                     "/hunting", "/soc", "/soar", "/dark-web-watch", "/devsecops", "/fix-prs", "/pipeline-gates", "/secure-design", "/zero-day-watch", "/firewall", "/controls", "/grc", "/cyber-risk",
+                     "/threat-models", "/ai-security", "/api-security", "/ai-usage", "/access-governance"):
+            self.assertIn(page, every, f"{page} is no longer reachable from the sidebar")
+
+    def test_the_connector_pages_are_reachable_from_the_module_they_feed(self):
+        every = {p for ps in self.nav.values() for p in ps}
+        for page in ("/tenable", "/qualys", "/openvas", "/prismacloud", "/cortex-xsiam", "/infoblox", "/axonius", "/active-directory", "/servicenow", "/jira", "/splunk", "/xdr"):
+            self.assertIn(page, every, page)
 
 
 class BuildTests(unittest.TestCase):
@@ -140,7 +205,8 @@ class CapabilitiesApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         admin_ids = {i["id"] for a in r.json()["areas"] for g in a["groups"] for i in g["items"]}
         self.assertTrue(user_ids < admin_ids)
-        self.assertEqual(len(r.json()["areas"]), 5)
+        self.assertEqual([a["id"] for a in r.json()["areas"]], ["soc", "appsec", "devsecops", "infra", "ai", "remediation", "grc", "admin"])
+        self.assertTrue(all("connectors" in a for a in r.json()["areas"]))
 
 
 if __name__ == "__main__":

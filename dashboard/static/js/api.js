@@ -250,6 +250,7 @@ export const api = {
   aiSecurityDelete: (id) => request("DELETE", `/api/ai-security/assets/${id}`),
   aiSecurityImport: () => request("POST", "/api/ai-security/import-discovered", {}),
   aiSecurityPublish: (body) => request("POST", "/api/ai-security/publish", body),
+  license: () => request("GET", "/api/license"),
   apiSecOverview: () => request("GET", "/api/api-security/overview"),
   apiSecEndpoints: (params) => request("GET", `/api/api-security/endpoints?${new URLSearchParams(params || {})}`),
   apiSecEndpoint: (id) => request("GET", `/api/api-security/endpoints/${id}`),

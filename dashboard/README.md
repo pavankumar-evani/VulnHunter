@@ -122,6 +122,25 @@ empty state with instructions instead of erroring.
   wired into every major table page (Code Scan, Queue, Remediation Plan, Exceptions,
   Asset Inventory, Risk dashboard).
 
+## How the app is organised: eight modules
+
+The app is eight numbered modules (plus Home and Help), and the sidebar shows **one module at a time**. With no module chosen it is a picker (the eight modules, one line each). Open a module, or any
+page that belongs to one, and the sidebar shows only that module - its pages, then the connectors that feed it; the other modules are not listed (a "Switch module" control opens them on request, and
+"All modules" returns to the picker). The choice is remembered (`localStorage` key `quanta.module`). **All modules** (`/capabilities`) is the matching landing page with what each module holds right now
+and what to connect when it is empty. A module the licence does not cover is shown locked in the picker and never opens (see [docs/LICENSING.md](../docs/LICENSING.md)).
+The sidebar is defined in `static/js/nav.js`, the catalog in `remediation/config/capabilities.yaml` and the licence map in `remediation/config/licensing.yaml`; tests keep the three in step.
+
+| # | Module | What is in it | Connectors that feed it |
+|---|---|---|---|
+| 1 | Threat Detection & Response | SOC Operations (cases, L1/L2/L3), Alert Triage, Threat Hunting, Detection Engineering, Threat Intelligence and Intel Intake, Dark Web Watch, SOAR Playbooks | Splunk, Cortex XSIAM, CrowdStrike, search / reputation / response endpoints |
+| 2 | Application Security | Application Vulnerabilities (SAST, DAST, SCA, secrets, containers), Code Scan, API Security, Threat Models | Scanner uploads (SARIF, coverage), Prisma Cloud |
+| 3 | DevSecOps & Supply Chain | Control Library, Code Fix Queue, Applications & SBOM, Dependencies, Fix Pull Requests, Pipeline Gates, Secure Design | GitHub, GitLab, OSV |
+| 4 | Infrastructure & Exposure | Infrastructure, OT, Certificate and Quantum-readiness views, Zero-day Watch, Compensating and Security Controls, Firewall Rules, Attack Chains, Blast Radius, Assets, Asset and Vulnerability Mapping | Tenable, Qualys, OpenVAS, Prisma Cloud, Infoblox, Axonius, Active Directory |
+| 5 | AI Security | AI Vulnerabilities, AI Security posture, AI Usage | AI usage connectors |
+| 6 | Remediation & Workflow | Remediation Queue, Plan, Approvals, Assignments, Ownership Analytics, Exceptions, Run Pipeline | ServiceNow, Jira, Splunk |
+| 7 | Risk, Governance & Compliance | Risk Dashboard, Cyber Risk, Risk & Compliance, ML Insights, Access Governance, Reports, Activity Log | Entitlement and HR imports |
+| 8 | Administration | Connections, Connectors catalog, policies, notifications, Users & Teams, Admin Settings | - |
+
 ## Pages
 
 | Route | Shows |
@@ -157,6 +176,7 @@ empty state with instructions instead of erroring.
 | `/tenable`, `/qualys` | Tenable.io and Qualys VMDR Test Connection + Fetch pages - CVE-scoped host-vulnerability pull connectors; Fetch writes a raw export file, still needing `/remediate <file>` to reach this dashboard's own pages (asset-type classification needs judgment - see `docs/GOING_LIVE.md`) |
 | `/prismacloud`, `/cortex-xsiam` | Prisma Cloud and Cortex XSIAM Test Connection + Fetch pages - posture/correlated-detection pull connectors (not CVE-scoped); Fetch writes already-normalized findings straight to `remediation/live-data/`, deliberately not auto-merged into the live queue |
 | `/infoblox`, `/axonius`, `/active-directory` | Infoblox NIOS, Axonius, and Active Directory (LDAP) Test Connection + Fetch pages - asset-discovery pull connectors; Fetch reconciles real ip/mac into the asset inventory (`asset_inventory.reconcile_pulled_assets()`), not vulnerability findings |
+| `/api-security` | API Security (admin) - inventory from OpenAPI uploads and imported gateway/WAF/access logs (shadow and deprecated endpoints, generated spec), OWASP API Top 10 (2023) findings with an evidence chain and a cURL request to confirm, caller activity, import of your own data-classification framework, monitor/block protection policies sent as signed requests to an endpoint you own (second-administrator approval for block, audit trail, change alerts, AWS WAF / Cloud Armor review rules), endpoint metrics, CI results gate and the onboarding checklist. Quanta never changes a WAF. See [docs/API_SECURITY.md](../docs/API_SECURITY.md) |
 | `/run` | Form to trigger a pipeline run (dry-run by default), plus recent-run audit log |
 | `/reports` | Generate a real, downloadable KPI/SLA/coverage snapshot report (daily through yearly framing) |
 | `/support` | In-app ITSM service desk (tickets in the local database: impact x urgency priority, rule-based team routing, SLA clocks, team-agent queues, finding links, analytics, optional email escalation via `QUANTA_SUPPORT_EMAIL`), plus known limitations and a before-you-file checklist |

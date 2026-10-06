@@ -658,9 +658,23 @@ source `ai-security` (asset type `ai-ml-system`, a complete set each time).
 `config/iam_policy.yaml`): entitlement and HR-roster intake; findings IAM001-IAM007 (leavers with access, dormant, unowned, too many privileged systems,
 separation of duties, shared accounts, never used); manager access reviews (a revoke is a recorded decision, the identity team acts); SoD pre-check.
 
-**Capabilities page** (`remediation/capabilities.py`, `config/capabilities.yaml`, page `/capabilities`): five selectable areas (1 vulnerability
-management and DevSecOps, 2 cyber risk, 3 detection/hunting and AI security, 4 L1 SOC with SOAR, 5 other) listing each capability with a live count and
-what to connect when it is empty. Add a capability to the YAML and it appears.
+**Module layout** (sidebar `dashboard/static/js/nav.js`, catalog `remediation/config/capabilities.yaml`): the app is organised into eight modules - 1 Threat Detection & Response (SOC, hunting, detection
+engineering, threat intel, SOAR), 2 Application Security, 3 DevSecOps & Supply Chain, 4 Infrastructure & Exposure, 5 AI Security, 6 Remediation & Workflow, 7 Risk, Governance & Compliance, 8 Administration -
+plus Home and Help. `nav.js` shows ONE module at a time: a picker when none is chosen, otherwise only the chosen module (its pages, then its `connectors`), with the others behind "Switch module". The module of the
+current route wins and is remembered in `localStorage` key `quanta.module`; /capabilities with no `area` clears it. `setLicense()`/`isLicensed()` lock modules the licence does not cover (picker shows
+them locked; `app.js` refuses their pages). `capabilities.yaml` uses the same module ids and also lists `connectors`; the "All modules" page
+(`/capabilities?area=<id>`) renders them. When you add a page, add it to the right module in BOTH files - `tests/test_capabilities.py` (`SidebarModuleTests`) fails if the module ids, a catalog page
+or a connector page are missing from the sidebar, or a sidebar path has no route.
+
+**Module licensing** (`remediation/licensing/license.py`, `config/licensing.yaml`, `cli/quanta_license.py`, `GET /api/license`; reference `docs/LICENSING.md`): the licence unit is the module. A licence is an
+Ed25519-signed claim set (customer, edition label, modules, issued, expires, optional grace_days) verified offline against the vendor public key (`QUANTA_LICENSE` / `QUANTA_LICENSE_FILE`,
+`QUANTA_LICENSE_PUBLIC_KEY_FILE`); nothing is sent anywhere. `QUANTA_LICENSE_MODE` is `off` (default: nothing checked), `warn` (reported, never blocks) or `enforce` (a middleware answers 403 for a route of an
+unlicensed module). `licensing.yaml` maps every API route prefix to `core` or a module (longest prefix; `shared` prefixes need any one of several modules) and a test fails if an API route has no entry,
+so add new route prefixes there when you add a feature. Core (sign-in, findings store, support, connections, administration) is never blocked. An expired licence keeps working for a grace period, then only core
+remains. A technical guardrail and a clear contract, not copy protection; never used with a real issued licence.
+
+**Capabilities page / All modules** (`remediation/capabilities.py`, `config/capabilities.yaml`, page `/capabilities`): the eight modules above, each listing its capabilities with a live count,
+what to connect when it is empty, and its connectors. Add a capability to the YAML and it appears.
 
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /

@@ -1,0 +1,133 @@
+# Module licensing: which API routes belong to which licensable module, the editions the issuing tool offers as shortcuts, and the enforcement defaults.
+# See docs/LICENSING.md. The module ids are the eight modules of the sidebar (dashboard/static/js/nav.js) and the All modules page (capabilities.yaml);
+# a test keeps the three in step and fails when an API route has no entry here, so a new feature cannot be shipped outside the licence by accident.
+
+# off: nothing is checked (the default, and what a self-hosted evaluation runs as).
+# warn: the licence is read and reported (GET /api/license, the All modules page) but nothing is blocked.
+# enforce: a route of a module the licence does not cover answers 403.
+# Override with QUANTA_LICENSE_MODE. The licence itself comes from QUANTA_LICENSE (the token) or QUANTA_LICENSE_FILE, verified against the vendor public key in
+# QUANTA_LICENSE_PUBLIC_KEY_FILE (or remediation/licensing/vendor_public_key.pem when that file is shipped).
+mode: off
+expiring_days: 30      # report "expiring" this many days before the end date
+grace_days: 14         # after the end date the modules keep working for this long (the licence can override it per customer)
+
+# Always available whatever the licence says: signing in, the platform shell, the findings store every module writes into, support, and the administration needed to apply a licence.
+core:
+  - /api/auth
+  - /api/status
+  - /api/license
+  - /api/capabilities
+  - /api/overview
+  - /api/queue
+  - /api/findings
+  - /api/search
+  - /api/notifications
+  - /api/support
+  - /api/teams
+  - /api/assignable-users
+  - /api/directory
+  - /api/connections
+  - /api/api-keys
+  - /api/admin
+  - /api/export
+  - /api/analytics
+  - /api/guidance
+  - /api/ai-assist
+  - /api/ai-trend-analysis
+  - /api/priority-rules
+  - /api/exploit-criteria
+  - /api/alert-rules
+  - /api/notification-settings
+  - /api/report-schedule
+  - /api/asset-policy
+  - /api/ingest/findings
+  - /api/ingest/scanner-csv
+  - /api/ingest/sarif
+  - /api/ingest/coverage
+  - /api/ingest/generic
+
+# A route belongs to the module whose prefix is its longest match. A prefix under `shared` is available when ANY of the listed modules is licensed.
+modules:
+  soc:
+    - /api/soc
+    - /api/hunting
+    - /api/detections
+    - /api/soar
+    - /api/darkweb
+    - /api/threat-intel
+    - /api/cortex-xsiam
+    - /api/ingest/alerts
+    - /api/ingest/threat-intel
+    - /api/ingest/darkweb
+  appsec:
+    - /api/api-security
+    - /api/threat-models
+    - /api/quanta-scan
+    - /api/ingest/api-traffic
+    - /api/ingest/openapi
+    - /api/ingest/api-test-results
+    - /api/inbound/api-policy-status
+  devsecops:
+    - /api/devsecops
+    - /api/applications
+    - /api/gitops
+    - /api/gate
+    - /api/pipeline-gates
+    - /api/secure-design
+    - /api/dependencies
+    - /api/ingest/sbom
+    - /api/inbound/pr-status
+    - /api/inbound/git-webhook
+  infra:
+    - /api/tenable
+    - /api/qualys
+    - /api/openvas
+    - /api/infoblox
+    - /api/axonius
+    - /api/active-directory
+    - /api/assets
+    - /api/firewall
+    - /api/controls
+    - /api/zero-day-watch
+    - /api/attack-paths
+    - /api/quantum-readiness
+    - /api/ingest/controls
+  ai:
+    - /api/ai-security
+    - /api/ai-usage
+    - /api/ai-vulnerabilities
+    - /api/ingest/ai-usage
+    - /api/ingest/otlp
+  remediation:
+    - /api/remediate
+    - /api/remediation-approvals
+    - /api/remediation-policy
+    - /api/remediation-metrics
+    - /api/remediation-verification
+    - /api/assignments
+    - /api/exceptions
+    - /api/run
+    - /api/playbooks
+    - /api/servicenow
+    - /api/jira
+    - /api/inbound/ticket-status
+  grc:
+    - /api/grc
+    - /api/cyber-risk
+    - /api/ml-insights
+    - /api/iam
+    - /api/reports
+    - /api/activity-log
+  admin: []
+
+shared:
+  /api/prismacloud: [infra, appsec]
+  /api/splunk: [soc, remediation]
+  /api/risk: [infra, grc]
+
+# Convenience bundles for the issuing tool (cli/quanta_license.py --edition). They are NOT prices and not the source of truth: a licence lists its modules explicitly.
+editions:
+  secops: [soc, infra, remediation]
+  appsec: [appsec, devsecops, remediation]
+  platform: [infra, remediation, grc]
+  enterprise: [soc, appsec, devsecops, infra, ai, remediation, grc]

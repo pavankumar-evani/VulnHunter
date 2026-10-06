@@ -6,6 +6,28 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Added
+- **Module licensing** (`remediation/licensing/`, `docs/LICENSING.md`): the module is the licence unit. Ed25519-signed, offline-verifiable licences (`cli/quanta_license.py` keygen / issue / verify), modes off (default) /
+  warn / enforce, a 403 for routes of an unlicensed module, `GET /api/license`, locked modules in the sidebar picker and on All modules, and a route-to-module map in `config/licensing.yaml` that a test keeps complete.
+
+### Changed
+- **The app is organised into eight modules.** The flat ~75-link sidebar (with 25 unrelated pages under "Connectors / Adaptors") is replaced by numbered, collapsible modules: Threat Detection &
+  Response (SOC, hunting, detection engineering, threat intel, SOAR), Application Security, DevSecOps & Supply Chain, Infrastructure & Exposure, AI Security, Remediation & Workflow, Risk, Governance &
+  Compliance and Administration, plus Home and Help. The sidebar shows ONE module at a time (a picker when none is chosen; "Switch module" or "All modules" to change; the choice is remembered), and each module
+  ends with the connectors that feed it; hunting, detection and alert triage are separate entries (tab deep links). "Capabilities" became "All modules" and uses the same eight modules with a connectors section per module. No page was removed
+  (`SidebarModuleTests` checks every page and connector is still reachable and that the sidebar and the catalog agree).
+
+### Added
+- **API security** (`remediation/apisec/`, page `/api-security`, admin only; `docs/API_SECURITY.md`): an API inventory built from OpenAPI/Swagger uploads or URL fetches and
+  imported gateway, WAF or access logs (JSON lines, array, common/combined log format, CSV, or pushed records), with shadow and deprecated-endpoint drift and a specification
+  generated from observed traffic; OWASP API Security Top 10 (2023) findings with an evidence chain and a placeholder-only cURL request to confirm each, published to the queue
+  (scan type DAST) with curated fix guidance matched by rule id; caller investigation; data sensitivity taken only from the customer's imported classification framework
+  (unmapped data is "unclassified"); monitor/block protection policies (block needs a second administrator) sent as signed requests to a customer-owned endpoint, with an audit
+  trail, per-policy change alerts, edge results reported back, and AWS WAF / Cloud Armor rules to review (Quanta changes no WAF); endpoint metrics (error rate = errors / calls)
+  with trend; a CI results gate (`/api/ingest/api-test-results`, GitHub Actions and GitLab CI examples, DevSecOps control `api-security-testing`); and an onboarding checklist with
+  two rollout orders. New `api:write` API-key scope and `api-policy-endpoint` connection type. Built against public documentation and unit-tested with fakes (104 tests); never run
+  against a live gateway, WAF or traffic source.
+
 ### Fixed
 - **Flaky CI test on `tests/test_file_lock.py`**: `test_without_the_lock_concurrent_increments_are_unsafe`
   relied on a `time.sleep()`-widened race actually manifesting within 50 iterations
