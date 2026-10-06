@@ -9,22 +9,21 @@
 # GitHub generates automatically from the dependency graph regardless of this file.
 version: 2
 updates:
+  # The four Python requirements files share pins (ldap3, pyyaml, requests, scikit-learn) and the Dockerfile installs them together in one pip
+  # command, so a bump to one file only fails the image build ("ResolutionImpossible"). One entry covers all four directories and one group keeps every
+  # bump to the same dependency in the same pull request.
   - package-ecosystem: "pip"
-    directory: "/dashboard"
+    directories:
+      - "/dashboard"
+      - "/remediation/config"
+      - "/remediation/connectors"
+      - "/remediation/enrichment"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "pip"
-    directory: "/remediation/config"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "pip"
-    directory: "/remediation/connectors"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "pip"
-    directory: "/remediation/enrichment"
-    schedule:
-      interval: "weekly"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
