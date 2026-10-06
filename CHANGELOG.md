@@ -6,6 +6,12 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 
 ## [Unreleased]
 
+### Fixed
+- **A lock-stealing race in the file lock** (`remediation/utils/file_lock.py`): a lock older than the waiter's own timeout (5 s) was treated as abandoned and deleted, even when its holder was alive and only slow.
+  On Linux that put two writers in one critical section, so creating the schema on a slow runner raised `table alert_state already exists` and the concurrency tests lost records (19 of 20), which showed up as
+  intermittent red CI runs. A lock now records its owner (process id and host) and is reclaimed only when that process is gone; a live holder is never robbed, and a lock with no readable owner keeps the age rule.
+  Schema creation waits up to 120 s. A lock file that had been committed to the repository is removed and `*.lock` is ignored.
+
 ### Added
 - **Module licensing** (`remediation/licensing/`, `docs/LICENSING.md`): the module is the licence unit. Ed25519-signed, offline-verifiable licences (`cli/quanta_license.py` keygen / issue / verify), modes off (default) /
   warn / enforce, a 403 for routes of an unlicensed module, `GET /api/license`, locked modules in the sidebar picker and on All modules, and a route-to-module map in `config/licensing.yaml` that a test keeps complete.

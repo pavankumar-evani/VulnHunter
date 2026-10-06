@@ -1221,7 +1221,7 @@ def ensure_schema(engine):
     against a fresh on-disk DB hit it directly). This lock is scoped to schema
     creation specifically, separate from every store's own lock, since it's the one
     piece every store's first-ever access shares."""
-    with FileLock(_SCHEMA_LOCK_PATH, local=True), _cluster_schema_lock(engine):
+    with FileLock(_SCHEMA_LOCK_PATH, timeout=120.0, local=True), _cluster_schema_lock(engine):   # creating every table can take seconds on a slow disk
         metadata.create_all(engine, tables=[
             alert_state, schedule_state, exceptions, remediation_approvals,
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
