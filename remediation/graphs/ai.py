@@ -23,7 +23,7 @@ import datetime
 from remediation.aisec import store as aisec_store
 from remediation.aiusage import discovery
 from remediation.aiusage import store as usage_store
-from remediation.graphs.schema import SEVERITIES, GraphBuilder
+from remediation.graphs.schema import SEVERITIES, GraphBuilder, prov
 from remediation.utils import db as db_module
 
 MODULE = "ai"
@@ -35,6 +35,14 @@ SYSTEM_KINDS = ("application", "agent", "gateway")
 SIDE_EFFECT_TOOLS = ("write", "external-send", "destructive", "financial")
 # register kind -> graph node kind
 OTHER_KINDS = {"model": "model", "mcp-server": "mcp-server", "plugin": "tool", "vector-db": "data-source", "dataset": "data-source"}
+_REGISTER = prov(source="AI security register", source_kind="user", confidence="declared")
+
+
+def _usage(ev):
+    """Provenance of a link seen in a recorded usage event."""
+    return prov(source=ev.get("source"), observed_at=ev.get("ts"), confidence="observed")
+
+
 PAGE = {"system": "/ai-security", "model": "/ai-security", "provider": "/ai-usage", "tool": "/ai-security", "mcp-server": "/ai-security",
         "data-source": "/ai-security", "shadow": "/ai-usage"}
 
@@ -106,11 +114,11 @@ def build(engine=None, findings=None, **context):
 
     done = set()
 
-    def link(src, dst, kind, label):
+    def link(src, dst, kind, label, p=None):
         """One edge per (source, target, kind); the target's weight counts how many systems use it."""
         if (src, dst, kind) not in done:
             done.add((src, dst, kind))
-            g.edge(src, dst, kind, label)
+            g.edge(src, dst, kind, label, prov=p)
             g.node(dst, "", "", weight=1)  # merged into the existing node: weight = number of systems that use it
 
     def used(kind, name, meta=None, sev=None):
@@ -131,17 +139,17 @@ def build(engine=None, findings=None, **context):
     for key, (sid, a) in sorted(systems.items()):
         ln = links.get(key, {})
         if a.get("vendor_model"):
-            link(sid, used("model", a["vendor_model"]), "runs", "runs")
+            link(sid, used("model", a["vendor_model"]), "runs", "runs", _REGISTER)
         for name in _names(ln.get("provider") or a.get("provider")):
-            link(sid, provider(name), "hosted_by", "hosted by")
+            link(sid, provider(name), "hosted_by", "hosted by", _REGISTER)
         sources = _entries(ln.get("data_sources")) + _entries(a.get("data_sources"))
         tools = _entries(ln.get("tools")) + _entries(a.get("tools"))
         untrusted = a.get("untrusted_input") is True or a.get("uses_rag") is True or any(d.get("trusted") is False for d in sources)
         for srv in _entries(ln.get("mcp_servers")) + _entries(a.get("mcp_servers")):
             weak = srv.get("transport") == "http" and srv.get("auth") == "none"
-            link(sid, used("mcp-server", srv["name"], {"transport": srv.get("transport"), "auth": srv.get("auth")}, "high" if weak else None), "can_call", "can call")
+            link(sid, used("mcp-server", srv["name"], {"transport": srv.get("transport"), "auth": srv.get("auth")}, "high" if weak else None), "can_call", "can call", _REGISTER)
         for src in sources:
-            link(sid, used("data-source", src["name"], {"trusted": src.get("trusted")}), "reads", "reads")
+            link(sid, used("data-source", src["name"], {"trusted": src.get("trusted")}), "reads", "reads", _REGISTER)
         for tool in tools:
             effect = tool.get("side_effect")
             bad = effect in SIDE_EFFECT_TOOLS and tool.get("requires_approval") is False
@@ -150,11 +158,11 @@ def build(engine=None, findings=None, **context):
             if bad and untrusted:
                 g.node(tid, "", "", weight=0, meta={"untrusted_path": True})
                 g.node(sid, "", "", weight=0, meta={"untrusted_path": True})
-            link(sid, tid, "can_call", "can call")
+            link(sid, tid, "can_call", "can call", _REGISTER)
             if tool.get("server"):
-                link(tid, used("mcp-server", tool["server"]), "served_by", "served by")
+                link(tid, used("mcp-server", tool["server"]), "served_by", "served by", _REGISTER)
             for name in _entries(tool.get("reads")):
-                link(tid, used("data-source", name["name"]), "reads", "reads")
+                link(tid, used("data-source", name["name"]), "reads", "reads", _REGISTER)
 
     # Recorded usage: the application name ties a system to the model and provider it was actually seen using
     seen = set()
@@ -165,10 +173,10 @@ def build(engine=None, findings=None, **context):
         sid = systems[key][0]
         if ev.get("model") and (sid, "m", _slug(ev["model"])) not in seen:
             seen.add((sid, "m", _slug(ev["model"])))
-            link(sid, used("model", ev["model"]), "runs", "runs")
+            link(sid, used("model", ev["model"]), "runs", "runs", _usage(ev))
         if ev.get("provider") and (sid, "p", _slug(ev["provider"])) not in seen:
             seen.add((sid, "p", _slug(ev["provider"])))
-            link(sid, provider(ev["provider"]), "hosted_by", "hosted by")
+            link(sid, provider(ev["provider"]), "hosted_by", "hosted by", _usage(ev))
 
     # Unreviewed applications found in traffic, joined to a provider already in the graph by name or domain, else to the service itself
     for app in shadows:
