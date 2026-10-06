@@ -237,6 +237,9 @@ export const api = {
   devsecopsFactory: () => request("GET", "/api/devsecops/factory"),
   devsecopsQueue: (body) => request("POST", "/api/devsecops/factory/queue", body),
   devsecopsUpdateItem: (id, body) => request("PUT", `/api/devsecops/factory/${encodeURIComponent(id)}`, body),
+  cvdAdvisories: () => request("GET", "/api/cvd/advisories"),
+  cvdTest: () => request("POST", "/api/cvd/test-connection", {}),
+  cvdFetch: (body) => request("POST", "/api/cvd/fetch", body),
   zeroDayWatch: (days) => request("GET", `/api/zero-day-watch?days=${days}`),
   firewallOverview: () => request("GET", "/api/firewall/overview"),
   firewallDeleteDevice: (d) => request("DELETE", `/api/firewall/devices/${encodeURIComponent(d)}`),
@@ -365,6 +368,8 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request("GET", `/api/activity-log${qs ? `?${qs}` : ""}`);
   },
+  integrity: () => request("GET", "/api/integrity"),
+  integrityHeal: (confirm, actions) => request("POST", "/api/integrity/heal", { confirm, actions: actions || null }),
   activityLogInsights: () => request("GET", "/api/activity-log/insights"),
   getAssetPolicy: () => request("GET", "/api/asset-policy"),
   saveAssetPolicy: (rulesText) => request("POST", "/api/asset-policy", { rules_text: rulesText }),
