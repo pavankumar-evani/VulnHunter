@@ -13,9 +13,9 @@ A self-hosted security operations platform that turns scanner noise into a ranke
 
 [About](#-about) · [Quick start](#-quick-start) · [Pick your path](#-pick-your-path) · [Modules](#-the-eight-modules) · [How it works](#-how-it-works) · [Safety](#-the-safety-model) · [Compared with other tools](#-how-quanta-compares) · [Docs](#-documentation-map)
 
-<img src="docs/images/dependency-graph.png" alt="Quanta's interactive dependency and exposure graph: the path from the internet through a WAF, load balancer and firewall into an application, then its dependencies, with a vulnerable package selected and its fix shown" width="900">
+<img src="docs/images/modules/home-modules.webp" alt="Quanta's All modules page: the eight modules (Threat Detection & Response, Application Security, DevSecOps & Supply Chain, Infrastructure & Exposure, AI Security, Remediation & Workflow, Risk, Governance & Compliance, Administration), each with what it holds right now and what to connect when it is empty" width="900">
 
-<sub>The dependency and exposure graph, on the bundled demo data (a fictional application). Click a package for its findings, the version that fixes it, and what depends on it.</sub>
+<sub>The All modules page: pick one of the eight modules and the application shows only that module, with live counts and what to connect when it is empty.</sub>
 
 </div>
 
@@ -630,7 +630,7 @@ Several sessions can work in parallel: [BRANCHES.md](BRANCHES.md) says which bra
 
 ## Disclaimer
 
-The sample data is fictional: hostnames, IP addresses and device names are made up, and the CVE IDs are real public ones used only to make the guidance realistic. No exploit code is included.
+Screenshots in this README were taken with the built-in simulation, which replays vendor-format responses through the real connectors so every module has data to show; in a deployment the data comes from your own connected sources. Simulated records are labelled as such and never overwrite live ones. The CVE IDs are real public ones. No exploit code is included.
 Generated playbooks in `remediation/output/` are unreviewed drafts and must never run against real infrastructure without human review and, where flagged, formal change approval.
 
 <div align="center"><sub>© 2026 Quanta. All rights reserved. Proprietary and confidential; see <a href="LICENSE">LICENSE</a>.</sub></div>
