@@ -41,6 +41,7 @@ import reports  # noqa: E402
 import quanta as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
+from remediation import graphs as module_graphs  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
@@ -619,6 +620,21 @@ def api_queue(user: dict = Depends(rbac.get_current_user)):
 def api_attack_paths(user: dict = Depends(rbac.get_current_user)):
     scoped = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
     return _fast_json({"chains": dashboard_data.get_attack_chains(scoped)})
+
+
+_GRAPH_ADMIN_MODULES = {"soc", "appsec", "ai", "grc", "admin"}   # the pages these graphs summarise are administrator pages
+
+
+@app.get("/api/graphs/{module}")
+def api_module_graph(module: str, request: Request, user: dict = Depends(rbac.get_current_user)):
+    """One module's relationship graph (remediation/graphs), built from that module's stored data and the findings the caller may see.
+    Graph theory (clusters, choke points, single points of failure) is computed in the browser; this only says what is connected to what."""
+    if module not in module_graphs.MODULES:
+        raise HTTPException(status_code=404, detail="Unknown module")
+    if module in _GRAPH_ADMIN_MODULES:
+        rbac.require_admin(request)
+    findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    return _fast_json(module_graphs.build(module, findings=findings))
 
 
 @app.get("/api/dependencies")

@@ -75,6 +75,7 @@ const routes = [
   { pattern: /^\/compensating-controls\/?$/, load: () => import("./pages/compensatingControls.js") },
   { pattern: /^\/attack-paths\/?$/, load: () => import("./pages/attackPaths.js") },
   { pattern: /^\/dependencies\/?$/, load: () => import("./pages/dependencies.js") },
+  { pattern: /^\/graphs\/?$/, load: () => import("./pages/graphs.js") },
   { pattern: /^\/applications\/?$/, load: () => import("./pages/applications.js") },
   { pattern: /^\/fix-prs\/?$/, load: () => import("./pages/fixPrs.js") },
   { pattern: /^\/pipeline-gates\/?$/, load: () => import("./pages/pipelineGates.js") },
