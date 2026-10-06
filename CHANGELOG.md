@@ -15,6 +15,13 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
   jitter instead of in lockstep. Twenty simultaneous writers under heavy CPU load used to lose 7 or 8 of their writes to `LockTimeoutError` (the intermittent failures of the concurrency tests); all twenty now land.
 
 ### Added
+- **Ontology, provenance and multi-hop questions** (`remediation/ontology/`, `remediation/config/ontology.yaml`, `ontology_questions.yaml`, `docs/ONTOLOGY.md`): a typed vocabulary over the data Quanta already holds
+  (classes with is-a, relations with domain/range, transitive and inverse axioms, cardinalities, and how each module graph maps onto it); `validate.py`, a SHACL-like conformance report (unknown class or relation,
+  domain/range, required attribute, attribute type, cardinality, dangling edge, invalid provenance) that never changes or drops data; optional `prov` on graph nodes and edges (source, source_kind, observed_at,
+  confidence; absent means unknown, and existing graph output is unchanged) with builders filling it only where stored data says so, and a Fact view; one whole-estate graph assembled from the module builders plus findings,
+  vulnerabilities and the controls inventory; and a bounded, typed path-query engine (structured JSON patterns parsed against the ontology, no expression language, depth/size/work caps, an honest reason on an empty result)
+  with five named questions. Routes `GET /api/ontology`, `/questions`, `/validate` (admin), `POST /api/ontology/query` (admin); an Ontology section on the Relationship graphs page that checks conformance and lights
+  question result paths on the graph. Nothing is stored, trained or sent; built and tested against fixtures, not clicked through in a browser yet.
 - **Environments and releases** (`remediation/utils/environment.py`, `VERSION`, `cli/quanta_release.py`, `remediation/config/features.yaml`, `deploy/helm/quanta/values-{dev,test,prod}.yaml`, `docker-compose.{dev,test}.yml`, `.github/workflows/release.yml` and `rollback.yml`, `docs/ENVIRONMENTS.md`, `docs/RELEASE_PROCESS.md`):
   `QUANTA_ENV` (dev, test, prod; a typo is an error, not a silent dev), one immutable image promoted unchanged through the three with only configuration changing, a DEV or TEST banner and the version and build in the footer,
   `GET /api/status` and `GET /api/features`, per-environment feature flags (a feature starts in dev, then test, then prod), a release preflight (`quanta_release.py check --target prod` fails on a short session secret, bundled sample data, simulation on, pending
