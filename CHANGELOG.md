@@ -7,6 +7,10 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Proactive hunt engine** (`remediation/hunting/engine/`, `docs/HUNT_ENGINE.md`, `GET/POST /api/hunting/suggestions*`, migration 7, tables `hunt_hypotheses` and `hunt_hypothesis_events`,
+  policy `remediation/config/hunt_engine.yaml`): hypothesis-driven suggestions (intel, coverage gaps, baseline/anomaly, exposure, identity, lessons learned, dark web, model-assisted) with the
+  evidence chain, ATT&CK tactics, data readiness ("cannot tell" rather than guessing), SPL/KQL/Sigma leads, a scored priority with its working, a lifecycle through accept (creates the existing hunt),
+  conclude and promote-to-detection, dismissal memory and a learning loop from past outcomes. The Threat Hunting page opens on a "Suggested hunts" tab. Nothing is run automatically.
 - **Integrity checks and safe self-heal** (`remediation/integrity/`, `docs/INTEGRITY.md`, `GET /api/integrity`, `POST /api/integrity/heal`, `quanta-admin integrity-manifest` and `check-integrity [--heal --confirm]`): a SHA-256 manifest of the code and shipped config
   built at image build time (code must not change; `remediation/config/*.yaml` policy is expected to, with the editor named where the activity log has one; no manifest reports "no baseline", never "ok"), store consistency checks (schema vs migrations,
   missing tables, findings file validity and `.bak`, orphaned assignments and approvals, stale locks, file snapshot divergence, SQLite integrity or PostgreSQL probe, disk, clock, API key and licence expiry) and four repairs that preview unless confirmed and
