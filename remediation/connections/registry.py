@@ -9,8 +9,14 @@ Every `pull` returns one of:
 Hosts and URLs are checked with the SSRF guard (remediation/connectors/url_safety.py) before a
 connector is ever built, at save time and again at run time.
 
-OpenVAS/GVM is not listed: it launches a scan and polls for minutes to hours, so it keeps its
-own start / status / import page rather than a scheduled one-shot pull.
+OpenVAS/GVM is listed as a pull of a FINISHED task's results (a stored task id); launching and polling a
+scan stays on its own page.
+
+Every pull connection also has a public `mode`: `live` (default, not stored) or `simulation`. A simulation
+connection needs no credentials and no reachable URL; sync.run hands the connector a replay transport
+(remediation/simulation/) so its real code runs against recorded vendor-format responses. Each pull/test
+callable takes an optional second argument, the transport (`session`; the LDAP connection for Active
+Directory, the GMP client for OpenVAS), and behaves as before when it is None.
 """
 import os
 import tempfile
@@ -33,8 +39,10 @@ from remediation.connectors.siem_search_connector import SplunkSearchConnector
 from remediation.connectors.splunk_connector import SplunkConnector
 from remediation.connectors.webhook_connector import NotifyWebhook, PolicyWebhook, ResponseWebhook
 from remediation.connectors.tenable_connector import TenableConnector
+from remediation.connectors.openvas_connector import OpenVasConnector
 from remediation.connections import push as push_mod
 from remediation.ingest import scanner_csv
+from remediation.simulation import renderers
 
 
 def _f(name, label, secret=False, required=True, kind="text", placeholder="", help="", options=None):
@@ -72,11 +80,11 @@ def _validate_snow(values):
     _validate_push(values)
 
 
-def _csv_pull(connector, source, reconcile):
+def _csv_pull(connector, source, reconcile, **fetch_kwargs):
     fd, tmp = tempfile.mkstemp(suffix=".csv")
     os.close(fd)
     try:
-        connector.fetch_and_write_csv(Path(tmp))
+        connector.fetch_and_write_csv(Path(tmp), **fetch_kwargs)
         findings, skipped = scanner_csv.parse_csv(tmp, source)
     finally:
         if os.path.exists(tmp):
@@ -84,12 +92,63 @@ def _csv_pull(connector, source, reconcile):
     return {"kind": "findings", "findings": findings, "reconcile": reconcile, "skipped": skipped}
 
 
-def _tenable(c):
-    return TenableConnector(c["access_key"], c["secret_key"])
+# A simulation connection (mode == "simulation") replays recorded vendor-format responses through the connector's real code via the
+# `session=` seam (remediation/simulation/). It needs no real credentials and no reachable URL, so unset fields fall back to these.
+SIM_BASE_URL = renderers.SIM_BASE_URL
+_SIM_DEFAULTS = {"base_url": SIM_BASE_URL, "platform_url": SIM_BASE_URL, "grid_master": "simulation.invalid", "server": "simulation.invalid",
+                 "base_dn": "DC=corp,DC=test", "hostname": "simulation.invalid", "task_id": "simulation-task"}
 
 
-def _qualys(c):
-    return QualysConnector(c["username"], c["password"], platform_url=c["platform_url"])
+def is_simulation(values):
+    return (values or {}).get("mode") == "simulation"
+
+
+def _v(c, key):
+    """A field's value; in simulation a missing one is a harmless placeholder (never a real credential)."""
+    if c.get(key) not in (None, ""):
+        return c[key]
+    if is_simulation(c):
+        return _SIM_DEFAULTS.get(key, "simulation")
+    return c[key]
+
+
+def _tenable(c, session=None):
+    if is_simulation(c):
+        return TenableConnector(_v(c, "access_key"), _v(c, "secret_key"), base_url=SIM_BASE_URL, session=session)
+    return TenableConnector(c["access_key"], c["secret_key"], session=session)
+
+
+def _qualys(c, session=None):
+    return QualysConnector(_v(c, "username"), _v(c, "password"), platform_url=_v(c, "platform_url"), session=session)
+
+
+def _prisma(c, session=None):
+    return PrismaCloudConnector(_v(c, "access_key_id"), _v(c, "secret_key"), base_url=_v(c, "base_url"), session=session)
+
+
+def _xsiam(c, session=None):
+    return CortexXsiamConnector(_v(c, "api_key"), _v(c, "api_key_id"), base_url=_v(c, "base_url"), session=session)
+
+
+def _infoblox(c, session=None):
+    return InfobloxConnector(_v(c, "grid_master"), _v(c, "username"), _v(c, "password"), session=session)
+
+
+def _axonius(c, session=None):
+    return AxoniusConnector(_v(c, "base_url"), _v(c, "api_key"), _v(c, "api_secret"), session=session)
+
+
+def _ad(c, session=None):
+    """`session` is the LDAP connection object here (a stateful protocol, not requests)."""
+    return ActiveDirectoryConnector(_v(c, "server"), _v(c, "base_dn"), bind_dn=c.get("bind_dn") or None,
+                                    bind_password=c.get("bind_password") or None, use_ssl=bool(c.get("use_ssl")), connection=session)
+
+
+def _openvas(c, session=None):
+    """`session` is the GMP client here (a stateful protocol, not requests)."""
+    if session is not None or is_simulation(c):
+        return OpenVasConnector(gmp_client=session)
+    return OpenVasConnector(hostname=c["hostname"], port=int(c.get("port") or 9390), username=c["username"], password=c["password"])
 
 
 SPECS = {
@@ -97,8 +156,8 @@ SPECS = {
         "label": "Tenable.io", "category": "Vulnerability scanner", "output": "findings",
         "fields": [_f("access_key", "Access key", secret=True), _f("secret_key", "Secret key", secret=True)],
         "docs": "Tenable.io > Settings > My Account > API Keys.",
-        "build": _tenable, "pull": lambda c: _csv_pull(_tenable(c), "tenable", reconcile=True),
-        "test": lambda c: _tenable(c).test_connection(),
+        "build": _tenable, "pull": lambda c, session=None: _csv_pull(_tenable(c, session), "tenable", reconcile=True),
+        "test": lambda c, session=None: _tenable(c, session).test_connection(),
         "note": "A full export: vulnerabilities no longer reported are removed from the queue on each sync.",
     },
     "qualys": {
@@ -106,56 +165,61 @@ SPECS = {
         "fields": [_f("platform_url", "Platform URL", placeholder="https://qualysapi.qualys.com"), _f("username", "Username"),
                    _f("password", "Password", secret=True)],
         "safe_targets": ["platform_url"], "docs": "Use the API base URL for your Qualys platform/region.",
-        "build": _qualys, "pull": lambda c: _csv_pull(_qualys(c), "qualys", reconcile=False),
-        "test": lambda c: _qualys(c).test_connection(),
+        "build": _qualys, "pull": lambda c, session=None: _csv_pull(_qualys(c, session), "qualys", reconcile=False),
+        "test": lambda c, session=None: _qualys(c, session).test_connection(),
         "note": "Host detections can be truncated for very large tenants, so findings are added and refreshed but never auto-removed.",
+    },
+    "openvas": {
+        "label": "OpenVAS / Greenbone (GVM)", "category": "Vulnerability scanner", "output": "findings",
+        "fields": [_f("hostname", "GVM host", placeholder="gvm.example.com"), _f("port", "GMP port", required=False, placeholder="9390"),
+                   _f("username", "Username"), _f("password", "Password", secret=True),
+                   _f("task_id", "Finished scan task ID", help="Results are read from a scan task that has finished (the OpenVAS page launches and tracks scans).")],
+        "safe_targets": ["hostname"], "docs": "Reads the results of a finished GVM task over GMP. Launching a scan stays on the OpenVAS page.",
+        "build": _openvas, "pull": lambda c, session=None: _csv_pull(_openvas(c, session), "openvas", reconcile=False, task_id=_v(c, "task_id")),
+        "test": lambda c, session=None: _openvas(c, session).test_connection(),
+        "note": "The results of one task: findings are added and refreshed but never auto-removed.",
     },
     "prismacloud": {
         "label": "Prisma Cloud", "category": "Cloud posture", "output": "findings",
         "fields": [_f("base_url", "API base URL", placeholder="https://api.prismacloud.io"), _f("access_key_id", "Access key ID", secret=True),
                    _f("secret_key", "Secret key", secret=True)],
         "safe_targets": ["base_url"],
-        "build": lambda c: PrismaCloudConnector(c["access_key_id"], c["secret_key"], base_url=c["base_url"]),
-        "pull": lambda c: {"kind": "findings", "findings": PrismaCloudConnector(c["access_key_id"], c["secret_key"], base_url=c["base_url"]).fetch_and_normalize_alerts(),
-                           "reconcile": False, "skipped": {}},
-        "test": lambda c: PrismaCloudConnector(c["access_key_id"], c["secret_key"], base_url=c["base_url"]).test_connection(),
+        "build": _prisma,
+        "pull": lambda c, session=None: {"kind": "findings", "findings": _prisma(c, session).fetch_and_normalize_alerts(), "reconcile": False, "skipped": {}},
+        "test": lambda c, session=None: _prisma(c, session).test_connection(),
     },
     "cortex-xsiam": {
         "label": "Cortex XSIAM", "category": "Detection and response", "output": "findings",
         "fields": [_f("base_url", "API base URL"), _f("api_key_id", "API key ID", secret=True), _f("api_key", "API key", secret=True)],
         "safe_targets": ["base_url"],
-        "build": lambda c: CortexXsiamConnector(c["api_key"], c["api_key_id"], base_url=c["base_url"]),
-        "pull": lambda c: {"kind": "findings", "findings": CortexXsiamConnector(c["api_key"], c["api_key_id"], base_url=c["base_url"]).fetch_and_normalize_incidents(),
-                           "reconcile": False, "skipped": {}},
-        "test": lambda c: CortexXsiamConnector(c["api_key"], c["api_key_id"], base_url=c["base_url"]).test_connection(),
+        "build": _xsiam,
+        "pull": lambda c, session=None: {"kind": "findings", "findings": _xsiam(c, session).fetch_and_normalize_incidents(), "reconcile": False, "skipped": {}},
+        "test": lambda c, session=None: _xsiam(c, session).test_connection(),
     },
     "infoblox": {
         "label": "Infoblox", "category": "Asset discovery", "output": "assets",
         "fields": [_f("grid_master", "Grid master host"), _f("username", "Username"), _f("password", "Password", secret=True)],
         "safe_targets": ["grid_master"],
-        "build": lambda c: InfobloxConnector(c["grid_master"], c["username"], c["password"]),
-        "pull": lambda c: {"kind": "assets", "assets": InfobloxConnector(c["grid_master"], c["username"], c["password"]).fetch_and_normalize_hosts()},
-        "test": lambda c: InfobloxConnector(c["grid_master"], c["username"], c["password"]).test_connection(),
+        "build": _infoblox,
+        "pull": lambda c, session=None: {"kind": "assets", "assets": _infoblox(c, session).fetch_and_normalize_hosts()},
+        "test": lambda c, session=None: _infoblox(c, session).test_connection(),
     },
     "axonius": {
         "label": "Axonius", "category": "Asset discovery", "output": "assets",
         "fields": [_f("base_url", "Base URL"), _f("api_key", "API key", secret=True), _f("api_secret", "API secret", secret=True)],
         "safe_targets": ["base_url"],
-        "build": lambda c: AxoniusConnector(c["base_url"], c["api_key"], c["api_secret"]),
-        "pull": lambda c: {"kind": "assets", "assets": AxoniusConnector(c["base_url"], c["api_key"], c["api_secret"]).fetch_and_normalize_devices()},
-        "test": lambda c: AxoniusConnector(c["base_url"], c["api_key"], c["api_secret"]).test_connection(),
+        "build": _axonius,
+        "pull": lambda c, session=None: {"kind": "assets", "assets": _axonius(c, session).fetch_and_normalize_devices()},
+        "test": lambda c, session=None: _axonius(c, session).test_connection(),
     },
     "active-directory": {
         "label": "Active Directory", "category": "Asset discovery", "output": "assets",
         "fields": [_f("server", "Server"), _f("base_dn", "Base DN"), _f("bind_dn", "Bind DN", required=False),
                    _f("bind_password", "Bind password", secret=True, required=False), _f("use_ssl", "Use LDAPS", required=False, kind="checkbox")],
         "safe_targets": ["server"],
-        "build": lambda c: ActiveDirectoryConnector(c["server"], c["base_dn"], bind_dn=c.get("bind_dn") or None,
-                                                    bind_password=c.get("bind_password") or None, use_ssl=bool(c.get("use_ssl"))),
-        "pull": lambda c: {"kind": "assets", "assets": ActiveDirectoryConnector(c["server"], c["base_dn"], bind_dn=c.get("bind_dn") or None,
-                                                                                bind_password=c.get("bind_password") or None, use_ssl=bool(c.get("use_ssl"))).fetch_and_normalize_computers()},
-        "test": lambda c: ActiveDirectoryConnector(c["server"], c["base_dn"], bind_dn=c.get("bind_dn") or None,
-                                                   bind_password=c.get("bind_password") or None, use_ssl=bool(c.get("use_ssl"))).test_connection(),
+        "build": _ad,
+        "pull": lambda c, session=None: {"kind": "assets", "assets": _ad(c, session).fetch_and_normalize_computers()},
+        "test": lambda c, session=None: _ad(c, session).test_connection(),
     },
 }
 
@@ -175,9 +239,9 @@ SPECS.update({
         "docs": "Claude Console > Settings > Admin keys. A workspace API key does not work. Pulls daily token counts by model and workspace.",
         "note": "Aggregated daily buckets; a re-pull updates them. Cost is estimated only if you enter prices in ai_pricing.yaml.",
         "validate": _days,
-        "build": lambda c: AnthropicUsageConnector(c["admin_key"], days=_days(c)),
-        "pull": lambda c: {"kind": "ai_usage", "events": AnthropicUsageConnector(c["admin_key"], days=_days(c)).fetch_events()},
-        "test": lambda c: AnthropicUsageConnector(c["admin_key"], days=_days(c)).test_connection(),
+        "build": lambda c, session=None: AnthropicUsageConnector(_v(c, "admin_key"), days=_days(c), session=session),
+        "pull": lambda c, session=None: {"kind": "ai_usage", "events": AnthropicUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).fetch_events()},
+        "test": lambda c, session=None: AnthropicUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).test_connection(),
     },
     "openai-usage": {
         "label": "OpenAI usage (AI spend)", "category": "AI usage", "output": "ai-usage",
@@ -186,9 +250,9 @@ SPECS.update({
         "docs": "OpenAI platform > Organization settings > Admin keys. A project API key does not work. Pulls daily token counts by model and project.",
         "note": "Aggregated daily buckets; a re-pull updates them. Cost is estimated only if you enter prices in ai_pricing.yaml.",
         "validate": _days,
-        "build": lambda c: OpenAIUsageConnector(c["admin_key"], days=_days(c)),
-        "pull": lambda c: {"kind": "ai_usage", "events": OpenAIUsageConnector(c["admin_key"], days=_days(c)).fetch_events()},
-        "test": lambda c: OpenAIUsageConnector(c["admin_key"], days=_days(c)).test_connection(),
+        "build": lambda c, session=None: OpenAIUsageConnector(_v(c, "admin_key"), days=_days(c), session=session),
+        "pull": lambda c, session=None: {"kind": "ai_usage", "events": OpenAIUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).fetch_events()},
+        "test": lambda c, session=None: OpenAIUsageConnector(_v(c, "admin_key"), days=_days(c), session=session).test_connection(),
     },
 })
 
@@ -334,6 +398,13 @@ SPECS.update({
 })
 
 
+MODE_FIELD = _f("mode", "Mode", required=False, kind="select", options=["live", "simulation"],
+                help="Live (default)")
+for _spec in SPECS.values():
+    if _spec.get("kind", "pull") == "pull":
+        _spec["fields"] = list(_spec["fields"]) + [dict(MODE_FIELD)]
+
+
 def public_catalog():
     """What the UI needs: the types and their fields, never the callables."""
     return [{"type": t, **{k: v for k, v in s.items() if k in ("label", "category", "output", "fields", "docs", "note")}, "kind": s.get("kind", "pull")} for t, s in SPECS.items()]
@@ -346,7 +417,10 @@ def split_values(conn_type, values):
     if not spec:
         raise ValueError(f"Unknown connector type {conn_type!r}")
     config, secrets = {}, {}
+    sim = spec.get("kind", "pull") == "pull" and values.get("mode") == "simulation"
     for f in spec["fields"]:
+        if sim and (f["secret"] or f["name"] in spec.get("safe_targets", [])):
+            continue  # a simulation connection stores no credential and no URL: nothing real to protect or to reach
         v = values.get(f["name"])
         if f["type"] == "checkbox":
             v = bool(v)
@@ -354,18 +428,22 @@ def split_values(conn_type, values):
             raise ValueError(f"{f['label']} must be one of {', '.join(f['options'])}")
         elif isinstance(v, str):
             v = v.strip()
-        if f["required"] and (v is None or v == ""):
+        if f["name"] == "mode":
+            if v == "simulation":
+                config["mode"] = "simulation"  # live is the default and is not stored
+            continue
+        if f["required"] and not sim and (v is None or v == ""):
             raise ValueError(f"{f['label']} is required")
         if v in (None, ""):
             continue
         (secrets if f["secret"] else config)[f["name"]] = v
-    for name in spec.get("safe_targets", []):
+    for name in ([] if sim else spec.get("safe_targets", [])):
         target = config.get(name)
         if target:
             try:
                 url_safety.assert_safe_target(target)
             except url_safety.UnsafeTargetError as exc:
                 raise ValueError(f"{name}: {exc}") from exc
-    if spec.get("validate"):
+    if spec.get("validate") and not sim:
         spec["validate"]({**config, **secrets})
     return config, secrets

@@ -1,0 +1,19 @@
+# TEST override: verify the build that will go to production, with production rules on. Layer it on the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml --env-file .env.test.example up --build
+# Own database volume and own secrets; never point it at production data. See docs/ENVIRONMENTS.md.
+services:
+  quanta:
+    build:
+      context: .
+      args:
+        VERSION: ${QUANTA_VERSION:-1.0.0}
+        BUILD_SHA: ${QUANTA_BUILD_SHA:-test}
+        BUILD_TIME: ${QUANTA_BUILD_TIME:-unknown}
+    environment:
+      QUANTA_ENV: test
+      QUANTA_PRODUCTION: "true"
+      QUANTA_ALLOW_SIMULATION: "true"
+    ports:
+      - "5051:5050"
+  caddy:
+    profiles: ["proxy"]

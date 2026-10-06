@@ -1,0 +1,34 @@
+# Overlay for the TEST environment: verify the exact build that will go to production, production-like in every setting.
+#   helm upgrade --install quanta deploy/helm/quanta -n quanta-test -f deploy/helm/quanta/values-test.yaml --set image.tag=<semver>
+# Own database, own vault, own secrets. Test data is synthetic or anonymised; never a copy of production data.
+config:
+  environment: test
+  production: true                           # test enforces the same rules production does
+  allowSimulation: false
+  logFormat: json
+ingress:
+  enabled: true
+  className: ""
+  host: quanta-test.example.com              # placeholder: your test host name
+  tls: {enabled: true, secretName: quanta-test-tls}
+web:
+  replicas: 2
+  trustForwardedHeaders: true                # safe only together with networkPolicy.enabled below
+  resources:
+    requests: {cpu: 200m, memory: 512Mi}
+    limits: {memory: 1Gi}
+worker:
+  enabled: true
+  replicas: 2
+  resources:
+    requests: {cpu: 200m, memory: 512Mi}
+    limits: {memory: 1Gi}
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+networkPolicy:
+  enabled: true
+secrets:
+  mode: externalSecrets
+  externalSecrets:
+    secretStoreRef: {kind: ClusterSecretStore, name: quanta-test-vault}  # placeholder: the TEST vault store

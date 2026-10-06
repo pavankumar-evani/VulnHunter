@@ -370,6 +370,25 @@ def cmd_seed_appsec_demo(a):
     return 0
 
 
+def cmd_seed_demo(a):
+    """Demonstration data through the real connector code (recorded vendor-format responses replayed through each connector, then merged and stored like live data)."""
+    from remediation.simulation import service
+    try:
+        if a.remove:
+            print("Removing the simulation connections and every record marked source_mode=simulation (live records are untouched).")
+            print(json.dumps(service.remove("quanta-admin")))
+            return 0
+        print("Loading demonstration data: one simulation connection per available connector, each run through the normal sync path.")
+        print(json.dumps(service.plan()))
+        out = service.load("quanta-admin")
+    except service.SimulationNotAllowed as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    for r in out["results"]:
+        print(f"  {r['name']}: {'ok' if r['ok'] else 'FAILED'}  {r['message']}")
+    return 0 if all(r["ok"] for r in out["results"]) else 1
+
+
 def cmd_worker(_a):
     from remediation.coordination import worker
     worker.main()
@@ -432,6 +451,9 @@ def build_parser():
     sd.add_argument("--name", default="orders-service")
     sd.add_argument("--remove", action="store_true")
     sd.set_defaults(fn=cmd_seed_appsec_demo)
+    sdm = sub.add_parser("seed-demo", help="load demonstration data by replaying recorded vendor responses through the real connectors; --remove undoes it")
+    sdm.add_argument("--remove", action="store_true")
+    sdm.set_defaults(fn=cmd_seed_demo)
     s = sub.add_parser("restore")
     s.add_argument("--from", dest="source", required=True)
     s.add_argument("--yes", action="store_true")

@@ -99,6 +99,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/* Environment shared by every Quanta container (never a secret value; secrets are *_FILE paths) */}}
 {{- define "quanta.env" -}}
+- name: QUANTA_ENV
+  value: {{ .Values.config.environment | default "dev" | quote }}
+- name: QUANTA_ALLOW_SIMULATION
+  value: {{ .Values.config.allowSimulation | quote }}
 - name: QUANTA_PRODUCTION
   value: {{ .Values.config.production | quote }}
 - name: QUANTA_HOST

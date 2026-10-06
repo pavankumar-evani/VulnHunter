@@ -1,0 +1,221 @@
+name: Release
+
+# One immutable image per tag, promoted unchanged dev -> test -> prod. Only configuration differs.
+# The deploy jobs are inert (skipped, workflow still green) until the repository variable DEPLOY_ENABLED is 'true'
+# and each GitHub Environment (dev, test, prod) has its own KUBE_CONFIG secret and, for prod, required reviewers.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag must equal VERSION
+        id: ver
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "v${VERSION}" != "${TAG}" ]; then echo "Tag ${TAG} does not match VERSION v${VERSION}"; exit 1; fi
+          if ! grep -Eq "^## \[(${VERSION}|Unreleased)\]" CHANGELOG.md; then echo "CHANGELOG.md has no entry for ${VERSION}"; exit 1; fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Create local tracking branches for all remotes
+        run: |
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+          for b in $(git branch -r | grep -v '\->' | sed 's#origin/##'); do
+            git branch --track "$b" "origin/$b" 2>/dev/null || true
+          done
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r dashboard/requirements.txt
+          pip install -r remediation/connectors/requirements.txt
+          pip install -r remediation/enrichment/requirements.txt
+          pip install -r remediation/config/requirements.txt
+      - name: Run test suite
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Release preflight
+        run: python cli/quanta_release.py check --target dev
+
+  build:
+    name: Build and push the image once
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      version: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build time
+        id: bt
+        run: echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          sbom: true
+          provenance: mode=max
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/quanta:${{ needs.verify.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/quanta:sha-${{ github.sha }}
+          build-args: |
+            VERSION=${{ needs.verify.outputs.version }}
+            BUILD_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.bt.outputs.time }}
+      - name: Attest the image
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/quanta
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  deploy-dev:
+    name: Deploy to dev
+    needs: build
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Save the current release for rollback
+        continue-on-error: true
+        run: |
+          mkdir -p release-record
+          helm get values quanta -n quanta-dev -o yaml > release-record/values-before.yaml
+          helm history quanta -n quanta-dev -o json > release-record/history-before.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-record-dev
+          path: release-record
+          if-no-files-found: ignore
+      - name: Upgrade
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/quanta
+        run: |
+          helm upgrade --install quanta deploy/helm/quanta -n quanta-dev --create-namespace --atomic --wait --timeout 10m \
+            -f deploy/helm/quanta/values-dev.yaml --set image.repository="${IMAGE_REPO}" --set image.tag="${VERSION}"
+
+  deploy-test:
+    name: Deploy to test and smoke-test
+    needs: [build, deploy-dev]
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Save the current release for rollback
+        continue-on-error: true
+        run: |
+          mkdir -p release-record
+          helm get values quanta -n quanta-test -o yaml > release-record/values-before.yaml
+          helm history quanta -n quanta-test -o json > release-record/history-before.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-record-test
+          path: release-record
+          if-no-files-found: ignore
+      - name: Upgrade
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/quanta
+        run: |
+          helm upgrade --install quanta deploy/helm/quanta -n quanta-test --create-namespace --atomic --wait --timeout 10m \
+            -f deploy/helm/quanta/values-test.yaml --set image.repository="${IMAGE_REPO}" --set image.tag="${VERSION}"
+      - name: Smoke test
+        env:
+          BASE_URL: ${{ vars.QUANTA_URL }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${BASE_URL}/healthz"
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${BASE_URL}/readyz"
+          STATUS="$(curl -fsS "${BASE_URL}/api/status")"
+          echo "${STATUS}" | python -c "import json,os,sys; d=json.load(sys.stdin); e=d['environment']; assert e['version']==os.environ['VERSION'], e; assert e['environment']=='test', e; print('status ok', e)"
+
+  deploy-prod:
+    name: Deploy to prod
+    needs: [build, deploy-test]
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    # The GitHub Environment "prod" carries the required reviewers; see docs/RELEASE_PROCESS.md.
+    environment: prod
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Save the current release for rollback
+        run: |
+          mkdir -p release-record
+          helm get values quanta -n quanta-prod -o yaml > release-record/values-before.yaml
+          helm history quanta -n quanta-prod -o json > release-record/history-before.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-record-prod
+          path: release-record
+      - name: Upgrade
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/quanta
+        run: |
+          helm upgrade --install quanta deploy/helm/quanta -n quanta-prod --create-namespace --atomic --wait --timeout 10m \
+            -f deploy/helm/quanta/values-prod.yaml --set image.repository="${IMAGE_REPO}" --set image.tag="${VERSION}"
+      - name: Verify
+        env:
+          BASE_URL: ${{ vars.QUANTA_URL }}
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${BASE_URL}/readyz"

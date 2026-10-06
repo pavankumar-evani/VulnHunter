@@ -1,0 +1,32 @@
+# Overlay for the DEV environment: build and try new features. Use on top of values.yaml:
+#   helm upgrade --install quanta deploy/helm/quanta -n quanta-dev -f deploy/helm/quanta/values-dev.yaml --set image.tag=<semver>
+# Same image as test and prod; only configuration differs. Secrets still come from a vault (a dev vault, never the prod one).
+config:
+  environment: dev
+  production: false                          # dev may keep demo data and open reads; real data never goes here
+  allowSimulation: false                     # dev allows simulation anyway (environment.simulation_allowed); this only matters for prod
+  logFormat: json
+ingress:
+  enabled: true
+  className: ""
+  host: quanta-dev.example.com               # placeholder: your dev host name
+  tls: {enabled: true, secretName: quanta-dev-tls}
+web:
+  replicas: 1
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+worker:
+  enabled: true
+  replicas: 1
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+podDisruptionBudget:
+  enabled: false
+networkPolicy:
+  enabled: false
+secrets:
+  mode: externalSecrets
+  externalSecrets:
+    secretStoreRef: {kind: ClusterSecretStore, name: quanta-dev-vault}   # placeholder: the DEV vault store

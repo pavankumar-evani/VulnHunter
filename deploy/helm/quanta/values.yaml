@@ -63,6 +63,8 @@ podDisruptionBudget:
 
 # ---------------------------------------------------------------------------- application settings (not secret)
 config:
+  environment: prod                          # dev | test | prod (QUANTA_ENV). The safe default: a chart installed with no overlay is production, with simulation off. values-dev/test/prod.yaml set it explicitly
+  allowSimulation: false                     # QUANTA_ALLOW_SIMULATION: lets a PROD pod run simulated connectors (a hosted demonstration site only)
   production: true                           # refuses to start with demo accounts or a missing session secret
   logFormat: json
   bootstrapAdminEmail: ""                    # the first administrator; the password comes from the vault (QUANTA_ADMIN_PASSWORD)

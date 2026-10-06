@@ -56,22 +56,36 @@ def _atomic_write(path, findings):
             os.unlink(tmp)
 
 
-def merge(new_findings, source, path=None, reconcile=False):
-    """Returns {added, updated, removed, total}. Nothing is written when there is no change."""
+def merge(new_findings, source, path=None, reconcile=False, source_mode=None):
+    """Returns {added, updated, removed, total}. Nothing is written when there is no change.
+
+    `source_mode` is the provenance of this pull: "live" or "simulation" (records carry it as `source_mode`; a record without it is live).
+    A simulated pull never changes a live record that has the same identity (live wins; the count is returned as `kept_live`), a live pull
+    that meets a simulated record replaces it with the real one, and `reconcile` only ever removes records of the same mode."""
     path = Path(path or DEFAULT_PATH)
     from remediation.utils import file_sync
     with FileLock(str(path), timeout=60.0):
         file_sync.sync_if_enabled(force=True)  # QUANTA_FILES_BACKEND=db: start from the cluster's latest copy
         existing = load(path)
         index = {key_of(f): i for i, f in enumerate(existing) if f.get("source") == source}
-        seen, added, updated = set(), 0, 0
+        run_mode = source_mode or "live"
+        seen, added, updated, kept_live = set(), 0, 0, 0
         next_n = _next_number(existing)
         for n in new_findings:
             k = key_of({**n, "source": source})
             seen.add(k)
+            if source_mode:
+                n = {**n, "source_mode": source_mode}
             if k in index:
                 cur = existing[index[k]]
+                cur_mode = cur.get("source_mode") or "live"
+                if run_mode == "simulation" and cur_mode != "simulation":
+                    kept_live += 1
+                    continue
                 changed = False
+                if cur_mode == "simulation" and run_mode != "simulation":
+                    cur["source_mode"] = "live"
+                    changed = True
                 if n.get("last_seen") and n["last_seen"] != cur.get("last_seen"):
                     cur["last_seen"] = n["last_seen"]
                     changed = True
@@ -89,10 +103,28 @@ def merge(new_findings, source, path=None, reconcile=False):
                 added += 1
         removed = 0
         if reconcile:
-            keep = [f for f in existing if f.get("source") != source or key_of(f) in seen]
+            keep = [f for f in existing if f.get("source") != source or key_of(f) in seen or (f.get("source_mode") or "live") != run_mode]
             removed = len(existing) - len(keep)
             existing = keep
         if added or updated or removed:
             _atomic_write(path, existing)
             file_sync.sync_if_enabled(force=True)  # publish it to the other replicas before releasing the lock
-        return {"added": added, "updated": updated, "removed": removed, "total": len(existing)}
+        result = {"added": added, "updated": updated, "removed": removed, "total": len(existing)}
+        if kept_live:
+            result["kept_live"] = kept_live
+        return result
+
+
+def remove_simulated(path=None):
+    """Removes every record whose source_mode is "simulation" (live records are never touched). Returns how many were removed."""
+    path = Path(path or DEFAULT_PATH)
+    from remediation.utils import file_sync
+    with FileLock(str(path), timeout=60.0):
+        file_sync.sync_if_enabled(force=True)
+        existing = load(path)
+        keep = [f for f in existing if f.get("source_mode") != "simulation"]
+        removed = len(existing) - len(keep)
+        if removed:
+            _atomic_write(path, keep)
+            file_sync.sync_if_enabled(force=True)
+        return removed

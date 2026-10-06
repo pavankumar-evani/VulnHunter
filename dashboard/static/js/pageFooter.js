@@ -36,7 +36,7 @@ export function initPageFooter() {
           <span class="doc-ref">Scope &amp; limitations &#8599;</span>
         </span>
         <div class="page-footer-meta">
-          <div class="page-footer-version">Quanta v${status.app_version || "1.0.0"} · &copy; 2026 Quanta LLC. All rights reserved.</div>
+          <div class="page-footer-version">Quanta v${(status.environment && status.environment.version) || status.app_version || "1.0.0"}${status.environment && status.environment.build_sha ? " (" + String(status.environment.build_sha).slice(0, 7) + ")" : ""} · &copy; 2026 Quanta LLC. All rights reserved.</div>
           <div class="footer-compliance-badges">
             <span class="badge">NIST CSF</span>
             <span class="badge">SOC 2</span>
