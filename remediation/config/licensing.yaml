@@ -17,6 +17,7 @@ core:
   - /api/graphs/admin
   - /api/status
   - /api/license
+  - /api/features
   - /api/capabilities
   - /api/overview
   - /api/queue
@@ -28,6 +29,7 @@ core:
   - /api/assignable-users
   - /api/directory
   - /api/connections
+  - /api/simulation
   - /api/api-keys
   - /api/admin
   - /api/export
@@ -120,6 +122,7 @@ modules:
     - /api/inbound/ticket-status
   grc:
     - /api/graphs/grc
+    - /api/posture
     - /api/grc
     - /api/cyber-risk
     - /api/ml-insights

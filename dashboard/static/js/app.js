@@ -4,13 +4,14 @@
 // dynamic import() is a native browser feature, not a bundler trick.
 import { api } from "./api.js";
 import { getCurrentUser, initAccountChip } from "./auth.js";
-import { renderSidebar, setLicense, findModule, isLicensed } from "./nav.js";
+import { renderSidebar, setLicense, setFeatures, findModule, isLicensed } from "./nav.js";
 import { initNotificationBell } from "./notifications.js";
 import { initGlobalSearch } from "./search.js";
 import { initSidebarToggle } from "./sidebarToggle.js";
 import { initTooltips } from "./tooltip.js";
 import { initThreatTip } from "./threatTip.js";
 import { initPageFooter } from "./pageFooter.js";
+import { initEnvBanner } from "./envBanner.js";
 import { initTopbarTenant } from "./topbarTenant.js";
 import { initInsightsPanel, resetInsightsContent } from "./insightsPanel.js";
 import { initIdleTimeout } from "./idleTimeout.js";
@@ -76,6 +77,7 @@ const routes = [
   { pattern: /^\/attack-paths\/?$/, load: () => import("./pages/attackPaths.js") },
   { pattern: /^\/dependencies\/?$/, load: () => import("./pages/dependencies.js") },
   { pattern: /^\/graphs\/?$/, load: () => import("./pages/graphs.js") },
+  { pattern: /^\/posture\/?$/, load: () => import("./pages/posture.js") },
   { pattern: /^\/applications\/?$/, load: () => import("./pages/applications.js") },
   { pattern: /^\/fix-prs\/?$/, load: () => import("./pages/fixPrs.js") },
   { pattern: /^\/pipeline-gates\/?$/, load: () => import("./pages/pipelineGates.js") },
@@ -118,6 +120,7 @@ let licenseLoadedAt = 0;
 async function loadLicense() {
   if (Date.now() - licenseLoadedAt < 5 * 60 * 1000) return;
   try { setLicense(await api.license()); } catch { setLicense(null); }
+  try { setFeatures(await api.features()); } catch { setFeatures(null); }
   licenseLoadedAt = Date.now();
 }
 
@@ -207,6 +210,7 @@ initInsightsPanel();
 initTooltips();
 initThreatTip();
 initPageFooter();
+initEnvBanner();
 initIdleTimeout();
 initCommandPalette();
 renderRoute();

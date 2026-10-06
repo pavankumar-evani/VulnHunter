@@ -492,6 +492,48 @@ const FAQS = [
     "SVG. These measures describe structure, not risk by themselves: a choke point is where paths " +
     "concentrate, so check what sits on it. A graph shows at most the 400 best-connected nodes " +
     "and says so when it caps. The administrator modules' graphs need an administrator."],
+  ["What is simulated data, and how do I switch to live data?",
+    "Simulated data is demonstration data that goes through the real connector code. A fictional " +
+    "estate is rendered into each vendor's real response format and replayed through the " +
+    "connector's own request building, paging, parsing, merge and enrichment, so demonstrations " +
+    "exercise the real workflows instead of showing a committed file. Every simulated record is " +
+    "tagged Simulated, never overwrites a live record, and is refused in a production environment " +
+    "unless an operator allows it on purpose. Load it from Connections (Load demonstration data) " +
+    "or with 'python cli/quanta_admin.py seed-demo'; remove it with 'seed-demo --remove', which " +
+    "deletes only simulated records. To go live, edit the connection from simulation to live, " +
+    "enter the real URL and credentials and run it: nothing downstream changes. A production " +
+    "deployment should start empty ('python cli/quanta_admin.py clear-sample-data --yes') and use " +
+    "only live connections. It proves Quanta's parsing and workflows, not that a vendor's live " +
+    "service behaves identically, and no connector has been run against a live account."],
+  ["How do I move a change from development to production?",
+    "The same container image is promoted unchanged through dev, test and prod; only " +
+    "configuration differs (QUANTA_ENV and the per-environment Helm values). Merge to master " +
+    "through a pull request with green CI, tag a release vX.Y.Z that matches the VERSION file and " +
+    "has a changelog entry, and the release workflow builds the image once, deploys to dev, then " +
+    "test (with a smoke test of /healthz, /readyz and the version), then prod, which waits for " +
+    "the reviewers configured on the prod GitHub Environment. Run 'python cli/quanta_release.py " +
+    "check --target prod' first: it fails on anything that would make prod unsafe (a short " +
+    "session secret, bundled sample data, simulation on, pending migrations, no recent backup). " +
+    "New features can be switched on per environment in remediation/config/features.yaml, so they " +
+    "can be tried in dev before prod. To roll back, 'python cli/quanta_release.py rollback-plan' " +
+    "prints the ordered steps (helm rollback, and a database restore only for a release that " +
+    "dropped something: schema changes are expand-only). The workflows and Helm overlays are " +
+    "checked statically; they have not been run against a live cluster."],
+  ["What is the Security Posture Review and how do I read it?",
+    "Open Security Posture Review in the Risk, Governance & Compliance module (administrators). " +
+    "It assesses what Quanta has recorded, and this deployment's own settings, against ten " +
+    "frameworks: zero trust, secure by design, threat modelling, defence in depth, architecture, " +
+    "the secure development lifecycle, the AI development lifecycle, software supply chain, AI " +
+    "supply chain and open-source dependencies, 183 checks in all. Each check is a pass, partial, " +
+    "gap, or not observable, and opens to show the recorded facts it looked at, what to do, and " +
+    "the exact setting to change (an environment variable, a config file key, a Helm value or a " +
+    "page). A score appears only when enough could be observed; what Quanta cannot see (build " +
+    "provenance, backups, model evaluation, endpoint protection state) is listed as not " +
+    "observable, never counted as a pass, so an empty estate does not look good. The overview " +
+    "ranks the biggest gaps first. The scores and stages are Quanta's own summary (none of the " +
+    "standards publishes a number) and the thresholds are in " +
+    "remediation/config/posture_policy.yaml. It reads and advises only: it changes nothing and is " +
+    "not an audit or certification."],
   ["How do I propose and open a fix pull request?",
     "Admin only. Store a GitHub or GitLab connection, set the repository on the application, " +
     "create a proposal from the ranked work, review it on Fix Pull Requests and approve it. " +

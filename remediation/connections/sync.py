@@ -14,14 +14,25 @@ from remediation.connections import crypto, push, registry, store
 from remediation.ingest import merge
 
 
-def _reconcile_assets(assets, findings_path):
+class SimulationRefused(RuntimeError):
+    """A simulation connection was run where simulation is not allowed (a production process without QUANTA_ALLOW_SIMULATION)."""
+
+
+def _reconcile_assets(assets, findings_path, engine=None, mode=None):
     from remediation.inventory import asset_inventory
-    known = [a["name"] for a in asset_inventory.build_asset_inventory(merge.load(findings_path))]
-    return asset_inventory.reconcile_pulled_assets(assets, known)
+    known = [a["name"] for a in asset_inventory.build_asset_inventory(merge.load(findings_path), ownership=asset_inventory.load_ownership(engine))]
+    return asset_inventory.reconcile_pulled_assets(assets, known, engine=engine, source_mode=mode if mode == "simulation" else None)
 
 
 def test_connection(conn_type, values):
     spec = registry.SPECS[conn_type]
+    if registry.is_simulation(values):
+        from remediation.simulation import renderers
+        from remediation.utils import environment
+        if not environment.simulation_allowed():
+            raise SimulationRefused("Simulation is not allowed in this environment (QUANTA_ENV=prod).")
+        spec["test"](values, renderers.session_for(conn_type, values))
+        return
     spec["test"](values)
 
 
@@ -50,9 +61,21 @@ def run(connection_id, actor="scheduler", engine=None, findings_path=merge.DEFAU
             store.finish_run(connection_id, "ok" if not r["errors"] or r["sent"] else "error", message, r["sent"], engine, now)
             record_activity(actor, "connection.sync", name, {"ok": True, **r}, engine=engine)
             return {"ok": True, "message": message, "count": r["sent"], "detail": detail}
-        pulled = spec["pull"](values)
+        mode = "simulation" if registry.is_simulation(values) else "live"
+        if mode == "simulation":
+            # recorded vendor-format responses go through the connector's REAL pull code; only the transport is replaced
+            from remediation.simulation import renderers
+            from remediation.utils import environment
+            if not environment.simulation_allowed():
+                raise SimulationRefused("Simulation is not allowed in this environment (QUANTA_ENV=prod). Set QUANTA_ALLOW_SIMULATION=true only for a hosted demonstration site.")
+            pulled = spec["pull"](values, renderers.session_for(public["type"], values))
+        else:
+            pulled = spec["pull"](values)
+        for a in pulled.get("assets") or []:
+            if isinstance(a, dict):
+                a["source_mode"] = mode
         if pulled["kind"] == "findings":
-            result = merge.merge(pulled["findings"], public["type"], findings_path, reconcile=pulled.get("reconcile", False))
+            result = merge.merge(pulled["findings"], public["type"], findings_path, reconcile=pulled.get("reconcile", False), source_mode=mode)
             detail = {**result, "skipped": pulled.get("skipped") or {}, "fetched": len(pulled["findings"])}
             message = (f"Fetched {detail['fetched']} finding(s): {result['added']} new, {result['updated']} updated"
                        + (f", {result['removed']} no longer reported" if result["removed"] else "")
@@ -67,21 +90,24 @@ def run(connection_id, actor="scheduler", engine=None, findings_path=merge.DEFAU
                     message += f" Threat-intel refresh failed ({type(exc).__name__}); retry from the Overview page."
         elif pulled["kind"] == "ai_usage":
             from remediation.aiusage import store as usage_store
-            result = usage_store.record(pulled["events"], "provider-api", engine)
+            result = usage_store.record(pulled["events"], "provider-api", engine, source_mode=mode)
             detail = {**result, "fetched": len(pulled["events"])}
             message = (f"Fetched {detail['fetched']} usage bucket(s): {result['recorded']} new, {result['updated']} updated"
                        + (f", {result['rejected']} rejected" if result["rejected"] else "") + ".")
             count = detail["fetched"]
         else:
-            result = _reconcile_assets(pulled["assets"], findings_path)
+            result = _reconcile_assets(pulled["assets"], findings_path, engine, mode)
             detail = {"fetched": len(pulled["assets"]), "matched": len(result["matched"]), "unmatched": len(result["unmatched"]), "skipped": len(result["skipped"])}
             message = (f"Fetched {detail['fetched']} asset(s): {detail['matched']} matched an existing asset, "
                        f"{detail['unmatched']} stored for when a finding appears, {detail['skipped']} skipped.")
             count = detail["fetched"]
+        if mode == "simulation":
+            message = "Simulation: " + message
+            detail["mode"] = "simulation"
         store.finish_run(connection_id, "ok", message, count, engine, now)
         record_activity(actor, "connection.sync", name, {"ok": True, **{k: v for k, v in detail.items() if not isinstance(v, dict)}}, engine=engine)
         return {"ok": True, "message": message, "count": count, "detail": detail}
-    except (crypto.EncryptionNotConfigured, crypto.DecryptionFailed) as exc:
+    except (crypto.EncryptionNotConfigured, crypto.DecryptionFailed, SimulationRefused) as exc:
         message = str(exc)
     except Exception as exc:  # noqa: BLE001 - any source failure is recorded, not raised
         message = f"{type(exc).__name__}: {exc}"

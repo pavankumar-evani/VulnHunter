@@ -42,6 +42,7 @@ import quanta as cli  # noqa: E402
 from auth import ad_directory, login_audit, oidc, rbac, sessions  # noqa: E402
 from auth import users as auth_users  # noqa: E402
 from remediation import graphs as module_graphs  # noqa: E402
+from remediation.posture import engine as posture_engine  # noqa: E402
 from remediation.audit import activity_log  # noqa: E402
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
@@ -390,6 +391,11 @@ def assert_no_demo_accounts():
 
 @app.on_event("startup")
 async def _validate_production_requirements():
+    from remediation.utils import environment as quanta_environment
+    try:
+        quanta_environment.name()
+    except quanta_environment.EnvironmentError_ as exc:
+        raise SystemExit(f"Quanta will not start: {exc}. Set QUANTA_ENV to dev, test or prod (or unset it).") from exc
     rbac.validate_production_requirements()
     observability.configure_logging()
     from remediation.utils import migrations
@@ -665,6 +671,15 @@ def api_queue(user: dict = Depends(rbac.get_current_user)):
 def api_attack_paths(user: dict = Depends(rbac.get_current_user)):
     scoped = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
     return _fast_json({"chains": dashboard_data.get_attack_chains(scoped)})
+
+
+@app.get("/api/posture")
+def api_posture(request: Request, user: dict = Depends(rbac.get_current_user)):
+    """The Security Posture Review (remediation/posture): ten frameworks assessed from recorded data. Administrator only, because it reads settings of this
+    deployment as well as findings. Deterministic for the same recorded data; nothing is changed."""
+    rbac.require_admin(request)
+    findings = _scope_to_team(_annotate_finding_teams(dashboard_data.load_live_queue()), user)
+    return _fast_json(posture_engine.assess(findings=findings, now=datetime.datetime.now(datetime.timezone.utc)))
 
 
 _GRAPH_ADMIN_MODULES = {"soc", "appsec", "ai", "grc", "admin"}   # the pages these graphs summarise are administrator pages
@@ -4543,6 +4558,22 @@ def _safe_check(fn, default):
         return default, str(exc)
 
 
+def _environment_info():
+    from remediation.utils import environment as quanta_environment
+    try:
+        return quanta_environment.info()
+    except quanta_environment.EnvironmentError_ as exc:
+        return {"environment": "invalid", "error": str(exc), "version": quanta_environment.version(),
+                "build_sha": None, "build_time": None, "simulation_allowed": False}
+
+
+@app.get("/api/features")
+def api_features(user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """Which feature flags are on in this environment (remediation/config/features.yaml plus the QUANTA_FEATURES_ON/OFF overrides)."""
+    from remediation.utils import features
+    return features.snapshot()
+
+
 @app.get("/api/status")
 def api_status():
     """A real machine-readable health/status endpoint - every field below is an actual
@@ -4589,6 +4620,7 @@ def api_status():
         "uptime_seconds": round(time.monotonic() - _PROCESS_STARTED_AT, 1),
         "notification_scheduler_alive": _scheduler_task is not None and not _scheduler_task.done(),
         "data_stores": data_stores,
+        "environment": _environment_info(),
     }
 
 
@@ -6023,6 +6055,7 @@ app.include_router(appsec_api.build_router(require_api_key=require_api_key, scop
                                            read_upload=_read_upload, enrich_in_background=_enrich_in_background,
                                            queue_rescan_job=lambda connection_id, actor: job_queue.enqueue(job_worker.KIND_CONNECTION_SYNC, {"connection_id": connection_id, "actor": actor},
                                                                                                           dedupe_key=f"sync:{connection_id}")))
+app.include_router(__import__("simulation_api").build_router())  # demonstration data through the real connector code; see dashboard/simulation_api.py
 
 
 @app.get("/api/zero-day-watch")

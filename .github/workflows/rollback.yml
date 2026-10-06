@@ -1,0 +1,54 @@
+name: Rollback
+
+# Roll one environment back to a Helm revision. Protected by the GitHub Environment of the same name (prod has required reviewers).
+# Inert until the repository variable DEPLOY_ENABLED is 'true'. Database: see docs/RELEASE_PROCESS.md (expand-only migrations mean
+# the previous version still works on the migrated schema; restore the backup only for a contract release).
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to roll back
+        required: true
+        type: choice
+        options: [dev, test, prod]
+      revision:
+        description: Helm revision to roll back to (see helm history)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    name: Roll back
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - uses: azure/setup-helm@v4
+      - name: Cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBE_CONFIG" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Roll back
+        env:
+          TARGET: ${{ inputs.environment }}
+          REVISION: ${{ inputs.revision }}
+        run: |
+          case "${REVISION}" in (*[!0-9]*|'') echo "revision must be a number"; exit 1;; esac
+          helm history quanta -n "quanta-${TARGET}"
+          helm rollback quanta "${REVISION}" -n "quanta-${TARGET}" --wait --timeout 10m
+          helm history quanta -n "quanta-${TARGET}"
+      - name: Verify readiness
+        env:
+          BASE_URL: ${{ vars.QUANTA_URL }}
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors "${BASE_URL}/readyz"
+          curl -fsS "${BASE_URL}/api/status"

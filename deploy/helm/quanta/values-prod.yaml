@@ -1,0 +1,34 @@
+# Overlay for the PROD environment. Reached only through the gated release pipeline (GitHub Environment "prod" with required reviewers).
+#   helm upgrade --install quanta deploy/helm/quanta -n quanta-prod --atomic --wait -f deploy/helm/quanta/values-prod.yaml --set image.tag=<semver>
+# Production holds real data only: no simulated connectors, no bundled sample data, no demo accounts.
+config:
+  environment: prod
+  production: true
+  allowSimulation: false                     # never on in production; a hosted demonstration site is a separate deployment that says so
+  logFormat: json
+ingress:
+  enabled: true
+  className: ""
+  host: quanta.example.com                   # placeholder: your production host name
+  tls: {enabled: true, secretName: quanta-tls}
+web:
+  replicas: 3
+  trustForwardedHeaders: true                # safe only together with networkPolicy.enabled below
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {memory: 2Gi}
+worker:
+  enabled: true
+  replicas: 2
+  resources:
+    requests: {cpu: 500m, memory: 1Gi}
+    limits: {memory: 2Gi}
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+networkPolicy:
+  enabled: true
+secrets:
+  mode: externalSecrets
+  externalSecrets:
+    secretStoreRef: {kind: ClusterSecretStore, name: quanta-prod-vault}  # placeholder: the PROD vault store

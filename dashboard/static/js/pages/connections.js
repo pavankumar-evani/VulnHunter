@@ -160,16 +160,23 @@ export async function render(container) {
   async function load() {
     const data = await api.connections();
     const keys = await api.apiKeys();
+    let sim = null; // null when simulation is not allowed in this environment (the route answers 403)
+    try { sim = await api.simulationStatus(); } catch { sim = null; }
     container.innerHTML = `
       <p class="subtitle">Connect your scanners and asset sources once. Quanta stores the credentials encrypted, pulls on the schedule you choose,
       merges new findings into the queue, enriches them with CISA KEV and EPSS, and records every run.</p>
       ${data.encryption_available ? "" : `<div class="callout callout-warn"><strong>Credential storage is off.</strong> Set <code>QUANTA_ENCRYPTION_KEY</code>
         (<code>python cli/quanta_admin.py gen-key</code>) and restart to add connections. Each connector's own page still works without it.</div>`}
-      <p><button type="button" id="add-conn"${data.encryption_available ? "" : " disabled"}>Add a connection</button></p>
+      <p><button type="button" id="add-conn"${data.encryption_available ? "" : " disabled"}>Add a connection</button>
+        ${sim ? `<button type="button" class="secondary-button" id="sim-load">Load demonstration data</button>
+        ${sim.simulated_findings || sim.connections.length ? `<button type="button" class="secondary-button danger-link" id="sim-remove">Remove demonstration data</button>` : ""}` : ""}</p>
+      ${sim ? `<p class="muted">Demonstration data is not stored in a file: recorded vendor-format responses are replayed through each connector's real code, then merged, enriched
+        and stored exactly like live data. Every such record is marked <span class="badge badge-outline">Simulated</span> and is never allowed to overwrite a live one.
+        ${sim.simulated_findings ? `Currently ${sim.simulated_findings} simulated and ${sim.live_findings} live finding(s).` : ""}</p>` : ""}
       <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Name</th><th>Source</th><th>Provides</th><th>Schedule</th><th>Last sync</th><th>Result</th><th></th></tr></thead>
         <tbody>${data.connections.length ? data.connections.map((c) => `<tr>
-          <td>${escapeHtml(c.name)}${c.enabled ? "" : ` <span class="muted">(disabled)</span>`}</td>
+          <td>${escapeHtml(c.name)}${c.mode === "simulation" ? ` <span class="badge badge-outline" title="Recorded vendor responses replayed through the real connector code">Simulated</span>` : ""}${c.enabled ? "" : ` <span class="muted">(disabled)</span>`}</td>
           <td>${escapeHtml(c.label)}</td>
           <td>${escapeHtml(c.output || "")}</td>
           <td>${escapeHtml((SCHEDULES.find(([v]) => v === c.schedule_minutes) || [0, `${c.schedule_minutes} min`])[1])}</td>
@@ -196,7 +203,7 @@ export async function render(container) {
           : `<tr><td colspan="6" class="empty-state">No API keys yet.</td></tr>`}</tbody></table></div>
       <h2>Supported sources</h2>
       <ul>${data.catalog.map((c) => `<li><strong>${escapeHtml(c.label)}</strong> (${escapeHtml(c.category)})${c.docs || c.note ? ` - ${escapeHtml([c.docs, c.note].filter(Boolean).join(" "))}` : ""}</li>`).join("")}</ul>
-      <p class="muted">OpenVAS/GVM launches a scan and polls for a long time, so it keeps its own page under Connectors / Adaptors.</p>`;
+      <p class="muted">OpenVAS/GVM reads the results of a finished task here; launching and tracking a scan stays on its own page under Connectors / Adaptors.</p>`;
     container.querySelector("#add-conn").addEventListener("click", () => openEditor(data, null, load));
     container.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openEditor(data, data.connections.find((c) => String(c.id) === b.dataset.edit), load)));
     container.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
@@ -206,6 +213,24 @@ export async function render(container) {
     container.querySelectorAll("[data-sync]").forEach((b) => b.addEventListener("click", async () => {
       try { await api.syncConnection(Number(b.dataset.sync)); flash("Sync started.", "info"); setTimeout(load, 1500); } catch (err) { flash(err.message, "error"); }
     }));
+    const simLoad = container.querySelector("#sim-load");
+    if (simLoad) simLoad.addEventListener("click", async () => {
+      try {
+        const plan = await api.simulationLoad({ confirm: false });
+        const names = plan.connections.map((c) => c.name).join(", ");
+        if (!window.confirm(`Load demonstration data through ${names}? ${plan.estate.hosts} fictional hosts, ${plan.estate.detections} vulnerabilities. Each record is marked Simulated.`)) return;
+        simLoad.disabled = true;
+        const r = await api.simulationLoad({ confirm: true });
+        const bad = r.results.filter((x) => !x.ok);
+        flash(bad.length ? `Loaded with ${bad.length} failure(s): ${bad[0].message}` : "Demonstration data loaded.", bad.length ? "error" : "success");
+        load();
+      } catch (err) { flash(err.message, "error"); simLoad.disabled = false; }
+    });
+    const simRemove = container.querySelector("#sim-remove");
+    if (simRemove) simRemove.addEventListener("click", async () => {
+      if (!window.confirm("Remove the simulation connections and every simulated record? Live data is not touched.")) return;
+      try { const r = await api.simulationRemove(); flash(`Removed ${r.connections_removed} connection(s) and ${r.findings_removed} simulated finding(s).`, "success"); load(); } catch (err) { flash(err.message, "error"); }
+    });
     container.querySelector("#add-key").addEventListener("click", () => openKeyEditor(load));
     container.querySelector("#import-file").addEventListener("click", () => openImport(load));
     container.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
