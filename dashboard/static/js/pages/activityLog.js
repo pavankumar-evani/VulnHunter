@@ -8,6 +8,7 @@
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
+import { renderIntegrity } from "../integrityPanel.js";
 import { paginate, paginationHtml, wirePagination } from "../pagination.js";
 
 export const title = "Activity Log";
@@ -69,6 +70,21 @@ function unusualActorRowHtml(r) {
 }
 
 export async function render(container) {
+  let admin = false;
+  try { admin = ((await api.authMe()).user || {}).role === "admin"; } catch { admin = false; }
+  if (!admin) return renderActivity(container);
+  // Administrators get an Integrity tab beside the feed (code baseline, store checks, safe repairs).
+  container.innerHTML = `<p><button type="button" data-t="activity">Activity</button> <button type="button" class="secondary-button" data-t="integrity">Integrity</button></p><div id="al-body"></div>`;
+  const body = container.querySelector("#al-body");
+  const show = (t) => {
+    container.querySelectorAll("[data-t]").forEach((b) => b.classList.toggle("secondary-button", b.dataset.t !== t));
+    return t === "integrity" ? renderIntegrity(body) : renderActivity(body);
+  };
+  container.querySelectorAll("[data-t]").forEach((b) => b.addEventListener("click", () => show(b.dataset.t)));
+  return show(new URLSearchParams(window.location.search).get("tab") === "integrity" ? "integrity" : "activity");
+}
+
+async function renderActivity(container) {
   container.innerHTML = `<div class="empty-state">Loading…</div>`;
 
   const [logData, insights] = await Promise.all([

@@ -36,13 +36,13 @@ from remediation.utils import migrations  # noqa: E402
 class MigrationTests(unittest.TestCase):
     def test_pending_then_applied_once_and_recorded(self):
         e = create_engine("sqlite:///:memory:")
-        self.assertEqual([v for v, _ in migrations.pending(e)], [1, 2, 3, 4, 5, 6])
+        self.assertEqual([v for v, _ in migrations.pending(e)], [m[0] for m in migrations.MIGRATIONS])
         with e.begin() as c:  # an old support_tickets table without the ITSM columns
             c.execute(text("CREATE TABLE support_tickets (id INTEGER PRIMARY KEY, kind VARCHAR NOT NULL, severity VARCHAR NOT NULL, subject VARCHAR NOT NULL, "
                            "description TEXT NOT NULL, status VARCHAR NOT NULL, requester_email VARCHAR NOT NULL, assignee_email VARCHAR, resolution TEXT, "
                            "created_at VARCHAR NOT NULL, updated_at VARCHAR NOT NULL, resolved_at VARCHAR)"))
         ran = migrations.apply(e)
-        self.assertEqual([v for v, _ in ran], [1, 2, 3, 4, 5, 6])
+        self.assertEqual([v for v, _ in ran], [m[0] for m in migrations.MIGRATIONS])
         cols = {r[1] for r in e.connect().execute(text("PRAGMA table_info(support_tickets)"))}
         self.assertTrue({"team", "priority", "csat_score"} <= cols)
         self.assertEqual(migrations.apply(e), [])

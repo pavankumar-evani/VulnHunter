@@ -18,6 +18,7 @@ core:
   - /api/status
   - /api/license
   - /api/features
+  - /api/decisions
   - /api/capabilities
   - /api/overview
   - /api/queue
@@ -34,6 +35,7 @@ core:
   - /mcp
   - /api/mcp
   - /api/admin
+  - /api/integrity
   - /api/export
   - /api/analytics
   - /api/guidance
@@ -60,6 +62,7 @@ modules:
     - /api/detections
     - /api/soar
     - /api/darkweb
+    - /api/cvd
     - /api/threat-intel
     - /api/cortex-xsiam
     - /api/ingest/alerts

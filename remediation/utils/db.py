@@ -725,6 +725,24 @@ darkweb_hits = Table(
     Column("updated_at", String, nullable=False),
 )
 
+cvd_advisories = Table(
+    "cvd_advisories", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("source", String, nullable=False),
+    Column("advisory_id", String, nullable=False),
+    Column("title", String, nullable=True),
+    Column("cves", Text, nullable=True),  # JSON list
+    Column("vendor", String, nullable=True),
+    Column("product", String, nullable=True),
+    Column("severity", String, nullable=True),
+    Column("published", String, nullable=True),
+    Column("state", String, nullable=True),
+    Column("url", String, nullable=True),
+    Column("first_seen", String, nullable=False),
+    Column("updated_at", String, nullable=False),
+    UniqueConstraint("source", "advisory_id", name="uq_cvd_source_id"),
+)
+
 darkweb_sources = Table(
     "darkweb_sources", metadata,
     Column("source_id", String, primary_key=True),
@@ -1216,6 +1234,26 @@ devsecops_custom_controls = Table(
     Column("created_at", String, nullable=False),
 )
 
+# Counts and outcomes of typed decisions (remediation/decisions/calibration.py): never free text, never a prompt, never a person's identity.
+decision_log = Table(
+    "decision_log", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("decision", String, nullable=False),
+    Column("question", String, nullable=False),
+    Column("ref", String, nullable=True),            # an opaque id such as alert:12, never text
+    Column("logged_at", String, nullable=False),
+    Column("value", String, nullable=False),
+    Column("probability", Float, nullable=False),
+    Column("confidence", Float, nullable=False),
+    Column("route", String, nullable=False),
+    Column("evaluator", String, nullable=True),
+    Column("version", String, nullable=True),
+    Column("outcome", String, nullable=True),        # accepted | overridden
+    Column("outcome_value", String, nullable=True),
+    Column("outcome_at", String, nullable=True),
+    Column("model_calls_avoided", Integer, nullable=False, default=0),
+)
+
 
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
@@ -1240,9 +1278,9 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
+            hunts, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
-            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls,
+            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

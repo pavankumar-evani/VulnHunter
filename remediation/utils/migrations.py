@@ -60,7 +60,20 @@ def _m005_simulation_provenance(engine):
             _add_missing_columns(engine, table)
 
 
-def _m006_api_key_team(engine):
+def _m006_cvd_advisories(engine):
+    """New table only (expand-only): the CVD feed store. Safe if ensure_schema already created it."""
+    from remediation.utils import db
+    db.cvd_advisories.create(engine, checkfirst=True)
+
+
+def _m007_ai_asset_agent_fields(engine):
+    """Adds the agent, MCP server and lifecycle keys to stored AI asset records (they live in data_json, so no column changes). Expand-only and repeatable."""
+    from remediation.aisec import store
+    if inspect(engine).has_table("ai_assets"):
+        store.backfill_new_fields(engine)
+
+
+def _m008_api_key_team(engine):
     from remediation.utils import db
     if inspect(engine).has_table("api_keys"):
         _add_missing_columns(engine, db.api_keys)
@@ -72,7 +85,9 @@ MIGRATIONS = [
     (3, "soc_alert_rule_and_entities", _m003_soc_alert_columns),
     (4, "soc_alert_action_taken", _m004_soc_alert_action),
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
-    (6, "api_key_team_binding", _m006_api_key_team),
+    (6, "cvd_advisories_table", _m006_cvd_advisories),
+    (7, "ai_asset_agent_mcp_lifecycle_fields", _m007_ai_asset_agent_fields),
+    (8, "api_key_team_binding", _m008_api_key_team),
 ]
 
 

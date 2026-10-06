@@ -14,6 +14,8 @@ Quanta administration: the commands you need to install, run and look after a de
     python cli/quanta_admin.py check              # is this deployment configured safely?
     python cli/quanta_admin.py backup --out ./backups
     python cli/quanta_admin.py restore --from ./backups/quanta-backup-....zip --yes
+    python cli/quanta_admin.py integrity-manifest # baseline of the code and shipped config (build time)
+    python cli/quanta_admin.py check-integrity [--heal [--confirm]]   # code drift + store consistency; safe repairs preview unless --confirm
     python cli/quanta_admin.py rotate-keys        # re-encrypt stored credentials under the newest key
     python cli/quanta_admin.py seed-appsec-demo   # a demo application, SBOM and findings for the Applications pages (--remove undoes it)
 
@@ -389,6 +391,47 @@ def cmd_seed_demo(a):
     return 0 if all(r["ok"] for r in out["results"]) else 1
 
 
+def cmd_integrity_manifest(a):
+    from remediation.integrity import manifest
+    path, data = manifest.write(REPO_ROOT, path=a.out)
+    n = sum(1 for m in data["files"].values() if m["kind"] == "policy")
+    print(f"Wrote {path}: {len(data['files'])} files ({len(data['files']) - n} code, {n} policy).")
+    return 0
+
+
+def cmd_check_integrity(a):
+    from remediation.integrity import heal, service
+    report = service.full_report()
+    m = report["manifest"]
+    print(f"Code baseline: {m['state']}  {m['message']}")
+    for kind in ("modified", "missing", "unexpected"):
+        for rel in m["code"][kind]:
+            print(f"  code {kind}: {rel}")
+    for kind in ("modified", "missing", "unexpected"):
+        for rel in m["policy"][kind]:
+            who = m["policy"]["editors"].get(rel)
+            print(f"  policy {kind} (expected to change): {rel}" + (f"  by {who['actor']} ({who['action']}, {who['at']})" if who else ""))
+    print()
+    tag = {"ok": "PASS", "info": "INFO", "warn": "WARN", "fail": "FAIL"}
+    for c in report["checks"]:
+        print(f"[{tag[c['level']]}] {c['title']}: {c['detail']}" + (f"  (fix: {c['fix']})" if c.get("fix") else ""))
+        if c.get("manual") and c["level"] in ("warn", "fail"):
+            print(f"       manual: {c['manual']}")
+    rc = 1 if report["counts"]["fail"] or m["state"] == "code-modified" else 0
+    if a.heal:
+        print()
+        out = heal.run(confirm=bool(a.confirm), actor="cli")
+        print("Repairs applied:" if a.confirm else "Repairs previewed (add --confirm to apply):")
+        for r in out["results"]:
+            print(f"  {r['action']}: {r['status']}" + (f" - {json.dumps(r['planned'])[:300]}" if r["planned"] else ""))
+        for mm in out["manual"]:
+            print(f"  manual: {mm['title']}: {mm['manual']}")
+        print(f"After: {out['after']['status']}")
+    elif a.confirm:
+        print("--confirm has no effect without --heal.", file=sys.stderr)
+    return rc
+
+
 def cmd_worker(_a):
     from remediation.coordination import worker
     worker.main()
@@ -454,6 +497,13 @@ def build_parser():
     sdm = sub.add_parser("seed-demo", help="load demonstration data by replaying recorded vendor responses through the real connectors; --remove undoes it")
     sdm.add_argument("--remove", action="store_true")
     sdm.set_defaults(fn=cmd_seed_demo)
+    im = sub.add_parser("integrity-manifest", help="write the SHA-256 baseline of the application's code and shipped config (run at build time)")
+    im.add_argument("--out", default=None, help="manifest path (default remediation/integrity/manifest.json, or QUANTA_INTEGRITY_MANIFEST)")
+    im.set_defaults(fn=cmd_integrity_manifest)
+    ci = sub.add_parser("check-integrity", help="compare the code with its baseline and run store consistency checks; --heal previews safe repairs, --heal --confirm applies them")
+    ci.add_argument("--heal", action="store_true")
+    ci.add_argument("--confirm", action="store_true")
+    ci.set_defaults(fn=cmd_check_integrity)
     s = sub.add_parser("restore")
     s.add_argument("--from", dest="source", required=True)
     s.add_argument("--yes", action="store_true")

@@ -8,7 +8,8 @@ links are gaps, never a pass. Model provenance, signing and weight integrity can
 import datetime
 import fnmatch
 
-from remediation.posture import model
+from remediation.aisec import rules_mcp
+from remediation.posture import aidlc, model
 
 FRAMEWORK = {
     "id": "ai-supply-chain",
@@ -360,4 +361,50 @@ def run(ctx):
         out.append(_na(cid, "assurance", title, 3) if not d["has_ai"] else
                    _chk(cid, "assurance", title, "unknown", weight=3, evidence=[ev + f" {len(assets or [])} system(s) and {len(d['apps'] or [])} unreviewed or reviewed AI application(s) are recorded."], recommendation=rec,
                         change=_page(PAGE_REGISTER, "notes", "evidence reference", "Keeps the evidence next to the system."), data_used=["AI register"]))
+
+    # ---- MCP servers and tools, read from the register's structured records (blank is a gap, never a pass)
+    need_appr = rules_mcp.config()["side_effects_requiring_approval"]
+
+    def servers():
+        return [{"name": f"{a['name']}/{s['name']}", **s} for a in (assets or []) for s in a.get("mcp_servers") or []]
+
+    def pooled(rows, fn):
+        pool = [{**r, "_v": fn(r)} for r in rows]
+        return pool, [r for r in pool if r["_v"] is not None], [r for r in pool if r["_v"] is False]
+
+    def mauth():
+        def v(s):
+            if s.get("auth") is None:
+                return None
+            if s["auth"] in ("none", "api-key"):
+                return False
+            return None if (s["auth"] == "oauth2.1" and s.get("token_audience_validated") is None) else (s.get("token_audience_validated") is not False)
+        pool, ans, bad = pooled([s for s in servers() if s.get("transport") == "http"], v)
+        return _tri_check("mcp-auth", "tools", "Remote MCP servers use OAuth 2.1 or mutual TLS with the token audience checked", pool, ans, bad, "remote (HTTP) MCP servers",
+                          "Require OAuth 2.1 bearer tokens (or mTLS), validate each token's audience and never pass a client's token to another API.", 5,
+                          _page(PAGE_REGISTER, "mcp_servers", "auth oauth2.1, token audience validated", "Records strong authentication."), "unauthenticated, key-only or not audience-checked", thr)
+    out.append(guard("mcp-auth", "tools", "Remote MCP servers use OAuth 2.1 or mutual TLS with the token audience checked", mauth, 5))
+
+    def tappr():
+        rows = [{"name": f"{a['name']}/{t['name']}", **t} for a in (assets or []) for t in a.get("tools") or [] if t.get("side_effect") in need_appr]
+        pool, ans, bad = pooled(rows, lambda t: t.get("requires_approval"))
+        return _tri_check("tool-approval", "tools", "Tools that write, send data out, delete or spend require a person's approval", pool, ans, bad, "recorded tools with a side effect",
+                          "Set requires_approval on each of these tools and show the person the exact call before it runs.", 5,
+                          _page(PAGE_REGISTER, "tools", "requires_approval true", "Records the approval gate."), "callable with no approval", thr)
+    out.append(guard("tool-approval", "tools", "Tools that write, send data out, delete or spend require a person's approval", tappr, 5))
+
+    def miso():
+        pool, ans, bad = pooled(servers(), lambda s: aidlc.all_of(s.get("sandboxed"), s.get("egress_restricted")))
+        return _tri_check("mcp-isolation", "tools", "MCP servers run sandboxed with restricted outbound access", pool, ans, bad, "registered MCP servers",
+                          "Run each server in a container or VM as a non-root user with an egress allowlist.", 3,
+                          _page(PAGE_REGISTER, "mcp_servers", "sandboxed true, egress restricted true", "Records isolation."), "not sandboxed or with open egress", thr)
+    out.append(guard("mcp-isolation", "tools", "MCP servers run sandboxed with restricted outbound access", miso, 3))
+
+    def aud():
+        rows = [a for a in (assets or []) if a.get("tools") or a.get("mcp_servers")]
+        pool, ans, bad = pooled(rows, lambda a: aidlc.all_of(*[(a.get("audit_log") or {}).get(k) for k in ("immutable", "redacts_secrets")]))
+        return _tri_check("audit-integrity", "assurance", "Tool-call audit logs are append-only and redact secrets", pool, ans, bad, "systems with recorded tools or MCP servers",
+                          "Send tool calls to an append-only store and redact tokens and keys before a record is written.", 3,
+                          _page(PAGE_REGISTER, "audit_log", "immutable true, redacts secrets true", "Records log integrity."), "with an alterable log or secrets in logs", thr)
+    out.append(guard("audit-integrity", "assurance", "Tool-call audit logs are append-only and redact secrets", aud, 3))
     return out
