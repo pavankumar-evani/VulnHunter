@@ -11,6 +11,7 @@ const KEY_SCOPES = [
   ["ai-usage:write", "Report AI usage (gateway, OpenTelemetry)"],
   ["soc:write", "Send SIEM / XDR alerts for triage"],
   ["darkweb:write", "Send dark-web monitoring output"],
+  ["asm:write", "Send attack-surface discovery output"],
 ];
 
 const SCHEDULES = [[0, "Manual only"], [15, "Every 15 minutes"], [60, "Hourly"], [360, "Every 6 hours"], [1440, "Daily"], [10080, "Weekly"]];

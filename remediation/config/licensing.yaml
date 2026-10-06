@@ -97,6 +97,8 @@ modules:
     - /api/active-directory
     - /api/assets
     - /api/firewall
+    - /api/asm
+    - /api/ingest/asm
     - /api/controls
     - /api/zero-day-watch
     - /api/attack-paths

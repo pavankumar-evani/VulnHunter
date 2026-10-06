@@ -53,6 +53,7 @@ const routes = [
   { pattern: /^\/access-governance\/?$/, load: () => import("./pages/iam.js") },
   { pattern: /^\/ai-security\/?$/, load: () => import("./pages/aiSecurity.js") },
   { pattern: /^\/api-security\/?$/, load: () => import("./pages/apiSecurity.js") },
+  { pattern: /^\/attack-surface\/?$/, load: () => import("./pages/attackSurface.js") },
   { pattern: /^\/firewall\/?$/, load: () => import("./pages/firewall.js") },
   { pattern: /^\/zero-day-watch\/?$/, load: () => import("./pages/zeroDay.js") },
   { pattern: /^\/devsecops\/?$/, load: () => import("./pages/devsecops.js") },
