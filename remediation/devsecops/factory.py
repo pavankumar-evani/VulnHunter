@@ -92,7 +92,7 @@ def items(findings, engine=None):
             shown = "merged-still-reported"
         else:
             shown = row["state"]
-        out.append({**row, "shown_state": shown, "title": f["title"] if f else None, "severity": f["severity"] if f else None, "repository": (f.get("asset") or {}).get("name") if f else None,
+        out.append({**row, "shown_state": shown, "title": f.get("title") if f else None, "severity": f.get("severity") if f else None, "repository": (f.get("asset") or {}).get("name") if f else None,
                     "scan_type": f.get("scan_type") if f else None, "location": f.get("location") if f else None})
     out.sort(key=lambda r: (r["shown_state"] == "resolved-in-latest-scan", SEV.get(r["severity"], 9), r["finding_id"]))
     return out

@@ -26,6 +26,8 @@ RUN pip install --no-cache-dir -r dashboard/requirements.txt -r remediation/conn
     && pip install --no-cache-dir "psycopg2-binary>=2.9,<3"
 
 COPY . .
+# baseline of the shipped code for GET /api/integrity (a failure here only means the API reports 'no baseline')
+RUN python cli/quanta_admin.py integrity-manifest || true
 RUN chmod +x deploy/entrypoint.sh \
     && useradd --system --create-home --uid 10001 quanta \
     && mkdir -p /app/remediation/output /app/remediation/live-data \
