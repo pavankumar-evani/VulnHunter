@@ -40,3 +40,6 @@ deliverables/
 
 # A local database from an older working name; never source
 remediation/vulnhunter.db
+
+# advisory lock files written at run time (remediation/utils/file_lock.py)
+*.lock
