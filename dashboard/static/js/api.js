@@ -24,6 +24,20 @@ async function request(method, path, body) {
   return data;
 }
 
+// Plain-text responses (Markdown or HTML exports); errors still carry the JSON detail.
+async function requestText(path) {
+  const res = await fetch(path);
+  const text = await res.text();
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { detail = JSON.parse(text).detail || detail; } catch { /* not JSON */ }
+    const err = new Error(detail);
+    err.status = res.status;
+    throw err;
+  }
+  return text;
+}
+
 export const api = {
   overview: () => request("GET", "/api/overview"),
   threatIntelFreshness: () => request("GET", "/api/threat-intel/freshness"),
@@ -237,6 +251,22 @@ export const api = {
   socIncident: (id) => request("GET", `/api/soc/incidents/${id}`),
   socIncidentAct: (id, action, body) => request("POST", `/api/soc/incidents/${id}/${action}`, body),
   socIncidentManual: (body) => request("POST", "/api/soc/incidents/manual", body),
+  socIncidentReport: (id) => request("GET", `/api/soc/incidents/${id}/report`),
+  socIncidentReportMd: (id) => requestText(`/api/soc/incidents/${id}/report?format=md`),
+  socIncidentReportRefresh: (id, body) => request("POST", `/api/soc/incidents/${id}/report/refresh`, body),
+  socIncidentFollowUp: (id, body) => request("POST", `/api/soc/incidents/${id}/follow-up`, body),
+  socIncidentMergeFollowups: (id, body) => request("POST", `/api/soc/incidents/${id}/report/merge-followups`, body),
+  socIncidentPostToTicket: (id, body) => request("POST", `/api/soc/incidents/${id}/report/post-to-ticket`, body),
+  socIncidentAiSummary: (id, body) => request("POST", `/api/soc/incidents/${id}/ai-summary`, body),
+  huntingAttackMatrix: () => request("GET", "/api/hunting/attack-matrix"),
+  huntingSuggestion: (id) => request("GET", `/api/hunting/suggestions/${id}`),
+  huntingHunt: (id) => request("GET", `/api/hunting/hunts/${id}`),
+  huntReport: (id) => request("GET", `/api/hunting/hunts/${id}/report`),
+  huntReportText: (id, fmt) => requestText(`/api/hunting/hunts/${id}/report?format=${fmt}`),
+  huntAllowlistAdd: (id, body) => request("POST", `/api/hunting/hunts/${id}/allowlist`, body),
+  huntAllowlistRemove: (id, entryId) => request("DELETE", `/api/hunting/hunts/${id}/allowlist/${entryId}`),
+  huntTimeBox: (id, body) => request("POST", `/api/hunting/hunts/${id}/time-box`, body),
+  huntReportMetrics: () => request("GET", "/api/hunting/report-metrics"),
   socRoutingPreview: (alertId) => request("GET", `/api/soc/routing/preview?alert_id=${alertId}`),
   socAnalystUpdate: (body) => request("PUT", "/api/soc/analysts", body),
   socAnalystAdd: (body) => request("POST", "/api/soc/analysts", body),

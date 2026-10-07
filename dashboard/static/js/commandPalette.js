@@ -10,6 +10,7 @@ import { escapeHtml } from "./dom.js";
 import { rank, highlight } from "./fuzzy.js";
 import { lookupData } from "./search.js";
 import { toast, showShortcuts, debounce } from "./ui.js";
+import { api } from "./api.js";
 
 const RECENT_KEY = "quanta.recent";
 const THEME_KEY = "quanta.theme";
@@ -17,6 +18,7 @@ let el = null;
 let items = [];      // what is shown, in order
 let sel = 0;
 let user = null;
+let socItems = [];   // SOC incidents and hunts, loaded when the palette opens (administrators only: the list APIs are admin-gated)
 
 // ---- recent pages (the router calls recordVisit after each page loads)
 function readRecent() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch { return []; } }
@@ -82,7 +84,7 @@ function recentItems() {
 }
 
 // ---- rendering
-const GROUP_TITLES = { recent: "Recent", page: "Pages", action: "Actions", data: "Findings and assets" };
+const GROUP_TITLES = { recent: "Recent", page: "Pages", action: "Actions", soc: "Incidents and hunts", data: "Findings and assets" };
 function render() {
   const list = el.querySelector(".pal-list");
   const input = el.querySelector(".pal-input");
@@ -113,7 +115,8 @@ function compute() {
   } else {
     const pages = rank(pageItems(), q, (p) => [p.label, p.sub, p.extra], 8).map((r) => ({ ...r.item, hl: r.indices }));
     const acts = rank(actionItems(), q, (a) => [a.label], 4).map((r) => ({ ...r.item, hl: r.indices }));
-    items = [...pages, ...acts, ...(dataFor === q ? dataResults : [])];
+    const soc = rank(socItems, q, (x) => [x.label, x.sub], 6).map((r) => ({ ...r.item, hl: r.indices }));
+    items = [...pages, ...acts, ...soc, ...(dataFor === q ? dataResults : [])];
   }
   sel = Math.min(sel, Math.max(0, items.length - 1));
   render();
@@ -149,6 +152,20 @@ function onKey(e) {
   else if (e.key === "Tab") { e.preventDefault(); el.querySelector(".pal-input").focus(); } // keep focus in the box; the list follows with the arrows
 }
 
+// Incident ids and hunt titles for the palette, from the real list APIs. A failure (not an administrator, no licence) just leaves the group out.
+async function loadSocItems() {
+  socItems = [];
+  if (!user || user.role !== "admin") return;
+  try {
+    const [inc, hunts] = await Promise.all([api.socIncidents({ open_only: "true" }).catch(() => ({ incidents: [] })), api.huntingList().catch(() => ({ hunts: [] }))]);
+    socItems = [
+      ...inc.incidents.slice(0, 200).map((i) => ({ kind: "soc", label: `#${i.id} ${i.title}`, sub: `Incident, ${i.severity}, ${i.status}`, icon: "signal", path: `/soc?incident=${i.id}` })),
+      ...hunts.hunts.slice(0, 100).map((h) => ({ kind: "soc", label: `Hunt #${h.id} ${h.title}`, sub: `Hunt, ${h.status}`, icon: "search", path: `/hunting?hunt=${h.id}` })),
+    ];
+    if (el) compute();
+  } catch { socItems = []; }
+}
+
 let opener = null;
 function close() {
   if (!el) return;
@@ -165,6 +182,7 @@ async function open() {
   if (el) return;
   opener = document.activeElement;
   try { user = await getCurrentUser(); } catch { user = null; }
+  loadSocItems();
   el = document.createElement("div");
   el.className = "pal-backdrop";
   el.innerHTML = `<div class="pal" role="dialog" aria-modal="true" aria-label="Command palette">
