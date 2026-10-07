@@ -127,14 +127,31 @@ def main():
         state = wait_for(lambda: (lambda d: d if sum(1 for v in d.values() if v) == 1 else None)(leaders()), 60)
         check(bool(state), f"exactly one web pod is the scheduler leader ({state})")
         leader = next(p for p, v in state.items() if v)
-        survivor = pod_b if leader == pod_a else pod_a
-        sport, ssession = (5082, sb) if survivor == pod_b else (5081, sa)
         c.stop_forwards()
-        c.forward(survivor, sport)
-        ssession = login(sport, a.admin_email, a.admin_password)
         sh("kubectl", "-n", a.namespace, "delete", "pod", leader, "--wait=false")
-        took = wait_for(lambda: ssession.get(f"http://127.0.0.1:{sport}/api/admin/jobs", timeout=10).json()["leader"], 120)
-        check(bool(took), f"the surviving pod takes over as leader after {leader} is deleted")
+
+        # Kubernetes starts a replacement pod at once, and the replacement can win the lease before the old survivor does, so ask every
+        # ready web pod (never the deleted one) rather than only the one that was already running.
+        seen_pods = {}      # pod -> (port, session)
+
+        def other_leaders():
+            pods = [p for p in c.pods("web") if p != leader]
+            result = {}
+            for pod in pods:
+                if pod not in seen_pods:
+                    port = 5090 + len(seen_pods)
+                    proc = subprocess.Popen(["kubectl", "-n", a.namespace, "port-forward", f"pod/{pod}", f"{port}:5050"],
+                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    c.forwards.append(proc)
+                    if not wait_for(lambda: requests.get(f"http://127.0.0.1:{port}/healthz", timeout=3).status_code == 200, 30, 1):
+                        continue
+                    seen_pods[pod] = (port, login(port, a.admin_email, a.admin_password))
+                port, session = seen_pods[pod]
+                result[pod] = session.get(f"http://127.0.0.1:{port}/api/admin/jobs", timeout=10).json()["leader"]
+            return result if sum(1 for v in result.values() if v) == 1 else None
+
+        took = wait_for(other_leaders, 150)
+        check(bool(took), f"a different web pod takes over as leader after {leader} is deleted ({took})")
 
         # 4. workers
         workers = wait_for(lambda: c.pods("worker"), 60)
