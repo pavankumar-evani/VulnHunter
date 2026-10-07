@@ -322,6 +322,70 @@ export function groupByDay(items, getTs) {
   return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, list]) => ({ day, items: list }));
 }
 
+// ---------------------------------------------------------------- infrastructure and exposure (module 4)
+export function assetFacets(assets) {
+  const kinds = {}; let owned = 0; let unowned = 0;
+  for (const a of assets) { kinds[a.kind] = (kinds[a.kind] || 0) + 1; if (a.owner || a.team) owned += 1; else unowned += 1; }
+  return { kinds, owned, unowned };
+}
+// The exposure map's rows from /api/attack-surface/summary: widest layer first, bars scaled to the biggest layer, risky services flagged on the services row.
+export function exposureLevels(summary) {
+  const k = summary.assets.by_kind;
+  const rows = [
+    { kind: "domain", label: "Domains and subdomains", count: (k.domain || 0) + (k.subdomain || 0), flag: "" },
+    { kind: "ip", label: "Addresses", count: k.ip || 0, flag: "" },
+    { kind: "service", label: "Services", count: k.service || 0, flag: summary.exposed_risky_services ? `${summary.exposed_risky_services} risky exposed` : "", flagCount: summary.exposed_risky_services || 0 },
+    { kind: "url", label: "Web endpoints", count: k.url || 0, flag: "" },
+  ];
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return rows.map((r) => ({ ...r, width: Math.round((r.count / max) * 100), flagWidth: r.flagCount ? Math.max(2, Math.round((Math.min(r.flagCount, r.count) / max) * 100)) : 0 }));
+}
+export const changeTone = (c) => ({ new: "warn", reappeared: "warn", changed: "info", disappeared: "good" }[c] || "neutral");
+
+// ---------------------------------------------------------------- administration (module 8)
+// One word for how a connection is doing, from what the server recorded. "stale" = enabled and scheduled, but its last success is older than twice its schedule
+// (a leader tick that stopped, or a source that keeps failing quietly).
+export function connectionHealth(c, now = Date.now()) {
+  if (!c.enabled) return "disabled";
+  if (c.last_status === "running") return "running";
+  if (c.last_status === "error") return "failing";
+  if (!c.last_status || !c.last_run_at) return "never";
+  const t = Date.parse(c.last_run_at);
+  if (c.schedule_minutes > 0 && Number.isFinite(t) && now - t > c.schedule_minutes * 60000 * 2) return "stale";
+  return "ok";
+}
+export function nextRun(c, now = Date.now()) {
+  if (!c.enabled || !c.schedule_minutes) return { label: c.enabled ? "Manual only" : "Disabled", overdue: false, at: null };
+  const t = Date.parse(c.last_run_at || "");
+  if (!Number.isFinite(t)) return { label: "Due on the next scheduler tick", overdue: true, at: null };
+  const at = t + c.schedule_minutes * 60000;
+  return { label: at <= now ? "Overdue: due on the next scheduler tick" : `About ${new Date(at).toISOString().slice(11, 16)} UTC`, overdue: at <= now, at };
+}
+export function connectionKpis(connections, now = Date.now()) {
+  const k = { total: connections.length, ok: 0, failing: 0, stale: 0, never: 0, disabled: 0, running: 0, simulated: 0 };
+  for (const c of connections) { k[connectionHealth(c, now)] += 1; if (c.mode === "simulation") k.simulated += 1; }
+  return k;
+}
+export const HEALTH_LABEL = { ok: "Healthy", failing: "Failing", stale: "Not syncing", never: "Never run", disabled: "Disabled", running: "Syncing" };
+export const HEALTH_TONE = { ok: "good", failing: "critical", stale: "warn", never: "neutral", disabled: "neutral", running: "info" };
+// Activity log: a live tail keeps the newest N entries, merging new ones in by id and keeping order; returns the ids that are new.
+export function mergeTail(current, incoming, max = 500) {
+  const seen = new Set(current.map((e) => e.id));
+  const fresh = incoming.filter((e) => !seen.has(e.id));
+  const merged = [...fresh, ...current].sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)) || Number(b.id) - Number(a.id)).slice(0, max);
+  return { list: merged, freshIds: new Set(fresh.map((e) => e.id)) };
+}
+export function activityFilter(entries, { q = "", action = "", actor = "" } = {}) {
+  const words = String(q).trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return entries.filter((e) => (!action || e.action === action || String(e.action).startsWith(`${action}.`)) && (!actor || e.actor === actor)
+    && (!words.length || words.every((w) => `${e.action} ${e.actor} ${e.target || ""} ${JSON.stringify(e.details || {})}`.toLowerCase().includes(w))));
+}
+export function activityGroups(entries) {
+  const m = new Map();
+  for (const e of entries) { const a = String(e.action).split(".")[0]; m.set(a, (m.get(a) || 0) + 1); }
+  return [...m.entries()].map(([group, count]) => ({ group, count })).sort((a, b) => b.count - a.count || a.group.localeCompare(b.group));
+}
+
 export function filterRecords(list, q, getters) {
   const words = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return list;

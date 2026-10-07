@@ -481,5 +481,89 @@ class GateHistoryTests(unittest.TestCase):
         self.assertEqual(len(g[0]["items"]), 2)
 
 
+NOW_MS = 1_800_000_000_000  # 2027-01-15T08:00:00Z
+ISO = "new Date(1800000000000 - %d).toISOString()"
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class ConnectionHealthTests(unittest.TestCase):
+    def health(self, **c):
+        base = {"enabled": True, "schedule_minutes": 60, "last_status": "ok"}
+        base.update(c)
+        return run_js(f"console.log(JSON.stringify(M.connectionHealth({json.dumps(base)}, {NOW_MS})));", "moduleLogic.js")
+
+    def iso(self, minutes_ago):
+        return run_js(f"console.log(JSON.stringify(new Date({NOW_MS} - {minutes_ago} * 60000).toISOString()));", "moduleLogic.js")
+
+    def test_states(self):
+        self.assertEqual(self.health(enabled=False, last_status="error"), "disabled")
+        self.assertEqual(self.health(last_status="running"), "running")
+        self.assertEqual(self.health(last_status="error", last_run_at=self.iso(5)), "failing")
+        self.assertEqual(self.health(last_status=None), "never")
+        self.assertEqual(self.health(last_run_at=None), "never")
+        self.assertEqual(self.health(last_run_at=self.iso(30)), "ok")
+
+    def test_stale_means_older_than_twice_the_schedule(self):
+        self.assertEqual(self.health(last_run_at=self.iso(119)), "ok")
+        self.assertEqual(self.health(last_run_at=self.iso(121)), "stale")
+        self.assertEqual(self.health(schedule_minutes=0, last_run_at=self.iso(60 * 24 * 30)), "ok")  # manual only is never stale
+
+    def test_next_run(self):
+        out = run_js(f'''const c={{enabled:true, schedule_minutes:60, last_run_at:new Date({NOW_MS} - 20*60000).toISOString()}};
+          console.log(JSON.stringify([M.nextRun(c,{NOW_MS}).overdue, M.nextRun({{...c, last_run_at:new Date({NOW_MS} - 90*60000).toISOString()}},{NOW_MS}).overdue, M.nextRun({{...c, schedule_minutes:0}},{NOW_MS}).label, M.nextRun({{...c, enabled:false}},{NOW_MS}).label, M.nextRun({{...c, last_run_at:null}},{NOW_MS}).overdue]));''', "moduleLogic.js")
+        self.assertEqual(out, [False, True, "Manual only", "Disabled", True])
+
+    def test_kpis_count_each_state_once_and_simulations(self):
+        cs = [{"enabled": True, "schedule_minutes": 60, "last_status": "ok", "last_run_at": self.iso(1), "mode": "simulation"}, {"enabled": True, "schedule_minutes": 60, "last_status": "error", "last_run_at": self.iso(1)}, {"enabled": False}]
+        k = run_js(f"console.log(JSON.stringify(M.connectionKpis({json.dumps(cs)}, {NOW_MS})));", "moduleLogic.js")
+        self.assertEqual((k["total"], k["ok"], k["failing"], k["disabled"], k["simulated"]), (3, 1, 1, 1, 1))
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class ActivityTailTests(unittest.TestCase):
+    E = [{"id": 3, "timestamp": "2026-01-03T10:00:00Z", "actor": "a@x", "action": "login.success", "target": None, "details": {}},
+         {"id": 2, "timestamp": "2026-01-02T10:00:00Z", "actor": "b@x", "action": "exception.revoke", "target": "EXC-1", "details": {"reason": "done"}},
+         {"id": 1, "timestamp": "2026-01-01T10:00:00Z", "actor": "a@x", "action": "login.failure", "target": None, "details": {}}]
+
+    def test_merge_adds_only_new_entries_and_keeps_newest_first(self):
+        incoming = [{"id": 4, "timestamp": "2026-01-04T10:00:00Z", "actor": "c@x", "action": "approval.request"}, self.E[0]]
+        out = call("moduleLogic.js", f"(() => {{ const m = M.mergeTail({json.dumps(self.E)}, {json.dumps(incoming)}, 10); return {{ids: m.list.map((e) => e.id), fresh: [...m.freshIds]}}; }})()")
+        self.assertEqual(out, {"ids": [4, 3, 2, 1], "fresh": [4]})
+
+    def test_merge_caps_the_tail(self):
+        out = call("moduleLogic.js", f"M.mergeTail({json.dumps(self.E)}, [], 2).list.map((e) => e.id)")
+        self.assertEqual(out, [3, 2])
+
+    def test_filters_by_group_actor_and_text(self):
+        f = lambda opts: call("moduleLogic.js", f"M.activityFilter({json.dumps(self.E)}, {json.dumps(opts)}).map((e) => e.id)")  # noqa: E731
+        self.assertEqual(f({"action": "login"}), [3, 1])
+        self.assertEqual(f({"action": "login.failure"}), [1])
+        self.assertEqual(f({"actor": "b@x"}), [2])
+        self.assertEqual(f({"q": "EXC-1 done"}), [2])
+        self.assertEqual(f({}), [3, 2, 1])
+        self.assertEqual(f({"action": "log"}), [])  # a group is a whole first segment, not a prefix of letters
+
+    def test_groups_are_counted_and_sorted(self):
+        self.assertEqual(call("moduleLogic.js", f"M.activityGroups({json.dumps(self.E)})"), [{"group": "login", "count": 2}, {"group": "exception", "count": 1}])
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class AttackSurfaceLogicTests(unittest.TestCase):
+    def test_facets(self):
+        a = [{"kind": "domain", "owner": "x"}, {"kind": "domain", "team": "t"}, {"kind": "ip"}, {"kind": "url", "owner": None, "team": None}]
+        self.assertEqual(call("moduleLogic.js", f"M.assetFacets({json.dumps(a)})"), {"kinds": {"domain": 2, "ip": 1, "url": 1}, "owned": 2, "unowned": 2})
+
+    def test_exposure_levels_scale_to_the_widest_layer_and_flag_risky_services(self):
+        s = {"assets": {"by_kind": {"domain": 6, "subdomain": 14, "ip": 10, "service": 5, "url": 0}}, "exposed_risky_services": 2}
+        lv = call("moduleLogic.js", f"M.exposureLevels({json.dumps(s)})")
+        self.assertEqual([(x["kind"], x["count"], x["width"]) for x in lv], [("domain", 20, 100), ("ip", 10, 50), ("service", 5, 25), ("url", 0, 0)])
+        svc = lv[2]
+        self.assertEqual((svc["flag"], svc["flagWidth"]), ("2 risky exposed", 10))
+        self.assertEqual(lv[0]["flagWidth"], 0)
+
+    def test_change_tone(self):
+        self.assertEqual(call("moduleLogic.js", '["new","reappeared","changed","disappeared","other"].map(M.changeTone)'), ["warn", "warn", "info", "good", "neutral"])
+
+
 if __name__ == "__main__":
     unittest.main()
