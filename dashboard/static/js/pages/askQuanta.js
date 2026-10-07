@@ -78,6 +78,15 @@ function answerHtml(result) {
     </div>`;
 }
 
+function structuredHtml(s) {
+  const r = s.result;
+  const cols = r.columns || [];
+  const table = r.rows && r.rows.length && cols.length ? `<div class="table-scroll" style="margin-top:10px"><table class="data-table"><thead><tr>${cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead><tbody>${r.rows.map((row) => `<tr>${cols.map((c, i) => `<td>${i === 0 && row.page ? `<a href="${escapeHtml(row.page)}" data-link>${escapeHtml(row[c] ?? "")}</a>` : escapeHtml(row[c] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
+  return `<div class="callout" id="ask-answer"><span class="badge badge-outline">Structured: ${escapeHtml(s.query.intent)}</span>
+    <p style="margin:8px 0 0">${escapeHtml(r.summary)}</p>${r.note ? `<p class="filter-count">${escapeHtml(r.note)}</p>` : ""}${table}
+    <details style="margin-top:10px"><summary class="filter-count">The exact query that ran</summary><pre>${escapeHtml(JSON.stringify(s.query, null, 2))}</pre></details></div>`;
+}
+
 export async function render(container) {
   container.innerHTML = `
     <p class="subtitle">
@@ -110,6 +119,13 @@ export async function render(container) {
     input.value = query;
     resultEl.innerHTML = `<div class="empty-state">Searching real data…</div>`;
     try {
+      // Structured grammar first (deterministic, shows the exact query it ran); anything it cannot parse falls back to the keyword search below.
+      let structured = null;
+      try { structured = await api.askStructured(query); } catch (e) { if (/administrator/i.test(e.message)) { resultEl.innerHTML = `<div class="callout">${escapeHtml(e.message)}</div>`; return; } }
+      if (structured && structured.parsed && structured.result) {
+        resultEl.innerHTML = structuredHtml(structured);
+        return;
+      }
       const result = await api.searchAsk(query);
       resultEl.innerHTML = answerHtml(result);
     } catch (err) {

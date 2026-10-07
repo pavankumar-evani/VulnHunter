@@ -1458,6 +1458,31 @@ decision_log = Table(
 )
 
 
+# Insights (remediation/insights/): one row per stable insight id (state is the person's decision), and small key/value baselines the next refresh compares against.
+insights = Table(
+    "insights", metadata,
+    Column("id", String, primary_key=True),
+    Column("detector", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("module", String, nullable=False),
+    Column("state", String, nullable=False, default="open"),   # open | snoozed | dismissed | acted
+    Column("state_reason", Text, nullable=True),
+    Column("state_by", String, nullable=True),
+    Column("state_at", String, nullable=True),
+    Column("snooze_until", String, nullable=True),
+    Column("payload", Text, nullable=False),                   # the insight as JSON, refreshed each run
+    Column("first_seen", String, nullable=False),
+    Column("last_seen", String, nullable=False),
+)
+
+insight_baselines = Table(
+    "insight_baselines", metadata,
+    Column("key", String, primary_key=True),
+    Column("value", Text, nullable=False),
+    Column("updated_at", String, nullable=False),
+)
+
+
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
     cheap - safe to call on every access rather than requiring a separate migration
@@ -1483,7 +1508,7 @@ def ensure_schema(engine):
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
             hunts, hunt_hypotheses, hunt_hypothesis_events, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
-            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log, asm_assets, asm_runs, asm_changes, asm_scope, asm_settings, soc_incidents, soc_incident_alerts, soc_incident_events, investigation_reports, incident_followups, hunt_allowlist, hunt_report_meta,
+            applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log, asm_assets, asm_runs, asm_changes, asm_scope, asm_settings, soc_incidents, soc_incident_alerts, soc_incident_events, investigation_reports, incident_followups, hunt_allowlist, hunt_report_meta, insights, insight_baselines,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

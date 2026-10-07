@@ -105,6 +105,13 @@ def _m011_investigation_reports(engine):
         table.create(engine, checkfirst=True)
 
 
+def _m012_insights_tables(engine):
+    """New tables only (expand-only): insights and insight_baselines. Safe if ensure_schema already created them."""
+    from remediation.utils import db
+    db.insights.create(engine, checkfirst=True)
+    db.insight_baselines.create(engine, checkfirst=True)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
@@ -117,6 +124,7 @@ MIGRATIONS = [
     (9, "hunt_hypotheses_tables", _m009_hunt_hypotheses),
     (10, "soc_incidents_and_analyst_routing", _m010_soc_incidents),
     (11, "investigation_reports_followups_allowlist", _m011_investigation_reports),
+    (12, "insights_tables", _m012_insights_tables),
 ]
 
 

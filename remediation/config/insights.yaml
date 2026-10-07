@@ -1,0 +1,38 @@
+# Insights engine: thresholds, role caps and learning bounds. Every detector is deterministic (rules and robust statistics); nothing here calls a model.
+# A detector with too little data says so in the refresh result's "gaps" list and emits no insight.
+max_per_role: 10          # the most insights any one role lens is shown at a time
+snooze_days: 7            # default snooze length
+resolve_after_days: 3     # an insight whose detector stops producing it is hidden after it has been absent this long
+
+learning:                 # acted/dismissed counts per detector nudge its weight, bounded and visible to the admin
+  min_actions: 5          # fewer recorded actions than this and the weight stays 1.0
+  strength: 0.4           # weight = 1 + strength * (acted - dismissed) / total
+  min_weight: 0.6
+  max_weight: 1.4
+
+detectors:
+  kev_week_over_week:   {enabled: true, min_new: 3, ratio: 1.5, min_findings: 20}
+  sla_trend:            {enabled: true, min_new: 3, ratio: 1.5, breach_share: 0.2, min_findings: 20}
+  finding_burst:        {enabled: true, window_days: 3, min_count: 5, z: 3.5, min_entities: 10}
+  exposure_change:      {enabled: true}
+  unowned_critical:     {enabled: true, min_findings: 1}
+  control_disappeared:  {enabled: true, stale_days: 30}
+  exception_expiring:   {enabled: true, within_days: 14}
+  approval_stalled:     {enabled: true, stalled_days: 7}
+  same_cve_many_apps:   {enabled: true, min_assets: 3}
+  source_quiet:         {enabled: true, factor: 3, scan_max_age_days: 7}
+  noisy_rules:          {enabled: true, min_closed: 10, fp_rate: 0.8}
+  alert_volume_anomaly: {enabled: true, min_days: 14, z: 3.5, min_count: 10}
+  entity_repeat:        {enabled: true, window_days: 14, min_records: 3}
+  posture_drop:         {enabled: true, min_points: 6, min_drop: 0.15}
+  expiry:               {enabled: true, key_within_days: 14}
+  ai_cost_spike:        {enabled: true, min_days: 10, z: 3.5, min_cost_usd: 5}
+  policy_drift:         {enabled: true, window_days: 14}
+
+# Activity-log actions that change policy/configuration. A matching event whose details carry none of the approval keys is reported as drift.
+drift:
+  action_prefixes: [priority_rules, exploit_criteria, remediation_policy, policy., settings, config, gate., licensing, rbac, admin.settings]
+  approval_keys: [approved_by, approval_id, change_ticket]
+
+correlation:
+  min_insights: 3         # an entity in at least this many insights becomes a compound insight
