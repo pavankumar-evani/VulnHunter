@@ -180,5 +180,165 @@ class QueueSavedViewTests(unittest.TestCase):
         self.assertFalse(call("queueLogic.js", 'M.sameState("?kevOnly=true","")'))
 
 
+ROW = {"id": "F1", "assignment": {"status": "open", "assignee_email": "me@x"}, "sla": {"due_date": "2026-01-01", "days_remaining": -3, "breached": True}}
+UNASSIGNED = {"id": "F2", "assignment": None, "sla": {"due_date": "2026-09-01", "days_remaining": 2, "breached": False}}
+ME = {"email": "me@x", "role": "user"}
+ADMIN = {"email": "boss@x", "role": "admin"}
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class AssignmentBoardRuleTests(unittest.TestCase):
+    def plan(self, row, to, me):
+        return call("moduleLogic.js", f"M.planAssignmentMove({json.dumps(row)}, {json.dumps(to)}, {json.dumps(me)})")
+
+    def test_assignee_moves_own_work(self):
+        p = self.plan(ROW, "in_progress", ME)
+        self.assertEqual((p["ok"], p["action"], p["status"]), (True, "status", "in_progress"))
+
+    def test_blocked_needs_a_note_and_resolved_explains_itself(self):
+        self.assertEqual(self.plan(ROW, "blocked", ME)["needs"], "note")
+        self.assertIn("next scan", self.plan(ROW, "resolved", ME)["note"])
+
+    def test_someone_else_cannot_move_it_but_an_admin_can(self):
+        self.assertFalse(self.plan(ROW, "blocked", {"email": "other@x", "role": "user"})["ok"])
+        self.assertTrue(self.plan(ROW, "blocked", ADMIN)["ok"])
+
+    def test_taking_unassigned_work_assigns_it_first(self):
+        p = self.plan(UNASSIGNED, "in_progress", ME)
+        self.assertEqual((p["ok"], p["action"], p["then"]), (True, "take", "in_progress"))
+        self.assertIsNone(self.plan(UNASSIGNED, "open", ME)["then"])
+
+    def test_nothing_moves_back_to_unassigned_by_drag(self):
+        self.assertFalse(self.plan(ROW, "unassigned", ME)["ok"])
+        self.assertIn("administrator", self.plan(ROW, "unassigned", ME)["reason"])
+
+    def test_same_column_is_a_no_op(self):
+        p = self.plan(ROW, "open", ME)
+        self.assertTrue(p["same"])
+        self.assertFalse(p["ok"])
+
+    def test_kpis_count_open_work_for_sla(self):
+        rows = [ROW, UNASSIGNED, {"id": "F3", "assignment": {"status": "resolved"}, "sla": {"breached": True, "days_remaining": -9}}]
+        k = call("moduleLogic.js", f"M.assignmentKpis({json.dumps(rows)})")
+        self.assertEqual((k["total"], k["unassigned"], k["open"], k["resolved"], k["breached"], k["atRisk"]), (3, 1, 1, 1, 1, 1))
+
+    def test_url_state_round_trip_and_defaults(self):
+        out = run_js('const s=M.parseAssignState("?view=team&priority=High&status=blocked&mode=table&include_resolved=true&q=web"); console.log(JSON.stringify([s, M.assignStateToSearch(s), M.assignStateToSearch(M.parseAssignState("")), M.parseAssignState("?view=bogus&status=bogus&priority=bogus").view]));', "moduleLogic.js")
+        self.assertEqual(out[0]["view"], "team")
+        self.assertTrue(out[0]["includeResolved"])
+        self.assertEqual(sorted(out[1].lstrip("?").split("&")), sorted("view=team&priority=High&status=blocked&q=web&include_resolved=true&mode=table".split("&")))
+        self.assertEqual(out[2], "")
+        self.assertEqual(out[3], "mine")
+
+    def test_sla_clock_wording(self):
+        out = run_js('console.log(JSON.stringify([M.slaClock(null), M.slaClock({breached:true,days_remaining:-4,due_date:"x"}), M.slaClock({days_remaining:0,due_date:"x",breached:false}), M.slaClock({days_remaining:2,due_date:"x"}), M.slaClock({days_remaining:30,due_date:"2026-12-01"})]));', "moduleLogic.js")
+        self.assertEqual([o["tone"] for o in out], ["none", "bad", "warn", "warn", "good"])
+        self.assertEqual(out[1]["text"], "Breached 4d ago")
+        self.assertEqual(out[2]["text"], "Due today")
+
+
+PENDING = {"id": "APR-1", "status": "pending", "computed_status": "pending", "requested_by": "req@x", "playbook_lint": {"passed": True, "errors": 0, "warnings": 1}, "created_on": "2026-01-01"}
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class ApprovalRuleTests(unittest.TestCase):
+    def can(self, fn, a, me):
+        return call("moduleLogic.js", f"M.{fn}({json.dumps(a)}, {json.dumps(me)})")
+
+    def test_admin_other_than_requester_can_approve(self):
+        self.assertTrue(self.can("canApprove", PENDING, ADMIN)["ok"])
+
+    def test_separation_of_duties(self):
+        r = self.can("canApprove", PENDING, {"email": "REQ@x", "role": "admin"})
+        self.assertFalse(r["ok"])
+        self.assertIn("Separation of duties", r["reason"])
+
+    def test_failed_lint_blocks_approval_with_the_count(self):
+        r = self.can("canApprove", {**PENDING, "playbook_lint": {"passed": False, "errors": 2, "warnings": 0}}, ADMIN)
+        self.assertFalse(r["ok"])
+        self.assertIn("2 errors", r["reason"])
+        self.assertTrue(self.can("canReject", {**PENDING, "playbook_lint": {"passed": False, "errors": 2, "warnings": 0}}, ADMIN)["ok"])
+
+    def test_non_admin_and_decided_requests_cannot_be_decided(self):
+        self.assertFalse(self.can("canApprove", PENDING, ME)["ok"])
+        self.assertFalse(self.can("canApprove", {**PENDING, "computed_status": "approved"}, ADMIN)["ok"])
+        self.assertFalse(self.can("canReject", {**PENDING, "computed_status": "expired"}, ADMIN)["ok"])
+
+    def test_reason_validation(self):
+        out = call("moduleLogic.js", 'M.validateReason("  too  ")')
+        self.assertIn("at least 8", out)
+        self.assertEqual(call("moduleLogic.js", 'M.validateReason("Needs a staging run first")'), "")
+
+    def test_timeline_for_a_rejected_request_stops_at_the_decision(self):
+        steps = call("moduleLogic.js", f'M.approvalTimeline({json.dumps({**PENDING, "computed_status": "rejected", "rejected_by": "boss@x", "rejected_at": "2026-01-02", "rejection_reason": "no"})})')
+        self.assertEqual([s["id"] for s in steps], ["requested", "staging", "decision"])
+        self.assertEqual(steps[2]["label"], "Rejected")
+
+    def test_timeline_for_an_approved_triggered_request_waits_on_verification(self):
+        a = {**PENDING, "computed_status": "remediation_triggered", "approved_by": "boss@x", "approved_at": "2026-01-02", "triggered_at": "2026-01-03", "triggered_by": "boss@x", "verification": {"state": "awaiting-rescan", "detail": "d"}}
+        steps = call("moduleLogic.js", f"M.approvalTimeline({json.dumps(a)})")
+        self.assertEqual([s["state"] for s in steps], ["done", "pending", "done", "done", "current"])
+        a["verification"] = {"state": "still-present", "detail": "still there"}
+        self.assertEqual(call("moduleLogic.js", f"M.approvalTimeline({json.dumps(a)})")[-1]["state"], "failed")
+
+    def test_pending_with_a_passed_window_is_skipped_not_current(self):
+        steps = call("moduleLogic.js", f'M.approvalTimeline({json.dumps({**PENDING, "computed_status": "expired"})})')
+        self.assertEqual(steps[2]["state"], "skipped")
+
+    def test_buckets_and_kpis(self):
+        apps = [PENDING, {**PENDING, "id": "A2", "computed_status": "approved"}, {**PENDING, "id": "A3", "computed_status": "remediation_triggered", "verification": {"state": "still-present"}}, {**PENDING, "id": "A4", "computed_status": "rejected"},
+                {**PENDING, "id": "A5", "playbook_lint": {"passed": False, "errors": 1, "warnings": 0}}]
+        out = run_js(f'const a={json.dumps(apps)}; console.log(JSON.stringify({{b:a.map(M.approvalBucket), k:M.approvalKpis(a,{{avg_days_request_to_approval:2.5,fix_hold_rate:0.5}})}}));', "moduleLogic.js")
+        self.assertEqual(out["b"], ["pending", "approved", "approved", "closed", "pending"])
+        k = out["k"]
+        self.assertEqual((k["pending"], k["approved"], k["triggered"], k["rejected"], k["lintFailed"], k["stillPresent"], k["avgDaysToApproval"], k["fixHoldRate"]), (2, 1, 1, 1, 1, 1, 2.5, 0.5))
+
+    def test_needs_approval_orders_by_priority_and_skips_requested(self):
+        fs = [{"id": "F10", "priority": "Low", "remediation_policy": {"change_type": "normal"}}, {"id": "F2", "priority": "Critical", "remediation_policy": {"change_type": "emergency"}},
+              {"id": "F3", "priority": "High", "remediation_policy": {"change_type": "standard"}}, {"id": "F4", "priority": "High", "remediation_policy": {"change_type": "normal"}}]
+        out = call("moduleLogic.js", f'M.needsApproval({json.dumps(fs)}, [{{finding_id:"F4"}}]).map(f=>f.id)')
+        self.assertEqual(out, ["F2", "F10"])
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class ExceptionRuleTests(unittest.TestCase):
+    NOW = "new Date(2026, 5, 15)"
+
+    def test_states_and_countdown(self):
+        out = run_js(f'const n={self.NOW}; console.log(JSON.stringify([M.exceptionState({{computed_status:"active",expires_on:"2026-06-20"}},n), M.exceptionState({{computed_status:"active",expires_on:"2026-06-15"}},n), M.exceptionState({{computed_status:"active",expires_on:"2026-09-01"}},n), M.exceptionState({{computed_status:"revoked"}},n), M.exceptionState({{computed_status:"expired"}},n)]));', "moduleLogic.js")
+        self.assertEqual([o["key"] for o in out], ["expiring", "expiring", "active", "revoked", "expired"])
+        self.assertEqual(out[0]["label"], "5d left")
+        self.assertEqual(out[1]["label"], "Expires today")
+
+    def test_kpis_count_expiring_inside_active(self):
+        ex = [{"computed_status": "active", "expires_on": "2026-06-20"}, {"computed_status": "active", "expires_on": "2026-12-20"}, {"computed_status": "expired"}, {"computed_status": "revoked"}]
+        k = run_js(f"console.log(JSON.stringify(M.exceptionKpis({json.dumps(ex)}, {self.NOW})));", "moduleLogic.js")
+        self.assertEqual(k, {"active": 2, "expiring": 1, "expired": 1, "revoked": 1, "total": 4})
+
+    def validate(self, **kw):
+        base = {"finding_id": "F1", "reason": "Compensating control: isolated segment", "requested_by": "a@x", "approved_by": "b@x", "expires_on": "2026-07-15"}
+        base.update(kw)
+        return run_js(f"console.log(JSON.stringify(M.validateException({json.dumps(base)}, {self.NOW})));", "moduleLogic.js")
+
+    def test_a_good_request_passes(self):
+        self.assertEqual(self.validate(), "")
+
+    def test_each_rule_the_server_enforces(self):
+        self.assertIn("finding", self.validate(finding_id="").lower())
+        self.assertIn("reason", self.validate(reason="short").lower())
+        self.assertIn("future", self.validate(expires_on="2026-06-15"))
+        self.assertIn("365", self.validate(expires_on="2028-01-01"))
+        self.assertIn("Separation of duties", self.validate(approved_by="A@x"))
+        self.assertIn("approves", self.validate(approved_by=""))
+        self.assertIn("expiry", self.validate(expires_on="").lower())
+
+    def test_add_days_iso(self):
+        self.assertEqual(run_js('console.log(JSON.stringify(M.addDaysIso(30, new Date(2026, 0, 15))));', "moduleLogic.js"), "2026-02-14")
+
+    def test_filter_records_requires_every_word(self):
+        out = run_js('console.log(JSON.stringify(M.filterRecords([{a:"web server",b:"x"},{a:"web",b:"db"}], "web db", [(r)=>r.a,(r)=>r.b]).length));', "moduleLogic.js")
+        self.assertEqual(out, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

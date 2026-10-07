@@ -124,6 +124,36 @@
 .mx-log .row.new { animation: sx-flash 2.2s ease-out; }
 .mx-log .row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--brand-accent); }
 
+/* forms and dialogs */
+.mx-check { display: inline-flex; gap: 8px; align-items: center; font-size: .86rem; cursor: pointer; }
+.mx-inline { display: inline-flex; gap: 8px; align-items: center; }
+.mx-fs { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 10px; padding: 8px 12px 10px; min-width: 0; } .mx-fs legend { padding: 0 6px; font-size: .8rem; font-weight: 700; color: var(--text-muted); }
+.mx-fs input[type=text], .mx-fs input[type=date], .mx-fs select, .mx-fs textarea { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font: inherit; }
+.mx-fs input[type=date] { width: auto; }
+.mx-picked .mx-pickedrow { margin-top: 6px; padding: 6px 8px; border: 1px solid var(--brand-accent); border-radius: 6px; font-size: .86rem; }
+.mx-results { display: grid; gap: 2px; margin-top: 4px; } .mx-result { text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; padding: 5px 8px; font: inherit; font-size: .84rem; color: var(--text); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-result:hover, .mx-result:focus-visible { border-color: var(--brand-accent); outline: none; background: var(--bg); }
+.mx-details { margin-top: 12px; } .mx-details summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+.mx-code { max-height: 340px; overflow: auto; }
+
+/* approvals: timeline, actions */
+.mx-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.mx-why-not { font-size: .76rem; color: var(--text-muted); border-left: 3px solid var(--sx-warn); padding-left: 8px; }
+.mx-tl { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 4px; font-size: .82rem; }
+.mx-tl li { display: flex; gap: 8px; align-items: flex-start; } .mx-tl-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--border); margin-top: 4px; flex: none; background: var(--surface); }
+.mx-tl-done .mx-tl-dot { background: var(--sx-good); border-color: var(--sx-good); } .mx-tl-current .mx-tl-dot { border-color: var(--brand-accent); background: color-mix(in srgb, var(--brand-accent) 40%, var(--surface)); }
+.mx-tl-failed .mx-tl-dot { background: var(--sx-bad); border-color: var(--sx-bad); } .mx-tl-skipped .mx-tl-dot { border-style: dashed; }
+.mx-tl-compact { display: flex; flex-wrap: wrap; gap: 4px 12px; } .mx-tl-compact .mx-tl-body { white-space: nowrap; }
+.mx-tl:not(.mx-tl-compact) li { border-left: 2px solid var(--border); margin-left: 4px; padding-left: 10px; }
+.mx-tl:not(.mx-tl-compact) .mx-tl-dot { margin-left: -17px; }
+.mx-card.flash { animation: sx-flash 2.2s ease-out; } .mx-card.pending { opacity: .7; }
+.mx-cardlink { text-align: left; font-weight: 600; color: var(--text); padding: 0; }
+.mx-note { font-size: .76rem; color: var(--text-muted); border-left: 3px solid var(--border); padding-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-clock { font-size: .76rem; } .mx-clock-bad { color: var(--sx-bad); font-weight: 700; } .mx-clock-warn { color: var(--sx-warn); font-weight: 700; } .mx-clock-good, .mx-clock-none { color: var(--text-muted); }
+.mx-statuspill { display: inline-block; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); font-size: .76rem; font-weight: 600; }
+.mx-st-in_progress { border-color: var(--sx-low); } .mx-st-blocked { border-color: var(--sx-warn); color: var(--sx-warn); } .mx-st-resolved { border-color: var(--sx-good); color: var(--sx-good); }
+.mx-status-sel { padding: 3px 8px; font-size: .82rem; }
+
 @media (max-width: 860px) { .mx-split { grid-template-columns: minmax(0, 1fr); } .mx-chain { grid-template-columns: 1fr; } .mx-arrow { transform: rotate(90deg); justify-self: center; } .mx-mix { grid-column: span 1; } }
 @media (max-width: 520px) {
   .mx-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mx-mix { grid-column: span 2; } .mx-cover { grid-template-columns: 1fr; }
