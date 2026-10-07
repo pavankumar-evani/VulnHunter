@@ -1,0 +1,2 @@
+# Shell scripts run inside Linux containers: never let a Windows checkout turn their line endings into CRLF.
+*.sh text eol=lf
