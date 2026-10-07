@@ -57,6 +57,7 @@ from remediation.integrity import heal as integrity_heal, service as integrity_s
 from remediation.assignments import analytics as ownership_analytics  # noqa: E402
 from remediation.assignments import store as assignments_store  # noqa: E402
 import observability  # noqa: E402
+import events as live_events  # noqa: E402
 from remediation.apikeys import store as apikey_store  # noqa: E402
 from remediation.connections import crypto as conn_crypto  # noqa: E402
 from remediation.connections import links as conn_links  # noqa: E402
@@ -860,6 +861,27 @@ def api_threat_intel_refresh_now(body: ThreatIntelRefreshBody, request: Request)
     activity_log.record_activity(user["email"], "threat_intel.refresh_now", None, {"cve_count": cve_count})
     freshness = dashboard_data.load_threat_intel_freshness()
     return {"dry_run": False, "message": f"Refreshed KEV/EPSS for {cve_count} CVE(s).", "freshness": freshness}
+
+
+@app.get("/api/events")
+async def api_events(request: Request, topics: str = "", once: bool = False, user: dict = Depends(rbac.require_login)):  # noqa: ARG001
+    """Server-Sent Events: a read-only live feed (dashboard/events.py). Topics are comma separated (empty = all). `once=true` sends the hello frame and
+    closes (availability check). Resumes from Last-Event-ID. The stream carries event names and small counters, never finding or user detail; the page
+    still reads the real data through the normal routes. A stream is recycled after 15 minutes and the browser reconnects by itself."""
+    wanted = [t.strip() for t in topics.split(",") if t.strip()][:10]
+    sub = live_events.hub.subscribe(wanted)
+    if sub is None:
+        raise HTTPException(status_code=503, detail="Too many live streams are open; the page will poll instead.")
+    try:
+        last_id = int(request.headers.get("last-event-id", "0") or 0)
+    except ValueError:
+        last_id = 0
+    headers = {"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
+    return StreamingResponse(live_events.stream(sub, last_id, once=once, max_seconds=900), media_type="text/event-stream", headers=headers)
+
+
+from remediation.audit import activity_log as _activity_log_hook  # noqa: E402
+_activity_log_hook.listener = lambda action: live_events.publish("activity", {"action": action})
 
 
 @app.get("/api/notifications")
