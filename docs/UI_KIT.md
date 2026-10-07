@@ -84,6 +84,7 @@ export async function render(container, ...params) {
 * **Home** (`pages/overview.js`): four headline tiles. There is no server-side history, so the change chips and sparklines come from what this browser saw on earlier visits (`localStorage` `quanta.home.history`, at most one reading per five minutes, 24 kept). Until there are two readings the tile shows the number only; the tile hint says so. It refreshes straight away on an `activity` event as well as on its existing 20-second timer, and counts up only on the first paint.
 * **Module picker** (`pages/capabilities.js`): tiles with an in-use meter and counters, a debounced filter over the chosen module's capabilities, empty states, a data-age badge. Behaviour (remembered module, `?area=` link, licence banner) is unchanged.
 * **SOC and Hunting pages** were rebuilt on this kit: see `docs/SOC_HUNT_UI.md`.
+* **Queue, assignments, approvals, exceptions, posture, risk and compliance, applications, fix PRs, pipeline gates, attack surface, AI security, connections and the activity log** were rebuilt next: see `docs/UI_REVAMP.md`. They add `mxKit.js` (a selectable, virtualised table whose sort and filters the page owns so they can live in the URL; tiles that are filters; popovers; radar, meter and stacked bar; `autoRefresh`; `pageActions`, which puts a page's key actions in the command palette through `registerPaletteActions` while it is open) and `modules.css`.
 
 ## Accessibility
 

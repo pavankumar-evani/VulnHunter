@@ -15,7 +15,7 @@ import { queryBlock, wireQueryBlocks, renderHuntReport } from "../huntReport.js"
 
 export const title = "Threat Hunting";
 
-const NATIVE = [["suggested", "Suggested hunts"], ["matrix", "ATT&CK coverage"], ["active", "Active hunts"]];
+const NATIVE = [["suggested", "Suggested hunts"], ["matrix", "ATT&CK coverage"], ["active", "Active hunts"], ["library", "Library & frameworks"]];
 const LEGACY = [["alerts", "Alert triage"], ["intel", "Intel intake"], ["detections", "Detection engineering"], ["more", "More"]];
 const STATUSES = [["suggested", "Suggested"], ["accepted", "Accepted"], ["running", "Running"], ["evidence-recorded", "Evidence recorded"], ["concluded", "Concluded"], ["dismissed", "Dismissed"]];
 const go = (path) => { window.history.pushState({}, "", path); window.dispatchEvent(new PopStateEvent("popstate")); };
@@ -44,6 +44,7 @@ export async function render(container) {
   const stamp = () => { const a = container.querySelector("#hx-age"); if (a) { a.innerHTML = dataAgeBadge(Date.now()); mountDataAge(a); } };
 
   if (tab === "suggested") await suggested(); else if (tab === "matrix") await matrix(); else if (tab === "active") await active();
+  else if (tab === "library") { try { const m = await import("../huntLibrary.js"); await m.render(body, { isAdmin, st, go }); } catch (e) { body.innerHTML = `<div class="sx-callout warn">${escapeHtml(e.message)}</div>`; } }
   else { try { const m = await import("./huntingMore.js"); await m.render(body, { tab: tab === "more" ? "overview" : tab }); } catch (e) { body.innerHTML = `<div class="sx-callout warn">${escapeHtml(e.message)}</div>`; } }
 
   // ------------------------------------------------------------------ suggested hunts

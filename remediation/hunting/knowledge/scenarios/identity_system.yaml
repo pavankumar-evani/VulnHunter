@@ -1,0 +1,671 @@
+# Identity attacks, services and system-level persistence/execution, and user-level behaviour. Windows Security, Sysmon and Linux auditd field names.
+- id: identity-kerberoasting
+  title: Kerberoasting
+  category: identity
+  hypothesis: "If an adversary with a domain account is requesting service tickets to crack offline, we would expect to see one account requesting many RC4-encrypted service tickets for different service accounts on {scope}."
+  techniques: [T1558.003]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Rubeus, Impacket GetUserSPNs, PowerShell ticket requests"]
+    infrastructure: ["The compromised host and its domain account"]
+    victim: ["Service accounts with weak passwords and SPNs"]
+  data_sources: [host-auth, directory]
+  leads:
+    - name: RC4 service ticket requests for non-machine accounts
+      technique: T1558.003
+      logsource: {product: windows, service: security}
+      selection: {EventID: 4769, TicketEncryptionType: "0x17", ServiceName|endswith: "svc"}
+      notes: "Single-event form. The hunt is one requester with many distinct ServiceName values in a minute. Replace the ServiceName filter with your service-account naming rule."
+    - name: One account requesting tickets for many services
+      technique: T1558.003
+      spl: 'search sourcetype=WinEventLog:Security EventCode=4769 Ticket_Encryption_Type=0x17 NOT Service_Name="*$" | bin _time span=5m | stats dc(Service_Name) as services, values(Service_Name) as names by Account_Name, Client_Address, _time | where services >= 5 | sort - services | head 50'
+      kql: 'SecurityEvent | where EventID == 4769 and TicketEncryptionType == "0x17" and ServiceName !endswith "$" | summarize services=dcount(ServiceName) by Account, IpAddress, bin(TimeGenerated, 5m) | where services >= 5'
+  malicious: ["Five or more distinct service tickets with RC4 from one workstation in minutes", "A user account requesting tickets for SQL, HTTP and CIFS services in a burst"]
+  benign: ["Vulnerability scanners and inventory tools", "Legacy applications that still require RC4"]
+  tuning: ["Enforce AES for service accounts so any RC4 request stands out", "Exclude known scanner hosts"]
+  severity: high
+  priority: high
+  playbook: pb-ad-compromise
+  response: ["Reset the passwords of the targeted service accounts to long random values or use managed service accounts", "Investigate the requesting host"]
+
+- id: identity-asrep-roasting
+  title: AS-REP roasting
+  category: identity
+  hypothesis: "If an adversary is looking for accounts that do not need Kerberos pre-authentication, we would expect to see authentication requests without pre-authentication for several accounts from one host on {scope}."
+  techniques: [T1558.004]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Rubeus asreproast, Impacket GetNPUsers"]
+    infrastructure: ["The requesting host"]
+    victim: ["Accounts with 'Do not require Kerberos preauthentication'"]
+  data_sources: [host-auth, directory]
+  leads:
+    - name: AS-REQ without pre-authentication for an RC4 ticket
+      technique: T1558.004
+      logsource: {product: windows, service: security}
+      selection: {EventID: 4768, PreAuthType: 0, TicketEncryptionType: "0x17"}
+  malicious: ["Several accounts probed from one address", "A pre-auth-disabled account that was just enabled and then requested"]
+  benign: ["Legacy systems that need the setting"]
+  tuning: ["List and remove the pre-auth-disabled flag from accounts that do not need it"]
+  severity: high
+  priority: medium
+  playbook: pb-ad-compromise
+  response: ["Reset the passwords of the accounts hit and clear the flag"]
+
+- id: identity-dcsync
+  title: DCSync (directory replication by a non-domain-controller)
+  category: identity
+  hypothesis: "If an adversary has replication rights, we would expect to see a directory replication request from a host that is not a domain controller on {scope}."
+  techniques: [T1003.006]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Mimikatz lsadump::dcsync, Impacket secretsdump"]
+    infrastructure: ["The host that issues the replication request"]
+    victim: ["Every password hash in the domain, including krbtgt"]
+  data_sources: [host-auth, network-flow]
+  leads:
+    - name: Directory replication access requested by a non-DC account
+      technique: T1003.006
+      logsource: {product: windows, service: security}
+      selection: {EventID: 4662, Properties|contains: ["1131f6aa-9c07-11d1-f79f-00c04fc2dcd2", "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2", "89e95b76-444d-4c62-991a-0facbeda640c"]}
+      notes: "Replication GUIDs. Exclude domain-controller computer accounts (names ending in $) and Azure AD Connect's account."
+    - name: Replication RPC from a host that is not a DC
+      technique: T1003.006
+      spl: 'search sourcetype=zeek:dce_rpc endpoint="drsuapi" operation IN ("DRSGetNCChanges","DsGetNCChanges") | lookup domain_controllers ip AS id.orig_h OUTPUT is_dc | where isnull(is_dc) | stats count by id.orig_h, id.resp_h | head 50'
+      notes: "Needs network RPC logs and a lookup of domain controller addresses."
+  malicious: ["A workstation or server requesting replication", "A user account with replication rights it has never used"]
+  benign: ["Azure AD Connect and similar sync tools", "Domain controller to domain controller replication"]
+  tuning: ["Exclude only the named sync accounts and DCs; everything else is a finding"]
+  severity: critical
+  priority: high
+  playbook: pb-ad-compromise
+  response: ["Treat the domain as exposed: contain the host, plan a double krbtgt reset with the identity team"]
+
+- id: identity-golden-silver-ticket
+  title: Golden and silver tickets
+  category: identity
+  hypothesis: "If an adversary forged Kerberos tickets, we would expect to see service logons with tickets that have no matching ticket request, unusual lifetimes or an account that does not exist, on {scope}."
+  techniques: [T1558.001, T1558.002]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Mimikatz, Impacket ticketer with a stolen krbtgt or service-account hash"]
+    infrastructure: ["The host presenting the ticket"]
+    victim: ["Domain-wide (golden) or one service (silver)"]
+  data_sources: [host-auth]
+  leads:
+    - name: Logon with no matching ticket request for the same account and client
+      technique: T1558.001
+      spl: 'search sourcetype=WinEventLog:Security (EventCode=4624 Logon_Type=3 OR EventCode=4768 OR EventCode=4769) | eval kind=if(EventCode=4624,"logon","tgt_tgs") | stats dc(kind) as kinds, values(kind) as seen by Account_Name, Client_Address | where kinds=1 AND seen="logon" | head 100'
+      notes: "A network logon that arrives with no TGT/TGS event at any DC is the classic gap. Requires DC and member server logs in the same index, and is noisy with NTLM."
+    - name: Ticket granting ticket requested with an unexpected encryption type
+      technique: T1558.002
+      logsource: {product: windows, service: security}
+      selection: {EventID: [4768, 4769], TicketEncryptionType: "0x17"}
+      notes: "Where AES is enforced, RC4 tickets indicate forged or downgraded tickets."
+  malicious: ["A privileged logon with no ticket request", "A ticket with a ten-year lifetime in the service ticket"]
+  benign: ["NTLM fallback", "Cross-domain referrals"]
+  tuning: ["Enforce AES-only and watch for downgrades", "Baseline your NTLM use first"]
+  severity: critical
+  priority: medium
+  playbook: pb-ad-compromise
+  response: ["Double krbtgt password reset (identity team); rebuild affected trust relationships"]
+
+- id: identity-pass-the-hash
+  title: Pass-the-hash
+  category: identity
+  hypothesis: "If an adversary is reusing NTLM hashes, we would expect to see network logons with NTLM and a key length of zero from a workstation to servers it has not used before on {scope}."
+  techniques: [T1550.002]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Mimikatz sekurlsa::pth, Impacket psexec/smbexec"]
+    infrastructure: ["The workstation that originates the logons"]
+    victim: ["Servers reachable with a stolen local or domain hash"]
+  data_sources: [host-auth]
+  leads:
+    - name: NTLM network logon with a null key length
+      technique: T1550.002
+      logsource: {product: windows, service: security}
+      selection: {EventID: 4624, LogonType: 3, AuthenticationPackageName: "NTLM", KeyLength: 0}
+      notes: "Matches many legitimate NTLM logons; focus on administrator accounts and new source-destination pairs."
+    - name: One source fanning out admin logons to many hosts
+      technique: T1550.002
+      spl: 'search sourcetype=WinEventLog:Security EventCode=4624 Logon_Type=3 Authentication_Package=NTLM | bin _time span=15m | stats dc(dest) as hosts by Account_Name, src, _time | where hosts >= 5 | sort - hosts | head 50'
+  malicious: ["The same local administrator hash used across many servers", "A service account logging on from a workstation"]
+  benign: ["Software deployment tools", "Backup agents"]
+  tuning: ["Randomise local administrator passwords (LAPS) so one hash cannot move", "Exclude deployment servers"]
+  severity: high
+  priority: high
+  playbook: pb-ad-compromise
+  response: ["Contain the source host; reset the account and local administrator secrets that were exposed"]
+
+- id: identity-pass-the-ticket
+  title: Pass-the-ticket and ticket theft
+  category: identity
+  hypothesis: "If an adversary is reusing stolen Kerberos tickets, we would expect to see a ticket used from a host other than the one it was issued to, or tickets exported on an endpoint, on {scope}."
+  techniques: [T1550.003]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Rubeus, Mimikatz kerberos::ptt, Impacket ticket conversion"]
+    infrastructure: ["Source host of the reused ticket"]
+    victim: ["The identity whose ticket was taken"]
+  data_sources: [host-auth, endpoint]
+  leads:
+    - name: Ticket-handling tools or command patterns
+      technique: T1550.003
+      logsource: {category: process_creation, product: windows}
+      selection: {CommandLine|contains: ["kerberos::ptt", "kerberos::list /export", "Rubeus.exe ptt", "asktgt", "/ptt", "tgtdeleg", "klist purge"]}
+    - name: Service ticket request from an address different from the TGT's address
+      technique: T1550.003
+      spl: 'search sourcetype=WinEventLog:Security (EventCode=4768 OR EventCode=4769) | stats values(Client_Address) as addrs, dc(Client_Address) as n by Account_Name | where n >= 2 | sort - n | head 50'
+  malicious: ["The same account's tickets requested from two hosts at once", "Ticket export commands on a server"]
+  benign: ["Users with several devices", "Terminal servers and VDI"]
+  tuning: ["Exclude VDI pools and known multi-homed hosts"]
+  severity: high
+  priority: medium
+  playbook: pb-ad-compromise
+  response: ["Purge tickets by resetting the account; investigate where the ticket came from"]
+
+- id: identity-shadow-admin
+  title: Shadow administrators and hidden privilege
+  category: identity
+  hypothesis: "If an adversary or insider is building hidden administrative access, we would expect to see changes to sensitive group membership, AdminSDHolder, delegation or Group Policy by an account outside the identity team on {scope}."
+  techniques: [T1098, T1069.002, T1078.002, T1484.001]
+  kill_chain: [installation]
+  diamond:
+    capability: ["Directory write access; PowerView and ADSI; delegation settings"]
+    infrastructure: ["The account and host making the changes"]
+    victim: ["Domain privilege and the integrity of policy"]
+  data_sources: [host-auth, directory]
+  leads:
+    - name: Change to a privileged group or to AdminSDHolder
+      technique: T1098
+      logsource: {product: windows, service: security}
+      selection: {EventID: [4728, 4732, 4756, 5136], TargetUserName|contains: ["Domain Admins", "Enterprise Admins", "Administrators", "Schema Admins", "AdminSDHolder"]}
+    - name: Group Policy object created or edited by a non-identity-team account
+      technique: T1484.001
+      logsource: {product: windows, service: security}
+      selection: {EventID: [5136, 5137, 5141], ObjectClass: "groupPolicyContainer"}
+  malicious: ["A user added to Domain Admins outside a change", "A GPO edited to add a startup script"]
+  benign: ["Planned administrative changes", "Joiner-mover-leaver automation"]
+  tuning: ["Alert on every sensitive-group add that has no ticket; they are rare"]
+  severity: critical
+  priority: high
+  playbook: pb-ad-compromise
+  response: ["Verify with the change record; revert unknown changes and review the actor's account"]
+
+- id: sys-new-service-install
+  title: New or modified Windows service
+  category: system-services
+  hypothesis: "If an adversary is persisting or moving laterally with services, we would expect to see a service installed with an unusual binary path, a random name or a command-shell image on {scope}."
+  techniques: [T1543.003, T1569.002]
+  kill_chain: [installation]
+  diamond:
+    capability: ["sc.exe, PsExec-style service creation, Cobalt Strike service beacons"]
+    infrastructure: ["The remote host that created the service"]
+    victim: ["The server or workstation where the service runs as SYSTEM"]
+  data_sources: [host-auth, endpoint]
+  leads:
+    - name: Service installed whose image is a shell, a user-writable path or an admin-share path
+      technique: T1543.003
+      logsource: {product: windows, service: system}
+      selection: {EventID: 7045, ImagePath|contains: ["cmd.exe /c", "powershell", "\\\\127.0.0.1\\ADMIN$", "\\Users\\Public\\", "\\ProgramData\\", "\\Temp\\", "%COMSPEC%"]}
+    - name: Service control manager creating a service from the command line
+      technique: T1569.002
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: "\\sc.exe", CommandLine|contains: [" create ", " config ", "binPath="]}
+  malicious: ["A service whose binary lives in a temp or public folder", "A service created on a remote host a few seconds after a network logon"]
+  benign: ["Software installers", "Management agents"]
+  tuning: ["Allow-list installers by signer", "Compare with your software deployment schedule"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Isolate the host; collect the service binary; remove after evidence is held"]
+
+- id: sys-scheduled-task-persistence
+  title: Scheduled tasks and cron jobs created for persistence
+  category: system-services
+  hypothesis: "If an adversary needs to survive a reboot, we would expect to see scheduled tasks or cron entries created that run scripts from user-writable folders, or with hidden or SYSTEM settings, on {scope}."
+  techniques: [T1053.005, T1053.003]
+  kill_chain: [installation]
+  diamond:
+    capability: ["schtasks, at, crontab, PowerShell Register-ScheduledTask"]
+    infrastructure: ["The payload location or URL the task runs"]
+    victim: ["Hosts where the task persists, often as SYSTEM or root"]
+  data_sources: [endpoint, host-auth]
+  leads:
+    - name: Task created that runs a shell, script host or file from a user-writable path
+      technique: T1053.005
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: "\\schtasks.exe", CommandLine|contains: ["/create", "/sc minute", "\\AppData\\", "\\Temp\\", "\\Users\\Public\\", "powershell", "mshta", "/ru system"]}
+    - name: Cron entry added that fetches and runs content
+      technique: T1053.003
+      logsource: {category: process_creation, product: linux}
+      selection: {CommandLine|contains: ["crontab -", "/etc/cron", "curl http", "wget http", "base64 -d"]}
+      notes: "Matches any command line that mentions both cron and a download. Use auditd file-write events on /var/spool/cron for a cleaner signal."
+  malicious: ["A task named like a Windows component that runs from AppData", "A cron job that pipes a download into a shell"]
+  benign: ["Software updaters", "Backup and monitoring agents"]
+  tuning: ["Baseline task names per image build", "Exclude your management agents' tasks by signer"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Export the task definition for evidence, then remove it with the host owner's agreement"]
+
+- id: sys-wmi-event-subscription
+  title: WMI event subscription persistence and remote WMI execution
+  category: system-services
+  hypothesis: "If an adversary uses WMI for stealthy persistence or lateral execution, we would expect to see permanent event consumers created or wmiprvse spawning interpreters on {scope}."
+  techniques: [T1546.003, T1047]
+  kill_chain: [installation, exploitation]
+  diamond:
+    capability: ["Permanent WMI subscriptions, wmic, PowerShell WMI cmdlets"]
+    infrastructure: ["Remote host that issued WMI calls"]
+    victim: ["Hosts where the subscription fires"]
+  data_sources: [endpoint]
+  leads:
+    - name: WMI filter, consumer or binding created (Sysmon 19-21)
+      technique: T1546.003
+      logsource: {category: wmi_event, product: windows}
+      selection: {EventID: [19, 20, 21]}
+      notes: "Sysmon event ids for WMI filter, consumer and binding. Any non-baseline subscription is a finding."
+    - name: WMI provider host spawning a command interpreter
+      technique: T1047
+      logsource: {category: process_creation, product: windows}
+      selection: {ParentImage|endswith: "\\WmiPrvSE.exe", Image|endswith: ["\\cmd.exe", "\\powershell.exe", "\\wscript.exe", "\\cscript.exe"]}
+  malicious: ["A CommandLineEventConsumer that runs PowerShell", "wmiprvse launching cmd after a remote logon"]
+  benign: ["Management tools that use WMI", "Inventory agents"]
+  tuning: ["Record your baseline subscriptions; alert on anything new"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Dump the subscription for evidence; remove the filter, consumer and binding"]
+
+- id: sys-registry-run-keys-persistence
+  title: Registry autorun and startup-folder persistence
+  category: system-services
+  hypothesis: "If an adversary needs persistence without services, we would expect to see Run or RunOnce keys or startup-folder files written by an unusual process, pointing at user-writable paths, on {scope}."
+  techniques: [T1547.001]
+  kill_chain: [installation]
+  diamond:
+    capability: ["reg add, PowerShell, installers"]
+    infrastructure: ["The payload path or script"]
+    victim: ["The user profile or machine hive"]
+  data_sources: [endpoint]
+  leads:
+    - name: Run-key value written that points to a user-writable or script path
+      technique: T1547.001
+      logsource: {category: registry_set, product: windows}
+      selection: {TargetObject|contains: ["\\CurrentVersion\\Run", "\\CurrentVersion\\RunOnce"], Details|contains: ["\\AppData\\", "\\Temp\\", "\\Users\\Public\\", "powershell", "wscript", "mshta", "rundll32", ".js", ".vbs", ".hta"]}
+    - name: File dropped in a startup folder
+      technique: T1547.001
+      logsource: {category: file_event, product: windows}
+      selection: {TargetFilename|contains: "\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\"}
+  malicious: ["A Run value that launches a script from AppData", "A .lnk or .vbs in Startup written by Office or a browser"]
+  benign: ["Installers for ordinary software", "Cloud-sync clients"]
+  tuning: ["Exclude by signer and known installer parents"]
+  severity: medium
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Remove the value after capturing the payload"]
+
+- id: sys-vulnerable-driver-byovd
+  title: Vulnerable or unsigned driver loaded (bring your own vulnerable driver)
+  category: system-services
+  hypothesis: "If an adversary is loading a vulnerable signed driver to disable security tools or gain kernel access, we would expect to see a driver load from an unusual path, with a hash on a vulnerable-driver list, followed by security-tool tampering on {scope}."
+  techniques: [T1068, T1685]
+  kill_chain: [exploitation, installation]
+  diamond:
+    capability: ["Known vulnerable signed drivers abused to kill EDR processes or read kernel memory"]
+    infrastructure: ["Where the driver file was fetched from"]
+    victim: ["Endpoint security tooling and the kernel's integrity"]
+  data_sources: [endpoint]
+  leads:
+    - name: Driver loaded from a user-writable path
+      technique: T1068
+      logsource: {category: driver_load, product: windows}
+      selection: {ImageLoaded|contains: ["\\Users\\", "\\ProgramData\\", "\\Temp\\", "\\Windows\\Temp\\", "\\Downloads\\"]}
+    - name: Driver hash on a vulnerable-driver list
+      technique: T1685
+      spl: 'search sourcetype=sysmon EventCode=6 | lookup vulnerable_drivers sha256 AS Hashes OUTPUT driver_name | where isnotnull(driver_name) | stats count by Computer, ImageLoaded, driver_name | head 50'
+      notes: "Needs a lookup built from a public vulnerable-driver list such as LOLDrivers. Quanta does not ship one."
+  malicious: ["A signed but vulnerable driver loaded from Temp, then EDR services stopping", "A service created with a driver type from a user folder"]
+  benign: ["Hardware vendors' installers", "Gaming and monitoring tools that ship drivers"]
+  tuning: ["Enable the Microsoft vulnerable-driver blocklist", "Alert on any driver load outside System32\\drivers"]
+  severity: high
+  priority: medium
+  playbook: pb-malware-eradication
+  response: ["Isolate the host; treat as potentially rooted; rebuild rather than clean"]
+
+- id: sys-lolbin-proxy-execution
+  title: Living-off-the-land binaries used for proxy execution and download
+  category: system-services
+  hypothesis: "If an adversary is using built-in tools to run code or download files, we would expect to see certutil, bitsadmin, mshta, rundll32, regsvr32 or msbuild with a URL, a script or an unusual argument on {scope}."
+  techniques: [T1218, T1218.011, T1218.010, T1218.005, T1105]
+  kill_chain: [exploitation, installation]
+  diamond:
+    capability: ["Signed Microsoft binaries (LOLBAS) that load or fetch attacker content"]
+    infrastructure: ["URLs and UNC paths in the command line"]
+    victim: ["Application-allow-listed hosts where only built-in tools run"]
+  data_sources: [endpoint]
+  leads:
+    - name: Built-in binary invoked with a download, scriptlet or remote path
+      technique: T1218
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\certutil.exe", "\\bitsadmin.exe", "\\mshta.exe", "\\regsvr32.exe", "\\rundll32.exe", "\\msbuild.exe", "\\installutil.exe", "\\wmic.exe"], CommandLine|contains: ["http://", "https://", "-urlcache", "/transfer", "scrobj.dll", "javascript:", "vbscript:", "\\\\", "/i:http"]}
+    - name: Rundll32 running a function that is not a DLL export of a normal component
+      technique: T1218.011
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: "\\rundll32.exe", CommandLine|contains: ["comsvcs.dll", "MiniDump", "pcwutl.dll", "advpack.dll", "ieadvpack.dll", "shell32.dll,Control_RunDLL"]}
+      notes: "comsvcs MiniDump is a credential dump; the others are known proxy-execution paths."
+  malicious: ["certutil downloading an executable", "rundll32 with comsvcs.dll and MiniDump targeting lsass"]
+  benign: ["Software deployment scripts", "Administrators using bitsadmin for transfers"]
+  tuning: ["Exclude your management tools by parent process and signer"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Collect the command line and downloaded file; isolate if code ran"]
+
+- id: sys-uncommon-parent-child
+  title: Uncommon parent and child process pairs
+  category: system-services
+  hypothesis: "If an adversary has run code through a trusted process, we would expect to see a child process that this parent has never started before, such as a document reader launching a shell or a service host launching a script, on {scope}."
+  techniques: [T1059, T1204.002]
+  kill_chain: [exploitation]
+  diamond:
+    capability: ["Any code execution through an application or exploit"]
+    infrastructure: ["Outbound connections the child makes (see network scenarios)"]
+    victim: ["The host and the user's data"]
+  data_sources: [endpoint]
+  leads:
+    - name: Rare parent and child pair on a host over thirty days
+      technique: T1059
+      spl: 'search sourcetype=sysmon EventCode=1 | stats count, dc(Computer) as hosts, earliest(_time) as first_seen by ParentImage, Image | where count < 5 AND hosts <= 2 AND first_seen > relative_time(now(), "-1d@d") | sort count | head 100'
+      kql: 'DeviceProcessEvents | summarize n=count(), hosts=dcount(DeviceName), first=min(Timestamp) by InitiatingProcessFileName, FileName | where n < 5 and hosts <= 2 and first > ago(1d)'
+      notes: "A statistical baseline, not a signature. Expect noise from software updates; sort by how unusual the parent is for the child."
+    - name: PDF or Office reader spawning a shell
+      technique: T1204.002
+      logsource: {category: process_creation, product: windows}
+      selection: {ParentImage|endswith: ["\\acrord32.exe", "\\foxitreader.exe", "\\winword.exe", "\\excel.exe"], Image|endswith: ["\\cmd.exe", "\\powershell.exe", "\\wscript.exe"]}
+  malicious: ["A reader or service host starting a command shell", "A pair seen only on one host and only once"]
+  benign: ["Application updates", "Rare administrative workflows"]
+  tuning: ["Build the baseline per image or per role, not for the whole estate"]
+  severity: medium
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Review the child's command line and its network activity before isolating"]
+
+- id: sys-unsigned-binary-odd-path
+  title: Unsigned or masquerading binary in an odd location
+  category: system-services
+  hypothesis: "If an adversary is hiding a binary under a trusted name, we would expect to see a system-looking executable name running from a user-writable path or without a valid signature on {scope}."
+  techniques: [T1036.005]
+  kill_chain: [installation]
+  diamond:
+    capability: ["Renamed tools and malware named after Windows components"]
+    infrastructure: ["Where the binary came from"]
+    victim: ["The host that runs it"]
+  data_sources: [endpoint]
+  leads:
+    - name: System binary name running outside System32
+      technique: T1036.005
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\svchost.exe", "\\lsass.exe", "\\csrss.exe", "\\services.exe", "\\winlogon.exe", "\\explorer.exe", "\\taskhost.exe"], Image|contains: ["\\Users\\", "\\ProgramData\\", "\\Temp\\", "\\Downloads\\", "\\Public\\"]}
+    - name: Executable run from a user-writable path that is unsigned
+      technique: T1036.005
+      spl: 'search sourcetype=sysmon EventCode=1 (Image="*\\Users\\*" OR Image="*\\ProgramData\\*" OR Image="*\\Temp\\*") Signed=false | stats count, dc(Computer) as hosts by Image, Hashes | where hosts <= 2 | sort - count | head 100'
+  malicious: ["svchost.exe in a user folder", "An unsigned binary seen on a single host"]
+  benign: ["Portable apps used by staff", "In-house tools that are not signed"]
+  tuning: ["Sign your in-house tools", "Exclude by hash once reviewed"]
+  severity: high
+  priority: medium
+  playbook: pb-malware-eradication
+  response: ["Hash the file, check reputation, detonate in a sandbox before deciding"]
+
+- id: sys-powershell-obfuscation
+  title: Obfuscated and encoded PowerShell
+  category: system-services
+  hypothesis: "If an adversary is hiding PowerShell commands, we would expect to see encoded, compressed or heavily concatenated commands, or script-block logs with high entropy, on {scope}."
+  techniques: [T1059.001, T1027.010, T1140]
+  kill_chain: [exploitation]
+  diamond:
+    capability: ["Invoke-Obfuscation, base64 and gzip stagers, AMSI bypass strings"]
+    infrastructure: ["Download URLs in decoded payloads"]
+    victim: ["Windows hosts with PowerShell logging"]
+  data_sources: [endpoint, host-auth]
+  leads:
+    - name: Encoded or downloading PowerShell command line
+      technique: T1059.001
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\powershell.exe", "\\pwsh.exe"], CommandLine|contains: [" -enc ", " -encodedcommand ", " -e JAB", "FromBase64String", "IEX (", "Invoke-Expression", "DownloadString", "-nop -w hidden", "-ExecutionPolicy Bypass -NoProfile -W Hidden", "[Convert]::", "GzipStream"]}
+    - name: Script-block logging containing AMSI tampering
+      technique: T1027.010
+      logsource: {product: windows, service: powershell}
+      selection: {EventID: 4104, ScriptBlockText|contains: ["AmsiUtils", "amsiInitFailed", "AmsiScanBuffer", "[Ref].Assembly.GetType"]}
+  malicious: ["Hidden window plus encoded command from an Office parent", "AMSI bypass strings in a script block"]
+  benign: ["Management scripts that encode parameters", "Package managers"]
+  tuning: ["Allow-list signed management scripts", "Turn on Script Block and Module logging if not on"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Decode the command, find the download and the parent; isolate if it ran"]
+
+- id: sys-dll-sideloading
+  title: DLL search-order hijacking and side-loading
+  category: system-services
+  hypothesis: "If an adversary is side-loading a malicious DLL through a legitimate program, we would expect to see a signed application loading an unsigned DLL from its own writable folder, or an application copied to a user path with a DLL beside it, on {scope}."
+  techniques: [T1574.001]
+  kill_chain: [exploitation, installation]
+  diamond:
+    capability: ["A legitimate signed executable plus a malicious DLL with the expected name"]
+    infrastructure: ["The archive or installer that delivered both files"]
+    victim: ["The host and the privileges of the host application"]
+  data_sources: [endpoint]
+  leads:
+    - name: Unsigned DLL loaded by a process from a user-writable folder
+      technique: T1574.001
+      logsource: {category: image_load, product: windows}
+      selection: {Image|contains: ["\\Users\\", "\\ProgramData\\", "\\Temp\\"], ImageLoaded|contains: ["\\Users\\", "\\ProgramData\\", "\\Temp\\"], Signed: "false"}
+    - name: Known sideload pairs where the DLL is outside its normal folder
+      technique: T1574.001
+      spl: 'search sourcetype=sysmon EventCode=7 Signed=false (ImageLoaded="*\\version.dll" OR ImageLoaded="*\\wtsapi32.dll" OR ImageLoaded="*\\dbghelp.dll" OR ImageLoaded="*\\cryptsp.dll") NOT (ImageLoaded="C:\\Windows\\*") | stats count, dc(Computer) as hosts by Image, ImageLoaded | sort - count | head 100'
+  malicious: ["A signed utility copied to Temp loading an unsigned version.dll", "An application and DLL dropped together by an archive"]
+  benign: ["Portable applications", "Developer tools"]
+  tuning: ["Exclude by signer of the host application and the DLL's hash after review"]
+  severity: high
+  priority: medium
+  playbook: pb-malware-eradication
+  response: ["Collect both files; compare the DLL with the vendor's"]
+
+- id: sys-linux-persistence
+  title: Linux persistence (systemd, SSH keys, accounts)
+  category: system-services
+  hypothesis: "If an adversary is persisting on a Linux host, we would expect to see a new systemd unit, an added SSH authorized key or a new local account created outside change on {scope}."
+  techniques: [T1543.002, T1098.004, T1136.001]
+  kill_chain: [installation]
+  diamond:
+    capability: ["systemctl, ssh-keygen and authorized_keys edits, useradd"]
+    infrastructure: ["The SSH key's origin; payload paths in the unit"]
+    victim: ["Linux servers and containers' hosts"]
+  data_sources: [endpoint, host-auth]
+  leads:
+    - name: New systemd unit or enabled service from a temp or home path
+      technique: T1543.002
+      logsource: {category: file_event, product: linux}
+      selection: {TargetFilename|startswith: ["/etc/systemd/system/", "/usr/lib/systemd/system/", "/home/"], TargetFilename|endswith: [".service", ".timer"]}
+    - name: Authorized keys file modified or account created
+      technique: T1098.004
+      logsource: {category: process_creation, product: linux}
+      selection: {CommandLine|contains: ["authorized_keys", "useradd", "adduser", "usermod -aG sudo", "usermod -G wheel"]}
+  malicious: ["A key appended to root's authorized_keys by a non-interactive process", "A service whose ExecStart is under /tmp or /dev/shm"]
+  benign: ["Configuration management", "Admin user onboarding"]
+  tuning: ["Exclude your configuration-management user; alert on all else"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Remove key or unit after saving a copy; rotate the host's credentials"]
+
+- id: sys-lsass-credential-dumping
+  title: LSASS and credential dumping
+  category: system-services
+  hypothesis: "If an adversary is dumping credentials from memory, we would expect to see a non-system process opening LSASS with read access, a dump file created, or a known dumping tool on {scope}."
+  techniques: [T1003.001, T1555.003]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Mimikatz, ProcDump, comsvcs MiniDump, nanodump, browser-credential stealers"]
+    infrastructure: ["Where the dump is sent (staging share, C2)"]
+    victim: ["Any credential in memory or in browser stores"]
+  data_sources: [endpoint]
+  leads:
+    - name: Access to LSASS memory with read rights by an unexpected process
+      technique: T1003.001
+      logsource: {category: process_access, product: windows}
+      selection: {TargetImage|endswith: "\\lsass.exe", GrantedAccess|contains: ["0x1010", "0x1410", "0x1438", "0x143a", "0x1fffff"]}
+    - name: Dump tools and command lines
+      technique: T1003.001
+      logsource: {category: process_creation, product: windows}
+      selection: {CommandLine|contains: ["sekurlsa::", "procdump -ma lsass", "procdump.exe -accepteula -ma", "comsvcs.dll, MiniDump", "lsass.dmp", "nanodump"]}
+  malicious: ["A non-security process reading LSASS", "A dmp file created by rundll32"]
+  benign: ["EDR and AV agents", "Crash-dump collection by IT"]
+  tuning: ["Exclude your endpoint security product by signer and path"]
+  severity: critical
+  priority: high
+  playbook: pb-ad-compromise
+  response: ["Assume every credential on the host is exposed; reset accounts that logged on there"]
+
+- id: sys-log-clearing-defense-impairment
+  title: Event-log clearing and security-tool tampering
+  category: system-services
+  hypothesis: "If an adversary is covering tracks, we would expect to see event logs cleared, audit policy changed or security tools stopped on {scope}."
+  techniques: [T1685.005, T1685]
+  kill_chain: [installation]
+  diamond:
+    capability: ["wevtutil, PowerShell Clear-EventLog, tool-specific kill commands"]
+    infrastructure: ["The session performing the clearing"]
+    victim: ["Evidence and defensive tooling"]
+  data_sources: [endpoint, host-auth]
+  leads:
+    - name: Security or system log cleared
+      technique: T1685.005
+      logsource: {product: windows, service: security}
+      selection: {EventID: [1102, 104]}
+    - name: Security tools stopped or disabled from the command line
+      technique: T1685
+      logsource: {category: process_creation, product: windows}
+      selection: {CommandLine|contains: ["Set-MpPreference -DisableRealtimeMonitoring", "sc stop windefend", "sc config sense start= disabled", "wevtutil cl", "auditpol /clear", "taskkill /f /im"]}
+  malicious: ["Log clear followed by other suspicious activity", "Real-time protection turned off by a script"]
+  benign: ["Log rotation by administrators", "Troubleshooting"]
+  tuning: ["Every log clear is worth a ticket; exclude only named, scheduled maintenance"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Retrieve logs from the SIEM (you should have a copy); isolate the host"]
+
+- id: user-rare-logon-new-device
+  title: Rare logons and first-seen devices for a user
+  category: user-activity
+  hypothesis: "If an account is used by someone else, we would expect to see logons from devices, logon types or hosts that account has never used, on {scope}."
+  techniques: [T1078, T1021.001]
+  kill_chain: [exploitation, actions-on-objectives]
+  diamond:
+    capability: ["Stolen or shared credentials"]
+    infrastructure: ["The device and network of the unfamiliar logon"]
+    victim: ["The account and the systems it reaches"]
+  data_sources: [host-auth, identity-provider]
+  leads:
+    - name: First logon of an account to a host in thirty days
+      technique: T1078
+      spl: 'search sourcetype=WinEventLog:Security EventCode=4624 Logon_Type IN (2,3,10) NOT Account_Name="*$" | stats earliest(_time) as first_seen by Account_Name, dest | where first_seen > relative_time(now(), "-1d@d") | head 200'
+      kql: 'SecurityEvent | where EventID == 4624 and LogonType in (2,3,10) and Account !endswith "$" | summarize first=min(TimeGenerated) by Account, Computer | where first > ago(1d)'
+    - name: Remote desktop logon
+      technique: T1021.001
+      logsource: {product: windows, service: security}
+      selection: {EventID: 4624, LogonType: 10}
+  malicious: ["A service desk account logging on to a domain controller", "A user's first-ever RDP to a server"]
+  benign: ["New joiners; role changes", "Roaming users"]
+  tuning: ["Weight by host criticality; ignore workstation-to-own-user first logons"]
+  severity: medium
+  priority: medium
+  playbook: pb-credential-compromise
+  response: ["Confirm with the user before escalating"]
+
+- id: user-first-seen-admin-tool
+  title: First-seen administrative or remote-access tool
+  category: user-activity
+  hypothesis: "If an adversary or an unapproved user is introducing administrative tooling, we would expect to see a remote-administration, tunnelling or scanning tool run on a host or by a user that has never run it before, on {scope}."
+  techniques: [T1219, T1105, T1569.002]
+  kill_chain: [installation, command-and-control]
+  diamond:
+    capability: ["PsExec, AnyDesk, ngrok, Rclone, AdFind, Advanced IP Scanner"]
+    infrastructure: ["The tool's relay or the destination of its data transfer"]
+    victim: ["The host running the tool"]
+  data_sources: [endpoint]
+  leads:
+    - name: Known dual-use tools executed
+      technique: T1219
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\psexec.exe", "\\psexec64.exe", "\\ngrok.exe", "\\rclone.exe", "\\adfind.exe", "\\advanced_ip_scanner.exe", "\\netscan.exe", "\\mimikatz.exe", "\\plink.exe", "\\chisel.exe"]}
+    - name: Executable seen on exactly one host for the first time
+      technique: T1105
+      spl: 'search sourcetype=sysmon EventCode=1 | stats earliest(_time) as first_seen, dc(Computer) as hosts by Image, Hashes | where hosts=1 AND first_seen > relative_time(now(), "-1d@d") | head 200'
+      notes: "Very noisy on developer machines; use it on servers or sensitive subnets."
+  malicious: ["PsExec used by a user who is not in IT", "Rclone on a file server"]
+  benign: ["IT staff and security testers", "Developers' own tools"]
+  tuning: ["Maintain the approved-tool list and alert on the rest"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Ask the owner; if unexplained, isolate and collect"]
+
+- id: user-abnormal-command-history
+  title: Reconnaissance command bursts in a user's command history
+  category: user-activity
+  hypothesis: "If an adversary is exploring a host or the domain, we would expect to see a burst of discovery commands (whoami, ipconfig, net, nltest, systeminfo) from one user or session on {scope}."
+  techniques: [T1087, T1082, T1033, T1016]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Built-in discovery commands and scripts"]
+    infrastructure: ["The session's origin"]
+    victim: ["The host and the directory"]
+  data_sources: [endpoint]
+  leads:
+    - name: Discovery commands in a short window
+      technique: T1082
+      spl: 'search sourcetype=sysmon EventCode=1 (Image="*\\whoami.exe" OR Image="*\\ipconfig.exe" OR Image="*\\net.exe" OR Image="*\\net1.exe" OR Image="*\\nltest.exe" OR Image="*\\systeminfo.exe" OR Image="*\\tasklist.exe" OR Image="*\\quser.exe") | bin _time span=5m | stats dc(Image) as tools, values(Image) as which by Computer, User, _time | where tools >= 4 | sort - tools | head 100'
+      kql: 'DeviceProcessEvents | where FileName in~ ("whoami.exe","ipconfig.exe","net.exe","net1.exe","nltest.exe","systeminfo.exe","tasklist.exe","quser.exe") | summarize tools=dcount(FileName) by DeviceName, AccountName, bin(Timestamp, 5m) | where tools >= 4'
+    - name: Single-event form of the commonly chained discovery commands
+      technique: T1087
+      logsource: {category: process_creation, product: windows}
+      selection: {CommandLine|contains: ["net group \"domain admins\"", "net user /domain", "nltest /dclist", "whoami /priv", "whoami /groups", "net localgroup administrators", "dsquery", "adfind"]}
+  malicious: ["Four different discovery tools within five minutes from a non-admin user", "Domain admin group enumeration from a workstation"]
+  benign: ["Administrators troubleshooting", "Login scripts"]
+  tuning: ["Exclude known login scripts and administrator jump hosts"]
+  severity: medium
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Look at what ran next; a discovery burst is a signal to watch the host, not yet to isolate"]
+
+- id: user-lateral-movement-admin-shares
+  title: Lateral movement over SMB, RDP and WinRM
+  category: user-activity
+  hypothesis: "If an adversary is moving between hosts, we would expect to see remote service creation, admin-share file writes or remote shells from one source to several servers in a short window on {scope}."
+  techniques: [T1021.002, T1021.001, T1021.006, T1570]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["PsExec-style tools, WinRM, RDP with stolen credentials"]
+    infrastructure: ["The source host and account"]
+    victim: ["Servers and workstations in the same or adjacent segments"]
+  data_sources: [host-auth, network-flow, endpoint]
+  leads:
+    - name: Admin share write followed by service creation on the same host
+      technique: T1021.002
+      logsource: {product: windows, service: security}
+      selection: {EventID: 5145, ShareName|endswith: ["\\ADMIN$", "\\C$", "\\IPC$"], RelativeTargetName|endswith: [".exe", ".dll", ".bat", ".ps1"]}
+    - name: One source reaching many hosts over remote management
+      technique: T1021.006
+      spl: 'search sourcetype=WinEventLog:Security EventCode=4624 Logon_Type=3 NOT Account_Name="*$" | bin _time span=10m | stats dc(dest) as hosts by Account_Name, src, _time | where hosts >= 8 | sort - hosts | head 50'
+  malicious: ["An executable written to ADMIN$ followed by a new service", "A workstation reaching eight servers in ten minutes"]
+  benign: ["Patching and inventory tools", "Backup servers"]
+  tuning: ["Exclude management servers; segment so workstations cannot reach each other"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Contain the source host and the account; map the hosts it reached"]

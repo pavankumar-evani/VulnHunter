@@ -1,87 +1,154 @@
-// Security Posture Review: one assessment of the recorded estate and of this Quanta deployment against ten frameworks (remediation/posture).
-// Every score comes from checks you can open: each shows the recorded facts it looked at, what to do, and the exact setting to change. What Quanta
-// cannot observe is listed, never scored. Nothing here changes anything; it reads what Quanta already holds and advises.
+// Security Posture Review: where the estate and this Quanta deployment stand against ten frameworks, worked out from what Quanta has recorded.
+// A score appears only when enough could be observed; what could not be observed is listed, never counted as a pass. Every check opens to the recorded facts,
+// what to do and the exact setting to change (with a copy button). It reads and advises: it changes nothing.
+// The server keeps no history, so trend deltas and sparklines come from earlier readings taken in this browser (moduleLogic.pushReading).
 import { api } from "../api.js";
 import { escapeHtml } from "../dom.js";
+import { icon } from "../icons.js";
+import { kpiTile, chip, toast, emptyState, onCleanup, dataAgeBadge, mountDataAge, touchDataAge, mountCounters, sparkline, deltaChip, tipAttr, debounce } from "../ui.js";
+import { copyText, downloadText, segmented, onSeg } from "../sxKit.js";
+import { radarSvg, tabBar, wireTabBar, pageActions, replaceSearch, readJson, writeJson, meter, copyButton, wireCopy, skeletonPage, kpiStrip } from "../mxKit.js";
+import { settingText, POSTURE_KIND_LABEL, actionsMarkdown, pushReading, readingSeries, scoreTone, postureTotals, filterChecks } from "../moduleLogic.js";
 
 export const title = "Security Posture Review";
 
-const STATUS = { pass: ["Pass", "ps-pass"], partial: ["Partial", "ps-partial"], fail: ["Gap", "ps-fail"], unknown: ["Not observable", "ps-unknown"], na: ["Not applicable", "ps-na"] };
-const KIND = { env: "Environment variable", yaml: "Config file", helm: "Helm value", page: "Quanta page", process: "Process" };
-const stageClass = (s) => ({ Traditional: "ps-trad", Initial: "ps-init", Advanced: "ps-adv", Optimal: "ps-opt" }[s] || "ps-none");
+const STATUS = { pass: ["Pass", "good"], partial: ["Partial", "warn"], fail: ["Gap", "critical"], unknown: ["Not observable", "neutral"], na: ["Not applicable", "neutral"] };
+const HIST_KEY = "quanta.posture.history";
 const fmt = (n) => (n === null || n === undefined ? "n/a" : String(Math.round(n)));
-
-function radar(frameworks) {
-  const items = frameworks.filter((f) => f.score !== null);
-  if (items.length < 3) return `<p class="muted">The radar needs at least three scored frameworks.</p>`;
-  const S = 360, c = S / 2, R = 128, n = items.length;
-  const pt = (i, v) => { const a = -Math.PI / 2 + (2 * Math.PI * i) / n; return [c + Math.cos(a) * R * (v / 100), c + Math.sin(a) * R * (v / 100)]; };
-  const ring = (v) => items.map((_, i) => pt(i, v).map((x) => x.toFixed(1)).join(",")).join(" ");
-  const poly = items.map((f, i) => pt(i, f.score).map((x) => x.toFixed(1)).join(",")).join(" ");
-  const labels = items.map((f, i) => { const [x, y] = pt(i, 118); const anchor = x < c - 8 ? "end" : x > c + 8 ? "start" : "middle"; return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" class="ps-radar-label">${escapeHtml(f.title.length > 22 ? f.title.slice(0, 21) + "…" : f.title)}</text>`; }).join("");
-  const dots = items.map((f, i) => { const [x, y] = pt(i, f.score); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" class="ps-radar-dot"><title>${escapeHtml(f.title)}: ${fmt(f.score)}</title></circle>`; }).join("");
-  return `<svg viewBox="0 0 ${S} ${S}" class="ps-radar" role="img" aria-label="Scores by framework">${[25, 50, 75, 100].map((v) => `<polygon points="${ring(v)}" class="ps-radar-ring"/>`).join("")}${items.map((_, i) => { const [x, y] = pt(i, 100); return `<line x1="${c}" y1="${c}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" class="ps-radar-axis"/>`; }).join("")}<polygon points="${poly}" class="ps-radar-area"/>${dots}${labels}</svg>`;
-}
-
-function changeHtml(ch) {
-  if (!ch) return "";
-  return `<div class="ps-change"><span class="ps-kind">${escapeHtml(KIND[ch.kind] || ch.kind)}</span> <code>${escapeHtml(ch.where || "")}</code>${ch.key ? ` &rsaquo; <code>${escapeHtml(ch.key)}</code>` : ""}${ch.value !== undefined && ch.value !== null && ch.value !== "" ? ` = <code>${escapeHtml(String(ch.value))}</code>` : ""}${ch.effect ? `<div class="muted">${escapeHtml(ch.effect)}</div>` : ""}</div>`;
-}
-
-function checkHtml(c) {
-  const [label, cls] = STATUS[c.status] || [c.status, ""];
-  const ev = (c.evidence || []).map((e) => `<li>${escapeHtml(e)}</li>`).join("");
-  const refs = (c.refs || []).map((r) => `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.label)}</a>`).join(" · ");
-  return `<details class="ps-check ${cls}"><summary><span class="ps-chip ${cls}">${escapeHtml(label)}</span><span class="ps-ct">${escapeHtml(c.title)}</span><span class="ps-w" title="How much this counts in the framework score">weight ${c.weight}</span></summary>
-    <div class="ps-body">${c.detail ? `<p>${escapeHtml(c.detail)}</p>` : ""}${ev ? `<h5>What was recorded</h5><ul>${ev}</ul>` : ""}${c.recommendation ? `<h5>What to do</h5><p>${escapeHtml(c.recommendation)}</p>` : ""}${changeHtml(c.change)}
-    ${c.data_used && c.data_used.length ? `<p class="muted">Read: ${c.data_used.map(escapeHtml).join(", ")}</p>` : ""}${refs ? `<p class="muted">${refs}</p>` : ""}</div></details>`;
-}
-
-function frameworkHtml(f, filter) {
-  const checks = f.checks.filter((c) => filter === "all" || c.status === filter || (filter === "gaps" && (c.status === "fail" || c.status === "partial")));
-  const areas = f.areas.map((a) => `<div class="ps-area"><span>${escapeHtml(a.title)}</span><div class="ps-bar" title="${a.observable} of ${a.checks} checks observable"><i style="width:${a.score === null ? 0 : a.score}%"></i></div><b>${fmt(a.score)}</b></div>`).join("");
-  const byArea = f.areas.map((a) => {
-    const mine = checks.filter((c) => c.area === a.id);
-    return mine.length ? `<h4>${escapeHtml(a.title)}</h4>${mine.map(checkHtml).join("")}` : "";
-  }).join("");
-  const other = checks.filter((c) => !f.areas.some((a) => a.id === c.area));
-  return `<section class="ps-fw"><div class="ps-fw-head"><div><h3>${escapeHtml(f.title)}</h3><p class="muted">${escapeHtml(f.summary || "")}</p>${(f.refs || []).map((r) => `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.label)}</a>`).join(" · ")}</div>
-    <div class="ps-score ${stageClass(f.stage)}"><b>${fmt(f.score)}</b><span>${escapeHtml(f.stage || "not scored")}</span></div></div>
-    ${f.note ? `<p class="ps-note">${escapeHtml(f.note)}</p>` : ""}<div class="ps-areas">${areas}</div>
-    <p class="muted">${f.counts.pass} pass · ${f.counts.partial} partial · ${f.counts.fail} gaps · ${f.counts.unknown} not observable · ${f.counts.na} not applicable. ${Math.round(f.observable_share * 100)}% of the check weight could be observed.</p>
-    ${byArea}${other.length ? `<h4>Other</h4>${other.map(checkHtml).join("")}` : ""}${checks.length ? "" : `<p class="muted">No checks match this filter.</p>`}</section>`;
-}
+const STAGE_TONE = { Traditional: "bad", Initial: "warn", Advanced: "good", Optimal: "good" };
 
 export async function render(container) {
-  container.innerHTML = `<p class="subtitle">Where the estate stands against ten frameworks, worked out from what Quanta has recorded. A score appears only when enough could be observed; what could not be observed is listed, never counted as a pass. The numbers are Quanta's own summary (the standards publish none), set in <code>remediation/config/posture_policy.yaml</code>. It advises and changes nothing.</p><div id="ps-root"><p class="muted">Assessing…</p></div>`;
-  const root = container.querySelector("#ps-root");
-  let data;
-  try { data = await api.posture(); } catch (err) { root.innerHTML = `<p class="gv-empty">${escapeHtml(err && err.message ? err.message : "The review could not be loaded.")}</p>`; return; }
-  let active = (new URLSearchParams(window.location.search).get("framework")) || "overview", filter = "all";
-  const fws = data.frameworks;
+  const $ = (s) => container.querySelector(s);
+  let alive = true;
+  onCleanup(() => { alive = false; });
+  const S = { data: null, active: new URLSearchParams(window.location.search).get("framework") || "overview", filter: "all", q: "", history: [], loadedAt: 0 };
 
-  function draw() {
-    const tabs = [["overview", "Overview"], ...fws.map((f) => [f.id, f.title])];
-    let body;
-    if (active === "overview") {
-      const o = data.overall;
-      body = `<div class="ps-top"><div class="ps-hero ${stageClass(o.stage)}"><span>Overall</span><b>${fmt(o.score)}</b><em>${escapeHtml(o.stage || "not scored")}</em><small>${o.scored_frameworks} of ${o.frameworks} frameworks had enough recorded to score</small></div><div class="ps-radar-wrap">${radar(fws)}</div></div>
-        <div class="ps-cards">${fws.map((f) => `<button type="button" class="ps-card ${stageClass(f.stage)}" data-fw="${escapeHtml(f.id)}"><b>${fmt(f.score)}</b><span>${escapeHtml(f.title)}</span><small>${escapeHtml(f.stage || "not enough recorded")} · ${f.counts.fail + f.counts.partial} gaps</small></button>`).join("")}</div>
-        <h3>What to do first</h3>${data.actions.length ? `<ol class="ps-actions">${data.actions.map((a) => `<li><div><button type="button" class="link-button" data-fw="${escapeHtml(a.framework)}">${escapeHtml(a.framework_title)}</button> <span class="ps-chip ${STATUS[a.status][1]}">${STATUS[a.status][0]}</span> <b>${escapeHtml(a.title)}</b></div>${a.evidence.length ? `<div class="muted">${escapeHtml(a.evidence[0])}</div>` : ""}<p>${escapeHtml(a.recommendation)}</p>${changeHtml(a.change)}</li>`).join("")}</ol>${data.all_actions > data.actions.length ? `<p class="muted">${data.all_actions - data.actions.length} more are listed under each framework.</p>` : ""}` : `<p class="muted">No open gaps among what could be observed.</p>`}
-        <h3>Not observable</h3><p class="muted">Quanta cannot see these from what is recorded, so they are not in any score. Recording the data (or connecting the source) makes them measurable.</p>
-        <details class="ps-unobs"><summary>${data.not_observable.length} checks</summary><ul>${data.not_observable.map((u) => `<li><b>${escapeHtml(u.title)}</b> <span class="muted">(${escapeHtml(u.framework)})</span>${u.data_used.length ? `<div class="muted">Needs: ${u.data_used.map(escapeHtml).join(", ")}</div>` : ""}</li>`).join("")}</ul></details>
-        ${Object.keys(data.unavailable_sources).length ? `<p class="muted">Sources that could not be read this time: ${Object.keys(data.unavailable_sources).map(escapeHtml).join(", ")}.</p>` : ""}${Object.keys(data.problems).length ? `<p class="ps-note">Some framework modules did not load: ${Object.entries(data.problems).map(([k, v]) => `${escapeHtml(k)} (${escapeHtml(v)})`).join(", ")}.</p>` : ""}`;
-    } else {
-      const f = fws.find((x) => x.id === active);
-      body = `<div class="ps-filter">${[["all", "All"], ["gaps", "Gaps and partial"], ["fail", "Gaps"], ["unknown", "Not observable"], ["pass", "Pass"]].map(([v, l]) => `<button type="button" class="ps-f${filter === v ? " ps-f-on" : ""}" data-filter="${v}">${l}</button>`).join("")}</div>${f ? frameworkHtml(f, filter) : "<p>Unknown framework.</p>"}`;
-    }
-    root.innerHTML = `<div class="ps-tabs" role="tablist">${tabs.map(([id, name]) => `<button type="button" role="tab" class="ps-tab${id === active ? " ps-tab-on" : ""}" aria-selected="${id === active}" data-fw="${escapeHtml(id)}">${escapeHtml(name)}</button>`).join("")}</div><div class="ps-main">${body}</div>`;
+  container.innerHTML = `<div class="sx-page mx-page"><div class="sx-head"><div><h2>Security posture review</h2><p>Where the estate stands against ten frameworks, from what Quanta has recorded. A score appears only when enough could be observed; what could not be observed is listed, never counted as a pass. The numbers are Quanta's own summary (the standards publish none), set in <code>posture_policy.yaml</code>. It advises and changes nothing.</p></div>
+    <div class="sx-row"><span id="ps-age"></span><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="ps-refresh">${icon("clock", 14)} Assess again</button><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="ps-copy">Copy action list</button><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="ps-dl">Download .md</button></div></div>
+    <div id="ps-skel">${skeletonPage(4)}<p class="ui-muted" role="status">Assessing ten frameworks from the recorded data. This can take half a minute on a large estate.</p></div>
+    <div id="ps-tabs" hidden></div><div id="ps-main"></div></div>`;
+
+  async function load() {
+    const data = await api.posture();
+    if (!alive) return;
+    S.data = data; S.loadedAt = Date.now();
+    const reading = { overall: data.overall.score, fw: Object.fromEntries(data.frameworks.map((f) => [f.id, f.score])) };
+    S.history = pushReading(readJson(HIST_KEY, []), reading);
+    writeJson(HIST_KEY, S.history);
   }
-  root.addEventListener("click", (ev) => {
-    const fw = ev.target.closest("[data-fw]");
-    if (fw) { active = fw.getAttribute("data-fw"); filter = "all"; draw(); window.scrollTo({ top: 0 }); return; }
-    const fl = ev.target.closest("[data-filter]");
-    if (fl) { filter = fl.getAttribute("data-filter"); draw(); }
+  const fw = () => S.data.frameworks;
+  const fwTrend = (id) => readingSeries(S.history, (r) => r.fw && r.fw[id]);
+  const url = () => replaceSearch(S.active === "overview" ? "" : `?framework=${encodeURIComponent(S.active)}`);
+
+  function trendBits(series, goodWhen = "up") {
+    const spark = series.values.length > 1 ? sparkline(series.values, { width: 70, height: 22, label: "Score over earlier readings in this browser" }) : "";
+    let chipHtml = "";
+    if (series.previous !== null && series.current !== null) {
+      const diff = Math.round((series.current - series.previous) * 10) / 10;
+      const dir = diff === 0 ? "flat" : diff > 0 ? "up" : "down";
+      const tone = dir === "flat" ? "flat" : dir === goodWhen ? "good" : "bad";
+      chipHtml = `<span class="ui-delta ui-delta-${tone}" ${tipAttr(`Previous reading in this browser: ${series.previous}, now ${series.current}`)}><span aria-hidden="true">${dir === "up" ? "▲" : dir === "down" ? "▼" : "■"}</span> ${diff > 0 ? "+" : ""}${diff} pts<span class="ui-sr"> ${dir === "flat" ? "no change" : dir} since the previous reading</span></span>`;
+    }
+    return `${chipHtml}${spark}`;
+  }
+  function changeHtml(ch, { compact = false } = {}) {
+    if (!ch) return "";
+    const text = settingText(ch);
+    const link = ch.kind === "page" ? `<a class="ui-btn ui-btn-ghost sx-btn-sm" href="${escapeHtml(ch.where)}" data-link>Open ${escapeHtml(ch.key)}</a>` : "";
+    return `<div class="mx-change"><div class="mx-sub"><b>${escapeHtml(POSTURE_KIND_LABEL[ch.kind] || ch.kind)}</b> in <code>${escapeHtml(ch.where || "")}</code>${ch.key && ch.kind !== "env" && ch.kind !== "yaml" ? ` &rsaquo; ${escapeHtml(ch.key)}` : ""}</div>
+      ${text ? `<code class="mx-code">${escapeHtml(text)}</code>` : (ch.value !== undefined ? `<div class="mx-sub">${escapeHtml(String(ch.value))}</div>` : "")}
+      ${!compact && ch.effect ? `<div class="ui-muted mx-sub">${escapeHtml(ch.effect)}</div>` : ""}<div class="mx-actions">${text ? copyButton(text, "Copy exact setting") : ""}${link}</div></div>`;
+  }
+  function checkHtml(c) {
+    const [label, tone] = STATUS[c.status] || [c.status, "neutral"];
+    const ev = (c.evidence || []).map((e) => `<li>${escapeHtml(e)}</li>`).join("");
+    const refs = (c.refs || []).map((r) => `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.label)}</a>`).join(" &middot; ");
+    return `<details class="mx-check mx-check-${c.status}"><summary>${chip(label, { tone })}<span class="mx-ct">${escapeHtml(c.title)}</span><span class="ui-muted mx-w" ${tipAttr("How much this check counts in the framework score")}>weight ${c.weight}</span></summary>
+      <div class="mx-check-body">${c.detail ? `<p>${escapeHtml(c.detail)}</p>` : ""}${ev ? `<h5 class="mx-h3">What was recorded</h5><ul class="mx-list">${ev}</ul>` : ""}${c.recommendation ? `<h5 class="mx-h3">What to do</h5><p>${escapeHtml(c.recommendation)}</p>` : ""}${changeHtml(c.change)}
+        ${c.data_used && c.data_used.length ? `<p class="ui-muted mx-sub">Read: ${c.data_used.map(escapeHtml).join(", ")}</p>` : ""}${refs ? `<p class="ui-muted mx-sub">${refs}</p>` : ""}</div></details>`;
+  }
+
+  function overviewHtml() {
+    const d = S.data; const o = d.overall;
+    const overall = readingSeries(S.history, (r) => r.overall);
+    return `<div class="mx-hero"><div class="mx-hero-score mx-tone-${scoreTone(o.score)}"><span class="ui-kpi-label">Overall</span><div class="mx-score">${fmt(o.score)}</div>${chip(o.stage || "not scored", { tone: STAGE_TONE[o.stage] === "bad" ? "critical" : STAGE_TONE[o.stage] || "neutral" })}<div class="mx-trend">${trendBits(overall)}</div>
+        <p class="ui-muted mx-sub">${o.scored_frameworks} of ${o.frameworks} frameworks had enough recorded to score.${overall.values.length < 2 ? " Trend appears after a second reading in this browser." : ""}</p></div>
+      <div class="mx-hero-radar">${radarSvg(fw().filter((f) => f.score !== null).map((f) => ({ label: f.title.length > 20 ? f.title.slice(0, 19) + "…" : f.title, value: f.score / 100 })), { size: 300, label: "Score by framework" }) || '<p class="ui-muted">The radar needs at least three scored frameworks.</p>'}</div></div>
+      <div id="ps-kpis" class="sx-kpis mx-kpis"></div>
+      <h3 class="mx-h3">Frameworks</h3>
+      <div class="mx-grid-cards">${fw().map((f) => { const tr = fwTrend(f.id); return `<button type="button" class="mx-card mx-fwcard" data-fw="${escapeHtml(f.id)}" aria-label="${escapeHtml(f.title)}, score ${fmt(f.score)}, ${f.counts.fail + f.counts.partial} gaps"><div class="mx-card-head"><h4>${escapeHtml(f.title)}</h4>${chip(f.stage || "not enough recorded", { tone: f.stage ? (STAGE_TONE[f.stage] === "bad" ? "critical" : STAGE_TONE[f.stage]) : "neutral" })}</div>
+        <div class="sx-row"><span class="mx-score mx-score-sm mx-tone-${scoreTone(f.score)}">${fmt(f.score)}</span>${meter((f.score || 0) / 100, { tone: scoreTone(f.score) === "bad" ? "bad" : scoreTone(f.score) === "warn" ? "warn" : "", label: `Score ${fmt(f.score)} of 100` })}${trendBits(tr)}</div>
+        <div class="mx-sub">${f.counts.pass} pass &middot; ${f.counts.partial} partial &middot; ${f.counts.fail} gaps &middot; ${f.counts.unknown} not observable</div></button>`; }).join("")}</div>
+      <h3 class="mx-h3">What to do first</h3>
+      ${d.actions.length ? `<ol class="mx-actionlist">${d.actions.map((a) => `<li class="mx-card"><div class="mx-card-head"><span class="sx-row"><button type="button" class="sx-link-btn" data-fw="${escapeHtml(a.framework)}">${escapeHtml(a.framework_title)}</button>${chip(STATUS[a.status][0], { tone: STATUS[a.status][1] })}</span><span class="ui-muted mx-sub" ${tipAttr("Estimated effect on the framework score")}>impact ${a.impact}</span></div>
+        <h4>${escapeHtml(a.title)}</h4>${a.evidence.length ? `<div class="ui-muted mx-sub">${escapeHtml(a.evidence[0])}</div>` : ""}<p>${escapeHtml(a.recommendation)}</p>${changeHtml(a.change, { compact: true })}</li>`).join("")}</ol>${d.all_actions > d.actions.length ? `<p class="ui-muted">${d.all_actions - d.actions.length} more are listed under each framework.</p>` : ""}` : emptyState({ title: "No open gaps among what could be observed", body: "Recording more data makes more of the ten frameworks measurable. See the list below.", iconName: "approved" })}
+      <details class="sx-panel mx-details"><summary>Not observable (${d.not_observable.length} checks)</summary><p class="ui-muted">Quanta cannot see these from what is recorded, so they are in no score. Recording the data, or connecting the source, makes them measurable.</p>
+        <ul class="mx-list">${d.not_observable.map((u) => `<li><b>${escapeHtml(u.title)}</b> <span class="ui-muted">(${escapeHtml(u.framework)})</span>${u.data_used.length ? `<div class="ui-muted mx-sub">Needs: ${u.data_used.map(escapeHtml).join(", ")}</div>` : ""}</li>`).join("")}</ul></details>
+      ${Object.keys(d.unavailable_sources).length ? `<p class="ui-muted">Sources that could not be read this time: ${Object.keys(d.unavailable_sources).map(escapeHtml).join(", ")}.</p>` : ""}
+      ${Object.keys(d.problems).length ? `<div class="mx-callout mx-callout-warn">Some framework modules did not load: ${Object.entries(d.problems).map(([k, v]) => `${escapeHtml(k)} (${escapeHtml(v)})`).join(", ")}.</div>` : ""}`;
+  }
+  function frameworkHtml(f) {
+    const checks = filterChecks(f.checks, S.filter, S.q);
+    const tr = fwTrend(f.id);
+    const areas = f.areas.map((a) => `<div class="mx-area"><span>${escapeHtml(a.title)}</span>${meter((a.score || 0) / 100, { tone: a.score !== null && a.score < 40 ? "bad" : a.score !== null && a.score < 70 ? "warn" : "", label: `${a.title}: ${fmt(a.score)}` })}<b>${fmt(a.score)}</b><span class="ui-muted mx-sub">${a.observable}/${a.checks} observable</span></div>`).join("");
+    const byArea = f.areas.map((a) => { const mine = checks.filter((c) => c.area === a.id); return mine.length ? `<h4 class="mx-h3">${escapeHtml(a.title)}</h4>${mine.map(checkHtml).join("")}` : ""; }).join("");
+    const other = checks.filter((c) => !f.areas.some((a) => a.id === c.area));
+    const counts = [["all", "All", f.checks.length], ["gaps", "Gaps and partial", f.counts.fail + f.counts.partial], ["fail", "Gaps", f.counts.fail], ["unknown", "Not observable", f.counts.unknown], ["pass", "Pass", f.counts.pass]];
+    return `<section aria-label="${escapeHtml(f.title)}"><div class="mx-fwhead"><div><h3>${escapeHtml(f.title)}</h3><p class="ui-muted">${escapeHtml(f.summary || "")}</p><p>${(f.refs || []).map((r) => `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(r.label)}</a>`).join(" &middot; ")}</p></div>
+      <div class="mx-hero-score mx-tone-${scoreTone(f.score)}"><div class="mx-score">${fmt(f.score)}</div>${chip(f.stage || "not scored", { tone: f.stage ? (STAGE_TONE[f.stage] === "bad" ? "critical" : STAGE_TONE[f.stage]) : "neutral" })}<div class="mx-trend">${trendBits(tr)}</div></div></div>
+      ${f.note ? `<div class="mx-callout">${escapeHtml(f.note)}</div>` : ""}<div class="mx-areas">${areas}</div>
+      <p class="ui-muted">${Math.round(f.observable_share * 100)}% of the check weight could be observed.</p>
+      <div class="sx-toolbar" role="search">${segmented("Show", counts.map(([id, l, n]) => ({ id, label: l, count: n })), S.filter)}<input type="search" class="sx-field" id="ps-q" placeholder="Search these checks" value="${escapeHtml(S.q)}" aria-label="Search checks"></div>
+      ${byArea}${other.length ? `<h4 class="mx-h3">Other</h4>${other.map(checkHtml).join("")}` : ""}${checks.length ? "" : emptyState({ title: "No check matches", body: "Change the filter or the search.", iconName: "search" })}</section>`;
+  }
+
+  function paint() {
+    if (!alive || !S.data) return;
+    $("#ps-skel").hidden = true;
+    const tabs = [{ id: "overview", label: "Overview" }, ...fw().map((f) => ({ id: f.id, label: f.title }))];
+    const tabsEl = $("#ps-tabs"); tabsEl.hidden = false; tabsEl.innerHTML = tabBar("Frameworks", tabs, S.active);
+    const f = fw().find((x) => x.id === S.active);
+    $("#ps-main").innerHTML = S.active === "overview" || !f ? overviewHtml() : frameworkHtml(f);
+    if (S.active === "overview" || !f) {
+      const t = postureTotals(fw());
+      kpiStrip($("#ps-kpis"), [
+        { key: "gaps", label: "Gaps", value: t.fail, tone: t.fail ? "danger" : "good", filterable: false, hint: "Checks that were observed and not met." },
+        { key: "partial", label: "Partial", value: t.partial, tone: t.partial ? "warn" : "good", filterable: false, hint: "Observed and only partly met." },
+        { key: "pass", label: "Passing", value: t.pass, tone: "good", filterable: false, hint: "Observed and met." },
+        { key: "unknown", label: "Not observable", value: t.unknown, filterable: false, hint: "Quanta cannot see these from what is recorded. They are in no score." },
+        { key: "actions", label: "Open actions", value: S.data.all_actions, tone: S.data.all_actions ? "warn" : "good", filterable: false, hint: "Every gap or partial check with something to do, across all frameworks." },
+      ], () => {});
+    }
+    const age = $("#ps-age"); age.innerHTML = dataAgeBadge(S.loadedAt, { fresh: 600000, stale: 3600000 }); mountDataAge(age);
+    mountCounters($("#ps-main"));
+  }
+
+  wireTabBar($("#ps-tabs"), (id) => { S.active = id; S.filter = "all"; S.q = ""; url(); paint(); });
+  wireCopy(container, copyText);
+  onSeg($("#ps-main"), (id) => { S.filter = id; paint(); });
+  const typeSearch = debounce((v) => { S.q = v; paint(); const i = $("#ps-q"); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 220);
+  container.addEventListener("input", (e) => { if (e.target.id === "ps-q") typeSearch(e.target.value); });
+  container.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-fw]"); if (b && !e.target.closest(".mx-tabs")) { S.active = b.dataset.fw; S.filter = "all"; S.q = ""; url(); paint(); window.scrollTo({ top: 0 }); return; }
+    if (e.target.closest("#ps-refresh")) { refresh(true); return; }
+    if (e.target.closest("#ps-copy")) { if (S.data) copyText(actionsMarkdown(S.data.actions, new Date().toISOString().slice(0, 10)), "Action list copied as Markdown"); return; }
+    if (e.target.closest("#ps-dl")) { if (S.data) downloadText("security-posture-actions.md", actionsMarkdown(S.data.actions, new Date().toISOString().slice(0, 10))); }
   });
-  draw();
+  async function refresh(manual) {
+    const btn = $("#ps-refresh"); if (btn) btn.disabled = true;
+    try { await load(); paint(); if (manual) toast("Assessed again.", { tone: "good", ms: 2200 }); const age = $("#ps-age .ui-age"); if (age) touchDataAge(age, S.loadedAt); }
+    catch (err) { toast(`Could not assess: ${err.message}`, { tone: "bad", ms: 8000 }); }
+    finally { if (btn) btn.disabled = false; }
+  }
+
+  try { await load(); } catch (err) {
+    $("#ps-skel").hidden = true;
+    $("#ps-main").innerHTML = emptyState({ title: err.status === 401 || err.status === 403 ? "The posture review is for administrators" : "The review could not be loaded", body: err.message || "Try again in a moment.", actionLabel: err.status === 401 ? "Sign in" : "", actionHref: err.status === 401 ? "/login?redirect=/posture" : "", iconName: "risk" });
+    return;
+  }
+  paint();
+  pageActions([
+    { label: "Posture: assess again", icon: "risk", run: () => refresh(true) }, { label: "Posture: copy the action list as Markdown", icon: "risk", run: () => S.data && copyText(actionsMarkdown(S.data.actions), "Action list copied") },
+    { label: "Posture: show the overview", icon: "risk", run: () => { S.active = "overview"; url(); paint(); } },
+  ]);
 }

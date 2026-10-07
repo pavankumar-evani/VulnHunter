@@ -1,0 +1,97 @@
+{
+  "retrieved": "2026-10-07",
+  "tool": "scripts/build_hunt_knowledge.py",
+  "sources": {
+    "enterprise": {
+      "url": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json",
+      "name": "Enterprise ATT&CK",
+      "version": "19.2",
+      "modified": "2026-08-05T21:33:58.496Z",
+      "counts": {
+        "tactics": 15,
+        "techniques": 697
+      }
+    },
+    "mobile": {
+      "url": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/mobile-attack/mobile-attack.json",
+      "name": "Mobile ATT&CK",
+      "version": "19.2",
+      "modified": "2026-08-05T21:34:50.442Z",
+      "counts": {
+        "tactics": 12,
+        "techniques": 124
+      }
+    },
+    "ics": {
+      "url": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/ics-attack/ics-attack.json",
+      "name": "ICS ATT&CK",
+      "version": "19.2",
+      "modified": "2026-08-05T21:34:28.409Z",
+      "counts": {
+        "tactics": 12,
+        "techniques": 97
+      }
+    },
+    "atlas": {
+      "url": "https://raw.githubusercontent.com/mitre-atlas/atlas-data/main/dist/ATLAS.yaml",
+      "name": "Adversarial Threat Landscape for AI Systems",
+      "version": "5.6.0",
+      "counts": {
+        "tactics": 16,
+        "techniques": 170,
+        "mitigations": 35,
+        "case_studies": 57
+      }
+    }
+  },
+  "counts": {
+    "groups": 180,
+    "software": 953,
+    "mitigations": 108
+  },
+  "files": {
+    "enterprise.json": {
+      "bytes": 556583,
+      "sha256": "52773845a74a99da"
+    },
+    "mobile.json": {
+      "bytes": 91739,
+      "sha256": "3a1c6b5b9b950356"
+    },
+    "ics.json": {
+      "bytes": 72097,
+      "sha256": "1eda6d1c7fab370f"
+    },
+    "groups.json": {
+      "bytes": 122944,
+      "sha256": "bfcb7935349a6c76"
+    },
+    "software.json": {
+      "bytes": 410265,
+      "sha256": "65a26b4e69b34d76"
+    },
+    "mitigations.json": {
+      "bytes": 24980,
+      "sha256": "4654fa4dac5402dd"
+    },
+    "renamed.json": {
+      "bytes": 7101,
+      "sha256": "b72fd4db8be97726"
+    },
+    "atlas.json": {
+      "bytes": 78021,
+      "sha256": "734940823114773b"
+    },
+    "atlas_mitigations.json": {
+      "bytes": 12261,
+      "sha256": "056559ebb40f7605"
+    },
+    "atlas_cases.json": {
+      "bytes": 35744,
+      "sha256": "b88ca5f74c9bb031"
+    }
+  },
+  "total_bytes": 1411735,
+  "seed": false,
+  "note": "Generated from MITRE ATT&CK and MITRE ATLAS public data by scripts/build_hunt_knowledge.py; text is trimmed. Refresh by re-running the script. Techniques are matched to the live ATT&CK site by id for the full text."
+}

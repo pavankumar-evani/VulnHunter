@@ -16,12 +16,18 @@ def finalise(h, ctx, lib=None):
     """Adds readiness, queries, tactics, coverage, effort, learned history and the score to a raw hypothesis."""
     lib = lib if lib is not None else render.library()
     wanted = list(dict.fromkeys(t.upper() for t in h.pop("techniques_wanted")))
+    extra_q = h.pop("extra_queries", None) or []          # ready-made leads a generator brings (the knowledge scenarios)
+    ready_override = h.pop("data_readiness_override", None)
     techs = [m.technique_entry(t, lib) for t in wanted]
     sc = h["scope"]
     hyp_text = h["hypothesis"]
     queries, missing = render.queries_for(wanted, sc["assets"], sc["identities"], lib, hyp_text=hyp_text)
+    if extra_q:
+        queries = queries + extra_q
+        have = {q["technique"].split(".")[0].upper() for q in extra_q}
+        missing = [t for t in missing if t.split(".")[0].upper() not in have]
     src_names = list(dict.fromkeys(ds for t in wanted for ds in (lib.get(t.split(".")[0]) or {}).get("data_sources", [])))
-    ready = readiness.assess(src_names, ctx.connections)
+    ready = ready_override or readiness.assess(src_names, ctx.connections)
     sig = h["signals"]
     if not sig.get("coverage"):
         if not ctx.rules or not wanted:

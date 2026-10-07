@@ -148,7 +148,9 @@ export function initNotificationBell() {
 
   refreshBadge();
   // Live: any recorded activity or notification event re-checks straight away; otherwise a slow, backing-off poll (live.js pauses it in a hidden tab).
-  const recheck = () => { cache = null; refreshBadge().catch(() => {}); };
+  // Coalesced: a stream that reconnects replays up to 50 events at once, and each used to cost a request (and a server-side recompute).
+  let recheckTimer = null;
+  const recheck = () => { cache = null; clearTimeout(recheckTimer); recheckTimer = setTimeout(() => { refreshBadge().catch(() => {}); }, 800); };
   live.subscribe("activity", recheck);
   live.subscribe("notifications", recheck);
   live.poll("notifications.poll", async () => { const n = await loadNotifications(true); return n.map((x) => x.id); }, { every: 30000 });

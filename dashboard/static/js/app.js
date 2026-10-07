@@ -133,7 +133,11 @@ async function loadLicense() {
 // server-side (app.py's Depends(rbac.require_*) on sensitive mutation routes only).
 // Every GET/read route stays reachable directly (e.g. curl /api/queue) regardless of
 // this client-side check - see dashboard/README.md's "What this is NOT (yet)" section.
+// Each navigation takes a number. A slow page that finishes after the person has already moved on must not install its cleanup or title over the page now showing
+// (its own onCleanup() flag has already told it to stop painting).
+let renderGen = 0;
 async function renderRoute() {
+  const gen = ++renderGen;
   if (currentCleanup) {
     currentCleanup();
     currentCleanup = null;
@@ -183,15 +187,19 @@ async function renderRoute() {
   appEl.innerHTML = pageSkeleton(); // skeleton in the shape of a page, so nothing jumps when the real content arrives
   try {
     const mod = await matched.route.load();
+    if (gen !== renderGen) return; // navigated elsewhere while the module loaded
     const heading = typeof mod.title === "function" ? mod.title(...matched.params) : mod.title;
     titleEl.textContent = heading;
     document.title = `${heading} · Quanta`;
     appEl.innerHTML = "";
-    currentCleanup = (await mod.render(appEl, ...matched.params)) || null;
+    const cleanup = (await mod.render(appEl, ...matched.params)) || null;
+    if (gen !== renderGen) { if (typeof cleanup === "function") { try { cleanup(); } catch { /* the page is gone */ } } return; }
+    currentCleanup = cleanup;
     void appEl.offsetWidth; // restart the enter animation (ui.css; skipped under prefers-reduced-motion)
     appEl.classList.add("ui-page-enter");
     recordVisit(window.location.pathname + window.location.search, heading);
   } catch (err) {
+    if (gen !== renderGen) return; // an error from a page the person has already left is not worth showing over the new one
     // Error boundary: one page failing never takes the shell down.
     console.error(err);
     runCleanups();

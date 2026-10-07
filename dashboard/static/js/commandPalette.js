@@ -65,8 +65,16 @@ function pageItems() {
   return out;
 }
 
+// Page-level actions (the rebuilt pages register their key actions while they are open; the router's cleanup removes them).
+let pageActions = [];
+export function registerPaletteActions(list) {
+  const mine = list.map((a) => ({ kind: "action", sub: "This page", icon: "dashboard", ...a }));
+  pageActions = [...pageActions, ...mine];
+  return () => { pageActions = pageActions.filter((a) => !mine.includes(a)); };
+}
+
 function actionItems() {
-  const acts = [];
+  const acts = [...pageActions];
   NAV.filter((g) => g.id !== "home" && g.id !== "help").forEach((m) => {
     acts.push({ kind: "action", label: `Switch to ${m.group}`, sub: "Module", icon: m.icon, run: () => navigate(`/capabilities?area=${m.id}`), locked: !isLicensed(m.id) });
   });
@@ -111,7 +119,7 @@ let dataFor = "";
 function compute() {
   const q = el.querySelector(".pal-input").value.trim();
   if (!q) {
-    items = [...recentItems(), ...pageItems().slice(0, 8), ...actionItems().slice(0, 3)];
+    items = [...pageActions.slice(0, 5), ...recentItems(), ...pageItems().slice(0, 8), ...actionItems().filter((a) => !pageActions.includes(a)).slice(0, 3)];
   } else {
     const pages = rank(pageItems(), q, (p) => [p.label, p.sub, p.extra], 8).map((r) => ({ ...r.item, hl: r.indices }));
     const acts = rank(actionItems(), q, (a) => [a.label], 4).map((r) => ({ ...r.item, hl: r.indices }));

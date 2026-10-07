@@ -1,0 +1,317 @@
+# Insider-threat and drive-by / watering-hole scenarios. Insider scenarios describe BEHAVIOUR that warrants a confidential look, never a person: involve HR and legal first.
+- id: insider-staging-exfil-personal-cloud
+  title: Data staged and sent to personal cloud storage
+  category: insider-threat
+  hypothesis: "If a user is preparing to take data out of the company, we would expect to see archives or bulk copies created in a staging folder on {scope}, followed by uploads to personal cloud storage or webmail."
+  techniques: [T1074.001, T1560.001, T1567.002]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Native archivers, sync clients and browser uploads; no malware needed"]
+    infrastructure: ["Personal cloud storage, webmail and file-transfer sites"]
+    victim: ["Sensitive repositories the user can already read"]
+  data_sources: [endpoint, proxy, file-activity]
+  leads:
+    - name: Archive utility run over a user-data folder with a password or split volumes
+      technique: T1560.001
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\7z.exe", "\\7za.exe", "\\winrar.exe", "\\rar.exe"], CommandLine|contains: [" a ", " -p", " -v", "-hp"]}
+    - name: Large upload to a personal storage service
+      technique: T1567.002
+      spl: 'search sourcetype=proxy (dest_domain="*dropbox.com" OR dest_domain="*drive.google.com" OR dest_domain="*mega.nz" OR dest_domain="*mega.io" OR dest_domain="*wetransfer.com" OR dest_domain="*box.com") http_method=POST | stats sum(bytes_out) as bytes, dc(url) as uploads by user, dest_domain | where bytes > 104857600 | sort - bytes | head 50'
+      kql: 'DeviceNetworkEvents | where RemoteUrl has_any ("dropbox.com","drive.google.com","mega.nz","wetransfer.com") | summarize hits=count() by InitiatingProcessAccountName, RemoteUrl, bin(Timestamp, 1d) | where hits > 200'
+      notes: "Hundred megabytes is a starting threshold. Divide by the user's own 30-day average if you have it."
+  malicious: ["An archive of a project folder followed by an upload from the same user within the hour", "Uploads on the user's last weeks of employment that exceed their norm"]
+  benign: ["Staff who legitimately share files with customers", "Developers backing up their own work to personal accounts against policy (a policy issue, not necessarily theft)"]
+  tuning: ["Compare each user with their own history and their peer group, not a global number", "Exclude your sanctioned file-sharing tenant by tenant id"]
+  severity: high
+  priority: medium
+  playbook: pb-insider-case
+  response: ["Do not confront the user; open a confidential case with HR and legal", "Preserve proxy, endpoint and file-access logs for the period"]
+
+- id: insider-mass-download
+  title: Mass download or bulk access of documents
+  category: insider-threat
+  hypothesis: "If a user is harvesting data beyond their duties, we would expect to see an unusually large number of files or records read, downloaded or exported from {scope} in a short period."
+  techniques: [T1213, T1213.002, T1530, T1005]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Normal access rights used at unusual volume; scripted download tools"]
+    infrastructure: ["The user's own device and, later, a transfer path (see staging scenarios)"]
+    victim: ["Document libraries, customer data stores, cloud buckets"]
+  data_sources: [saas-audit, file-activity, cloud-audit]
+  leads:
+    - name: Many file downloads by one user in an hour
+      technique: T1213.002
+      spl: 'search sourcetype=m365:audit Operation IN ("FileDownloaded","FileSyncDownloadedFull","FileAccessed") | bin _time span=1h | stats dc(ObjectId) as files by UserId, _time | where files > 200 | sort - files | head 50'
+      kql: 'OfficeActivity | where Operation in ("FileDownloaded","FileSyncDownloadedFull") | summarize files=dcount(OfficeObjectId) by UserId, bin(TimeGenerated, 1h) | where files > 200 | order by files desc'
+      notes: "Two hundred is a placeholder. Use each user's own 30-day 95th percentile if you can."
+    - name: Bulk read of an object store by one identity
+      technique: T1530
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventSource: "s3.amazonaws.com", eventName: ["GetObject", "ListObjects", "ListObjectsV2", "CopyObject"]}
+      notes: "Single-event form; count per principal per hour to turn it into a hunt. Needs S3 data-event logging, which is off by default."
+  malicious: ["A user who rarely downloads suddenly pulling hundreds of files, outside their project", "Downloads preceding a resignation or a poor review (a signal only HR holds)"]
+  benign: ["Migrations, backups and legal-hold collection run by IT", "Sync clients re-downloading after a new device"]
+  tuning: ["Exclude service accounts and your migration tools", "Rank by sensitivity labels where you have them"]
+  severity: high
+  priority: medium
+  playbook: pb-insider-case
+  response: ["Confidential case; restrict export or sync rights while HR decides", "Collect the audit trail of what was downloaded"]
+
+- id: insider-privilege-abuse
+  title: Privileged access used outside duties
+  category: insider-threat
+  hypothesis: "If an administrator or privileged user is abusing access, we would expect to see their account reading data, adding accounts or changing permissions on systems outside their usual remit in {scope}."
+  techniques: [T1078, T1098, T1087]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Legitimate administrative tools and rights"]
+    infrastructure: ["The administrator's usual workstation and jump hosts"]
+    victim: ["Systems and data belonging to other teams"]
+  data_sources: [host-auth, cloud-audit, directory]
+  leads:
+    - name: Administrator adding a user to a privileged group or creating an account outside a change window
+      technique: T1098
+      logsource: {product: windows, service: security}
+      selection: {EventID: [4728, 4732, 4756, 4720], TargetUserName|contains: ["admin", "svc", "backup"]}
+      notes: "Group-add and account-create events. Join with your change calendar; an add without a ticket is the lead."
+    - name: Privileged account touching hosts it has never touched before
+      technique: T1078
+      spl: 'search sourcetype=WinEventLog:Security EventCode=4624 Logon_Type IN (3,10) | stats earliest(_time) as first_seen by user, dest | where first_seen > relative_time(now(), "-1d@d") | lookup privileged_users user OUTPUT is_admin | where is_admin=1 | head 100'
+      notes: "Needs a lookup of privileged accounts (from Access Governance or your directory)."
+  malicious: ["An admin reading mailboxes or HR data with no ticket", "A new account created by an admin and used only by that admin"]
+  benign: ["Break-fix work on an incident", "Cross-team administration under a change"]
+  tuning: ["Tie to the ticketing system so a change record excuses the activity", "Alert on first-time system access per privileged user"]
+  severity: high
+  priority: medium
+  playbook: pb-insider-case
+  response: ["Ask the owning team for the change record before escalating", "Reduce standing privilege afterwards (just-in-time access)"]
+
+- id: insider-off-hours-access
+  title: Off-hours access to sensitive systems
+  category: insider-threat
+  hypothesis: "If a user is accessing sensitive systems when they normally do not work, we would expect to see logons or data access to {scope} outside their usual hours or from a new device or location."
+  techniques: [T1078, T1021.001]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Valid credentials and remote access"]
+    infrastructure: ["VPN, remote desktop or a home device"]
+    victim: ["Sensitive file servers, source repositories, finance systems"]
+  data_sources: [host-auth, identity-provider]
+  leads:
+    - name: Remote desktop or VPN logon to a sensitive server late at night
+      technique: T1021.001
+      spl: 'search sourcetype=WinEventLog:Security EventCode=4624 Logon_Type IN (10,7) | eval hour=strftime(_time,"%H") | where hour<5 OR hour>=23 | stats count, earliest(_time) as first by user, dest | sort - count | head 100'
+      kql: 'SecurityEvent | where EventID == 4624 and LogonType in (10, 7) | extend h = datetime_part("hour", TimeGenerated) | where h < 5 or h >= 23 | summarize n=count() by Account, Computer'
+      notes: "Hours are in UTC unless your logs are local; adjust to the user's time zone."
+    - name: Interactive or remote-desktop logon (single-event form; filter by hour and user in your tool)
+      technique: T1078
+      logsource: {product: windows, service: security}
+      selection: {EventID: 4624, LogonType: [2, 7, 10]}
+      notes: "Every interactive-type logon; the hunt is the subset outside the user's normal hours."
+  malicious: ["A user who has never worked nights reaching a finance server at 03:00", "Off-hours access combined with a large download"]
+  benign: ["On-call and shift workers", "Staff across time zones"]
+  tuning: ["Use per-user working-hour baselines", "Exclude on-call rotas"]
+  severity: medium
+  priority: low
+  playbook: pb-insider-case
+  response: ["Check the on-call roster and travel before treating it as a case"]
+
+- id: insider-departing-employee
+  title: Departing employee collecting data or removing it through removable media
+  category: insider-threat
+  hypothesis: "If an employee who has resigned or been notified is taking company data, we would expect to see removable-media writes, personal-cloud uploads or mass printing from their devices in {scope} before their last day."
+  techniques: [T1052.001, T1567, T1048]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["USB storage, personal cloud, email to a private address"]
+    infrastructure: ["Removable media; personal accounts"]
+    victim: ["Customer lists, designs, code, pricing"]
+  data_sources: [endpoint, file-activity, proxy]
+  leads:
+    - name: Files written to removable media
+      technique: T1052.001
+      logsource: {category: file_event, product: windows}
+      selection: {TargetFilename|startswith: ["D:\\", "E:\\", "F:\\", "G:\\"], Image|endswith: ["\\explorer.exe", "\\robocopy.exe", "\\xcopy.exe"]}
+      notes: "Drive letters vary; use your DLP or EDR device-control event instead if you have one."
+    - name: Mail with attachments to a personal address from a user on the leavers list
+      technique: T1048
+      spl: 'search sourcetype=mail direction=outbound attachment_count>0 | lookup leavers user AS sender OUTPUT last_day | where isnotnull(last_day) | stats sum(attachment_bytes) as bytes, count by sender, recipient_domain | sort - bytes | head 50'
+      notes: "Needs a leavers lookup from HR, kept confidential and access-controlled."
+  malicious: ["Gigabytes copied to a USB in the final week", "Forwarding of customer files to a private address"]
+  benign: ["Handing over work to a colleague by approved means", "Personal photos copied from a phone"]
+  tuning: ["Keep the leavers list tightly controlled", "Only alert the case owner"]
+  severity: high
+  priority: medium
+  playbook: pb-insider-case
+  response: ["HR and legal decide on access reduction; consider a return-of-property reminder rather than accusation"]
+
+- id: insider-source-code-theft
+  title: Source-code repositories cloned or exported in bulk
+  category: insider-threat
+  hypothesis: "If someone is taking source code, we would expect to see many repositories cloned, or a repository exported or mirrored, by an identity that does not usually work on them in {scope}."
+  techniques: [T1213.003, T1567.001, T1048]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["git clone, mirror or archive download; push to a personal remote"]
+    infrastructure: ["Personal repository hosts; the cloning workstation"]
+    victim: ["Proprietary code and secrets inside it"]
+  data_sources: [vcs-ci, proxy]
+  leads:
+    - name: Many repositories cloned by one user in a day
+      technique: T1213.003
+      spl: 'search sourcetype=github:audit action IN ("git.clone","repo.download_zip","git.fetch") | stats dc(repo) as repos by actor, _time span=1d | where repos > 15 | sort - repos | head 50'
+      notes: "Field names follow GitHub's audit log; adapt for GitLab or Bitbucket."
+    - name: Push to a repository host that is not the company's
+      technique: T1567.001
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: "\\git.exe", CommandLine|contains: ["remote add", "push --mirror", "--mirror"]}
+      notes: "A mirror push or a new remote to an external host. Needs command-line logging."
+  malicious: ["Mirror clones of repositories the user has never contributed to", "A new remote pointing at a personal account"]
+  benign: ["Build servers and CI that clone everything", "New joiners fetching many repositories"]
+  tuning: ["Exclude CI and service identities", "Compare to the user's team repository list"]
+  severity: high
+  priority: medium
+  playbook: pb-insider-case
+  response: ["Confidential case; rotate any secrets present in the cloned repositories"]
+
+- id: insider-sabotage
+  title: Destructive or disruptive actions by someone with access
+  category: insider-threat
+  hypothesis: "If a user intends to harm the company, we would expect to see deletion of data or backups, account lockouts or service stops by an identity with legitimate access on {scope}."
+  techniques: [T1485, T1531, T1489, T1490]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Administrative rights and knowledge of where recovery data lives"]
+    infrastructure: ["Internal systems; sometimes a logic bomb scheduled in advance"]
+    victim: ["Production data, backups, directory accounts"]
+  data_sources: [endpoint, cloud-audit, host-auth]
+  leads:
+    - name: Backup catalogue or shadow-copy deletion
+      technique: T1490
+      logsource: {category: process_creation, product: windows}
+      selection: {CommandLine|contains: ["vssadmin delete shadows", "wmic shadowcopy delete", "wbadmin delete catalog", "bcdedit /set {default} recoveryenabled no", "delete systemstatebackup"]}
+    - name: Bulk deletion of cloud resources by one identity
+      technique: T1485
+      spl: 'search sourcetype=aws:cloudtrail eventName IN ("DeleteBucket","DeleteDBInstance","DeleteSnapshot","DeleteVolume","TerminateInstances","DeleteBackupVault") | bin _time span=1h | stats count, values(eventName) as actions by userIdentity.arn, _time | where count > 10 | sort - count | head 50'
+  malicious: ["Backup deletion from an interactive admin session outside change", "Mass termination of instances by a person who is leaving"]
+  benign: ["Decommissioning under a change", "Cleanup scripts run by the platform team"]
+  tuning: ["Require a change ticket id in the session tags and exclude tagged calls", "Treat backup deletion as always interesting"]
+  severity: critical
+  priority: high
+  playbook: pb-insider-case
+  response: ["Suspend the identity's destructive rights through the owning team now; preserve logs", "Check backups are intact and offline copies are untouched"]
+
+- id: driveby-browser-exploit
+  title: Drive-by browser exploitation
+  category: drive-by
+  hypothesis: "If a user's browser was exploited by a malicious page, we would expect to see the browser or its renderer spawning a shell or script host, or a browser process loading unusual modules, on {scope}."
+  techniques: [T1189, T1203]
+  kill_chain: [delivery, exploitation]
+  diamond:
+    capability: ["Browser or plug-in exploit served from a compromised or malicious site"]
+    infrastructure: ["Exploit-kit landing pages, compromised legitimate sites, redirector chains"]
+    victim: ["Users with unpatched browsers or extensions"]
+  data_sources: [endpoint, proxy]
+  leads:
+    - name: Browser starting a command interpreter or script host
+      technique: T1203
+      logsource: {category: process_creation, product: windows}
+      selection: {ParentImage|endswith: ["\\chrome.exe", "\\msedge.exe", "\\firefox.exe", "\\iexplore.exe"], Image|endswith: ["\\cmd.exe", "\\powershell.exe", "\\wscript.exe", "\\mshta.exe", "\\rundll32.exe"]}
+      notes: "A browser does not normally launch an interpreter. Native-messaging helpers and enterprise single-sign-on shims are the usual exceptions."
+    - name: Redirect chain ending in a download of an executable or script from a new domain
+      technique: T1189
+      spl: 'search sourcetype=proxy (url="*.exe" OR url="*.msi" OR url="*.js" OR url="*.hta" OR url="*.zip") | stats earliest(_time) as first_seen, dc(user) as users by dest_domain | where first_seen > relative_time(now(), "-3d@d") AND users >= 1 | sort - users | head 50'
+  malicious: ["A renderer or browser spawning powershell with a download string", "Several users hitting the same new domain and downloading a file"]
+  benign: ["Software vendors' download pages", "Developer tooling opened from a browser"]
+  tuning: ["Exclude known SSO and password-manager helpers", "Prefer chains that end in execution"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Isolate the endpoint; capture the browser history and the downloaded file", "Patch the browser and block the site"]
+
+- id: driveby-malvertising-seo
+  title: Malvertising and search-engine poisoning
+  category: drive-by
+  hypothesis: "If an adversary is using paid ads or poisoned search results to deliver software lookalikes, we would expect to see users downloading installers for popular tools from newly seen domains after a search or ad click on {scope}."
+  techniques: [T1583.008, T1608.006, T1189]
+  kill_chain: [delivery]
+  diamond:
+    capability: ["Cloned download pages for popular tools; trojanised installers"]
+    infrastructure: ["Ad accounts, typosquat domains, poisoned search results, file hosts"]
+    victim: ["Staff and admins who search for tools (PuTTY, Zoom, password managers, AI apps)"]
+  data_sources: [proxy, endpoint]
+  leads:
+    - name: Installer downloaded from a domain with a popular tool's name that is not the vendor
+      technique: T1608.006
+      spl: 'search sourcetype=proxy (url="*putty*" OR url="*zoom*" OR url="*keepass*" OR url="*7-zip*" OR url="*anydesk*" OR url="*chatgpt*") (url="*.exe" OR url="*.msi" OR url="*.dmg" OR url="*.zip") NOT (dest_domain="*.putty.org" OR dest_domain="*.zoom.us" OR dest_domain="*.microsoft.com") | stats count, dc(user) as users by dest_domain, url | sort - count | head 50'
+      notes: "Replace the allow list with your approved vendors; this is a starting set of names."
+    - name: Referer from a search or ad redirect leading to an executable download
+      technique: T1583.008
+      logsource: {category: proxy}
+      selection: {cs-referer|contains: ["googleadservices.com", "bing.com/aclick", "ad.doubleclick.net"], c-uri|endswith: [".exe", ".msi", ".iso", ".zip"]}
+  malicious: ["An installer from a look-alike domain run within minutes", "The same new domain across several users"]
+  benign: ["Legitimate software downloads that were promoted through ads"]
+  tuning: ["Publish a list of approved download sites and block the rest", "Track newly registered domains"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Block the domain, identify everyone who downloaded it, and check for execution"]
+
+- id: driveby-fake-updater
+  title: Fake browser or software update from a compromised site
+  category: drive-by
+  hypothesis: "If a compromised website is showing a fake update prompt, we would expect to see script-based downloads followed by a user running an update-named file from a download folder on {scope}."
+  techniques: [T1189, T1204.002, T1105]
+  kill_chain: [delivery, exploitation, installation]
+  diamond:
+    capability: ["Injected JavaScript on a legitimate site; a trojan disguised as an update"]
+    infrastructure: ["Compromised websites; staging hosts for the second stage"]
+    victim: ["Users who visit the compromised site and approve the 'update'"]
+  data_sources: [endpoint, proxy]
+  leads:
+    - name: A file named like an update run from a download folder
+      technique: T1204.002
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|contains: ["\\Downloads\\"], Image|endswith: ["update.exe", "updater.exe", "chrome_update.exe", "browser_update.exe", "flash_update.exe", "setup_update.exe"]}
+    - name: Script interpreter fetching a payload soon after
+      technique: T1105
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\wscript.exe", "\\cscript.exe", "\\powershell.exe", "\\msiexec.exe"], CommandLine|contains: ["http://", "https://", "-EncodedCommand", "/i http"]}
+  malicious: ["An 'update' from a download folder launching a script host", "Several users visiting the same site then running the same file"]
+  benign: ["Real installers in Downloads", "Packaging tools"]
+  tuning: ["Allow updates only from managed channels", "Use file reputation to exclude signed vendor binaries"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Isolate; remove the file; notify the compromised site's owner if public"]
+
+- id: driveby-clickfix-paste-and-run
+  title: ClickFix paste-and-run (clipboard command delivery)
+  category: drive-by
+  hypothesis: "If a page is tricking users into pasting a command, we would expect to see a user-launched Run dialog or terminal executing a long, obfuscated or download command that begins with a captcha or verification lure on {scope}."
+  techniques: [T1204.004, T1059.001, T1218.005]
+  kill_chain: [exploitation, installation]
+  diamond:
+    capability: ["A fake captcha or error page that copies a command to the clipboard and asks the user to run it"]
+    infrastructure: ["Compromised or malicious pages; the staging server named in the pasted command"]
+    victim: ["Any user who can open Run or a terminal"]
+  data_sources: [endpoint]
+  leads:
+    - name: Command started from the Run dialog or Explorer that downloads or decodes content
+      technique: T1204.004
+      logsource: {category: process_creation, product: windows}
+      selection: {ParentImage|endswith: "\\explorer.exe", CommandLine|contains: ["mshta http", "powershell -w hidden", "iex (", "irm ", "curl http", "-enc ", "FromBase64String", "I am not a robot", "Verification ID"]}
+      notes: "The lure text often ends up in the pasted command as a comment, which is why the human-verification phrases are listed."
+    - name: Registry record of commands typed into the Run dialog
+      technique: T1059.001
+      logsource: {category: registry_set, product: windows}
+      selection: {TargetObject|contains: "\\Explorer\\RunMRU", Details|contains: ["powershell", "mshta", "cmd /c", "curl", "http"]}
+      notes: "RunMRU stores recent Run commands per user. Needs registry-value logging or a periodic collection."
+  malicious: ["A hidden PowerShell with a decoded download launched from the Run dialog", "mshta fetching a remote application"]
+  benign: ["Administrators running commands by hand", "Helpdesk instructions for a script"]
+  tuning: ["Block the Run dialog and mshta for standard users where possible", "Exclude IT staff and review quickly"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Isolate the host, collect the pasted command and the page URL, search for the same command elsewhere"]

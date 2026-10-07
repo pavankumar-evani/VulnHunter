@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import ai_assist  # noqa: E402
 import appsec_api  # noqa: E402
+import hunt_knowledge_api  # noqa: E402
 import investigation_api  # noqa: E402
 import mcp_api  # noqa: E402
 import data as dashboard_data  # noqa: E402
@@ -6844,6 +6845,8 @@ app.include_router(mcp_api.build_router(
     scope_findings=lambda rows, user: _scope_to_team(_annotate_finding_teams(rows), user), scope_assets=lambda rows, user: _scope_to_team(rows, user),
     attack_chains=lambda findings: dashboard_data.get_attack_chains(findings),
     posture=lambda findings: posture_engine.assess(findings=findings, now=datetime.datetime.now(datetime.timezone.utc))))  # read-only MCP endpoint; see dashboard/mcp_api.py
+app.include_router(hunt_knowledge_api.build_router(load_findings=lambda: dashboard_data.load_live_queue(), enforce_ai_limit=lambda actor: _enforce_ai_usage_limit(actor),
+                                                   run_ai_call=lambda prompt, route, actor, governance: _run_ai_call_and_record_usage(prompt, route, actor, governance)))  # the hunting knowledge base: docs/HUNT_KNOWLEDGE.md
 app.include_router(__import__("simulation_api").build_router())  # demonstration data through the real connector code; see dashboard/simulation_api.py
 
 
