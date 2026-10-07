@@ -76,6 +76,11 @@ class QueueFilterSortTests(unittest.TestCase):
         self.assertEqual(self.filt("?highEpssOnly=true"), ["F1"])
         self.assertEqual(self.filt("?unowned=true"), ["F2", "F4"])
 
+    def test_a_person_assigned_finding_is_not_unowned(self):
+        findings = [{"id": "A", "priority": "Low", "assignee": "x@y"}, {"id": "B", "priority": "Low"}]
+        out = run_js(f'const st=M.parseQueueState("?unowned=true"); console.log(JSON.stringify([M.applyQueueFilters({json.dumps(findings)}, st.filters).map(f=>f.id), M.queueKpis({json.dumps(findings)}).unowned]));', "queueLogic.js")
+        self.assertEqual(out, [["B"], 1])
+
     def test_free_text_matches_every_word(self):
         self.assertEqual(self.filt("?q=log4shell web-01"), ["F1"])
         self.assertEqual(self.filt("?q=CVE-2020"), ["F3"])
