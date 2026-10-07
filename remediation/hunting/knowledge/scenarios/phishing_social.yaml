@@ -1,0 +1,380 @@
+# Phishing and social engineering scenarios. Field names are Sigma-style; map them to your mail, proxy and identity logs.
+- id: phish-credential-harvest
+  title: Credential-harvesting phishing
+  category: phishing
+  hypothesis: "If an adversary is phishing our users for passwords, we would expect to see messages that link to look-alike or form-builder sign-in pages, users reaching those pages, and then sign-ins to {scope} from sources those users have not used before."
+  techniques: [T1566.002, T1598.003, T1204.001]
+  kill_chain: [delivery, exploitation]
+  diamond:
+    capability: ["Look-alike sign-in page, or a reverse-proxy phishing kit that relays the real sign-in"]
+    infrastructure: ["Newly registered or look-alike domains, URL shorteners, abused file-sharing and form-builder links, bulk mail relays"]
+    victim: ["Users who received external mail with links, and the accounts and data they can reach"]
+  data_sources: [email, proxy, identity-provider]
+  leads:
+    - name: Inbound mail urging a sign-in with a link to a shared-content or form page
+      technique: T1566.002
+      logsource: {product: m365, service: exchange}
+      selection: {Direction: Inbound, Subject|contains: ["verify your account", "password expires", "unusual sign-in", "action required", "document shared with you"], UrlDomain|endswith: [".sharepoint.com", ".forms.office.com", ".typeform.com", ".weebly.com", ".web.app", ".pages.dev"]}
+      notes: "Abused legitimate hosting is the point of the pattern, so the domain list will also match real mail; the subject words narrow it. Review the page behind each link."
+    - name: Users who reached a page whose title or path asks for a sign-in, from a domain first seen this week
+      technique: T1598.003
+      spl: 'search sourcetype=proxy (url="*login*" OR url="*signin*" OR url="*verify*") | stats earliest(_time) as first_seen, dc(user) as users, count by dest_domain | where first_seen > relative_time(now(), "-7d@d") AND users >= 2 | sort - users | head 50'
+      kql: 'DeviceNetworkEvents | where RemoteUrl matches regex @"(login|signin|verify)" | summarize first_seen=min(Timestamp), users=dcount(InitiatingProcessAccountName), hits=count() by RemoteUrl | where first_seen > ago(7d) and users >= 2 | order by users desc | take 50'
+      notes: "Several different users reaching the same new sign-in-looking page within days is the signal; one user is rarely worth a hunt."
+    - name: Successful sign-in shortly after a first-seen source for the same user
+      technique: T1204.001
+      spl: 'search sourcetype=signin result=success | stats earliest(_time) as first_seen by user, src_ip | eventstats count as sources by user | where first_seen > relative_time(now(), "-1d@d") AND sources > 1 | sort - first_seen | head 100'
+      notes: "Needs a prior baseline of the user's source addresses in the same index."
+  malicious: ["The same new page reached by many users who also received the same message", "A sign-in from a hosting provider or unfamiliar country within minutes of a click", "A fresh mailbox rule or token grant after that sign-in"]
+  benign: ["Marketing and HR tools that legitimately send 'verify' mail through form builders", "Staff travelling or on a new phone"]
+  tuning: ["Exclude your own survey and HR domains", "Prefer clicks followed by a sign-in change over clicks alone", "Join with email gateway verdicts if the message was already marked malicious"]
+  severity: high
+  priority: high
+  playbook: pb-email-purge-and-block
+  response: ["Remove the message from all mailboxes and block the page at the proxy", "Treat each user who submitted credentials as compromised: reset, revoke sessions, check mailbox rules"]
+
+- id: phish-malicious-attachment-macro
+  title: Malicious attachment that runs a macro or script
+  category: phishing
+  hypothesis: "If an adversary is delivering macro-enabled or script attachments, we would expect to see an Office application starting a command interpreter or script host on {scope}, soon after an attachment was opened."
+  techniques: [T1566.001, T1204.002, T1059.005]
+  kill_chain: [delivery, exploitation, installation]
+  diamond:
+    capability: ["Macro-enabled document, script or shortcut attachment that downloads a second stage"]
+    infrastructure: ["Sender domains and relays; the URL the macro fetches from"]
+    victim: ["Users who open attachments from outside; their endpoints"]
+  data_sources: [email, endpoint]
+  leads:
+    - name: Office application spawning a script host or shell
+      technique: T1059.005
+      logsource: {category: process_creation, product: windows}
+      selection: {ParentImage|endswith: ["\\winword.exe", "\\excel.exe", "\\powerpnt.exe", "\\outlook.exe"], Image|endswith: ["\\wscript.exe", "\\cscript.exe", "\\cmd.exe", "\\powershell.exe", "\\mshta.exe", "\\rundll32.exe", "\\regsvr32.exe"]}
+      notes: "The classic macro execution chain. Few legitimate Office add-ins start a shell."
+    - name: Attachment with a macro or script extension delivered from outside
+      technique: T1566.001
+      logsource: {product: m365, service: exchange}
+      selection: {Direction: Inbound, AttachmentName|endswith: [".docm", ".xlsm", ".js", ".vbs", ".wsf", ".hta", ".lnk", ".iso", ".img"]}
+  malicious: ["Winword or Excel starting powershell.exe with an encoded or download command", "An attachment from a first-time sender whose domain is days old"]
+  benign: ["Finance macros that call cmd.exe for file housekeeping", "Software packaging tools that send ISO images"]
+  tuning: ["List the macro-enabled templates your business uses and exclude them by hash", "Block macros from the internet at policy level and measure the remainder"]
+  severity: high
+  priority: high
+  playbook: pb-endpoint-containment
+  response: ["Isolate the endpoint if the child process reached the network", "Purge the message from other mailboxes (pb-email-purge-and-block)"]
+
+- id: phish-container-lnk-onenote-iso
+  title: Phishing with container, shortcut or OneNote payloads that skip Mark-of-the-Web
+  category: phishing
+  hypothesis: "If an adversary is using disk images, shortcuts or OneNote files to avoid macro blocking, we would expect to see a mounted image or an opened note launching a script or binary on {scope}."
+  techniques: [T1553.005, T1204.002, T1566.001]
+  kill_chain: [delivery, exploitation]
+  diamond:
+    capability: ["ISO/IMG/VHD container, LNK shortcut or OneNote embedded script that carries a loader"]
+    infrastructure: ["Sender and download hosts; the loader's staging server"]
+    victim: ["Users who receive file-sharing links or attachments from outside"]
+  data_sources: [endpoint, email]
+  leads:
+    - name: Process started from a mounted disk image or from an Explorer-opened shortcut
+      technique: T1553.005
+      logsource: {category: process_creation, product: windows}
+      selection: {ParentImage|endswith: "\\explorer.exe", CommandLine|contains: [".lnk", "cmd /c start", "powershell -w hidden", "rundll32"], Image|endswith: ["\\cmd.exe", "\\powershell.exe", "\\rundll32.exe", "\\wscript.exe"]}
+      notes: "Shortcut launching an interpreter with hidden-window flags. Pair with a recent ISO mount event (Microsoft-Windows-VHDMP) for the container case."
+    - name: OneNote starting a script host or binary
+      technique: T1204.002
+      logsource: {category: process_creation, product: windows}
+      selection: {ParentImage|endswith: "\\onenote.exe", Image|endswith: ["\\wscript.exe", "\\cscript.exe", "\\mshta.exe", "\\powershell.exe", "\\cmd.exe"]}
+  malicious: ["An interpreter launched with hidden window and a download or encoded command, right after a container was mounted", "OneNote spawning wscript.exe"]
+  benign: ["IT staff who mount ISO installers", "Shortcuts that start documented login scripts"]
+  tuning: ["Block ISO/IMG mounting for standard users if the business does not need it", "Exclude your deployment tool's parent process"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Quarantine the file and collect the container and shortcut for analysis", "Search for the same container hash across mailboxes and endpoints"]
+
+- id: phish-qr-code
+  title: QR-code phishing (quishing)
+  category: phishing
+  hypothesis: "If an adversary is moving phishing links into QR codes to bypass link scanning, we would expect to see inbound mail with an image or PDF and almost no text, followed by a mobile device reaching a new sign-in page for {scope}."
+  techniques: [T1566.002, T1598.003]
+  kill_chain: [delivery]
+  diamond:
+    capability: ["QR code in an image or PDF that encodes a sign-in or redirect URL"]
+    infrastructure: ["Redirectors and look-alike sign-in pages on newly registered domains"]
+    victim: ["Users reading mail on desktops and scanning with personal phones, outside corporate web filtering"]
+  data_sources: [email, identity-provider, proxy]
+  leads:
+    - name: Inbound mail with a QR-style subject and an image or PDF attachment
+      technique: T1566.002
+      logsource: {product: m365, service: exchange}
+      selection: {Direction: Inbound, Subject|contains: ["scan the qr", "scan to verify", "mfa update", "new voicemail", "benefits enrollment"], AttachmentName|endswith: [".png", ".jpg", ".pdf"]}
+    - name: Sign-in from a mobile user agent on a network the user has not used, within a day of such mail
+      technique: T1598.003
+      spl: 'search sourcetype=signin result=success (user_agent="*iPhone*" OR user_agent="*Android*") | stats earliest(_time) as first_seen, values(src_ip) as sources by user | where first_seen > relative_time(now(), "-1d@d") | head 100'
+      notes: "Corporate web filtering never sees the page because the scan happens on a personal phone, so the sign-in is the best remaining signal."
+  malicious: ["Several users receiving the same image-only message, then sign-ins from residential or mobile networks they have not used", "A sign-in from a new device soon after the message"]
+  benign: ["Legitimate MFA enrolment campaigns from IT that use QR codes", "Event and conference mail with ticket QR codes"]
+  tuning: ["Tell users what real MFA enrolment mail looks like", "Prefer image-only mail from first-time senders"]
+  severity: medium
+  priority: medium
+  playbook: pb-email-purge-and-block
+  response: ["Remove the message, add a content rule for image-only mail from new senders", "Reset credentials for users whose sign-in changed after the message"]
+
+- id: phish-mfa-fatigue-aitm
+  title: MFA fatigue and adversary-in-the-middle token theft
+  category: phishing
+  hypothesis: "If an adversary holds a user's password and is pushing MFA prompts, or relaying the sign-in through a proxy, we would expect to see repeated MFA denials followed by an approval, or a sign-in whose session token is reused from a different address, on {scope}."
+  techniques: [T1621, T1557, T1539, T1550.004]
+  kill_chain: [exploitation, actions-on-objectives]
+  diamond:
+    capability: ["Prompt bombing against push-based MFA; reverse-proxy kit that captures the session cookie after MFA"]
+    infrastructure: ["Proxy or hosting addresses used for the sign-in; the phishing front end"]
+    victim: ["Users with push-approval MFA and the applications behind single sign-on"]
+  data_sources: [identity-provider]
+  leads:
+    - name: Several MFA denials or timeouts for one user, then a success
+      technique: T1621
+      spl: 'search sourcetype=signin mfa_result IN ("denied","timeout","success") | bin _time span=30m | stats count(eval(mfa_result!="success")) as failed, count(eval(mfa_result="success")) as ok by user, _time | where failed >= 5 AND ok >= 1 | sort - failed | head 50'
+      kql: 'SigninLogs | where ResultType in (500121, 50074, 50076) or ResultType == 0 | summarize failed=countif(ResultType != 0), ok=countif(ResultType == 0) by UserPrincipalName, bin(TimeGenerated, 30m) | where failed >= 5 and ok >= 1'
+      notes: "Five denials in thirty minutes is a starting threshold; users with a broken authenticator also match."
+    - name: Sign-in attempts that stopped at the MFA step (MFA denied, not completed, or number-match failed)
+      technique: T1621
+      logsource: {product: azure, service: signinlogs}
+      selection: {ResultType: [500121, 50074, 50076], AuthenticationRequirement: "multiFactorAuthentication"}
+      notes: "The single-event form of the fatigue signal; count per user over thirty minutes to find the burst."
+    - name: Same session id used from two different addresses or countries
+      technique: T1539
+      spl: 'search sourcetype=signin | stats dc(src_ip) as addrs, dc(country) as countries, values(src_ip) as ips by session_id, user | where addrs >= 2 AND countries >= 2 | sort - countries | head 50'
+      notes: "Token replay. Needs the session or correlation id in the sign-in logs."
+  malicious: ["A burst of denials ending in an approval at night", "A session that starts in one country and continues from a hosting provider elsewhere within minutes"]
+  benign: ["Users on VPN and mobile networks switching addresses", "Authenticator app problems after a phone change"]
+  tuning: ["Use number-matching MFA, which removes most of the fatigue pattern", "Exclude known corporate egress ranges when computing countries"]
+  severity: high
+  priority: high
+  playbook: pb-credential-compromise
+  response: ["Revoke the session and refresh tokens now; password reset alone does not end a stolen session", "Switch the user to a phishing-resistant method"]
+
+- id: phish-thread-hijack
+  title: Reply-chain (thread-hijack) phishing from a compromised partner
+  category: phishing
+  hypothesis: "If a partner or colleague mailbox has been compromised and is replying into real conversations, we would expect to see inbound replies on existing threads that carry a new link or attachment and a sender address that has not used that thread's route before, to {scope}."
+  techniques: [T1566.002, T1534, T1586.002]
+  kill_chain: [delivery]
+  diamond:
+    capability: ["Access to a real mailbox and its conversation history"]
+    infrastructure: ["The compromised partner account; the link host in the reply"]
+    victim: ["Recipients on the existing thread; they trust the sender"]
+  data_sources: [email]
+  leads:
+    - name: Reply on an existing thread from an external sender that includes a link to a file-sharing or unknown domain
+      technique: T1566.002
+      logsource: {product: m365, service: exchange}
+      selection: {Direction: Inbound, Subject|startswith: ["RE:", "Re:", "FW:"], UrlDomain|endswith: [".sharepoint.com", ".dropbox.com", ".wetransfer.com", ".we.tl", ".box.com"]}
+    - name: Internal mail that carries the same link as an earlier external reply
+      technique: T1534
+      spl: 'search sourcetype=mail url=* | stats dc(recipient) as recipients, dc(sender_domain) as sender_domains, values(sender) as senders by url | where sender_domains >= 2 AND recipients >= 3 | sort - recipients | head 50'
+      notes: "A link that first arrives from a partner and then spreads from inside means internal spearphishing has begun."
+  malicious: ["A reply that matches the thread's topic but whose link host has no business relation to the partner", "A partner reply that arrives out of working hours for them"]
+  benign: ["Genuine partner file shares using the same services", "Automatic replies and mailing-list quoting"]
+  tuning: ["Allow-list your partners' known file-sharing tenants", "Use the sender's earlier behaviour with you as the baseline"]
+  severity: high
+  priority: medium
+  playbook: pb-email-purge-and-block
+  response: ["Tell the partner out of band that their mailbox is compromised", "Block the link host and purge the replies"]
+
+- id: phish-bec-payment-fraud
+  title: Business email compromise and payment diversion
+  category: phishing
+  hypothesis: "If an adversary has access to a finance or executive mailbox, we would expect to see forwarding or hiding rules, mail to finance with changed bank details, and an unusual sign-in to {scope}."
+  techniques: [T1114.003, T1534, T1684.001, T1586.002]
+  kill_chain: [exploitation, actions-on-objectives]
+  diamond:
+    capability: ["Access to a mailbox and knowledge of payment processes; sometimes a look-alike domain"]
+    infrastructure: ["Look-alike sender domains; mule bank accounts (never visible to Quanta)"]
+    victim: ["Finance, procurement and executives; suppliers"]
+  data_sources: [email, identity-provider, saas-audit]
+  leads:
+    - name: New inbox rule that forwards or moves mail to hidden folders
+      technique: T1114.003
+      logsource: {product: m365, service: audit}
+      selection: {Operation: ["New-InboxRule", "Set-InboxRule", "UpdateInboxRules"], Parameters|contains: ["ForwardTo", "RedirectTo", "DeleteMessage", "MoveToFolder", "RSS Feeds", "Archive"]}
+    - name: Look-alike sender whose display name matches an executive or supplier
+      technique: T1684.001
+      spl: 'search sourcetype=mail direction=inbound | eval display=lower(display_name) | stats values(sender) as senders, dc(sender) as addrs by display | where addrs >= 2 | sort - addrs | head 50'
+      notes: "Same display name, more than one sender address, is the impersonation pattern. Compare to your directory for the real address."
+  malicious: ["A rule that forwards mail containing 'invoice' or 'payment' outside the company", "A bank-detail change request arriving from an address that differs from the supplier's usual one by one character"]
+  benign: ["Users who forward to a personal address against policy", "Suppliers who change banks legitimately and tell you in advance"]
+  tuning: ["Alert on any external forwarding rule created through the API rather than the interface", "Finance should verify bank changes by call-back to a known number"]
+  severity: critical
+  priority: high
+  playbook: pb-credential-compromise
+  response: ["Stop any pending payment and call the bank; this is time-critical", "Remove rules, revoke sessions, collect mailbox audit logs"]
+
+- id: phish-mailbox-rules-persistence
+  title: Malicious mailbox rules and forwarding for persistence or hiding
+  category: phishing
+  hypothesis: "If an adversary has taken over a mailbox and wants to stay hidden, we would expect to see inbox rules that delete or move security mail or forward externally, created by a session that does not match the user's usual one on {scope}."
+  techniques: [T1114.003, T1564.008]
+  kill_chain: [installation]
+  diamond:
+    capability: ["Mailbox access that creates rules through the API or web interface"]
+    infrastructure: ["The sign-in address and user agent used for the rule creation"]
+    victim: ["The compromised mailbox and the correspondents whose mail is hidden or forwarded"]
+  data_sources: [saas-audit, identity-provider]
+  leads:
+    - name: Rule that moves or deletes mail about security, password or payment topics
+      technique: T1564.008
+      logsource: {product: m365, service: audit}
+      selection: {Operation: ["New-InboxRule", "Set-InboxRule"], Parameters|contains: ["security", "password", "invoice", "payment", "phish", "alert"]}
+    - name: Transport or forwarding rule to an external address
+      technique: T1114.003
+      logsource: {product: m365, service: audit}
+      selection: {Operation: ["New-TransportRule", "Set-Mailbox", "Set-TransportRule"], Parameters|contains: ["ForwardingSmtpAddress", "RedirectMessageTo", "BlindCopyTo"]}
+  malicious: ["A rule created minutes after a sign-in from a new device", "Forwarding to a free webmail address"]
+  benign: ["Users organising their mail", "Shared mailboxes that forward to a ticket system"]
+  tuning: ["Exclude shared mailboxes and ticket integrations by name", "Weight rules created from a non-corporate address"]
+  severity: high
+  priority: high
+  playbook: pb-credential-compromise
+  response: ["Delete the rule after saving a copy as evidence", "Check what was forwarded and to whom"]
+
+- id: phish-oauth-consent-abuse
+  title: Illicit OAuth consent and app-registration abuse
+  category: phishing
+  hypothesis: "If an adversary tricked users into granting an application access to their mail and files, we would expect to see a first-time application receiving broad delegated permissions from several users, or a new service principal with credentials added, in {scope}."
+  techniques: [T1528, T1550.001, T1098.003]
+  kill_chain: [exploitation, installation]
+  diamond:
+    capability: ["A malicious or look-alike multi-tenant application that requests mail, file and offline-access scopes"]
+    infrastructure: ["The application's publisher domain and redirect URIs"]
+    victim: ["Users who consent; the data their delegated tokens can read"]
+  data_sources: [identity-provider, saas-audit]
+  leads:
+    - name: Consent to an application with offline access plus mail or file scopes
+      technique: T1528
+      logsource: {product: azure, service: auditlogs}
+      selection: {operationName: ["Consent to application", "Add delegated permission grant", "Add OAuth2PermissionGrant"], Scope|contains: ["offline_access", "Mail.Read", "Mail.ReadWrite", "Files.Read.All", "Mail.Send"]}
+    - name: Credentials or certificates added to an existing application
+      technique: T1098.003
+      logsource: {product: azure, service: auditlogs}
+      selection: {operationName: ["Add service principal credentials", "Update application - Certificates and secrets management", "Add owner to application"]}
+  malicious: ["A never-seen application consented to by several users in one day", "A secret added to a privileged application by a user who does not own it"]
+  benign: ["Sanctioned third-party tools being rolled out", "Developers rotating secrets on their own apps"]
+  tuning: ["Maintain an approved-application list and alert on everything else", "Require admin consent for high-risk scopes"]
+  severity: high
+  priority: high
+  playbook: pb-credential-compromise
+  response: ["Revoke the grant and disable the application, then review what its tokens read", "Block user consent for unverified publishers"]
+
+- id: social-helpdesk-impersonation-vishing
+  title: Help-desk impersonation (vishing) to reset credentials or MFA
+  category: social-engineering
+  hypothesis: "If an adversary is phoning the help desk pretending to be an employee, we would expect to see a password reset or MFA method change followed within hours by a sign-in from a new device or network for the same account in {scope}."
+  techniques: [T1566.004, T1556.006, T1098.005, T1078]
+  kill_chain: [delivery, exploitation]
+  diamond:
+    capability: ["Voice pretext with gathered personal data (name, job title, manager, employee id) from open sources or breached data"]
+    infrastructure: ["Spoofed or VoIP numbers; the network used for the next sign-in"]
+    victim: ["Help-desk staff; the targeted employee's account; often privileged or finance users"]
+  data_sources: [identity-provider, saas-audit]
+  leads:
+    - name: MFA method added or reset, followed by a sign-in from a new device
+      technique: T1556.006
+      spl: 'search sourcetype=idp (event="mfa_method_added" OR event="mfa_reset" OR event="password_reset_by_admin") | stats earliest(_time) as change_time by user | join type=inner user [ search sourcetype=signin result=success device_new=true | stats earliest(_time) as new_device_time by user ] | where new_device_time >= change_time AND new_device_time - change_time < 14400 | head 50'
+      notes: "The join is indicative; run it as two searches if your SIEM limits subsearches. Four hours is a starting window."
+    - name: Device registered for MFA or the directory shortly after a reset
+      technique: T1098.005
+      logsource: {product: azure, service: auditlogs}
+      selection: {operationName: ["Add registered owner to device", "Register device", "User registered security info"]}
+  malicious: ["A reset on a privileged account initiated by a help-desk ticket that was opened by phone only", "A reset followed by a sign-in from a hosting network"]
+  benign: ["Genuine lost-phone resets", "New starters registering their first device"]
+  tuning: ["Require a call-back to a number on file or a video check for any reset", "Flag resets on administrators and finance users for second review"]
+  severity: high
+  priority: high
+  playbook: pb-account-takeover-social
+  response: ["Verify with the real person on a known number before anything else", "Reverse the reset and revoke sessions if verification fails"]
+
+- id: social-callback-phishing
+  title: Callback phishing leading to remote-access tooling
+  category: social-engineering
+  hypothesis: "If an adversary is using phone-number lures that make the user call back, we would expect to see a remote-support tool installed or run by a standard user soon after mail with a phone number and no link, on {scope}."
+  techniques: [T1566.004, T1219, T1204]
+  kill_chain: [delivery, exploitation, installation]
+  diamond:
+    capability: ["A call-centre style pretext (invoice, subscription renewal) that persuades the user to install a remote-support tool"]
+    infrastructure: ["Phone numbers; the remote-access service's relay hosts"]
+    victim: ["Users who read and act on invoice or subscription mail"]
+  data_sources: [email, endpoint, proxy]
+  leads:
+    - name: Remote-support or screen-sharing tool executed from a user profile or temp path
+      technique: T1219
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\anydesk.exe", "\\teamviewer.exe", "\\screenconnect.clientservice.exe", "\\atera_agent.exe", "\\ammyy.exe", "\\supremo.exe", "\\rustdesk.exe", "\\splashtop.exe"], Image|contains: ["\\Users\\", "\\AppData\\", "\\Temp\\", "\\Downloads\\"]}
+    - name: Inbound mail with a phone number and an invoice or renewal theme and no link
+      technique: T1566.004
+      logsource: {product: m365, service: exchange}
+      selection: {Direction: Inbound, Subject|contains: ["invoice", "your subscription", "renewal", "payment confirmation", "order confirmation"], BodyHasUrl: "false"}
+  malicious: ["A remote tool run from Downloads by a user who is not in IT, within an hour of such a mail", "A second tool installed shortly after the first"]
+  benign: ["IT-approved remote-support software", "Vendors who support your applications through the same tools"]
+  tuning: ["Allow only your approved remote-access tool by signer and block the others", "Alert on first-seen remote tools per host"]
+  severity: high
+  priority: medium
+  playbook: pb-endpoint-containment
+  response: ["Isolate the host and remove the tool", "Ask the user what they were told on the call and what they shared"]
+
+- id: social-deepfake-approval
+  title: Deepfake voice or video used to authorise a payment or access change
+  category: social-engineering
+  hypothesis: "If an adversary is impersonating an executive with synthetic voice or video, we would expect to see an urgent out-of-process payment, access or MFA request approved on a single channel, in {scope}."
+  techniques: [T1684.001, T1566.004, AML.T0088, AML.T0052.001]
+  kill_chain: [delivery, actions-on-objectives]
+  diamond:
+    capability: ["Voice cloning or real-time video synthesis plus public information about the executive"]
+    infrastructure: ["Calling numbers, meeting links, messaging accounts impersonating the executive"]
+    victim: ["Finance staff, assistants and help desk with authority to act on a request"]
+  data_sources: [saas-audit, email]
+  leads:
+    - name: Payment or access change request that bypassed the normal approval workflow
+      technique: T1684.001
+      spl: 'search sourcetype=approvals (urgency="high" OR reason="*urgent*" OR reason="*confidential*") channel IN ("chat","phone","email") | stats count by requester, approver, channel, amount | where amount > 10000 | sort - amount | head 50'
+      notes: "Your approval system's field names will differ. The pattern is a large or sensitive change approved on a single informal channel."
+    - name: New meeting or chat identity using an executive's display name from an external tenant
+      technique: T1566.004
+      logsource: {product: m365, service: teams}
+      selection: {SenderTenant|startswith: "external", DisplayName|contains: ["CEO", "CFO", "Chief", "Director"]}
+      notes: "Replace the display-name words with your executives' actual names; this is the shape of a look-alike chat identity."
+  malicious: ["An urgent request that insists on secrecy and skips a second approver", "A new payee added minutes before a large transfer"]
+  benign: ["Genuine urgent executive requests that follow the process", "Travelling executives using unusual channels"]
+  tuning: ["Define a call-back or code-word check for any money or access request received by voice or video", "Review exceptions weekly"]
+  severity: critical
+  priority: medium
+  playbook: pb-account-takeover-social
+  response: ["Stop the payment and verify through a known channel", "Preserve call and chat evidence; brief finance and the help desk"]
+
+- id: social-sim-swap
+  title: SIM swap and phone-number takeover used to defeat SMS MFA
+  category: social-engineering
+  hypothesis: "If an adversary has taken over a user's mobile number, we would expect to see SMS-based MFA used successfully from a new device right after a number port or a reset request, on {scope}."
+  techniques: [T1111, T1451]
+  kill_chain: [exploitation]
+  diamond:
+    capability: ["Social engineering of a mobile carrier or insider access to port a number"]
+    infrastructure: ["The adversary's device and network at sign-in"]
+    victim: ["Users who rely on SMS codes for MFA or password reset, especially executives and crypto or finance staff"]
+  data_sources: [identity-provider]
+  leads:
+    - name: SMS-based MFA success from a device not seen for that user in 30 days
+      technique: T1111
+      spl: 'search sourcetype=signin mfa_method="sms" result=success | stats earliest(_time) as first_seen by user, device_id | where first_seen > relative_time(now(), "-1d@d") | head 100'
+      notes: "A new device plus SMS is the weak combination; add your carrier alert feed if you have one."
+    - name: Sign-in that completed MFA by text message
+      technique: T1111
+      logsource: {product: azure, service: signinlogs}
+      selection: {AuthenticationDetails|contains: ["Text message", "SMS"], ResultType: 0}
+      notes: "Single-event form: every SMS-completed sign-in. The hunt is whether any of them is a new device for the user."
+  malicious: ["A password reset by SMS from a new device and country on the same day", "Several SMS resets in a short time"]
+  benign: ["Users with a new phone", "Roaming staff"]
+  tuning: ["Move high-value users to app-based or hardware MFA and remove SMS fallback", "Join with HR travel data where allowed"]
+  severity: high
+  priority: low
+  playbook: pb-account-takeover-social
+  response: ["Contact the user on another channel and ask them to check with their carrier", "Revoke sessions and move them off SMS"]
