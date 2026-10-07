@@ -1,609 +1,413 @@
+// Live Remediation Queue: every finding, re-scored on each load, as a fast sortable table with filters kept in the URL, bulk assign and exception
+// actions, saved views, and a detail drawer. Pure decisions (filters, sorting, selection, SLA maths) live in queueLogic.js and are tested under
+// Node; the table is mxKit.js. API calls are the same ones the page always made.
 import { api } from "../api.js";
-import { escapeHtml, timeAgo } from "../dom.js";
+import { escapeHtml } from "../dom.js";
 import { icon } from "../icons.js";
 import { filterByTenant, tenantBannerHtml } from "../tenant.js";
 import { QUEUE_SCAN_TYPES, SCAN_TYPE_LABELS } from "../scanTypes.js";
 import { INFRA_CATEGORIES, INFRA_CATEGORY_LABELS } from "../infraTypes.js";
-import { exportButtonsHtml, wireExportButtons } from "../export.js";
-import { columnPickerHtml, loadVisibleColumns, applyColumnVisibility, wireColumnPicker } from "../columnPicker.js";
-import { paginate, paginationHtml, wirePagination, DEFAULT_PAGE_SIZE } from "../pagination.js";
-import { openFindingDetail } from "../findingDetail.js";
-import { buildOwnerTeamMaps, environmentCellHtml, ENVIRONMENT_LABELS } from "../assetLookup.js";
+import { buildOwnerTeamMaps, ENVIRONMENT_LABELS } from "../assetLookup.js";
 import { dateRangeHtml, wireDateRange, filterByDateRange, computeRange, dateRangeDisclaimerHtml } from "../dateRange.js";
-import { threatIntelCellHtml, threatIntelExportValue } from "../threatIntelTagging.js";
+import { threatIntelCellHtml } from "../threatIntelTagging.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
-import { ageBucketFor } from "../domainSummary.js";
-
-// These 5 categories are each fixed to one effective asset type/category the moment the
-// URL selects them (cert-mgmt->certificate, iac->iac-resource, runtime->container-runtime,
-// dast/secrets->application or code-repository split only by CVE presence) - showing
-// Asset type/Category/Infra sub-category selects on these views is pure redundancy, since
-// there's nothing else for them to filter to. Only `sca` (application OR code-repository)
-// and the `infra-vm` default (6 asset types) genuinely need those controls.
-const SINGLE_ASSET_TYPE_CATEGORIES = new Set(["cert-mgmt", "iac", "runtime", "dast", "secrets", "ai-ml"]);
-
-const EXPORT_COLUMNS = [
-  { label: "Priority", value: (f) => f.priority },
-  { label: "ID", value: (f) => f.id },
-  { label: "Asset", value: (f) => f.asset && f.asset.name },
-  { label: "Asset Type", value: (f) => f.asset && f.asset.type },
-  { label: "Cloud Provider", value: (f) => f.cloud_provider || "" },
-  { label: "Environment", value: (f) => ENVIRONMENT_LABELS[f.environment || "unknown"] || f.environment },
-  { label: "Owner", value: (f) => f.owner },
-  { label: "Team", value: (f) => f.team },
-  { label: "Remediation Mechanism", value: (f) => f.remediation_mechanism || "" },
-  { label: "Category", value: (f) => f.scan_type_label || f.scan_type },
-  { label: "Title", value: (f) => f.title },
-  { label: "CVE", value: (f) => f.cve },
-  { label: "KEV", value: (f) => (f.kev && f.kev.listed ? "Yes" : "No") },
-  { label: "EPSS", value: (f) => (f.epss ? f.epss.score : "") },
-  { label: "Threat Intel", value: threatIntelExportValue },
-  { label: "Last Seen", value: (f) => f.last_seen },
-  { label: "SLA Due", value: (f) => f.sla && f.sla.due_date },
-  { label: "SLA Breached", value: (f) => !!(f.sla && f.sla.breached) },
-  { label: "ATT&CK Techniques", value: (f) => (f.attack_techniques || []).map((t) => t.technique_id).join("; ") },
-  { label: "Exception", value: (f) => (f.exception ? f.exception.reason : "") },
-  { label: "Change Type", value: (f) => (f.remediation_policy || {}).change_type || "" },
-  { label: "Cadence", value: (f) => (f.remediation_policy || {}).cadence || "" },
-  { label: "Cadence Overridden", value: (f) => !!((f.remediation_policy || {}).schedule_override) },
-  { label: "Next Maintenance Window", value: (f) => windowText((f.remediation_policy || {}).next_window) },
-  { label: "Auto-Remediate", value: (f) => ((f.remediation_policy || {}).auto_remediate ? "Yes" : "No") },
-];
-
-// Order matches EXPORT_COLUMNS/the header row/rowHtml() below - each id is also the
-// data-col value on that column's <th> and every row's matching <td> (see
-// columnPicker.js's applyColumnVisibility()). Defaults keep the columns most people
-// need to triage/act on a finding at a glance; everything else is a click away instead
-// of always-on - see the FAQ/screenshot this addresses ("too many columns").
-const QUEUE_COLUMNS = [
-  { id: "priority", label: "Priority" },
-  { id: "id", label: "ID" },
-  { id: "asset", label: "Asset" },
-  { id: "asset_type", label: "Asset Type", defaultVisible: false },
-  { id: "cloud_provider", label: "Cloud Provider", defaultVisible: false },
-  { id: "environment", label: "Environment", defaultVisible: false },
-  { id: "owner", label: "Owner", defaultVisible: false },
-  { id: "team", label: "Team", defaultVisible: false },
-  { id: "remediation_mechanism", label: "Remediation Mechanism", defaultVisible: false },
-  { id: "category", label: "Category" },
-  { id: "title", label: "Title" },
-  { id: "cve", label: "CVE" },
-  { id: "kev", label: "KEV" },
-  { id: "epss", label: "EPSS" },
-  { id: "threat_intel", label: "Threat Intel", defaultVisible: false },
-  { id: "last_seen", label: "Last Seen", defaultVisible: false },
-  { id: "sla", label: "SLA Due" },
-  { id: "attack", label: "ATT&CK", defaultVisible: false },
-  { id: "change_type", label: "Change Type" },
-  { id: "cadence", label: "Cadence" },
-  { id: "next_window", label: "Next Maintenance Window", defaultVisible: false },
-  { id: "auto_remediate", label: "Auto-Remediate", defaultVisible: false },
-  { id: "ai", label: "AI" },
-];
+import { getCurrentUser } from "../auth.js";
+import { openFindingDrawer } from "../findingDrawer.js";
+import { chip, toast, emptyState, onCleanup, registerShortcutHelp, dataAgeBadge, mountDataAge, touchDataAge, debounce, tipAttr } from "../ui.js";
+import { modal, popMenu, avatar, ringSvg, liveBadge, copyText, modalOpen } from "../sxKit.js";
+import { selectableTable, kpiStrip, popover, stackedBar, replaceSearch, readJson, writeJson, autoRefresh, pageActions, skeletonPage } from "../mxKit.js";
+import {
+  parseQueueState, queueStateToSearch, applyQueueFilters, sortQueue, queueKpis, activeFilterChips, clearFilter, activeFilterCount, slaRingFor, priorityReasons,
+  applyOptimistic, settle, pruneSelection, bulkBatches, MAX_BULK, addView, removeView, sanitizeViews, sameState, PRIORITIES, defaultState,
+} from "../queueLogic.js";
 
 export const title = "Live Remediation Queue";
 
 const REFRESH_MS = 20000;
-const PRIORITY_RANK = { Critical: 3, High: 2, Medium: 1, Low: 0 };
-// Same change-type -> badge-color convention as remediationApprovals.js.
-const CHANGE_TYPE_CLASS = { emergency: "badge-critical", normal: "badge-medium", standard: "badge-auto_approvable" };
+const VIEWS_KEY = "quanta.queue.views";
+const PRIORITY_COLOR = { Critical: "var(--sx-crit)", High: "var(--sx-high)", Medium: "var(--sx-med)", Low: "var(--sx-low)" };
+const CHANGE_TYPE_CLASS = { emergency: "critical", normal: "warn", standard: "good" };
+const SINGLE_ASSET_TYPE_CATEGORIES = new Set(["cert-mgmt", "iac", "runtime", "dast", "secrets", "ai-ml"]);
+const BUILT_IN_VIEWS = [
+  { name: "SLA breached", search: "?slaStatus=breached" },
+  { name: "Actively exploited (KEV)", search: "?kevOnly=true" },
+  { name: "Critical and unowned", search: "?priority=Critical&unowned=true" },
+  { name: "Likely to be exploited (EPSS 50%+)", search: "?highEpssOnly=true" },
+];
 
-function windowText(w) {
-  if (!w || !w.date) return "—";
-  return `${w.date} (${w.day_of_week}) ${w.start_time}-${w.end_time} ${w.timezone}`;
-}
-
-function rowHtml(f) {
-  const kev = f.kev && f.kev.listed
-    ? `<span class="badge badge-critical">KEV</span>`
-    : `<span class="muted">—</span>`;
-  const epss = f.epss ? `${(f.epss.score * 100).toFixed(1)}%` : "—";
-
-  let slaCell = `<span class="muted">—</span>`;
-  if (f.sla && f.sla.due_date) {
-    if (f.sla.breached) {
-      slaCell = `<span class="sla-breached">${escapeHtml(f.sla.due_date)} (breached)</span>`;
-    } else if (f.sla.days_remaining <= 3) {
-      slaCell = `<span class="sla-warn">${escapeHtml(f.sla.due_date)} (${f.sla.days_remaining}d)</span>`;
-    } else {
-      slaCell = `<span class="sla-ok">${escapeHtml(f.sla.due_date)} (${f.sla.days_remaining}d)</span>`;
-    }
-  }
-  if (f.exception) {
-    // Links straight to the specific exception record on /exceptions, same
-    // ?highlight=<id> deep-link pattern this page's own applyHighlight() supports for
-    // finding IDs (see below) - closes the loop from "here's why this can't be
-    // remediated" back to the actual approval record.
-    slaCell += `<br><a class="exception-tag" data-tooltip="${escapeHtml(f.exception.reason)}" ` +
-      `href="/exceptions?highlight=${encodeURIComponent(f.exception.id)}" data-link>` +
-      `Risk-accepted until ${escapeHtml(f.exception.expires_on)}</a>`;
-  }
-
-  const attackTags = (f.attack_techniques && f.attack_techniques.length)
-    ? f.attack_techniques.map((t) => `<span class="attack-tag" title="${escapeHtml(t.tactic)}">${escapeHtml(t.technique_id)}</span>`).join("")
-    : `<span class="muted">—</span>`;
-
-  const category = f.scan_type
-    ? `<span class="category-tag" data-tooltip="${escapeHtml(f.scan_type_label || "")}">${escapeHtml(f.scan_type)}</span>`
-    : `<span class="muted">—</span>`;
-
-  // Purely informational (see normalized-finding-schema.md's field notes): the
-  // real-world tool that would normally patch this asset class (SCCM, MDM, vendor
-  // firmware/hypervisor tooling) - not a working integration, never a link/action.
-  const remediationMechanism = f.remediation_mechanism
-    ? `<span data-tooltip="Real-world tool, not a working integration in this app - see the FAQ">${escapeHtml(f.remediation_mechanism)}</span>`
-    : `<span class="muted">—</span>`;
-
-  // Sourced from the finding's already-resolved remediation_policy (see
-  // remediation/config/remediation_policy_engine.py) - computed server-side in
-  // dashboard/data.py's load_live_queue(), same "recomputed live" convention as
-  // priority/SLA. See /remediation-policy for the config driving this per domain.
-  const policy = f.remediation_policy || {};
-  const changeTypeCell = policy.change_type
-    ? `<span class="badge ${CHANGE_TYPE_CLASS[policy.change_type] || ""}">${escapeHtml(policy.change_type)}</span>`
-    : `<span class="muted">—</span>`;
-  // schedule_override (remediation/config/remediation_policy_engine.py's
-  // policy_for_finding()) is true when this asset has its own remediation_schedule
-  // override (see /asset-policy) - shown distinctly from the domain's own default
-  // cadence so an admin can tell at a glance which findings are on a custom schedule.
-  const cadenceCell = policy.cadence
-    ? `${escapeHtml(policy.cadence)}${policy.schedule_override ? ` <span class="badge badge-medium" data-tooltip="Asset-level override - see /asset-policy">override</span>` : ""}`
-    : `<span class="muted">—</span>`;
-
-  return `
-    <tr data-finding-id="${escapeHtml(f.id)}">
-      <td data-col="priority"><span class="badge badge-priority-${(f.priority || "").toLowerCase()}">${escapeHtml(f.priority)}</span></td>
-      <td data-col="id"><button type="button" class="link-button finding-id-link" data-finding-id="${escapeHtml(f.id)}">${escapeHtml(f.id)}</button>${f.open_tickets ? ` <a href="/support" data-link class="badge badge-outline" data-tooltip="${f.open_tickets} open support ticket(s) linked to this finding">&#9993; ${f.open_tickets}</a>` : ""}</td>
-      <td data-col="asset">${escapeHtml(f.asset && f.asset.name)}</td>
-      <td data-col="asset_type" class="asset-type-cell">${escapeHtml(f.asset && f.asset.type)}</td>
-      <td data-col="cloud_provider" class="asset-type-cell">${f.cloud_provider ? escapeHtml(f.cloud_provider) : `<span class="muted">—</span>`}</td>
-      <td data-col="environment">${environmentCellHtml(f.environment, escapeHtml)}</td>
-      <td data-col="owner">${escapeHtml(f.owner || "Unowned")}</td>
-      <td data-col="team">${escapeHtml(f.team || "—")}</td>
-      <td data-col="remediation_mechanism">${remediationMechanism}</td>
-      <td data-col="category">${category}</td>
-      <td data-col="title" class="wrap-cell">${escapeHtml(f.title)}</td>
-      <td data-col="cve"><code>${escapeHtml(f.cve || "—")}</code></td>
-      <td data-col="kev">${kev}</td>
-      <td data-col="epss">${epss}</td>
-      <td data-col="threat_intel">${threatIntelCellHtml(f)}</td>
-      <td data-col="last_seen">${escapeHtml(f.last_seen || "—")}</td>
-      <td data-col="sla">${slaCell}</td>
-      <td data-col="attack">${attackTags}</td>
-      <td data-col="change_type">${changeTypeCell}</td>
-      <td data-col="cadence">${cadenceCell}</td>
-      <td data-col="next_window">${windowText(policy.next_window)}</td>
-      <td data-col="auto_remediate">${policy.auto_remediate ? "Yes" : "No"}</td>
-      <td data-col="ai"><a href="/ai-assist?finding_id=${encodeURIComponent(f.id)}" data-link class="ai-assist-link">${icon("ai", 14)} Ask AI</a></td>
-    </tr>`;
-}
-
-function sortFindings(findings, key, dir) {
-  const factor = dir === "asc" ? 1 : -1;
-  return [...findings].sort((a, b) => {
-    let av;
-    let bv;
-    if (key === "priority") {
-      av = PRIORITY_RANK[a.priority] ?? -1;
-      bv = PRIORITY_RANK[b.priority] ?? -1;
-    } else if (key === "sla") {
-      av = a.sla && a.sla.days_remaining !== null && a.sla.days_remaining !== undefined ? a.sla.days_remaining : Infinity;
-      bv = b.sla && b.sla.days_remaining !== null && b.sla.days_remaining !== undefined ? b.sla.days_remaining : Infinity;
-    } else {
-      av = a[key];
-      bv = b[key];
-    }
-    if (av < bv) return -1 * factor;
-    if (av > bv) return 1 * factor;
-    return 0;
-  });
-}
-
-// Mirrors dashboard/data.py's sla_summary() exactly - "breached"/"at_risk"/"on_track",
-// so Overview's SLA KPI tiles can deep-link here with ?slaStatus=breached etc. and the
-// count that lands on this filtered page matches the number on the tile that linked to
-// it. A finding with no SLA date at all falls into "on_track" here too, same as that
-// real server-side definition (not itself a bug this filter should paper over).
-function slaStatusOf(f) {
-  if (f.sla && f.sla.breached) return "breached";
-  if (f.sla && f.sla.days_remaining !== null && f.sla.days_remaining !== undefined && f.sla.days_remaining <= 3) return "at_risk";
-  return "on_track";
-}
-
-function applyFilters(findings, filters) {
-  let result = findings.filter((f) => {
-    if (filters.priority !== "all" && f.priority !== filters.priority) return false;
-    if (filters.assetType !== "all" && (f.asset && f.asset.type) !== filters.assetType) return false;
-    if (filters.environment !== "all" && (f.environment || "unknown") !== filters.environment) return false;
-    if (filters.category !== "all" && f.scan_type !== filters.category) return false;
-    if (filters.infraType !== "all" && f.infra_category !== filters.infraType) return false;
-    if (filters.kevOnly && !(f.kev && f.kev.listed)) return false;
-    // 0.5 mirrors dashboard_data.count_high_epss()'s own default threshold.
-    if (filters.highEpssOnly && !(f.epss && f.epss.score >= 0.5)) return false;
-    if (filters.slaStatus && filters.slaStatus !== "all" && slaStatusOf(f) !== filters.slaStatus) return false;
-    if (filters.cve && f.cve !== filters.cve) return false;
-    if (filters.title && f.title !== filters.title) return false;
-    if (filters.assetName && (f.asset && f.asset.name) !== filters.assetName) return false;
-    if (filters.severity && f.severity !== filters.severity) return false;
-    if (filters.team && f.team !== filters.team) return false;
-    if (filters.ageBucket && ageBucketFor(f.first_seen, new Date()) !== filters.ageBucket) return false;
-    if (filters.cloudProvider && (f.cloud_provider || "Not attributed") !== filters.cloudProvider) return false;
-    if (filters.assetOs && (f.asset && f.asset.os) !== filters.assetOs) return false;
-    if (filters.eolStatus && (f.eol_status && f.eol_status.status) !== filters.eolStatus) return false;
-    return true;
-  });
-  if (filters.dateRange && filters.dateRange.preset) {
-    const range = computeRange(filters.dateRange.preset, filters.dateRange.customFrom, filters.dateRange.customTo);
-    result = filterByDateRange(result, range, "first_seen");
-  }
-  return result;
-}
-
-// Mirrors dashboard_data.sla_summary()'s logic in JS so the KPI cards always match
-// whatever slice of findings the table is currently showing (tenant + filters), not
-// just the unfiltered server-side total.
-function computeSlaSummary(findings) {
-  let breached = 0;
-  let atRisk = 0;
-  let onTrack = 0;
-  for (const f of findings) {
-    const sla = f.sla || {};
-    if (sla.breached) breached += 1;
-    else if (sla.days_remaining !== null && sla.days_remaining !== undefined && sla.days_remaining <= 3) atRisk += 1;
-    else onTrack += 1;
-  }
-  return { breached, at_risk: atRisk, on_track: onTrack };
-}
+const windowText = (w) => (!w || !w.date ? "" : `${w.date} (${w.day_of_week}) ${w.start_time}-${w.end_time} ${w.timezone}`);
 
 export async function render(container) {
-  const topbarExtra = document.getElementById("topbar-extra");
-  let allFindings = [];
-  let lastFetched = null;
-  let sort = { key: "priority", dir: "desc" };
-  let page = 1;
-  let visibleColumns = loadVisibleColumns("queue", QUEUE_COLUMNS);
-  // A nav deep-link (e.g. /queue?category=infra-vm from the Security Domains menu) can
-  // preselect the category filter on load - falls back to "all" the same as before.
-  const initialCategory = new URLSearchParams(window.location.search).get("category") || "all";
-  // A card on the Infrastructure Vulnerabilities hub (/infrastructure) deep-links here
-  // with &infraType=os|network|network-security|ot|cloud on top of category=infra-vm.
-  const initialInfraType = new URLSearchParams(window.location.search).get("infraType") || "all";
-  // Drill-down deep-links from the Vulnerability/Asset Mapping dashboards
-  // (/vulnerability-mapping, /asset-mapping) - see applyFilters()'s cve/assetName
-  // predicate above.
-  const initialCve = new URLSearchParams(window.location.search).get("cve") || null;
-  const initialTitle = new URLSearchParams(window.location.search).get("title") || null;
-  const initialAssetName = new URLSearchParams(window.location.search).get("asset") || null;
-  // Clickable "By severity"/"By team"/"By priority" chart bars (domainSummary.js's
-  // severityChartBlockHtml/teamPriorityChartBlockHtml) deep-link here the same way -
-  // severity and team are silent (no dropdown, exact match, same pattern as cve/
-  // title/assetName above); priority reuses the filter bar's own existing dropdown.
-  const initialSeverity = new URLSearchParams(window.location.search).get("severity") || null;
-  const initialTeam = new URLSearchParams(window.location.search).get("team") || null;
-  const initialPriority = new URLSearchParams(window.location.search).get("priority") || "all";
-  // A clickable KPI tile (Overview's "CISA KEV-listed") deep-links here with
-  // ?kevOnly=true - same pattern as the other deep-link params above.
-  const initialKevOnly = new URLSearchParams(window.location.search).get("kevOnly") === "true";
-  // Reports' "High EPSS" KPI deep-links here with ?highEpssOnly=true - same pattern.
-  const initialHighEpssOnly = new URLSearchParams(window.location.search).get("highEpssOnly") === "true";
-  // The "Open-finding age" chart's bars deep-link here with ?ageBucket=0-30|31-60|
-  // 61-90|90+ - silent, no dropdown, same pattern as severity/team above.
-  const initialAgeBucket = new URLSearchParams(window.location.search).get("ageBucket") || null;
-  // Overview's "Assets by risk tier"/"KEV-listed findings by asset type" charts
-  // deep-link here with ?assetType=<type> - the filter bar's own existing dropdown
-  // just never read its initial value from the URL before now, same gap `priority`
-  // had until it was fixed.
-  const initialAssetType = new URLSearchParams(window.location.search).get("assetType") || "all";
-  // Infrastructure's "Cloud findings by provider" and the OT page's "By device type"
-  // pies deep-link here with ?cloudProvider=<provider>/?assetOs=<os> - silent, no
-  // dropdown, same exact-match pattern as severity/team/ageBucket above.
-  const initialCloudProvider = new URLSearchParams(window.location.search).get("cloudProvider") || null;
-  const initialAssetOs = new URLSearchParams(window.location.search).get("assetOs") || null;
-  // Overview's "EOL/EOS exposure" chart deep-links here with ?eolStatus=<status> -
-  // same silent exact-match pattern.
-  const initialEolStatus = new URLSearchParams(window.location.search).get("eolStatus") || null;
-  // Overview's SLA breached/at-risk/on-track KPI tiles deep-link here with
-  // ?slaStatus=breached|at_risk|on_track.
-  const initialSlaStatus = new URLSearchParams(window.location.search).get("slaStatus") || "all";
-  let filters = {
-    priority: initialPriority, assetType: initialAssetType, environment: "all", category: initialCategory, infraType: initialInfraType,
-    kevOnly: initialKevOnly, highEpssOnly: initialHighEpssOnly, slaStatus: initialSlaStatus, cve: initialCve, title: initialTitle, assetName: initialAssetName,
-    severity: initialSeverity, team: initialTeam, ageBucket: initialAgeBucket,
-    cloudProvider: initialCloudProvider, assetOs: initialAssetOs, eolStatus: initialEolStatus,
-    dateRange: { preset: "", customFrom: "", customTo: "" },
+  const S = {
+    all: [], state: parseQueueState(window.location.search), selected: new Set(), loadedAt: 0, me: null, admin: false, mode: "idle", assignments: new Map(),
+    dateRange: { preset: "", customFrom: "", customTo: "" }, views: sanitizeViews(readJson(VIEWS_KEY, [])), view: [], highlightDone: false, table: null,
   };
-  // A global-search result (search.js) deep-links here with ?highlight=<id> - the
-  // matching row gets scrolled into view and visually marked once on load.
-  const highlightId = new URLSearchParams(window.location.search).get("highlight");
-  let hasScrolledToHighlight = false;
+  let alive = true;
+  onCleanup(() => { alive = false; });
+  const $ = (sel) => container.querySelector(sel);
 
-  function renderLiveBadge() {
-    if (!topbarExtra) return;
-    topbarExtra.innerHTML = `<span class="live-badge" data-tooltip="Auto-refreshes every ${REFRESH_MS / 1000}s">` +
-      `<span class="live-dot"></span> Live · updated ${lastFetched ? timeAgo(lastFetched) : "just now"}</span>`;
-  }
+  container.innerHTML = `<div class="sx-page mx-page" id="q-root">
+    <div class="sx-head"><div><h2>Remediation queue</h2><p>Every finding, re-scored from the current <a href="/priority-rules" data-link>priority rules</a> each time it loads. Filters are kept in the address bar, so a link shares exactly this view.</p></div>
+      <div class="sx-row"><span id="q-live"></span><span id="q-age"></span><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="q-refresh">${icon("clock", 14)} Refresh</button>
+        <span class="sx-pop-host"><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="q-views" aria-haspopup="menu" aria-expanded="false">Saved views</button></span>
+        <button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="q-link">Copy link</button></div></div>
+    <div id="q-tenant">${tenantBannerHtml()}</div><div id="q-note"></div>
+    <div id="q-skel">${skeletonPage(6)}</div>
+    <div id="q-kpis" class="sx-kpis mx-kpis" hidden></div>
+    <div id="q-toolbar" hidden></div><div id="q-chips"></div><div id="q-bulk" class="mx-bulk" hidden></div>
+    <div id="q-table"></div>
+    <details class="sx-panel mx-notes"><summary class="sx-link-btn">How to read this page</summary><div class="mx-notes-body">
+      <p>Priority reasoning for each finding is the list behind the little question mark next to its priority. MITRE ATT&amp;CK tags are a keyword heuristic, not authoritative technique attribution (<code>remediation/enrichment/attack_mapping.py</code>). Category is a methodology taxonomy inferred from asset type (<code>scan_type_mapping.py</code>).
+      Change type, cadence, maintenance window and auto-remediate come from <a href="/remediation-policy" data-link>Remediation policy</a>; an "override" badge means that asset has its own schedule on <a href="/asset-policy" data-link>Asset policy</a>. Normal and emergency changes wait for a decision on <a href="/remediation-approvals" data-link>Remediation approvals</a>.</p>
+      <p>Keys: <kbd>j</kbd>/<kbd>k</kbd> move between rows, <kbd>Enter</kbd> opens the detail, <kbd>x</kbd> or <kbd>Space</kbd> selects, Shift-click selects a range.</p></div></details></div>`;
 
-  function currentSlice() {
-    const tenantFiltered = filterByTenant(allFindings);
-    return applyFilters(tenantFiltered, filters);
-  }
+  const setLive = (m) => { S.mode = m; const el = $("#q-live"); if (el) el.innerHTML = liveBadge(m); };
+  setLive("idle");
 
-  function renderRows() {
-    const sliced = currentSlice();
-    const sorted = sortFindings(sliced, sort.key, sort.dir);
-
-    // A highlighted deep-link (?highlight=<id>) may land on a page other than the
-    // current one - jump to its page once, same one-time-only rule as the scroll itself.
-    if (highlightId && !hasScrolledToHighlight) {
-      const idx = sorted.findIndex((f) => f.id === highlightId);
-      if (idx !== -1) page = Math.floor(idx / DEFAULT_PAGE_SIZE) + 1;
-    }
-
-    const paged = paginate(sorted, page);
-    page = paged.page;
-    const tbody = container.querySelector("#queue-body");
-    if (!tbody) return;
-    tbody.innerHTML = paged.rows.length
-      ? paged.rows.map(rowHtml).join("")
-      : `<tr><td colspan="${QUEUE_COLUMNS.length}" class="empty-state">No findings match the current filters.</td></tr>`;
-    applyColumnVisibility(container.querySelector("#queue-table"), visibleColumns);
-    container.querySelectorAll("th.sortable").forEach((th) => {
-      const indicator = th.querySelector(".sort-indicator");
-      indicator.textContent = th.dataset.sort === sort.key ? (sort.dir === "asc" ? "▲" : "▼") : "";
-    });
-    const countEl = container.querySelector("#queue-count");
-    if (countEl) countEl.textContent = `${sorted.length} of ${allFindings.length} finding(s)`;
-    const paginationEl = container.querySelector("#queue-pagination");
-    if (paginationEl) paginationEl.innerHTML = paginationHtml(paged.page, paged.totalPages);
-
-    // KPI cards always reflect the current tenant/filter slice, not the unfiltered total.
-    const sla = computeSlaSummary(sliced);
-    const breachedEl = container.querySelector("#kpi-breached");
-    const atRiskEl = container.querySelector("#kpi-at-risk");
-    const onTrackEl = container.querySelector("#kpi-on-track");
-    if (breachedEl) breachedEl.textContent = sla.breached;
-    if (atRiskEl) atRiskEl.textContent = sla.at_risk;
-    if (onTrackEl) onTrackEl.textContent = sla.on_track;
-
-    if (highlightId) applyHighlight(sliced);
-  }
-
-  // Scrolls to and marks the finding a global-search result linked to (?highlight=<id>).
-  // Only auto-scrolls once, so the periodic 20s refresh doesn't keep jerking the page
-  // back to it. If the finding exists but the current tenant/filter selection hides it,
-  // says so instead of silently showing nothing.
-  function applyHighlight(sliced) {
-    const noteEl = container.querySelector("#highlight-note");
-    const row = container.querySelector(`[data-finding-id="${CSS.escape(highlightId)}"]`);
-    if (row) {
-      row.classList.add("row-highlight");
-      if (!hasScrolledToHighlight) {
-        row.scrollIntoView({ behavior: "smooth", block: "center" });
-        hasScrolledToHighlight = true;
-      }
-      if (noteEl) noteEl.innerHTML = "";
-      return;
-    }
-    if (!noteEl) return;
-    const existsAtAll = allFindings.some((f) => f.id === highlightId);
-    noteEl.innerHTML = existsAtAll
-      ? `<div class="callout callout-warn">Finding <code>${escapeHtml(highlightId)}</code> exists but is hidden by ` +
-        `the current tenant/filter selection above - clear filters to see it.</div>`
-      : `<div class="callout callout-warn">Finding <code>${escapeHtml(highlightId)}</code> was not found.</div>`;
-  }
-
-  function assetTypeOptions() {
-    const types = [...new Set(allFindings.map((f) => f.asset && f.asset.type).filter(Boolean))].sort();
-    return types.map((t) => `<option value="${escapeHtml(t)}" ${t === filters.assetType ? "selected" : ""}>${escapeHtml(t)}</option>`).join("");
-  }
-
-  function infraTypeOptions() {
-    // Always lists every known sub-category (see infraTypes.js) - same "show the full
-    // known taxonomy" reasoning as categoryOptions() below.
-    return INFRA_CATEGORIES.map((value) =>
-      `<option value="${value}" ${value === filters.infraType ? "selected" : ""}>${escapeHtml(INFRA_CATEGORY_LABELS[value])}</option>`).join("");
-  }
-
-  function categoryOptions() {
-    // Always list every real queue category (not just ones present in today's data) so a
-    // deep link like /queue?category=dast shows a matching, selected dropdown option even
-    // when there's currently no sample finding of that type - see scanTypes.js.
-    const seen = new Map(QUEUE_SCAN_TYPES.map((t) => [t, SCAN_TYPE_LABELS[t]]));
-    for (const f of allFindings) {
-      if (f.scan_type && !seen.has(f.scan_type)) seen.set(f.scan_type, f.scan_type_label || f.scan_type);
-    }
-    return [...seen.entries()].sort().map(([value, label]) =>
-      `<option value="${value}" ${value === filters.category ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
-  }
-
-  function wireControls() {
-    container.querySelectorAll("th.sortable").forEach((th) => {
-      th.addEventListener("click", () => {
-        const key = th.dataset.sort;
-        sort = sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" };
-        page = 1;
-        renderRows();
-      });
-    });
-    container.querySelector("#f-priority").addEventListener("change", (e) => { filters.priority = e.target.value; page = 1; renderRows(); });
-    container.querySelector("#f-environment").addEventListener("change", (e) => { filters.environment = e.target.value; page = 1; renderRows(); });
-    // Asset type/Category/Infra sub-category are omitted entirely (not just disabled)
-    // on the single-asset-type deep-links - see SINGLE_ASSET_TYPE_CATEGORIES above.
-    const assetTypeEl = container.querySelector("#f-asset-type");
-    if (assetTypeEl) assetTypeEl.addEventListener("change", (e) => { filters.assetType = e.target.value; page = 1; renderRows(); });
-    const categoryEl = container.querySelector("#f-category");
-    if (categoryEl) categoryEl.addEventListener("change", (e) => { filters.category = e.target.value; page = 1; renderRows(); });
-    const infraTypeEl = container.querySelector("#f-infra-type");
-    if (infraTypeEl) infraTypeEl.addEventListener("change", (e) => { filters.infraType = e.target.value; page = 1; renderRows(); });
-    container.querySelector("#f-kev-only").addEventListener("change", (e) => { filters.kevOnly = e.target.checked; page = 1; renderRows(); });
-    container.querySelector("#f-high-epss-only").addEventListener("change", (e) => { filters.highEpssOnly = e.target.checked; page = 1; renderRows(); });
-    wireDateRange(container, "f-daterange", (dateRange) => { filters.dateRange = dateRange; page = 1; renderRows(); });
-  }
-
-  function renderShell() {
-    const hideAssetCategoryFilters = SINGLE_ASSET_TYPE_CATEGORIES.has(filters.category);
-    container.innerHTML = `
-      <p class="subtitle">
-        Re-scored on every page load from <a href="/priority-rules" data-link>the
-        current priority rules</a> — edit the weights there and reload this page to see it change.
-      </p>
-
-      ${tenantBannerHtml()}
-
-      <div id="highlight-note"></div>
-
-      <div class="kpi-grid">
-        <div class="kpi-card kpi-danger"><div class="kpi-value" id="kpi-breached">0</div><div class="kpi-label">SLA breached</div></div>
-        <div class="kpi-card kpi-warn"><div class="kpi-value" id="kpi-at-risk">0</div><div class="kpi-label">Due within 3 days</div></div>
-        <div class="kpi-card kpi-good"><div class="kpi-value" id="kpi-on-track">0</div><div class="kpi-label">On track</div></div>
-      </div>
-      <p class="filter-count" style="margin:-8px 0 8px">KPIs above reflect the current tenant/filter selection below.</p>
-
-      <div class="filter-bar">
-        <label>Priority
-          <select id="f-priority">
-            <option value="all" ${filters.priority === "all" ? "selected" : ""}>All</option>
-            <option value="Critical" ${filters.priority === "Critical" ? "selected" : ""}>Critical</option>
-            <option value="High" ${filters.priority === "High" ? "selected" : ""}>High</option>
-            <option value="Medium" ${filters.priority === "Medium" ? "selected" : ""}>Medium</option>
-            <option value="Low" ${filters.priority === "Low" ? "selected" : ""}>Low</option>
-          </select>
-        </label>
-        <label>Environment
-          <select id="f-environment">
-            <option value="all">All</option>
-            ${Object.entries(ENVIRONMENT_LABELS).map(([value, label]) =>
-              `<option value="${value}" ${filters.environment === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}
-          </select>
-        </label>
-        ${hideAssetCategoryFilters ? "" : `
-        <label>Asset type
-          <select id="f-asset-type"><option value="all" ${filters.assetType === "all" ? "selected" : ""}>All</option>${assetTypeOptions()}</select>
-        </label>
-        <label>Category
-          <select id="f-category"><option value="all" ${filters.category === "all" ? "selected" : ""}>All</option>${categoryOptions()}</select>
-        </label>
-        <label>Infra sub-category
-          <select id="f-infra-type"><option value="all" ${filters.infraType === "all" ? "selected" : ""}>All</option>${infraTypeOptions()}</select>
-        </label>`}
-        <label class="checkbox-label"><input type="checkbox" id="f-kev-only" ${filters.kevOnly ? "checked" : ""}> CISA KEV-listed only</label>
-        <label class="checkbox-label"><input type="checkbox" id="f-high-epss-only" ${filters.highEpssOnly ? "checked" : ""}> High EPSS (≥50%) only</label>
-        ${dateRangeHtml("f-daterange", filters.dateRange)}
-        <span class="filter-count" id="queue-count"></span>
-      </div>
-      ${dateRangeDisclaimerHtml()}
-
-      <div class="table-toolbar">
-        ${exportButtonsHtml("queue")}
-        ${columnPickerHtml("queue", QUEUE_COLUMNS, visibleColumns)}
-      </div>
-
-      <div class="table-scroll">
-        <table class="data-table" id="queue-table">
-          <thead>
-            <tr>
-              <th class="sortable" data-col="priority" data-sort="priority">Priority <span class="sort-indicator"></span></th>
-              <th data-col="id">ID</th><th data-col="asset">Asset</th><th data-col="asset_type">Asset Type</th><th data-col="cloud_provider">Cloud Provider</th><th data-col="environment">Environment</th><th data-col="owner">Owner</th><th data-col="team">Team</th><th data-col="remediation_mechanism">Remediation Mechanism</th><th data-col="category">Category</th><th data-col="title">Title</th><th data-col="cve">CVE</th>
-              <th data-col="kev">KEV</th><th data-col="epss">EPSS</th><th data-col="threat_intel">Threat Intel</th><th data-col="last_seen">Last Seen</th>
-              <th class="sortable" data-col="sla" data-sort="sla">SLA Due <span class="sort-indicator"></span></th>
-              <th data-col="attack">ATT&amp;CK</th>
-              <th data-col="change_type">Change Type</th><th data-col="cadence">Cadence</th><th data-col="next_window">Next Maintenance Window</th><th data-col="auto_remediate">Auto-Remediate</th>
-              <th data-col="ai">AI</th>
-            </tr>
-          </thead>
-          <tbody id="queue-body"></tbody>
-        </table>
-      </div>
-      <div id="queue-pagination"></div>
-
-      <div class="callout">
-        Priority reasoning for each finding (why it landed where it did) is in the plan detail
-        at <a href="/remediate" data-link>/remediate</a>. MITRE ATT&amp;CK tags are a
-        keyword heuristic, not authoritative technique attribution — see
-        <code>remediation/enrichment/attack_mapping.py</code>'s docstring. "Category" is a
-        methodology taxonomy (Infrastructure VM / SCA / Cert-Mgmt / DAST) inferred from
-        asset type (and, for application findings, whether a CVE is present) — see
-        <code>remediation/enrichment/scan_type_mapping.py</code>'s docstring for what it
-        does and doesn't claim. Change Type/Cadence/Next Maintenance Window/Auto-Remediate
-        come from <a href="/remediation-policy" data-link>the configurable Remediation
-        Policy</a> — a "override" badge on Cadence means this specific asset has its own
-        schedule set on <a href="/asset-policy" data-link>Asset Policy</a>, taking
-        precedence over its domain's default. See
-        <a href="/remediation-approvals" data-link>Remediation Approvals</a> for normal/emergency
-        findings awaiting a human decision.
-      </div>`;
-    wireControls();
-    wireExportButtons(container, "queue", {
-      getRows: () => sortFindings(currentSlice(), sort.key, sort.dir),
-      columns: EXPORT_COLUMNS,
-      filenameBase: "quanta-remediation-queue",
-    });
-    wireColumnPicker(container, "queue", (visible) => {
-      visibleColumns = visible;
-      applyColumnVisibility(container.querySelector("#queue-table"), visibleColumns);
-    });
-    renderRows();
-  }
-
+  // ------------------------------------------------------------------ data
   async function load() {
-    const [data, assetsData] = await Promise.all([api.queue(), api.assetsList()]);
+    const [data, assetsData, me, asg] = await Promise.all([
+      api.queue(), api.assetsList(), getCurrentUser().catch(() => null),
+      api.assignments({ view: "all", limit: 1000 }).catch(() => null),
+    ]);
+    if (!alive) return;
+    S.me = me; S.admin = !!(me && me.role === "admin");
     const { ownerByAssetName, teamByAssetName, environmentByAssetName } = buildOwnerTeamMaps(assetsData.assets);
-    allFindings = data.findings.map((f) => ({
-      ...f,
-      owner: ownerByAssetName.get(f.asset && f.asset.name),
-      team: teamByAssetName.get(f.asset && f.asset.name),
-      environment: environmentByAssetName.get(f.asset && f.asset.name),
-    }));
-    lastFetched = new Date();
-    renderShell();
-    renderLiveBadge();
-
-    const kevCount = allFindings.filter((f) => f.kev && f.kev.listed).length;
-    const breachedCount = allFindings.filter((f) => f.sla && f.sla.breached).length;
-    const teamAssignedCount = allFindings.filter((f) => f.team).length;
-    const teamAssignedPct = allFindings.length ? Math.round((teamAssignedCount / allFindings.length) * 100) : 0;
-
-    const alerts = [];
-    if (breachedCount > 0) {
-      alerts.push(insightAlertHtml(`<strong>${breachedCount}</strong> finding(s) are past their SLA window.`, "danger"));
-    }
-    if (kevCount > 0) {
-      alerts.push(insightAlertHtml(`<strong>${kevCount}</strong> finding(s) are CISA KEV-listed - confirmed actively exploited.`, "warn"));
-    }
-    if (teamAssignedPct < 50 && allFindings.length) {
-      alerts.push(insightAlertHtml(
-        `Only <strong>${teamAssignedPct}%</strong> of findings have a team assigned - see <a href="/assets" data-link>Asset Inventory</a> to import ownership.`,
-        "info",
-      ));
-    }
-
-    // Trimmed to just the one most load-bearing section (real, page-specific alerts
-    // computed from live data) - the panel now starts collapsed by default (see
-    // insightsPanel.js), so what little it shows on open should earn the click. Tips/
-    // term definitions are still available via the FAQ and this page's own callouts.
-    setInsightsContent(insightSectionHtml("On this page", alerts.join("")));
+    S.assignments = new Map(asg ? asg.rows.filter((r) => r.assignment && r.assignment.assignee_email).map((r) => [r.id, r.assignment]) : []);
+    S.all = data.findings.map((f) => {
+      const name = f.asset && f.asset.name;
+      const a = S.assignments.get(f.id);
+      return { ...f, owner: ownerByAssetName.get(name), team: teamByAssetName.get(name), environment: environmentByAssetName.get(name), assignee: a ? a.assignee_email : null };
+    });
+    S.loadedAt = Date.now();
+    S.selected = pruneSelection(S.selected, S.all.map((f) => f.id));
   }
 
-  const onTenantChanged = () => { page = 1; renderRows(); };
-  window.addEventListener("tenant-changed", onTenantChanged);
+  const scoped = () => filterByTenant(S.all);
+  function currentView() {
+    let list = applyQueueFilters(scoped(), S.state.filters);
+    if (S.dateRange.preset) list = filterByDateRange(list, computeRange(S.dateRange.preset, S.dateRange.customFrom, S.dateRange.customTo), "first_seen");
+    return sortQueue(list, S.state.sort.key, S.state.sort.dir);
+  }
+  const pushUrl = () => replaceSearch(queueStateToSearch(S.state));
+  function setFilters(patch, { repaintToolbar = true } = {}) {
+    S.state = { ...S.state, filters: { ...S.state.filters, ...patch } };
+    pushUrl(); paintKpis(); if (repaintToolbar) paintToolbar(); paintChips(); paintTable();
+  }
 
-  // Delegated on the outer container (survives renderShell()'s innerHTML replacement) -
-  // wired exactly once per render() call, same rule as wirePagination below.
-  container.addEventListener("click", (e) => {
-    const btn = e.target.closest(".finding-id-link");
-    if (!btn) return;
-    const finding = allFindings.find((f) => f.id === btn.dataset.findingId);
-    if (finding) openFindingDetail(finding);
-  });
-  wirePagination(container, (p) => { page = p; renderRows(); });
+  // ------------------------------------------------------------------ painting
+  function paintKpis() {
+    const base = scoped();
+    const k = queueKpis(base);
+    const f = S.state.filters;
+    const slice = S.view.length ? S.view : currentView();
+    const mix = queueKpis(slice).byPriority;
+    const mixCell = `<div class="sx-kpi-cell mx-mix"><div class="ui-kpi"><div class="ui-kpi-top"><span class="ui-kpi-label">In this view</span></div>
+      <div class="ui-kpi-value"><span class="ui-kpi-num">${slice.length.toLocaleString()}</span><span class="mx-of"> of ${base.length.toLocaleString()}</span></div>
+      ${stackedBar(PRIORITIES.map((p) => ({ label: p, value: mix[p], color: PRIORITY_COLOR[p] })), { label: "Findings in this view by priority" })}
+      <span class="sx-pop-host"><button type="button" class="sx-link-btn" id="q-mix" aria-haspopup="dialog" aria-expanded="false">Priority breakdown</button></span></div></div>`;
+    const tiles = [
+      { key: "critical", label: "Critical", value: k.byPriority.Critical, tone: k.byPriority.Critical ? "danger" : "good", pressed: f.priority === "Critical", hint: "Findings whose computed priority is Critical." },
+      { key: "breached", label: "SLA breached", value: k.breached, tone: k.breached ? "danger" : "good", pressed: f.slaStatus === "breached", hint: "Past the remediation window for their priority." },
+      { key: "atRisk", label: "Due in 3 days", value: k.atRisk, tone: k.atRisk ? "warn" : "good", pressed: f.slaStatus === "at_risk", hint: "Not yet breached but due within three days." },
+      { key: "kev", label: "KEV listed", value: k.kev, tone: k.kev ? "danger" : "good", pressed: f.kevOnly, hint: "On CISA's Known Exploited Vulnerabilities list: confirmed exploited." },
+      { key: "epss", label: "EPSS 50%+", value: k.highEpss, tone: k.highEpss ? "warn" : "", pressed: f.highEpssOnly, hint: "FIRST.org's probability of exploitation in the next 30 days is at least 50%." },
+      { key: "unowned", label: "Unowned", value: k.unowned, tone: k.unowned ? "warn" : "good", pressed: f.unownedOnly, hint: "No asset owner, team or assignee. Nobody is accountable yet." },
+    ];
+    const host = $("#q-kpis");
+    $("#q-skel").hidden = true;
+    kpiStrip(host, tiles, (key) => {
+      if (key === "critical") setFilters({ priority: f.priority === "Critical" ? "all" : "Critical" });
+      else if (key === "breached") setFilters({ slaStatus: f.slaStatus === "breached" ? "all" : "breached" });
+      else if (key === "atRisk") setFilters({ slaStatus: f.slaStatus === "at_risk" ? "all" : "at_risk" });
+      else if (key === "kev") setFilters({ kevOnly: !f.kevOnly });
+      else if (key === "epss") setFilters({ highEpssOnly: !f.highEpssOnly });
+      else if (key === "unowned") setFilters({ unownedOnly: !f.unownedOnly });
+    }, mixCell);
+  }
 
-  await load();
-  const tickTimer = setInterval(renderLiveBadge, 1000);
-  const refreshTimer = setInterval(() => { load().catch((err) => console.error(err)); }, REFRESH_MS);
+  function paintToolbar() {
+    const f = S.state.filters;
+    const base = scoped();
+    const active = document.activeElement;
+    const restore = active && $("#q-toolbar").contains(active) && active.id ? `#${active.id}` : "";
+    const caret = active && active.id === "f-q" ? active.selectionStart : null;
+    const types = [...new Set(S.all.map((x) => x.asset && x.asset.type).filter(Boolean))].sort();
+    const cats = new Map(QUEUE_SCAN_TYPES.map((t) => [t, SCAN_TYPE_LABELS[t]]));
+    for (const x of S.all) if (x.scan_type && !cats.has(x.scan_type)) cats.set(x.scan_type, x.scan_type_label || x.scan_type);
+    const opt = (v, label, cur) => `<option value="${escapeHtml(v)}" ${v === cur ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    const single = SINGLE_ASSET_TYPE_CATEGORIES.has(f.category);
+    const el = $("#q-toolbar");
+    el.hidden = false;
+    el.innerHTML = `<div class="sx-toolbar" role="search" aria-label="Filter findings">
+      <input type="search" class="sx-field" id="f-q" placeholder="Search id, title, CVE, asset, owner" value="${escapeHtml(f.q)}" aria-label="Search findings">
+      <select class="sx-field" id="f-priority" aria-label="Priority"><option value="all">Any priority</option>${PRIORITIES.map((p) => opt(p, p, f.priority)).join("")}</select>
+      <select class="sx-field" id="f-sla" aria-label="Service level"><option value="all">Any SLA state</option>${opt("breached", "Breached", f.slaStatus)}${opt("at_risk", "Due in 3 days", f.slaStatus)}${opt("on_track", "On track", f.slaStatus)}</select>
+      <select class="sx-field" id="f-env" aria-label="Environment"><option value="all">Any environment</option>${Object.entries(ENVIRONMENT_LABELS).map(([v, l]) => opt(v, l, f.environment)).join("")}</select>
+      ${single ? "" : `<select class="sx-field" id="f-type" aria-label="Asset type"><option value="all">Any asset type</option>${types.map((t) => opt(t, t, f.assetType)).join("")}</select>
+      <select class="sx-field" id="f-cat" aria-label="Category"><option value="all">Any category</option>${[...cats.entries()].sort().map(([v, l]) => opt(v, l, f.category)).join("")}</select>
+      <select class="sx-field" id="f-infra" aria-label="Infrastructure sub-category"><option value="all">Any infra type</option>${INFRA_CATEGORIES.map((v) => opt(v, INFRA_CATEGORY_LABELS[v], f.infraType)).join("")}</select>`}
+      <details class="mx-more"><summary class="ui-btn ui-btn-ghost sx-btn-sm">First seen</summary><div class="mx-more-body">${dateRangeHtml("f-daterange", S.dateRange)}${dateRangeDisclaimerHtml()}</div></details>
+      <span class="ui-muted mx-count" id="q-count" role="status" aria-live="polite"></span></div>`;
+    wireDateRange(el, "f-daterange", (dr) => { S.dateRange = dr; paintKpis(); paintChips(); paintTable(); });
+    if (restore) { const n = el.querySelector(restore); if (n) { n.focus(); if (caret !== null && n.setSelectionRange) n.setSelectionRange(caret, caret); } }
+    void base;
+  }
 
-  return () => {
-    clearInterval(tickTimer);
-    clearInterval(refreshTimer);
-    window.removeEventListener("tenant-changed", onTenantChanged);
+  function paintChips() {
+    const chips = activeFilterChips(S.state.filters);
+    const host = $("#q-chips");
+    host.innerHTML = chips.length ? `<div class="mx-chips" role="group" aria-label="Active filters">${chips.map((c) => `<button type="button" class="mx-fchip" data-unfilter="${escapeHtml(c.key)}" aria-label="Remove filter ${escapeHtml(c.label)} ${escapeHtml(c.value)}">${escapeHtml(c.label)}${c.value ? `: <b>${escapeHtml(c.value)}</b>` : ""} <span aria-hidden="true">&times;</span></button>`).join("")}
+      <button type="button" class="sx-link-btn" id="q-clear">Clear all</button><button type="button" class="sx-link-btn" id="q-save">Save as a view</button></div>` : "";
+  }
+
+  // ------------------------------------------------------------------ the table
+  const sevOf = (f) => `<span class="mx-prio mx-prio-${escapeHtml((f.priority || "").toLowerCase())}"><i></i>${escapeHtml(f.priority || "")}</span>`;
+  const ownerCell = (f) => {
+    const who = f.assignee || f.owner;
+    if (who) return `<span class="sx-who">${avatar(who, { size: 22 })}<span class="t" title="${escapeHtml(who)}">${escapeHtml(String(who).split("@")[0])}</span></span>${f.team ? `<div class="mx-sub">${escapeHtml(f.team)}</div>` : ""}`;
+    if (f.team) return `<span class="sx-who">${avatar(null, { size: 22 })}<span class="t">${escapeHtml(f.team)}</span></span><div class="mx-sub">team only</div>`;
+    return `<span class="mx-unowned">Unowned</span>`;
   };
+  const slaCell = (f) => {
+    if (!f.sla || !f.sla.due_date) return '<span class="ui-muted">n/a</span>';
+    const r = slaRingFor(f);
+    return `<span class="mx-slacell"><span ${tipAttr(r.label)}>${ringSvg(r, { size: 26, radius: 11 })}</span><span>${escapeHtml(f.sla.due_date)}<div class="mx-sub">${f.sla.breached ? "breached" : `${f.sla.days_remaining}d left`}</div></span></span>${f.exception ? `<a class="mx-exc" href="/exceptions?highlight=${encodeURIComponent(f.exception.id)}" data-link ${tipAttr(f.exception.reason)}>Risk accepted until ${escapeHtml(f.exception.expires_on)}</a>` : ""}`;
+  };
+  const columns = [
+    { key: "priority", label: "Priority", sortKey: "priority", width: 112, csv: (f) => f.priority, render: (f) => `${sevOf(f)}<button type="button" class="sx-why mx-why" data-why="${escapeHtml(f.id)}" aria-haspopup="dialog" aria-label="Why ${escapeHtml(f.id)} is ${escapeHtml(f.priority)}">${icon("faq", 14)}</button>` },
+    { key: "id", label: "ID", sortKey: "id", width: 92, csv: (f) => f.id, render: (f) => `<button type="button" class="sx-link-btn mx-id" data-open="${escapeHtml(f.id)}">${escapeHtml(f.id)}</button>${f.pending ? ' <span class="mx-saving" aria-label="Saving">…</span>' : ""}${f.open_tickets ? ` <a href="/support" data-link class="mx-tix" ${tipAttr(`${f.open_tickets} open support ticket(s)`)}>&#9993; ${f.open_tickets}</a>` : ""}` },
+    { key: "asset", label: "Asset", sortKey: "asset", width: 150, csv: (f) => f.asset && f.asset.name, render: (f) => `<span class="mx-clip" title="${escapeHtml(f.asset && f.asset.name)}">${escapeHtml(f.asset && f.asset.name)}</span><div class="mx-sub">${escapeHtml((f.asset && f.asset.type) || "")}</div>` },
+    { key: "title", label: "Finding", sortKey: "title", width: 320, csv: (f) => f.title, render: (f) => `<span class="mx-title" title="${escapeHtml(f.title)}">${escapeHtml(f.title)}</span>${f.cve ? `<div class="mx-sub"><code>${escapeHtml(f.cve)}</code></div>` : ""}` },
+    { key: "signals", label: "Exploitation", sortKey: "epss", width: 150, csv: (f) => `${f.kev && f.kev.listed ? "KEV " : ""}${f.epss ? `${(f.epss.score * 100).toFixed(1)}%` : ""}`.trim(),
+      render: (f) => `${f.kev && f.kev.listed ? `${chip("KEV", { tone: "critical", title: "On CISA's Known Exploited Vulnerabilities list" })} ` : ""}${f.epss ? `<span class="mx-epss" ${tipAttr(`EPSS ${(f.epss.score * 100).toFixed(1)}%, ${(f.epss.percentile * 100).toFixed(0)}th percentile`)}><i style="width:${Math.max(3, Math.round(f.epss.score * 100))}%"></i></span><span class="mx-epss-n">${(f.epss.score * 100).toFixed(0)}%</span>` : '<span class="ui-muted">no EPSS</span>'}` },
+    { key: "sla", label: "SLA", sortKey: "sla", width: 160, csv: (f) => (f.sla ? f.sla.due_date : ""), render: slaCell },
+    { key: "owner", label: "Owner", width: 150, csv: (f) => f.assignee || f.owner || "", render: ownerCell },
+    { key: "category", label: "Category", width: 110, csv: (f) => f.scan_type_label || f.scan_type, render: (f) => (f.scan_type ? `<span class="category-tag" ${tipAttr(f.scan_type_label || "")}>${escapeHtml(f.scan_type)}</span>` : '<span class="ui-muted">-</span>') },
+    { key: "change", label: "Change type", width: 110, csv: (f) => (f.remediation_policy || {}).change_type || "", render: (f) => { const p = f.remediation_policy || {}; return p.change_type ? chip(p.change_type, { tone: CHANGE_TYPE_CLASS[p.change_type] || "neutral" }) : '<span class="ui-muted">-</span>'; } },
+    { key: "cadence", label: "Cadence", width: 130, csv: (f) => (f.remediation_policy || {}).cadence || "", render: (f) => { const p = f.remediation_policy || {}; return p.cadence ? `${escapeHtml(p.cadence)}${p.schedule_override ? ` ${chip("override", { tone: "warn", title: "Asset-level override, see Asset policy" })}` : ""}` : '<span class="ui-muted">-</span>'; } },
+    { key: "env", label: "Environment", hidden: true, width: 110, csv: (f) => ENVIRONMENT_LABELS[f.environment || "unknown"] || f.environment || "", render: (f) => escapeHtml(ENVIRONMENT_LABELS[f.environment || "unknown"] || f.environment || "") },
+    { key: "cloud", label: "Cloud", hidden: true, width: 100, csv: (f) => f.cloud_provider || "", render: (f) => escapeHtml(f.cloud_provider || "") },
+    { key: "mechanism", label: "Remediation mechanism", hidden: true, width: 170, csv: (f) => f.remediation_mechanism || "", render: (f) => (f.remediation_mechanism ? `<span ${tipAttr("The real-world tool that would normally patch this asset class. Informational, not an integration.")}>${escapeHtml(f.remediation_mechanism)}</span>` : "") },
+    { key: "intel", label: "Threat intel", hidden: true, width: 150, csv: (f) => "", render: (f) => threatIntelCellHtml(f) },
+    { key: "attack", label: "ATT&CK", hidden: true, width: 130, csv: (f) => (f.attack_techniques || []).map((t) => t.technique_id).join("; "), render: (f) => (f.attack_techniques && f.attack_techniques.length ? f.attack_techniques.slice(0, 3).map((t) => `<span class="attack-tag" ${tipAttr(t.tactic || "")}>${escapeHtml(t.technique_id)}</span>`).join("") : "") },
+    { key: "window", label: "Next window", hidden: true, width: 220, csv: (f) => windowText((f.remediation_policy || {}).next_window), render: (f) => escapeHtml(windowText((f.remediation_policy || {}).next_window)) },
+    { key: "auto", label: "Auto-remediate", hidden: true, width: 110, csv: (f) => ((f.remediation_policy || {}).auto_remediate ? "Yes" : "No"), render: (f) => ((f.remediation_policy || {}).auto_remediate ? "Yes" : "No") },
+    { key: "seen", label: "Last seen", hidden: true, sortKey: "last_seen", width: 110, csv: (f) => f.last_seen || "", render: (f) => escapeHtml(f.last_seen || "") },
+    { key: "ai", label: "AI", width: 78, csv: () => "", render: (f) => `<a href="/ai-assist?finding_id=${encodeURIComponent(f.id)}" data-link class="ai-assist-link">${icon("ai", 14)} Ask</a>` },
+  ];
+
+  function paintTable() {
+    S.view = currentView();
+    const count = $("#q-count");
+    const base = scoped().length;
+    if (count) count.textContent = `${S.view.length.toLocaleString()} of ${base.toLocaleString()} finding${base === 1 ? "" : "s"}${activeFilterCount(S.state.filters) ? " match" : ""}`;
+    const mix = $("#q-kpis .mx-mix");
+    if (mix) { const p = queueKpis(S.view).byPriority; mix.querySelector(".mx-stack").outerHTML = stackedBar(PRIORITIES.map((x) => ({ label: x, value: p[x], color: PRIORITY_COLOR[x] })), { label: "Findings in this view by priority" }); mix.querySelector(".ui-kpi-num").textContent = S.view.length.toLocaleString(); }
+    const empty = !S.all.length
+      ? emptyState({ title: "No findings yet", body: "Connect a scanner, run a simulated demonstration load, or ingest a SARIF or CSV export and the queue fills itself. Quanta never invents a finding.", actionLabel: "Connect a source", actionHref: "/connections", iconName: "queue" })
+      : emptyState({ title: "No finding matches these filters", body: "Remove a filter chip, or clear them all, to see more.", iconName: "search" });
+    if (!S.table) {
+      S.table = selectableTable($("#q-table"), {
+        columns, rows: S.view, rowKey: (f) => f.id, selectable: true, sort: S.state.sort, storageKey: "queue-v2", caption: "Remediation queue", csvName: "quanta-remediation-queue",
+        rowHeight: 56, maxHeight: 640, emptyHtml: empty, selected: S.selected, rowClass: (f) => (f.pending ? "is-pending" : ""),
+        onSort: (key) => { const cur = S.state.sort; S.state = { ...S.state, sort: { key, dir: cur.key === key && cur.dir === "desc" ? "asc" : "desc" } }; pushUrl(); S.table.setSort(S.state.sort); paintTable(); },
+        onOpen: (f) => openFinding(f), onSelection: (sel) => { S.selected = sel; paintBulk(); },
+      });
+    } else { S.table.setSort(S.state.sort); S.table.setSelected(S.selected); S.table.setRows(S.view); }
+    paintBulk();
+    if (S.state.highlight && !S.highlightDone) applyHighlight();
+  }
+
+  function applyHighlight() {
+    const id = S.state.highlight;
+    const note = $("#q-note");
+    const idx = S.table ? S.table.scrollToKey(id) : -1;
+    if (idx >= 0) { S.highlightDone = true; note.innerHTML = ""; return; }
+    if (!S.all.length) return;
+    S.highlightDone = true;
+    note.innerHTML = S.all.some((f) => f.id === id)
+      ? `<div class="mx-callout mx-callout-warn">Finding <code>${escapeHtml(id)}</code> exists but is hidden by the filters or tenant selection. <button type="button" class="sx-link-btn" id="q-clear2">Clear filters</button></div>`
+      : `<div class="mx-callout mx-callout-warn">Finding <code>${escapeHtml(id)}</code> was not found.</div>`;
+  }
+
+  function openFinding(f) { openFindingDrawer(f, { onChanged: () => { refreshNow(); } }); }
+
+  // ------------------------------------------------------------------ bulk actions (optimistic: the row changes at once, rolls back with a reason on failure)
+  function paintBulk() {
+    const n = S.selected.size;
+    const host = $("#q-bulk");
+    if (!n) { host.hidden = true; host.innerHTML = ""; return; }
+    host.hidden = false;
+    host.innerHTML = `<div class="mx-bulk-in" role="region" aria-label="Actions for selected findings"><strong>${n.toLocaleString()} selected</strong>
+      ${S.admin ? `<button type="button" class="ui-btn sx-btn-sm" data-bulk="assign">Assign&hellip;</button><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" data-bulk="exception">Request exception&hellip;</button>` : `<span class="ui-muted">Assigning and exceptions need an administrator.</span>`}
+      <button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" data-bulk="copy">Copy IDs</button><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" data-bulk="clear">Clear selection</button></div>`;
+  }
+  function patchLocal(ids, patch) {
+    const r = applyOptimistic(S.all, ids, patch);
+    S.all = r.next;
+    paintKpis(); paintTable();
+    return r;
+  }
+  async function bulkAssign() {
+    const ids = [...S.selected];
+    if (ids.length > MAX_BULK) { toast(`Select at most ${MAX_BULK} findings at once.`, { tone: "warn" }); return; }
+    let people = []; let teams = [];
+    try { [{ users: people }, { teams }] = await Promise.all([api.assignableUsers(), api.teams()]); } catch (e) { toast(e.message, { tone: "bad" }); return; }
+    const out = await modal({ title: `Assign ${ids.length} finding${ids.length === 1 ? "" : "s"}`, confirmLabel: "Assign", description: "Assigning to a different team moves the findings into that team's view. The change is recorded in each finding's history.",
+      body: `<label>Assignee<select id="m-who"><option value="">Nobody yet, route to a team only</option>${people.map((u) => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name)} (${escapeHtml(u.email)})${u.team ? ` - ${escapeHtml(u.team)}` : ""}</option>`).join("")}</select></label>
+        <label>Team<select id="m-team"><option value="">Assignee's own team</option>${teams.map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join("")}</select></label>
+        <label>Note (optional)<textarea id="m-note" maxlength="2000" placeholder="Context, a link, or what to do first"></textarea></label>`,
+      validate: (d) => (!d.querySelector("#m-who").value && !d.querySelector("#m-team").value ? "Choose an assignee, a team, or both." : ""),
+      collect: (d) => ({ assignee_email: d.querySelector("#m-who").value || null, team: d.querySelector("#m-team").value || null, notes: d.querySelector("#m-note").value.trim() || null }) });
+    if (!out) return;
+    const opt = patchLocal(ids, { assignee: out.assignee_email, ...(out.team ? { team: out.team } : {}) });
+    try {
+      let total = 0;
+      for (const batch of bulkBatches(ids)) total += (await api.bulkAssign({ finding_ids: batch, ...out })).assigned;
+      S.all = settle(S.all, ids);
+      toast(`Assigned ${total} finding${total === 1 ? "" : "s"}${out.assignee_email ? ` to ${out.assignee_email}` : ""}${out.team ? ` (${out.team})` : ""}.`, { tone: "good" });
+      S.table.clearSelection(); paintKpis(); paintTable();
+    } catch (e) {
+      S.all = opt.undo(S.all); paintKpis(); paintTable();
+      toast(`Not assigned: ${e.message}`, { tone: "bad", ms: 9000 });
+    }
+  }
+  async function bulkException() {
+    const ids = [...S.selected];
+    if (ids.length > 50) { toast("Request exceptions for at most 50 findings at once. Each one is a separate approval record.", { tone: "warn", ms: 7000 }); return; }
+    let admins = [];
+    try { admins = ((await api.listUsers()).users || []).filter((u) => u.role === "admin" && u.email.toLowerCase() !== (S.me.email || "").toLowerCase()); } catch (e) { toast(e.message, { tone: "bad" }); return; }
+    if (!admins.length) { toast("An exception needs a second administrator to approve it (separation of duties). Create one under People first.", { tone: "warn", ms: 9000 }); return; }
+    const soon = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const out = await modal({ title: `Request an exception for ${ids.length} finding${ids.length === 1 ? "" : "s"}`, confirmLabel: "Record exception", description: "A risk-acceptance waiver with an expiry. It is recorded against each finding, shows on the queue, and lapses by itself.",
+      body: `<label>Reason (required)<textarea id="m-reason" placeholder="Why this risk is accepted, and what limits it"></textarea></label>
+        <label>Expires on (at most one year)<input type="text" id="m-exp" value="${soon}" placeholder="YYYY-MM-DD"></label>
+        <label>Approved by<select id="m-appr">${admins.map((a) => `<option value="${escapeHtml(a.email)}">${escapeHtml(a.name || a.email)} (${escapeHtml(a.email)})</option>`).join("")}</select></label>`,
+      validate: (d) => (d.querySelector("#m-reason").value.trim().length < 10 ? "Write a reason of at least 10 characters." : !/^\d{4}-\d\d-\d\d$/.test(d.querySelector("#m-exp").value.trim()) ? "Use the date format YYYY-MM-DD." : ""),
+      collect: (d) => ({ reason: d.querySelector("#m-reason").value.trim(), expires_on: d.querySelector("#m-exp").value.trim(), approved_by: d.querySelector("#m-appr").value }) });
+    if (!out) return;
+    const opt = patchLocal(ids, { exception: { id: "pending", reason: out.reason, expires_on: out.expires_on } });
+    let done = 0; const failed = [];
+    for (const id of ids) {
+      try { await api.exceptionCreate({ finding_id: id, ...out }); done += 1; } catch (e) { failed.push({ id, message: e.message }); }
+    }
+    if (failed.length) {
+      const failedIds = new Set(failed.map((x) => x.id));
+      S.all = S.all.map((f) => (failedIds.has(f.id) ? opt.undo([f])[0] : f));
+    }
+    S.all = settle(S.all, ids);
+    toast(failed.length ? `${done} recorded, ${failed.length} not: ${failed[0].id}: ${failed[0].message}` : `Exception recorded for ${done} finding${done === 1 ? "" : "s"}.`, { tone: failed.length ? "warn" : "good", ms: failed.length ? 10000 : 4000 });
+    S.table.clearSelection();
+    await refreshNow();
+  }
+
+  // ------------------------------------------------------------------ saved views
+  function openViews(btn) {
+    const here = queueStateToSearch(S.state);
+    const items = [
+      ...BUILT_IN_VIEWS.map((v) => ({ label: v.name, hint: sameState(v.search, here) ? "current view" : "built in", run: () => applySearch(v.search) })),
+      { sep: true },
+      ...S.views.map((v) => ({ label: v.name, hint: sameState(v.search, here) ? "current view" : "saved", run: () => applySearch(v.search) })),
+      ...(S.views.length ? [{ sep: true }] : []),
+      { label: "Save the current view...", run: saveCurrent },
+      ...S.views.map((v) => ({ label: `Delete "${v.name}"`, run: () => { S.views = removeView(S.views, v.name); writeJson(VIEWS_KEY, S.views); toast("View deleted.", { tone: "good", ms: 2500 }); } })),
+      { sep: true }, { label: "Reset to the default view", run: () => applySearch("") },
+    ];
+    popMenu(btn, items, { align: "right" });
+  }
+  function applySearch(search) {
+    S.state = parseQueueState(search); S.selected = new Set(); S.dateRange = { preset: "", customFrom: "", customTo: "" };
+    if (S.table) S.table.clearSelection();
+    pushUrl(); paintKpis(); paintToolbar(); paintChips(); paintTable();
+  }
+  async function saveCurrent() {
+    const out = await modal({ title: "Save this view", confirmLabel: "Save", description: "Saved in this browser only. It stores the filters and sort, not the findings.", body: `<label>Name<input type="text" id="m-name" maxlength="40" placeholder="e.g. Payments, KEV first"></label>`,
+      validate: (d) => (d.querySelector("#m-name").value.trim() ? "" : "Give the view a name."), collect: (d) => d.querySelector("#m-name").value });
+    if (!out) return;
+    const r = addView(S.views, out, queueStateToSearch({ ...S.state, highlight: null }));
+    if (r.error) { toast(r.error, { tone: "warn" }); return; }
+    S.views = r.views; writeJson(VIEWS_KEY, S.views);
+    toast(`Saved view "${out}".`, { tone: "good", ms: 3000 });
+  }
+
+  // ------------------------------------------------------------------ why this priority (popover)
+  function openWhy(btn, id) {
+    const f = S.all.find((x) => x.id === id); if (!f) return;
+    const r = priorityReasons(f);
+    popover(btn, `<h4>Why ${escapeHtml(f.priority)}</h4>${r.lines.length ? `<ol class="mx-reasons">${r.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ol>` : '<p class="ui-muted">No reasons were recorded.</p>'}<p class="ui-muted">Score ${r.score ?? "n/a"}. <a href="/priority-rules" data-link>Edit the weights</a></p>`, { label: `Why ${f.id} has this priority`, align: "left" });
+  }
+  function openMix(btn) {
+    const p = queueKpis(S.view).byPriority; const f = S.state.filters;
+    popover(btn, `<h4>Priority breakdown</h4><div class="mx-mixlist">${PRIORITIES.map((x) => `<button type="button" class="mx-mixrow" data-mixfilter="${x}" aria-pressed="${f.priority === x}"><span class="mx-prio mx-prio-${x.toLowerCase()}"><i></i>${x}</span><span class="mx-mixbar"><i style="width:${S.view.length ? (p[x] / S.view.length) * 100 : 0}%;background:${PRIORITY_COLOR[x]}"></i></span><strong>${p[x].toLocaleString()}</strong></button>`).join("")}</div><p class="ui-muted">Counts are for the current view. Choose a row to filter by it.</p>`, { label: "Priority breakdown", align: "left" });
+  }
+
+  // ------------------------------------------------------------------ events
+  const typeSearch = debounce((v) => setFilters({ q: v }, { repaintToolbar: false }), 220);
+  container.addEventListener("input", (e) => { if (e.target.id === "f-q") typeSearch(e.target.value); });
+  container.addEventListener("change", (e) => {
+    const m = { "f-priority": "priority", "f-sla": "slaStatus", "f-env": "environment", "f-type": "assetType", "f-cat": "category", "f-infra": "infraType" }[e.target.id];
+    if (m) setFilters({ [m]: e.target.value });
+  });
+  container.addEventListener("click", (e) => {
+    const t = e.target;
+    const un = t.closest("[data-unfilter]"); if (un) { S.state = { ...S.state, filters: clearFilter(S.state.filters, un.dataset.unfilter) }; pushUrl(); paintKpis(); paintToolbar(); paintChips(); paintTable(); return; }
+    if (t.closest("#q-clear") || t.closest("#q-clear2")) { S.state = { ...defaultState(), sort: S.state.sort }; pushUrl(); $("#q-note").innerHTML = ""; paintKpis(); paintToolbar(); paintChips(); paintTable(); return; }
+    if (t.closest("#q-save")) { saveCurrent(); return; }
+    if (t.closest("#q-refresh")) { refreshNow(true); return; }
+    if (t.closest("#q-views")) { openViews(t.closest("#q-views")); return; }
+    if (t.closest("#q-link")) { copyText(window.location.href, "Link to this view copied"); return; }
+    if (t.closest("#q-mix")) { openMix(t.closest("#q-mix")); return; }
+    const mf = t.closest("[data-mixfilter]"); if (mf) { const v = mf.dataset.mixfilter; setFilters({ priority: S.state.filters.priority === v ? "all" : v }); document.querySelectorAll(".mx-popover").forEach((n) => n.remove()); return; }
+    const why = t.closest("[data-why]"); if (why) { openWhy(why, why.dataset.why); return; }
+    const op = t.closest("[data-open]"); if (op) { const f = S.all.find((x) => x.id === op.dataset.open); if (f) openFinding(f); return; }
+    const b = t.closest("[data-bulk]");
+    if (b) {
+      const k = b.dataset.bulk;
+      if (k === "assign") bulkAssign(); else if (k === "exception") bulkException(); else if (k === "clear") S.table.clearSelection();
+      else if (k === "copy") copyText([...S.selected].join("\n"), `${S.selected.size} ids copied`);
+    }
+  });
+  const onTenant = () => { paintKpis(); paintTable(); };
+  window.addEventListener("tenant-changed", onTenant);
+  onCleanup(() => window.removeEventListener("tenant-changed", onTenant));
+
+  async function refreshNow(manual = false) {
+    try { await load(); paintKpis(); paintToolbar(); paintChips(); paintTable(); const age = $("#q-age .ui-age"); if (age) touchDataAge(age, S.loadedAt); if (manual) toast("Queue refreshed.", { tone: "good", ms: 1800 }); }
+    catch (e) { if (manual) toast(`Could not refresh: ${e.message}`, { tone: "bad" }); }
+  }
+
+  // ------------------------------------------------------------------ go
+  try { await load(); } catch (e) { $("#q-skel").hidden = true; $("#q-table").innerHTML = emptyState({ title: "The queue could not be loaded", body: e.message || "Try again in a moment.", iconName: "risk" }); return; }
+  S.view = currentView();
+  paintKpis(); paintToolbar(); paintChips(); paintTable();
+  $("#q-age").innerHTML = dataAgeBadge(S.loadedAt); mountDataAge($("#q-age"));
+
+  // page-level keys and palette actions
+  const onKey = (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || modalOpen()) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if ((e.key === "j" || e.key === "k") && !t.closest("tr[data-i]")) { const first = container.querySelector("tr[data-i]"); if (first) { e.preventDefault(); first.tabIndex = 0; first.focus(); } }
+  };
+  document.addEventListener("keydown", onKey);
+  onCleanup(() => document.removeEventListener("keydown", onKey));
+  registerShortcutHelp(["j", "k"], "Queue: move between findings");
+  registerShortcutHelp(["x", "Space"], "Queue: select the focused finding (Shift-click for a range)");
+  pageActions([
+    { label: "Queue: show SLA-breached findings", icon: "queue", run: () => applySearch("?slaStatus=breached") },
+    { label: "Queue: show actively exploited (KEV) findings", icon: "queue", run: () => applySearch("?kevOnly=true") },
+    { label: "Queue: show unowned Critical findings", icon: "queue", run: () => applySearch("?priority=Critical&unowned=true") },
+    { label: "Queue: clear all filters", icon: "queue", run: () => applySearch("") },
+    { label: "Queue: save the current view", icon: "queue", run: saveCurrent },
+    { label: "Queue: focus the search box", icon: "search", run: () => { const i = $("#f-q"); if (i) i.focus(); } },
+  ]);
+  autoRefresh(() => refreshNow(false), { every: REFRESH_MS, onMode: setLive });
+
+  const kev = scoped().filter((f) => f.kev && f.kev.listed).length;
+  const breached = scoped().filter((f) => f.sla && f.sla.breached).length;
+  const alerts = [];
+  if (breached) alerts.push(insightAlertHtml(`<strong>${breached}</strong> finding(s) are past their SLA window.`, "danger"));
+  if (kev) alerts.push(insightAlertHtml(`<strong>${kev}</strong> finding(s) are CISA KEV-listed: confirmed actively exploited.`, "warn"));
+  setInsightsContent(insightSectionHtml("On this page", alerts.join("")));
 }
