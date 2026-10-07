@@ -1,0 +1,10 @@
+# The threat-intelligence report watcher: polls the report sources an administrator adds on the Threat Intelligence page (public RSS/Atom/JSON feeds and
+# TAXII 2.1 collections), stores each new report once, scores it against the estate and, at or above hunting.auto_create_hunt_at_or_above in
+# soc_triage.yaml, creates the hunt and refreshes the hunt engine's suggestions. Nothing is ever run on a SIEM by the watcher: hunts stay accept/confirm-gated.
+#
+# It does nothing until at least one source is added and enabled. QUANTA_INTEL_WATCH=false switches the scheduled polling off entirely (a person can still poll a
+# source from the page).
+interval_minutes: 60          # how often a source is polled by the leader tick (a source is never polled more often than this)
+max_items_per_poll: 50        # newest items read from one feed or collection per poll
+max_new_reports_per_poll: 25  # reports stored from one poll; the rest wait for the next one
+max_bytes: 2000000            # one feed document is refused above this size

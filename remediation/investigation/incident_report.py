@@ -517,7 +517,7 @@ def build(incident, alert_rows, data, *, lookup=None, lookup_name=None, siem_run
     elif not siem_run:
         live["note"] = "A SIEM connection exists but no live search was confirmed for this build; the report uses stored data and the searches recorded earlier."
     else:
-        planned, skipped = qpb.plan(real, pb_cfg, days)
+        planned, skipped = qpb.plan(real, pb_cfg, days, getattr(siem_run, "language", "splunk-spl"))
         res = qpb.run(planned, siem_run, live["budget"], now_fn=lambda: now_iso())
         live.update({"ran": True, "planned": [{"id": p["id"], "name": p["name"], "query": p["query"], "look_back_days": p["days"]} for p in planned], "skipped": skipped,
                      "stop_reason": res["stop_reason"], "queries_run": res["queries_run"], "rows_seen": res["rows_seen"], "elapsed_seconds": res["elapsed_seconds"],

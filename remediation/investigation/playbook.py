@@ -34,9 +34,11 @@ def _tech(alert):
     return (alert.get("technique") or "").upper().split(".")[0]
 
 
-def plan(alerts, cfg, cap_days):
+def plan(alerts, cfg, cap_days, language="splunk-spl"):
     """-> (planned, skipped). planned: [{id, name, purpose, query, days, technique, alert_id}] in priority order (technique-specific patterns first); not truncated."""
     planned, skipped, seen = [], [], set()
+    key = hunt_soc.LANG_KEY.get(language, language)
+    no_template = set()
     patterns = cfg.get("patterns") or []
     ordered = sorted(patterns, key=lambda p: 0 if (p.get("for") or {}).get("techniques") else 1)
     for pat in ordered:
@@ -48,7 +50,12 @@ def plan(alerts, cfg, cap_days):
             missing = [n for n in pat.get("needs") or [] if not values.get(n)]
             if missing:
                 continue
-            query = hunt_soc._fill(pat["spl"], values)
+            if not pat.get(key):
+                if pat["id"] not in no_template:
+                    no_template.add(pat["id"])
+                    skipped.append({"id": pat["id"], "alert_id": a["id"], "reason": f"no {language} template for this search yet; not translated by guesswork"})
+                continue
+            query = hunt_soc._fill(pat[key], values)
             if query is None:
                 skipped.append({"id": pat["id"], "alert_id": a["id"], "reason": "a value is not plain host, user or address text, so it was not put in a query"})
                 continue

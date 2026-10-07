@@ -19,7 +19,7 @@ from auth import rbac
 from remediation.audit import activity_log
 from remediation.connections import registry as conn_registry
 from remediation.hunting import detection as hunt_detection, report as hunt_report, service as hunt_service, store as hunt_store, triage as hunt_triage
-from remediation.hunting import hunt_report as hunt_report_mod
+from remediation.hunting import hunt_report as hunt_report_mod, search_base
 from remediation.inventory import asset_inventory
 from remediation.investigation import followup as inv_followup, incident_report, itsm, playbook as qpb, store as inv_store
 from remediation.investigation.incident_report import _Index
@@ -129,11 +129,11 @@ def build_router(*, require_api_key, identity_map, lookback_cfg, auto_investigat
 
     def _siem(connection_id, required):
         try:
-            conn, public = hunt_service.connector("splunk-search", connection_id)
+            conn, public = hunt_service.search_connector(connection_id)
         except (ValueError, KeyError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if required and not conn:
-            raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+            raise HTTPException(status_code=400, detail="No read-only search connection (Splunk, Sentinel, Google SecOps, Elastic or CrowdStrike) is configured. Add one on the Connections page.")
         return conn, (public or {}).get("name")
 
     def _reputation(connection_id):
@@ -149,7 +149,7 @@ def build_router(*, require_api_key, identity_map, lookback_cfg, auto_investigat
         inc = _incident(incident_id)
         rows = incident_store.alert_rows(incident_id)
         if siem_connected is None:
-            siem_connected = bool(hunt_service.find_connection("splunk-search")[0])
+            siem_connected = bool(hunt_service.find_search_connection())
         report = incident_report.build(inc, rows, _data(incident_id, rows), lookup=lookup, lookup_name=lookup_name, siem_run=siem_run, siem_connected=siem_connected, siem_name=siem_name,
                                        cap_days=cap_days, followups=inv_store.list_followups(incident_id), events=incident_store.events(incident_id), actor=actor, live_requested=live_requested)
         if save:
@@ -192,19 +192,19 @@ def build_router(*, require_api_key, identity_map, lookback_cfg, auto_investigat
             real = [a for a in rows if a.get("role") != "duplicate"] or rows
             pb = qpb.load()
             cap = body.lookback_days or int(pb.get("max_lookback_days", 90))
-            planned, skipped = qpb.plan(real, pb, cap) if body.siem else ([], [])
+            planned, skipped = qpb.plan(real, pb, cap, hunt_service.language_of(siem_conn)) if body.siem else ([], [])
             bud = qpb.budget(pb)
             sendable = []
             if body.reputation:
                 from remediation.connectors import reputation_connector
                 sendable = sorted({v for a in rows for k, v in hunt_report._vals(a) if k in ("address", "domain", "hash", "url") and reputation_connector.classify(v)[0]})[: int((pb.get("reputation") or {}).get("max_lookups", 15))]
             return {"preview_only": True, "incident_id": inc["id"], "reputation_connection": rep_name, "indicators_that_would_be_sent": sendable, "siem_connection": siem_name,
-                    "searches_that_would_run": [{"name": p["name"], "query": p["query"], "look_back_days": p["days"]} for p in planned[: bud["max_queries"]]],
+                    "query_language": hunt_service.language_of(siem_conn), "searches_that_would_run": [{"name": p["name"], "query": p["query"], "look_back_days": p["days"]} for p in planned[: bud["max_queries"]]],
                     "planned_but_over_budget": max(0, len(planned) - bud["max_queries"]), "skipped": skipped, "budget": bud, "look_back_cap_days": cap,
                     "message": "Only public indicators are sent to the reputation service. The searches are read-only, bounded by the budget shown and stop at the first limit. Send confirm: true to run them."}
         cfg = lookback_cfg(body.lookback_days, body.justification, user["email"], f"incident {incident_id}") if body.siem else {"max_lookback_days": None}
         if siem_conn is not None:
-            siem_run = lambda q, earliest, max_rows: siem_conn.search(q, earliest=earliest, max_rows=max_rows)  # noqa: E731
+            siem_run = search_base.Runner(siem_conn)
         report = _build(incident_id, user["email"], lookup=lookup, lookup_name=rep_name, siem_run=siem_run, siem_name=siem_name, siem_connected=bool(siem_conn) or None,
                         cap_days=cfg.get("max_lookback_days"), live_requested=bool(body.siem or body.reputation))
         activity_log.record_activity(user["email"], "soc.incident.report", str(incident_id), {"version": report["version"], "siem": bool(siem_run), "reputation": bool(lookup),
@@ -222,7 +222,7 @@ def build_router(*, require_api_key, identity_map, lookback_cfg, auto_investigat
             if not body.confirm:
                 return {"preview_only": True, "siem_connection": siem_name, "message": "One read-only search will run in your SIEM for this value. Send confirm: true to run it."}
             cfg = lookback_cfg(body.lookback_days, body.justification, user["email"], f"incident {incident_id}")
-            siem_run = lambda q, earliest, max_rows: sconn.search(q, earliest=earliest, max_rows=max_rows)  # noqa: E731
+            siem_run = search_base.Runner(sconn)
         else:
             cfg = {"max_lookback_days": 90}
         pb = qpb.load()
@@ -320,7 +320,7 @@ def build_router(*, require_api_key, identity_map, lookback_cfg, auto_investigat
 
     def _hunt_report(hunt):
         keys = {hunt_report_mod.lead_key(q) for q in hunt.get("queries") or []}
-        return hunt_report_mod.build(hunt, hunt_detection.list_rules(), inv_store.list_allow(lead_keys=keys), inv_store.time_boxes())
+        return hunt_report_mod.build(hunt_service.with_clock_start(hunt), hunt_detection.list_rules(), inv_store.list_allow(lead_keys=keys), inv_store.time_boxes())
 
     @router.get("/api/hunting/hunts/{hunt_id}/report")
     def api_hunt_report(hunt_id: int, format: str = "json", user: dict = Depends(admin)):  # noqa: ARG001
@@ -387,6 +387,6 @@ def build_router(*, require_api_key, identity_map, lookback_cfg, auto_investigat
 
     @router.get("/api/hunting/report-metrics")
     def api_hunt_report_metrics(user: dict = Depends(admin)):  # noqa: ARG001
-        return hunt_report_mod.metrics(hunt_store.list_hunts(), inv_store.time_boxes())
+        return hunt_report_mod.metrics([hunt_service.with_clock_start(h) for h in hunt_store.list_hunts()], inv_store.time_boxes())
 
     return router

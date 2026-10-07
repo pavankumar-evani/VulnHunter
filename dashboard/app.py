@@ -71,6 +71,8 @@ from remediation.coordination.leader import Leader  # noqa: E402
 from remediation.guidance import engine as guidance_engine  # noqa: E402
 from remediation.controls import store as controls_store  # noqa: E402
 from remediation.connectors import reputation_connector as hunt_rep, siem_search_connector as sec_search  # noqa: E402
+from remediation.hunting import intelwatch, search_base, translate as hunt_translate  # noqa: E402
+from remediation.connectors import report_feed_connector  # noqa: E402
 from remediation.connectors.webhook_connector import ACTIONS as webhook_actions  # noqa: E402
 from remediation.soar import engine as soar_engine, playbooks as soar_playbooks  # noqa: E402
 from remediation.risk import quant as quant_risk, store as risk_store  # noqa: E402
@@ -418,6 +420,7 @@ async def _notification_scheduler_loop():
             _run_cvd_if_due()
             _run_gitops_sync_if_due()
             _run_hunt_suggestions_if_due()
+            _run_intel_watch_if_due()
             _run_integrity_checks_if_due()
             _run_insights_if_due()
             _run_incident_sweep()
@@ -5399,7 +5402,10 @@ def _hunt_from_intel(rec, actor):
 
 
 def _intel_out(r):
-    return {k: r[k] for k in ("id", "title", "source", "relevance", "priority", "reasons", "extracted", "hunt_id", "received_at", "received_by")}
+    out = {k: r[k] for k in ("id", "title", "source", "relevance", "priority", "reasons", "extracted", "hunt_id", "received_at", "received_by")}
+    out.update({k: r.get(k) for k in ("published_at", "fetched_at", "source_id", "url")})
+    out["why_triggered"] = r.get("trigger")
+    return out
 
 
 def _store_intel(content, title, source, actor):
@@ -5442,6 +5448,133 @@ def api_ingest_threat_intel(body: IntelBody, key: dict = Depends(require_api_key
     return {"id": rec["id"], "created": created, "relevance": rec["relevance"], "priority": rec["priority"], "hunt_id": hunt_id}
 
 
+# ---------------------------------------------------------------- the report watcher (report sources on the Threat Intelligence page)
+class IntelSourceBody(BaseModel):
+    name: str
+    kind: str                       # feed or taxii
+    url: str | None = None          # feed address (https)
+    connection_id: int | None = None   # a stored taxii connection
+    collection_id: str | None = None
+
+
+class IntelPollBody(BaseModel):
+    confirm: bool = False
+
+
+class IntelEnabledBody(BaseModel):
+    enabled: bool
+
+
+def _intel_watch_deps():
+    def build_taxii(source):
+        c, _ = hunt_service.connector("taxii", source["connection_id"])
+        if not c:
+            raise ValueError("The TAXII connection for this source is missing or disabled")
+        return c
+    return intelwatch.Deps(findings=dashboard_data.load_live_queue, make_hunt=lambda rec, actor: _hunt_from_intel(rec, actor), refresh_engine=hunt_engine.refresh,
+                           hunt_floor=lambda: ((hunt_soc.config().get("hunting") or {}).get("auto_create_hunt_at_or_above") or ""),
+                           build_feed=lambda s: report_feed_connector.ReportFeedConnector(s["url"], max_bytes=intelwatch.config()["max_bytes"], max_items=intelwatch.config()["max_items_per_poll"]),
+                           build_taxii=build_taxii)
+
+
+def _run_intel_watch_if_due():
+    """Leader tick: polls each enabled report source that is due (interval in config/intel_watch.yaml). Does nothing with no source added, or with
+    QUANTA_INTEL_WATCH=false. Never runs a search on a SIEM; never raises."""
+    try:
+        return intelwatch.poll_due(_intel_watch_deps())
+    except Exception:  # noqa: BLE001
+        logging.getLogger("quanta.scheduler").warning("report watcher tick failed")
+        return None
+
+
+def _source_out(s):
+    out = {k: s[k] for k in ("id", "name", "kind", "url", "connection_id", "collection_id", "enabled", "last_poll_at", "last_status", "last_error", "last_new", "total_reports", "created_by", "created_at")}
+    return out
+
+
+@app.get("/api/hunting/intel/sources")
+def api_intel_sources(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    cfg = intelwatch.config()
+    return {"sources": [_source_out(s) for s in hunt_service.list_sources()], "watch_enabled": intelwatch.enabled(), "interval_minutes": cfg["interval_minutes"],
+            "hunt_threshold": ((hunt_soc.config().get("hunting") or {}).get("auto_create_hunt_at_or_above") or None),
+            "note": "The watcher only reads reports. It never runs a search on a SIEM: a hunt it creates waits for a person to accept it and confirm any run."}
+
+
+@app.post("/api/hunting/intel/sources")
+def api_intel_source_add(body: IntelSourceBody, user: dict = Depends(rbac.require_admin)):
+    name = body.name.strip()
+    if not (1 <= len(name) <= 80):
+        raise HTTPException(status_code=400, detail="Give the source a name of 1 to 80 characters")
+    if body.kind == "feed":
+        try:
+            report_feed_connector.ReportFeedConnector(body.url or "")   # https only and the SSRF guard
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        url, conn_id, coll = body.url.strip(), None, None
+    elif body.kind == "taxii":
+        public = hunt_service.find_connection("taxii", body.connection_id)[0] if body.connection_id else None
+        if not public:
+            raise HTTPException(status_code=400, detail="Choose a stored TAXII connection (add one on the Connections page)")
+        if not (body.collection_id or "").strip():
+            raise HTTPException(status_code=400, detail="Give the collection id to poll (the Test button lists the collections the account can read)")
+        url, conn_id, coll = None, public["id"], body.collection_id.strip()
+    else:
+        raise HTTPException(status_code=400, detail="kind must be feed or taxii")
+    try:
+        s = hunt_service.add_source(name, body.kind, url, user["email"], conn_id, coll)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    activity_log.record_activity(user["email"], "intel.source.add", str(s["id"]), {"name": name, "kind": body.kind})
+    return _source_out(s)
+
+
+def _source_or_404(source_id):
+    s = hunt_service.get_source(source_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="No such report source")
+    return s
+
+
+@app.post("/api/hunting/intel/sources/{source_id}/test")
+def api_intel_source_test(source_id: int, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """Reads the source once and reports what it found; stores nothing and creates no hunt."""
+    s = _source_or_404(source_id)
+    try:
+        deps = _intel_watch_deps()
+        if s["kind"] == "feed":
+            return {"ok": True, **deps.build_feed(s).test_connection()}
+        c = deps.build_taxii(s)
+        return {"ok": True, **c.test_connection(), "collections": c.collections()}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"The source could not be read ({type(exc).__name__}: {str(exc)[:160]})") from exc
+
+
+@app.post("/api/hunting/intel/sources/{source_id}/poll")
+def api_intel_source_poll(source_id: int, body: IntelPollBody, user: dict = Depends(rbac.require_admin)):
+    s = _source_or_404(source_id)
+    if not body.confirm:
+        return {"preview_only": True, "source": s["name"], "message": "This reads the source (a GET only), stores new reports and creates hunts for the relevant ones. It runs no search on your SIEM. Send confirm: true to poll now."}
+    res = intelwatch.poll_source(s, _intel_watch_deps(), actor=user["email"])
+    activity_log.record_activity(user["email"], "intel.source.poll", str(source_id), {"status": res["status"], "new": res["new"], "hunts": res["hunts_created"]})
+    return {"preview_only": False, **res}
+
+
+@app.post("/api/hunting/intel/sources/{source_id}/enabled")
+def api_intel_source_enabled(source_id: int, body: IntelEnabledBody, user: dict = Depends(rbac.require_admin)):
+    _source_or_404(source_id)
+    hunt_service.update_source(source_id, {"enabled": 1 if body.enabled else 0})
+    activity_log.record_activity(user["email"], "intel.source.enable" if body.enabled else "intel.source.disable", str(source_id), {})
+    return _source_out(_source_or_404(source_id))
+
+
+@app.delete("/api/hunting/intel/sources/{source_id}")
+def api_intel_source_delete(source_id: int, user: dict = Depends(rbac.require_admin)):
+    s = _source_or_404(source_id)
+    hunt_service.delete_source(source_id)   # the reports it stored stay; only the source and its poll state go
+    activity_log.record_activity(user["email"], "intel.source.delete", str(source_id), {"name": s["name"]})
+    return {"deleted": True}
+
+
 @app.get("/api/hunting/intel")
 def api_hunting_intel_list(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
     return {"reports": [_intel_out(r) for r in hunt_service.list_intel()]}
@@ -5472,24 +5605,51 @@ def api_hunting_run_query(hunt_id: int, index: int, body: HuntRunBody, user: dic
     if not _EARLIEST.match(body.earliest):
         raise HTTPException(status_code=400, detail="earliest must look like -24h, -7d or -30m")
     try:
-        conn, public = hunt_service.connector("splunk-search", body.connection_id)
+        conn, public = hunt_service.search_connector(body.connection_id)
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not conn:
-        raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+        raise HTTPException(status_code=400, detail="No read-only search connection (Splunk, Sentinel, Google SecOps, Elastic or CrowdStrike) is configured. Add one on the Connections page.")
     q = h["queries"][index]
+    language = hunt_service.language_of(conn)
+    try:
+        shown, _ = hunt_service.prepare_lead(q, language)
+        why = None
+    except hunt_translate.NotExpressible as exc:
+        shown, why = None, str(exc)
     if not body.confirm:
-        return {"preview_only": True, "query": q["query"], "connection": public["name"], "earliest": body.earliest,
-                "message": "This read-only search will run in your SIEM. Send confirm: true to run it."}
+        return {"preview_only": True, "query": shown, "language": language, "not_expressible": why, "connection": public["name"], "earliest": body.earliest,
+                "message": "This read-only search will run in your SIEM. Send confirm: true to run it." if not why else f"This lead cannot be written in {language}: {why}"}
     _lookback_cfg(_earliest_days(body.earliest), body.justification, user["email"], f"hunt {hunt_id}")
     try:
-        res = hunt_service.run_hunt_query(hunt_id, index, conn, body.earliest)
+        res = hunt_service.run_hunt_query(hunt_id, index, conn, body.earliest, connection_name=public["name"])
     except sec_search.SearchRefused as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"The search failed: {str(exc)[:200]}") from exc
-    activity_log.record_activity(user["email"], "hunt.query.run", str(hunt_id), {"index": index, "count": res["count"], "connection": public["name"]})
+    activity_log.record_activity(user["email"], "hunt.query.run", str(hunt_id), {"index": index, "count": res["count"], "connection": public["name"], "language": language})
     return {"query": res, "hunt": _hunt_out(hunt_store.get_hunt(hunt_id))}
+
+
+@app.get("/api/hunting/hunts/{hunt_id}/run-plan")
+def api_hunting_run_plan(hunt_id: int, earliest: str = "-24h", connection_id: int | None = None, only_unrun: bool = True, user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """The dry-run plan for run-all: which leads would run, written in which language, in which connection and over which window. Contacts nothing: no connector is built."""
+    h = hunt_store.get_hunt(hunt_id)
+    if not h:
+        raise HTTPException(status_code=404, detail="No such hunt")
+    if not _EARLIEST.match(earliest):
+        raise HTTPException(status_code=400, detail="earliest must look like -24h, -7d or -30m")
+    try:
+        public = hunt_service.find_search_connection(connection_id)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    cap = int(((hunt_soc.config().get("hunting") or {}).get("max_trial_hits_per_run")) or 30)
+    if not public:
+        return {"connection": None, "message": "No read-only search connection is configured, so nothing could run. Showing the leads in Splunk SPL for reference.", **hunt_service.plan_hunt(h, "splunk-spl", earliest, cap, only_unrun)}
+    language = hunt_service.connection_language(public)
+    return {"connection": {"id": public["id"], "name": public["name"], "type": public["type"], "enabled": public["enabled"]}, "contacts_siem": False,
+            "look_back_ceiling_days": int(hunt_soc.config().get("max_lookback_days", 90)), "window_days": _earliest_days(earliest),
+            "needs_justification": _earliest_days(earliest) > int(hunt_soc.config().get("max_lookback_days", 90)), "message": f"Plan only: nothing was sent to {public['name']}.", **hunt_service.plan_hunt(h, language, earliest, cap, only_unrun)}
 
 
 @app.post("/api/hunting/hunts/{hunt_id}/run-all")
@@ -5502,27 +5662,31 @@ def api_hunting_run_all(hunt_id: int, body: RunAllBody, user: dict = Depends(rba
     if not _EARLIEST.match(body.earliest):
         raise HTTPException(status_code=400, detail="earliest must look like -24h, -7d or -30m")
     try:
-        conn, public = hunt_service.connector("splunk-search", body.connection_id)
+        conn, public = hunt_service.search_connector(body.connection_id)
     except (ValueError, KeyError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not conn:
-        raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+        raise HTTPException(status_code=400, detail="No read-only search connection (Splunk, Sentinel, Google SecOps, Elastic or CrowdStrike) is configured. Add one on the Connections page.")
     cap = int(((hunt_soc.config().get("hunting") or {}).get("max_trial_hits_per_run")) or 30)
-    todo = [i for i, q in enumerate(h["queries"]) if q.get("query") and not (body.only_unrun and q.get("result") in ("hits", "no-hits"))]
+    language = hunt_service.language_of(conn)
+    todo = [i for i, q in enumerate(h["queries"]) if (q.get("query") or q.get("selection")) and not (body.only_unrun and q.get("result") in ("hits", "no-hits"))]
     chosen, skipped = todo[:cap], max(0, len(todo) - cap)
     if not body.confirm:
-        return {"preview_only": True, "connection": public["name"], "earliest": body.earliest, "leads": [{"index": i, "name": h["queries"][i]["name"], "technique": h["queries"][i].get("technique")} for i in chosen],
-                "not_run_because_of_the_cap": skipped, "cap": cap,
-                "message": f"{len(chosen)} read-only search(es) will run in your SIEM over {body.earliest}. Send confirm: true to run them."}
+        plan = hunt_service.plan_hunt(h, language, body.earliest, cap, body.only_unrun)
+        return {"preview_only": True, "connection": public["name"], "language": language, "earliest": body.earliest,
+                "leads": [{"index": i, "name": h["queries"][i]["name"], "technique": h["queries"][i].get("technique")} for i in chosen],
+                "plan": plan["leads"], "not_run_because_of_the_cap": skipped, "cap": cap,
+                "message": f"{len(chosen)} read-only search(es) will run in {public['name']} ({language}) over {body.earliest}; {sum(1 for r in plan['leads'] if r['state'] == 'not-expressible')} lead(s) cannot be written in this language and will be recorded as not expressible. Send confirm: true to run them."}
     _lookback_cfg(_earliest_days(body.earliest), body.justification, user["email"], f"hunt {hunt_id}")
     results = []
     for i in chosen:
         try:
-            r = hunt_service.run_hunt_query(hunt_id, i, conn, body.earliest)
-            results.append({"index": i, "name": h["queries"][i]["name"], "count": r["count"], "error": None})
+            r = hunt_service.run_hunt_query(hunt_id, i, conn, body.earliest, connection_name=public["name"])
+            results.append({"index": i, "name": h["queries"][i]["name"], "count": r["count"], "error": None, "state": r["result"], "language": r.get("language_run"),
+                            "query": r.get("query_run"), "reason": r.get("not_expressible_reason")})
         except Exception as exc:  # noqa: BLE001 - recorded on the lead by run_hunt_query; the rest still run
-            results.append({"index": i, "name": h["queries"][i]["name"], "count": None, "error": str(exc)[:200]})
-    activity_log.record_activity(user["email"], "hunt.run_all", str(hunt_id), {"leads": len(chosen), "failed": sum(1 for r in results if r["error"]), "connection": public["name"], "earliest": body.earliest})
+            results.append({"index": i, "name": h["queries"][i]["name"], "count": None, "error": str(exc)[:200], "state": "error", "language": language, "query": None, "reason": None})
+    activity_log.record_activity(user["email"], "hunt.run_all", str(hunt_id), {"language": language, "leads": len(chosen), "failed": sum(1 for r in results if r["error"]), "connection": public["name"], "earliest": body.earliest})
     return {"preview_only": False, "ran": len(chosen), "failed": sum(1 for r in results if r["error"]), "not_run_because_of_the_cap": skipped, "results": results, "hunt": _hunt_out(hunt_store.get_hunt(hunt_id))}
 
 
@@ -5539,14 +5703,14 @@ def api_soc_follow_up(alert_id: int, body: FollowUpBody, user: dict = Depends(rb
     siem_run = None
     if body.siem:
         try:
-            sconn, spub = hunt_service.connector("splunk-search", body.siem_connection_id)
+            sconn, spub = hunt_service.search_connector(body.siem_connection_id)
         except (ValueError, KeyError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not sconn:
-            raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+            raise HTTPException(status_code=400, detail="No read-only search connection (Splunk, Sentinel, Google SecOps, Elastic or CrowdStrike) is configured. Add one on the Connections page.")
         if not body.confirm:
             return {"preview_only": True, "siem_connection": spub["name"], "message": "One read-only search will run in your SIEM for this value. Send confirm: true to run it."}
-        siem_run = lambda q, earliest: sconn.search(q, earliest=earliest, max_rows=10)  # noqa: E731
+        siem_run = search_base.Runner(sconn)
     try:
         ans = hunt_soc.follow_up(alert, stored["investigation"], body.kind, body.value, hunt_store.list_alerts(), dashboard_data.load_live_queue(), siem_run=siem_run)
     except ValueError as exc:
@@ -5604,13 +5768,13 @@ def api_soc_investigate(alert_id: int, body: InvestigateBody, user: dict = Depen
             rep_name, lookup = rpub["name"], rconn.lookup
         if body.siem:
             try:
-                sconn, spub = hunt_service.connector("splunk-search", body.siem_connection_id)
+                sconn, spub = hunt_service.search_connector(body.siem_connection_id)
             except (ValueError, KeyError) as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             if not sconn:
-                raise HTTPException(status_code=400, detail="No Splunk search connection is configured. Add one on the Connections page.")
+                raise HTTPException(status_code=400, detail="No read-only search connection (Splunk, Sentinel, Google SecOps, Elastic or CrowdStrike) is configured. Add one on the Connections page.")
             siem_name = spub["name"]
-            siem_run = lambda q, earliest: sconn.search(q, earliest=earliest, max_rows=10)  # noqa: E731
+            siem_run = search_base.Runner(sconn)
         if not body.confirm:
             sendable = [i["value"] for i in hunt_soc.indicators(alert) if hunt_rep.classify(i["value"])[0]] if body.reputation else []
             return {"preview_only": True, "reputation_connection": rep_name, "indicators_that_would_be_sent": sendable, "siem_connection": siem_name,
@@ -6356,9 +6520,13 @@ def _soar_providers():
             return c
         except Exception:  # noqa: BLE001
             return None
-    rep, spl = conn("reputation"), conn("splunk-search")
+    rep = conn("reputation")
+    try:
+        spl, _ = hunt_service.search_connector()
+    except Exception:  # noqa: BLE001
+        spl = None
     email = (lambda to, subject, body: email_sender.send_email(to, subject, body)) if email_sender.is_configured() else None
-    return soar_engine.Providers(lookup=rep.lookup if rep else None, siem_run=(lambda q, earliest: spl.search(q, earliest=earliest, max_rows=10)) if spl else None,
+    return soar_engine.Providers(lookup=rep.lookup if rep else None, siem_run=search_base.Runner(spl) if spl else None,
                                  notify_webhook=conn("notify-webhook"), send_email=email, response=conn("response-webhook"), findings=dashboard_data.load_live_queue(),
                                  owners=_owner_map(), save_investigation=lambda inv, md: hunt_service.save_investigation(inv, md, "playbook"))
 
