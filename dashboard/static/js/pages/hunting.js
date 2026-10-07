@@ -150,7 +150,7 @@ export async function render(container) {
         <label>Status <select name="status">${["proposed", "active", "closed"].map((s) => `<option${s === h.status ? " selected" : ""}>${s}</option>`).join("")}</select></label>
         <label>Outcome <select name="outcome">${["", "confirmed", "not-found", "needs-data"].map((s) => `<option value="${s}"${(h.outcome || "") === s ? " selected" : ""}>${s || "(none yet)"}</option>`).join("")}</select></label>
         <label><input type="checkbox" name="detection_created"${h.detection_created ? " checked" : ""}> This hunt led to a new detection</label>
-        <div><button type="submit">Save</button> <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=html">Download report (HTML)</a> &middot; <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report">Markdown for a ticket</a></div></form>`);
+        <div><button type="submit">Save</button> <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=html">Download report (HTML)</a> &middot; <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=md">Markdown for a ticket</a></div></form>`);
     container.querySelector("#back").addEventListener("click", () => { openHunt = null; show(); });
     const collect = () => h.queries.map((q, i) => ({ ...q, result: container.querySelector(`[data-q="${i}"]`).value || null, assessment: container.querySelector(`[data-a="${i}"]`).value || null }));
     container.querySelectorAll("[data-run]").forEach((b) => b.addEventListener("click", async () => {

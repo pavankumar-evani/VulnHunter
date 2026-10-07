@@ -1,0 +1,89 @@
+# The query playbook: the small, fixed set of read-only SIEM searches an incident investigation may run, per ATT&CK technique and entity type.
+# Searches run only after a person confirms (the same confirm gate and look-back ceiling as the rest of the SOC), against a stored read-only search
+# connection, and stop at the first budget below. Nothing is ever planned from a search's own results, so an investigation cannot wander.
+# Placeholders: {host} {user} {ip} {domain} {hash} {url}. A value that is not plain host, user or address text is refused, not escaped.
+version: 1
+
+# The look-back every search uses unless the request asks for more. More than this needs a written justification (kept in the activity log) and is
+# then limited by extended_lookback_days in soc_triage.yaml. Each pattern's own lookback_days is capped by whichever ceiling applies.
+max_lookback_days: 90
+
+# How far back the stored-data history (earlier alerts and incidents with the same host, user, address, file or rule) looks.
+history_days: 90
+
+# Hard stop conditions for one refresh. The first one reached ends the run, and the report says which ("stopped: query budget").
+budget:
+  max_queries: 6
+  max_rows: 100              # rows returned across all searches
+  rows_per_query: 10         # rows kept per search (the count is still the full count)
+  time_budget_seconds: 60
+  max_consecutive_errors: 2
+
+# Reputation lookups (only with confirm; public indicators only, a private address is never sent).
+reputation:
+  max_lookups: 15
+  malicious_min: 5           # engines flagging an indicator before the report calls it malicious (1 to this-1 is suspicious)
+
+# What can be asked, per technique. `for.techniques` is empty for "any alert"; an entry runs only when every name in `needs` has a value.
+patterns:
+  - id: web-exploit-requests
+    name: Suspicious requests to the host
+    purpose: Look for the exploit strings this technique uses in requests to the host.
+    for: {techniques: [T1190]}
+    spl: 'search host="{host}" ("../" OR "%2e%2e" OR "${jndi:" OR "union select" OR "/etc/passwd") | stats count by src_ip, uri_path'
+    lookback_days: 7
+    needs: [host]
+  - id: child-processes-of-service
+    name: Shells started by service processes
+    purpose: Check whether a web, print or office service on the host started a command interpreter.
+    for: {techniques: [T1059, T1190, T1203]}
+    spl: 'search host="{host}" (Image="*\\cmd.exe" OR Image="*\\powershell.exe" OR Image="*/bin/sh" OR Image="*/bin/bash") | stats count by Image, ParentImage'
+    lookback_days: 7
+    needs: [host]
+  - id: privilege-use
+    name: Privilege use by the account
+    purpose: Look for elevation or special-privilege logons by the account.
+    for: {techniques: [T1068, T1548, T1078]}
+    spl: 'search user="{user}" (EventCode=4672 OR EventCode=4673 OR EventCode=4648) | stats count by host, EventCode'
+    lookback_days: 14
+    needs: [user]
+  - id: logon-pattern
+    name: Failed then successful logons
+    purpose: Look for a burst of failures followed by a success for the account.
+    for: {techniques: [T1110, T1078, T1021]}
+    spl: 'search user="{user}" (EventCode=4625 OR EventCode=4624) | stats count by EventCode, src_ip'
+    lookback_days: 14
+    needs: [user]
+  - id: host-sightings
+    name: Other activity on the host
+    purpose: Count what else the host logged, by source type, to see whether anything else changed around the alert.
+    for: {techniques: []}
+    spl: 'search host="{host}" | stats count by sourcetype'
+    lookback_days: 7
+    needs: [host]
+  - id: ip-sightings
+    name: Where the address was seen
+    purpose: See which other hosts talked to the same address.
+    for: {techniques: []}
+    spl: 'search "{ip}" | stats count, dc(host) as hosts by sourcetype'
+    lookback_days: 30
+    needs: [ip]
+  - id: domain-sightings
+    name: Where the domain was seen
+    purpose: See which hosts resolved or contacted the same domain.
+    for: {techniques: []}
+    spl: 'search "{domain}" | stats count, dc(host) as hosts by sourcetype'
+    lookback_days: 30
+    needs: [domain]
+  - id: hash-sightings
+    name: Where the file hash was seen
+    purpose: See which hosts ran or stored the same file.
+    for: {techniques: []}
+    spl: 'search "{hash}" | stats count, dc(host) as hosts by sourcetype'
+    lookback_days: 30
+    needs: [hash]
+
+# Hunt reports
+hunt_report:
+  default_time_box_hours: 8    # a report is expected within hours, not days; per-hunt override via POST /api/hunting/hunts/{id}/time-box
+  max_time_box_hours: 168
