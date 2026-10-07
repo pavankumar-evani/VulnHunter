@@ -9,8 +9,13 @@ permissions:
 
 jobs:
   test:
-    name: Run pipeline artifact test suite
+    # The suite is split into balanced shards (scripts/ci_shard.py) that run in parallel; a full serial run had grown past 90 minutes.
+    name: Test shard ${{ matrix.shard }} of 4
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout (full history, all branches)
         uses: actions/checkout@v7
@@ -46,5 +51,31 @@ jobs:
       - name: Install priority-rules engine dependencies
         run: pip install -r remediation/config/requirements.txt
 
-      - name: Run test suite
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Run test suite (this shard)
+        # Each module runs in its own process with a time limit, so one hung test cannot stall the whole job, and the per-module
+        # durations at the end show where the time goes.
+        run: |
+          status=0
+          : > /tmp/durations
+          for m in $(python scripts/ci_shard.py ${{ matrix.shard }} 4); do
+            start=$(date +%s)
+            timeout 900 python -m unittest -v "$m" || { echo "::error::$m failed or timed out"; status=1; }
+            echo "$(( $(date +%s) - start ))s $m" >> /tmp/durations
+          done
+          echo "---- slowest modules in this shard ----"
+          sort -rn /tmp/durations | head -8
+          exit $status
+
+  all-tests:
+    # One stable check name that is green only when every shard is green.
+    name: Run pipeline artifact test suite
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "A test shard failed or was cancelled: ${{ needs.test.result }}"
+            exit 1
+          fi

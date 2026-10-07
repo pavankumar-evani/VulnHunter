@@ -27,6 +27,9 @@ from remediation.utils import db as db_module  # noqa: E402
 
 # routes that call out to the network or an external tool by design
 SKIP = {"/api/threat-intel/refresh-now", "/api/status"}
+# Server-Sent Events routes answer with a stream that is held open on purpose (up to an hour), so a plain GET never returns. They have their
+# own tests (tests/test_events.py, tests/test_soc_incidents_api.py).
+STREAM_SUFFIXES = ("/stream", "/events")
 
 
 class EmptyStateTests(unittest.TestCase):
@@ -45,7 +48,7 @@ class EmptyStateTests(unittest.TestCase):
             checked, failures = 0, []
             for route in fastapi_app.routes:
                 path = getattr(route, "path", "")
-                if "GET" not in getattr(route, "methods", set()) or "{" in path or not path.startswith("/api/") or path in SKIP:
+                if "GET" not in getattr(route, "methods", set()) or "{" in path or not path.startswith("/api/") or path in SKIP or path.endswith(STREAM_SUFFIXES):
                     continue
                 r = client.get(path)
                 checked += 1
