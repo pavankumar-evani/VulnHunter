@@ -1,344 +1,190 @@
+// Threat Hunting: a proactive board of suggested hunts, an ATT&CK coverage matrix, active hunts with live trial-hit progress and the hunt report.
+// The older tabs (alert triage, intel intake, detection engineering, proposals, hunts, overview) are kept in huntingMore.js and shown under their own tabs.
 import { api } from "../api.js";
-import { escapeHtml, flash } from "../dom.js";
+import { escapeHtml } from "../dom.js";
+import { icon } from "../icons.js";
+import { chip, toast, emptyState, onCleanup, debounce, tipAttr, dataAgeBadge, mountDataAge } from "../ui.js";
+import { live } from "../live.js";
+import { getCurrentUser } from "../auth.js";
+import {
+  HUNT_TYPES, TYPE_LABEL, STATE_LABEL, CELL_STATES, parseHuntState, huntStateToSearch, filterSuggestions, facetCounts, scoreBars, scoreTone, readinessText, queryTabs, aggregateMatrix, heatLevel, cellTitle,
+  huntProgress, verdictText,
+} from "../huntLogic.js";
+import { modal } from "../sxKit.js";
+import { queryBlock, wireQueryBlocks, renderHuntReport } from "../huntReport.js";
 
-export const title = "Hunting & SOC";
+export const title = "Threat Hunting";
 
-const TABS = [["suggested", "Suggested hunts"], ["overview", "Overview"], ["alerts", "Alert triage"], ["intel", "Threat intel"], ["proposals", "Proposed hunts"], ["hunts", "Hunts"], ["detections", "Detection engineering"]];
-const SEV = { Critical: "badge-critical", High: "badge-high", Medium: "badge-medium", Low: "badge-low", Informational: "badge-outline" };
-const NOTE = "Quanta is not a SIEM. It knows which assets carry exploitable vulnerabilities, so it proposes where to look, adds that context to alerts and judges how well your detections work. Searches in your SIEM are read-only and only run when you confirm.";
-const RESULTS = ["", "hits", "no-hits", "not-run", "error"];
-const ASSESS = ["", "benign", "suspicious", "malicious"];
-const VERDICT = { "likely-true-positive": "badge-critical", "likely-false-positive": "badge-low", "escalate-l2": "badge-high" };
-const LEAD = { "not-run": "badge-outline", "no-hits": "badge-low", "likely-fp": "badge-low", "possible-tp": "badge-high", "confirmed-tp": "badge-critical" };
-const OVERALL = { incomplete: "badge-outline", "no-findings": "badge-low", "low-confidence": "badge-medium", "multi-hit-correlated": "badge-high", "confirmed-compromise": "badge-critical" };
-const TIER = { high_fidelity: "badge-auto_approvable", healthy: "badge-low", noisy: "badge-medium", critical_noise: "badge-critical", low_value: "badge-high", low_volume: "badge-outline" };
-const PRIO = { high: "badge-critical", medium: "badge-medium", low: "badge-outline" };
+const NATIVE = [["suggested", "Suggested hunts"], ["matrix", "ATT&CK coverage"], ["active", "Active hunts"]];
+const LEGACY = [["alerts", "Alert triage"], ["intel", "Intel intake"], ["detections", "Detection engineering"], ["more", "More"]];
+const STATUSES = [["suggested", "Suggested"], ["accepted", "Accepted"], ["running", "Running"], ["evidence-recorded", "Evidence recorded"], ["concluded", "Concluded"], ["dismissed", "Dismissed"]];
+const go = (path) => { window.history.pushState({}, "", path); window.dispatchEvent(new PopStateEvent("popstate")); };
 
 export async function render(container) {
-  let tab = new URLSearchParams(window.location.search).get("tab") || "suggested";
-  let openHunt = null;
-  let openAlert = null;
+  const st = parseHuntState(window.location.search);
+  const me = await getCurrentUser().catch(() => null);
+  if (st.hunt) return renderHuntReport(container, st.hunt, { back: "/hunting?tab=active" });
+  let tab = st.tab || "suggested";
+  if (!NATIVE.some(([k]) => k === tab) && !LEGACY.some(([k]) => k === tab) && !["overview", "proposals", "hunts"].includes(tab)) tab = "suggested";
+  let alive = true;
+  onCleanup(() => { alive = false; });
+  const isAdmin = !!(me && me.role === "admin");
 
-  const shell = (inner) => {
-    container.innerHTML = `<p class="subtitle">${NOTE}</p>
-      <p>${TABS.map(([k, l]) => `<button type="button" class="${k === tab ? "" : "secondary-button"}" data-tab="${k}">${l}</button>`).join(" ")}</p><div id="hunt-body">${inner}</div>`;
-    container.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; openHunt = null; openAlert = null; show(); }));
-  };
-  const techniques = (list) => (list || []).map((t) => `<span class="badge badge-outline">${escapeHtml(t.technique_id)} ${escapeHtml(t.technique_name)}</span>`).join(" ") || '<span class="muted">none tagged</span>';
-  const pct = (x) => (x === null || x === undefined ? "-" : Math.round(x * 100) + "%");
+  container.innerHTML = `<div class="sx-page"><div class="sx-head"><div><h2>Threat hunting</h2><p>Hunts are hypotheses to test, proposed from what Quanta already holds: intel, exposure, alerts, identities and detection gaps. Quanta is not a SIEM and never runs a search by itself; you confirm each read-only search or run the query in your own tool and record the result.</p></div><span id="hx-age"></span></div>
+    <div class="hx-tabs" role="tablist" aria-label="Threat hunting">${[...NATIVE, ...LEGACY].map(([k, l]) => `<button type="button" role="tab" data-t="${k}" aria-selected="${k === tab || (k === "more" && ["overview", "proposals", "hunts"].includes(tab))}">${l}</button>`).join("")}</div>
+    <div id="hx-body" role="tabpanel"></div></div>`;
+  const body = container.querySelector("#hx-body");
+  const setUrl = (patch) => { Object.assign(st, patch); window.history.replaceState({}, "", window.location.pathname + huntStateToSearch(st)); };
+  container.querySelector(".hx-tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (b) { go(`/hunting?tab=${b.dataset.t}`); } });
+  container.querySelector(".hx-tabs").addEventListener("keydown", (e) => {
+    if (!["ArrowRight", "ArrowLeft"].includes(e.key)) return;
+    const all = [...container.querySelectorAll(".hx-tabs [data-t]")]; const i = all.indexOf(document.activeElement);
+    if (i < 0) return; e.preventDefault(); all[(i + (e.key === "ArrowRight" ? 1 : -1) + all.length) % all.length].focus();
+  });
+  const stamp = () => { const a = container.querySelector("#hx-age"); if (a) { a.innerHTML = dataAgeBadge(Date.now()); mountDataAge(a); } };
 
+  if (tab === "suggested") await suggested(); else if (tab === "matrix") await matrix(); else if (tab === "active") await active();
+  else { try { const m = await import("./huntingMore.js"); await m.render(body, { tab: tab === "more" ? "overview" : tab }); } catch (e) { body.innerHTML = `<div class="sx-callout warn">${escapeHtml(e.message)}</div>`; } }
+
+  // ------------------------------------------------------------------ suggested hunts
   async function suggested() {
-    const out = await api.huntingSuggestions();
-    const ready = { connected: "badge-low", partial: "badge-medium", "cannot-tell": "badge-outline", "none-required": "badge-outline" };
-    shell(`<p class="muted">${escapeHtml(out.note)}</p>
-      <p class="muted">${out.shown} of ${out.total} suggestions shown${out.suppressed_hidden ? `, ${out.suppressed_hidden} hidden because past hunts of that kind found nothing` : ""}. Last refreshed ${escapeHtml(out.last_refresh || "never")}. <button type="button" class="secondary-button" id="sg-refresh">Refresh now</button></p>
-      ${out.suggestions.length ? out.suggestions.map((s) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:4px 18px 14px;margin:14px 0">
-        <h3>${escapeHtml(s.title)} <span class="badge badge-outline">${escapeHtml(s.hunt_type)}</span> <span class="badge ${PRIO[s.expected_value] || "badge-outline"}">priority ${Math.round(s.priority.score)}</span> <span class="badge badge-outline">effort ${escapeHtml(s.effort)}</span></h3>
-        <p>${escapeHtml(s.hypothesis)}</p>
-        <p><strong>Why now:</strong> ${s.why_now.slice(0, 4).map((e) => escapeHtml(e.label)).join("; ")}${s.why_now.length > 4 ? ` and ${s.why_now.length - 4} more` : ""}</p>
-        <p>${techniques(s.techniques)} ${s.tactics.map((t) => `<span class="badge badge-outline">${escapeHtml(t)}</span>`).join(" ")}</p>
-        <p class="muted">Scope: ${s.scope.counts.assets} asset(s), ${s.scope.counts.identities} identit${s.scope.counts.identities === 1 ? "y" : "ies"}. Data: <span class="badge ${ready[s.data_readiness.status] || "badge-outline"}">${escapeHtml(s.data_readiness.status)}</span> ${s.queries.length} ready-made quer${s.queries.length === 1 ? "y" : "ies"}.</p>
-        <details><summary>Why this score</summary><ul>${s.priority.breakdown.map((r) => `<li><strong>${escapeHtml(r.factor)}</strong> ${r.points}: ${escapeHtml(r.note)}</li>`).join("")}</ul>${s.learned.note ? `<p class="muted">${escapeHtml(s.learned.note)}</p>` : ""}</details>
-        ${s.gaps.map((g) => `<p class="muted">${escapeHtml(g)}</p>`).join("")}
-        <button type="button" data-sg-accept="${escapeHtml(s.id)}">Accept and start hunt</button> <button type="button" class="secondary-button" data-sg-dismiss="${escapeHtml(s.id)}">Dismiss</button></div>`).join("") : '<p class="empty-state">No suggestions yet. Press Refresh now; the notes below say which data is missing.</p>'}
-      ${out.gaps.length ? `<h3>Data gaps</h3><ul>${out.gaps.map((g) => `<li class="muted">${escapeHtml(g.note)}</li>`).join("")}</ul>` : ""}`);
-    container.querySelector("#sg-refresh").addEventListener("click", async () => { try { await api.huntingSuggestionRefresh(); show(); } catch (e) { flash(e.message, "error"); } });
-    container.querySelectorAll("[data-sg-accept]").forEach((b) => b.addEventListener("click", async () => {
-      try { const r = await api.huntingSuggestionAccept(b.dataset.sgAccept); openHunt = r.hunt_id; tab = "hunts"; show(); } catch (e) { flash(e.message, "error"); }
-    }));
-    container.querySelectorAll("[data-sg-dismiss]").forEach((b) => b.addEventListener("click", async () => {
-      const reason = window.prompt("Reason: not-relevant, already-covered, no-data, accepted-risk or other", "not-relevant");
-      if (!reason) return;
-      const notes = window.prompt("Notes (required for other)", "") || "";
-      try { await api.huntingSuggestionDismiss(b.dataset.sgDismiss, { reason, notes }); show(); } catch (e) { flash(e.message, "error"); }
-    }));
-  }
+    body.innerHTML = '<div class="hx-grid"><div class="ui-skel ui-skel-card"></div><div class="ui-skel ui-skel-card"></div><div class="ui-skel ui-skel-card"></div></div>';
+    let data; let status = container.dataset.status || "suggested";
+    const fetchList = async () => { data = await api.huntingSuggestions(status === "suggested" ? "" : `?status=${status}`); };
+    try { await fetchList(); } catch (e) { body.innerHTML = `<div class="sx-callout warn">${escapeHtml(e.message)}</div>`; return; }
+    stamp();
+    let open = null; // the card whose score popover is open
 
-  async function overview() {
-    const o = await api.huntingOverview();
-    const m = o.metrics;
-    shell(`<div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">hunts proposed from live exposure</div><div class="kpi-value">${o.proposals}</div></div>
-        <div class="kpi-card"><div class="kpi-label">hunts closed</div><div class="kpi-value">${m.hunts.closed}</div></div>
-        <div class="kpi-card kpi-danger"><div class="kpi-label">hunts that confirmed activity</div><div class="kpi-value">${m.hunts.confirmed}</div></div>
-        <div class="kpi-card"><div class="kpi-label">alerts open</div><div class="kpi-value">${m.alerts.open}</div></div>
-      </div>
-      <h3>Hunt coverage</h3>
-      <p>${m.coverage.pct === null ? "No ATT&CK techniques are tagged on the current findings." : `${m.coverage.hunted} of ${m.coverage.estate_techniques} techniques that appear in your open findings have an active or closed hunt (${m.coverage.pct}%).`}
-        ${m.hunts.detections_created} hunt(s) led to a new detection. ${m.queries.run} of ${m.queries.total} queries have a recorded result.</p>
-      ${m.coverage.not_hunted.length ? `<p class="muted">Not hunted yet: ${m.coverage.not_hunted.map((t) => escapeHtml(t.technique_id + " " + t.technique_name) + (t.library ? "" : " (no library queries)")).join("; ")}</p>` : ""}
-      <h3>Alerts</h3>
-      <p>${m.alerts.total} received &middot; ${m.alerts.closed} closed &middot; ${m.alerts.true_positive} true positive &middot; ${m.alerts.false_positive} benign or false positive.</p>
-      <p class="muted">Send alerts with an API key that has the <code>soc:write</code> scope: <code>POST /api/ingest/alerts</code>, or OCSF Detection Findings to <code>POST /api/ingest/alerts/ocsf</code>. Threat-intelligence reports go to <code>POST /api/ingest/threat-intel</code>.
-      To run searches and look up indicators, add a "Splunk search" and an "Indicator reputation" connection on the Connections page.</p>`);
-  }
-
-  async function intel() {
-    const { reports } = await api.huntingIntelList();
-    shell(`<p class="muted">Paste a threat-intelligence report (advisory text, or a STIX 2.1 bundle). Quanta extracts the CVEs, ATT&CK techniques, actors and indicators, scores how much it matters to <em>your</em> estate, and can start a hunt from it.</p>
-      <form id="inf" class="run-form"><label>Title (optional) <input name="title" maxlength="160"></label><label>Source (optional) <input name="source" placeholder="advisory name or feed"></label>
-        <label>Report text or STIX JSON <textarea name="content" rows="8" required></textarea></label><div><button type="submit">Analyse report</button></div></form>
-      <h3>Reports</h3>
-      <div class="table-scroll"><table class="data-table"><thead><tr><th>Report</th><th>Relevance</th><th>Why</th><th>Found</th><th></th></tr></thead><tbody>
-      ${reports.length ? reports.map((r) => `<tr><td class="wrap-cell"><strong>${escapeHtml(r.title)}</strong><br><span class="muted">${escapeHtml(r.source || "")} ${escapeHtml(r.received_at)}</span></td>
-        <td><span class="badge ${PRIO[r.priority]}">${escapeHtml(r.priority)}</span> ${r.relevance}</td><td class="wrap-cell"><span class="muted">${r.reasons.map(escapeHtml).join("; ")}</span></td>
-        <td class="wrap-cell">${r.extracted.cves.length} CVE &middot; ${r.extracted.techniques.length} technique &middot; ${r.extracted.ips.length + r.extracted.domains.length + r.extracted.hashes.length + r.extracted.urls.length} indicator${r.extracted.actors.length ? "<br>" + r.extracted.actors.map(escapeHtml).join(", ") : ""}</td>
-        <td>${r.hunt_id ? `<button type="button" class="link-button" data-gohunt="${r.hunt_id}">Open hunt</button>` : `<button type="button" data-hunt="${r.id}">Start a hunt</button>`}</td></tr>`).join("") : '<tr><td colspan="5" class="empty-state">No reports yet.</td></tr>'}</tbody></table></div>`);
-    container.querySelector("#inf").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
-      try { const r = await api.huntingIntelAdd({ content: f.content.value, title: f.title.value || null, source: f.source.value || null }); flash(r.created ? `Analysed: ${r.priority} relevance.` : "That report was already analysed.", "success"); show(); } catch (err) { flash(err.message, "error"); }
+    const filters = () => ({ type: st.type, tactic: st.tactic, q: st.q, ready: st.ready, technique: st.technique });
+    function card(s) {
+      const rd = readinessText(s.data_readiness);
+      const bars = scoreBars(s.priority);
+      const q = (s.queries || [])[0];
+      const lifecycle = s.status;
+      return `<article class="hx-card" data-s="${escapeHtml(s.id)}">
+        <div class="hx-card-top"><span class="sx-row">${chip(TYPE_LABEL[s.hunt_type] || s.hunt_type, { tone: "info" })}${lifecycle !== "suggested" ? chip(lifecycle.replace("-", " "), { tone: "accent" }) : ""}</span>
+          <button type="button" class="hx-score t-${scoreTone(s.priority.score)}" data-why="${escapeHtml(s.id)}" aria-expanded="${open === s.id}" aria-label="Priority ${Math.round(s.priority.score)} of 100. Show why this score."><b>${Math.round(s.priority.score)}</b>why this score</button></div>
+        ${open === s.id ? `<div class="hx-pop" role="dialog" aria-label="Why this score">${bars.map((b) => `<div class="hx-bar-row"><span>${escapeHtml(b.factor.replace(/_/g, " "))}</span><span class="hx-bar${b.negative ? " neg" : ""}"><i style="width:${b.max ? b.pct : Math.min(100, Math.abs(b.points) * 8)}%"></i></span><span>${b.points > 0 ? "+" : ""}${b.points}${b.max ? "/" + b.max : ""}</span><span class="note">${escapeHtml(b.note)}</span></div>`).join("")}${s.learned && s.learned.note ? `<span class="note">${escapeHtml(s.learned.note)}</span>` : ""}</div>` : ""}
+        <h3>${escapeHtml(s.title)}</h3><p class="hx-hyp">${escapeHtml(s.hypothesis)}</p>
+        <div><p class="hx-sub">Why now</p><div class="hx-why">${(s.why_now || []).slice(0, 6).map((w) => w.link ? `<a href="${escapeHtml(w.link)}" data-link class="${w.strong ? "strong" : ""}" ${tipAttr(`${w.kind}: ${w.detail || ""}`)}>${escapeHtml(w.label)}</a>` : `<span class="${w.strong ? "strong" : ""}" ${tipAttr(`${w.kind}: ${w.detail || ""}`)}>${escapeHtml(w.label)}</span>`).join("") || '<span class="ui-muted">no triggering record</span>'}${(s.why_now || []).length > 6 ? `<span>+${s.why_now.length - 6}</span>` : ""}</div></div>
+        <div class="sx-chips">${(s.techniques || []).slice(0, 5).map((t) => `<button type="button" class="hx-fchip" data-tech="${escapeHtml(t.technique_id)}" ${tipAttr(`${t.technique_name} (${t.tactic || "no tactic"}). Click to filter by this technique.`)}>${escapeHtml(t.technique_id)} ${escapeHtml(t.technique_name)}</button>`).join("")}</div>
+        <div class="hx-facts"><span><b>${s.scope.counts.assets}</b> assets</span><span><b>${s.scope.counts.identities}</b> identities</span><span><b>${s.scope.counts.segments}</b> segments</span><span>effort <b>${escapeHtml(s.effort || "?")}</b></span><span>value <b>${escapeHtml(s.expected_value || "?")}</b></span>${chip(rd.label, { tone: rd.tone, title: rd.detail })}</div>
+        <div class="hx-two"><div><p class="hx-sub">Expected if malicious</p><ul>${(s.expected_malicious || []).slice(0, 3).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>-</li>"}</ul></div><div><p class="hx-sub">Likely benign</p><ul>${(s.likely_benign || []).slice(0, 3).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>-</li>"}</ul></div></div>
+        ${queryTabs(q).length ? queryBlock(q, s.id) : '<p class="ui-muted" style="font-size:.8rem;margin:0">No query generated yet; the hunt will ask you to write one for your data model.</p>'}
+        ${(s.gaps || []).length ? `<details><summary class="sx-link-btn">What Quanta cannot see (${s.gaps.length})</summary><ul class="sx-gaps">${s.gaps.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul></details>` : ""}
+        <div class="hx-actions">${lifecycle === "suggested" ? `<button type="button" class="ui-btn sx-btn-sm" data-do="accept" ${isAdmin ? "" : "disabled"}>Accept as a hunt</button><button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" data-do="dismiss" ${isAdmin ? "" : "disabled"}>Dismiss…</button>` : ""}
+          ${["accepted", "running", "evidence-recorded"].includes(lifecycle) ? `${s.hunt_id ? `<a class="ui-btn sx-btn-sm" href="/hunting?hunt=${s.hunt_id}" data-link>Open hunt report</a>` : ""}<button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" data-do="conclude" ${isAdmin ? "" : "disabled"}>Conclude…</button>` : ""}
+          ${lifecycle === "concluded" ? `${s.hunt_id ? `<a class="ui-btn ui-btn-ghost sx-btn-sm" href="/hunting?hunt=${s.hunt_id}" data-link>Report</a>` : ""}<button type="button" class="ui-btn sx-btn-sm" data-do="promote" ${isAdmin && !s.promoted_key ? "" : "disabled"}>${s.promoted_key ? "Promoted to a use case" : "Promote to a detection"}</button>` : ""}
+          ${s.next_step ? `<span class="ui-muted" style="font-size:.78rem">Next: ${escapeHtml(s.next_step)}</span>` : ""}</div></article>`;
+    }
+    function paint() {
+      const all = data.suggestions; const list = filterSuggestions(all, filters()); const f = facetCounts(all);
+      const tactics = Object.keys(f.tactics).sort();
+      body.innerHTML = `<div class="sx-toolbar">${["", ...HUNT_TYPES].map((t) => `<button type="button" class="hx-fchip" data-type="${t}" aria-pressed="${st.type === t}">${t ? TYPE_LABEL[t] : "All types"}${t ? ` <span class="sx-seg-n">${f.types[t] || 0}</span>` : ` <span class="sx-seg-n">${all.length}</span>`}</button>`).join("")}</div>
+        <div class="sx-toolbar"><select class="sx-field" id="hx-status" aria-label="Lifecycle">${STATUSES.map(([k, l]) => `<option value="${k}" ${k === status ? "selected" : ""}>${l}</option>`).join("")}</select>
+          <select class="sx-field" id="hx-tactic" aria-label="Tactic"><option value="">Any tactic</option>${tactics.map((t) => `<option ${t === st.tactic ? "selected" : ""}>${escapeHtml(t)} (${f.tactics[t]})</option>`).join("")}</select>
+          <input type="search" class="sx-field" id="hx-q" placeholder="Search hunts, techniques, assets" value="${escapeHtml(st.q)}" aria-label="Search hunts">
+          <button type="button" class="hx-fchip" id="hx-ready" aria-pressed="${st.ready === "connected"}">Data connected only</button>
+          ${st.technique ? `<button type="button" class="hx-fchip" data-tech-clear aria-pressed="true">Technique ${escapeHtml(st.technique)} (clear)</button>` : ""}
+          <span class="ui-muted" style="font-size:.82rem">${list.length} of ${data.total}${data.capped ? ` (top ${data.cap} shown)` : ""}${data.suppressed_hidden ? ` · ${data.suppressed_hidden} hidden by past outcomes` : ""}</span>
+          <button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="hx-refresh" ${isAdmin ? "" : "disabled"}>${icon("clock", 14)} Refresh suggestions</button></div>
+        <p class="ui-muted" style="margin:0;font-size:.82rem">${escapeHtml(data.note || "")}${data.last_refresh ? ` Last refreshed ${escapeHtml(data.last_refresh)}.` : ""}</p>
+        ${(data.gaps || []).length ? `<details class="sx-panel"><summary class="sx-link-btn">Where Quanta has nothing to suggest from (${data.gaps.length})</summary><ul class="sx-gaps">${data.gaps.map((g) => `<li><b>${escapeHtml(g.generator)}:</b> ${escapeHtml(g.note)}</li>`).join("")}</ul></details>` : ""}
+        ${list.length ? `<div class="hx-grid">${list.map(card).join("")}</div>` : `<div class="sx-panel">${emptyState({ title: all.length ? "No suggestion matches these filters" : status === "suggested" ? "No hunts suggested yet" : "Nothing in this state", body: all.length ? "Clear a filter to see the rest." : "Suggestions are generated from imported intel, known-exploited vulnerabilities, alerts, identities and detection gaps. Import a threat report, connect a scanner, or refresh once data is in.", actionLabel: all.length ? "" : "Import threat intel", actionHref: all.length ? "" : "/hunting?tab=intel", iconName: "search" })}</div>`}`;
+      wireQueryBlocks(body);
+    }
+    paint();
+    const typeSearch = debounce((v) => { setUrl({ q: v }); paint(); const el = body.querySelector("#hx-q"); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 220);
+    body.addEventListener("input", (e) => { if (e.target.id === "hx-q") typeSearch(e.target.value); });
+    body.addEventListener("change", async (e) => {
+      if (e.target.id === "hx-tactic") { setUrl({ tactic: e.target.value.replace(/ \(\d+\)$/, "") }); paint(); }
+      else if (e.target.id === "hx-status") { status = e.target.value; container.dataset.status = status; await fetchList(); paint(); }
     });
-    container.querySelectorAll("[data-hunt]").forEach((b) => b.addEventListener("click", async () => { try { const h = await api.huntingIntelHunt(Number(b.dataset.hunt)); openHunt = h.id; tab = "hunts"; show(); } catch (e) { flash(e.message, "error"); } }));
-    container.querySelectorAll("[data-gohunt]").forEach((b) => b.addEventListener("click", () => { openHunt = Number(b.dataset.gohunt); tab = "hunts"; show(); }));
-  }
-
-  async function proposals() {
-    const { proposals: ps, note } = await api.huntingProposals();
-    shell(`<p class="muted">${escapeHtml(note)}</p>
-      ${ps.length ? ps.map((p) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:4px 18px 14px;margin:14px 0"><h3>${escapeHtml(p.title)}</h3><p>${escapeHtml(p.hypothesis)}</p>
-        <p>${techniques(p.techniques)}</p><p><strong>Hosts:</strong> ${p.assets.slice(0, 12).map(escapeHtml).join(", ")}${p.assets.length > 12 ? ` and ${p.assets.length - 12} more` : ""}</p>
-        <p class="muted">${p.queries.length} ready-made queries. ${escapeHtml(p.notes || "")}</p>
-        <button type="button" data-accept="${escapeHtml(p.source_ref)}">Start this hunt</button></div>`).join("") : '<p class="empty-state">No open known-exploited or high-probability vulnerabilities need a hunt right now.</p>'}`);
-    container.querySelectorAll("[data-accept]").forEach((b) => b.addEventListener("click", async () => {
-      try { const h = await api.huntingAccept({ source_ref: b.dataset.accept }); openHunt = h.id; tab = "hunts"; show(); } catch (e) { flash(e.message, "error"); }
-    }));
-  }
-
-  async function hunts() {
-    const { hunts: hs } = await api.huntingList();
-    const h = openHunt && hs.find((x) => x.id === openHunt);
-    if (h) return huntDetail(h);
-    shell(`<div class="table-scroll"><table class="data-table"><thead><tr><th>Hunt</th><th>Verdict</th><th>Status</th><th>Outcome</th><th>Hosts</th><th></th></tr></thead><tbody>
-      ${hs.length ? hs.map((x) => `<tr><td class="wrap-cell"><strong>${escapeHtml(x.title)}</strong><br>${techniques(x.techniques)}</td><td><span class="badge ${OVERALL[x.verdict.overall]}">${escapeHtml(x.verdict.overall)}</span></td>
-        <td>${escapeHtml(x.status)}</td><td>${escapeHtml(x.outcome || "-")}</td><td>${x.assets.length}</td><td><button type="button" class="link-button" data-open="${x.id}">Open</button></td></tr>`).join("") : '<tr><td colspan="6" class="empty-state">No hunts yet. Start one from the proposals or a threat-intelligence report.</td></tr>'}</tbody></table></div>
-      <h3>Start a hunt of your own</h3>
-      <form id="hf" class="run-form"><label>Title <input name="title" required maxlength="200"></label><label>Hypothesis (what do you expect to find, and why?) <textarea name="hypothesis" rows="3" required></textarea></label>
-        <div><button type="submit">Create</button></div></form>`);
-    container.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => { openHunt = Number(b.dataset.open); show(); }));
-    container.querySelector("#hf").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      try { const r = await api.huntingCreate({ title: e.target.title.value, hypothesis: e.target.hypothesis.value }); openHunt = r.id; show(); } catch (err) { flash(err.message, "error"); }
-    });
-  }
-
-  function huntDetail(h) {
-    const v = h.verdict;
-    shell(`<p><button type="button" class="link-button" id="back">&larr; All hunts</button></p>
-      <h3>${escapeHtml(h.title)} <span class="badge ${OVERALL[v.overall]}">${escapeHtml(v.overall)}</span></h3><p>${escapeHtml(h.hypothesis)}</p><p>${techniques(h.techniques)}</p>
-      <p><strong>Hosts in scope:</strong> ${h.assets.map(escapeHtml).join(", ") || "none"}</p>
-      <p><strong>Data you need:</strong> ${h.data_sources.map(escapeHtml).join("; ") || "not specified"}</p>
-      <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">trial hits run</div><div class="kpi-value">${h.summary.run} of ${h.summary.total}</div></div>
-        <div class="kpi-card"><div class="kpi-label">returned results</div><div class="kpi-value">${h.summary.with_hits}</div></div>
-        <div class="kpi-card"><div class="kpi-label">entities in the results</div><div class="kpi-value">${h.summary.entities.length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">techniques without a rule</div><div class="kpi-value">${h.summary.gaps.length}</div></div></div>
-      <p>${escapeHtml(h.summary.headline)}</p>${h.summary.executive_summary.map((x) => `<p class="muted">${escapeHtml(x)}</p>`).join("")}
-      ${h.queries.length ? `<p><button type="button" id="run-all">Run all leads in the SIEM</button> <label>Look back <select id="ra-earliest"><option value="-24h">24 hours</option><option value="-7d">7 days</option><option value="-30d">30 days</option><option value="-90d">90 days</option><option value="-180d">180 days (needs a reason)</option></select></label> <label>Why (past 90 days) <input id="ra-why" size="36" placeholder="at least 20 characters"></label></p>` : ""}
-      ${v.correlated_entities.length ? `<p class="callout callout-warn">The same entity appears in more than one lead: ${v.correlated_entities.map(escapeHtml).join(", ")}</p>` : ""}
-      <h3>Leads</h3><p class="muted">Run a lead in your SIEM from here (needs a "Splunk search" connection), or run the query yourself and record the result. Then say what you made of the results. Unassessed hits are treated as possible true positives, never as benign.</p>
-      ${h.queries.length ? h.queries.map((q, i) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 16px;margin:10px 0"><strong>${escapeHtml(q.technique)}: ${escapeHtml(q.name)}</strong>
-        <span class="badge ${LEAD[v.leads[i]]}">${escapeHtml(v.leads[i])}</span>
-        <pre class="code-block">${escapeHtml(q.query)}</pre>
-        ${q.ran_at ? `<p class="muted">Ran ${escapeHtml(q.ran_at)} over ${escapeHtml(q.window || "")}: ${q.error ? "failed (" + escapeHtml(q.error) + ")" : q.count + " event(s)"}</p>` : ""}
-        ${q.sample && q.sample.length ? `<div class="table-scroll"><table class="data-table"><tbody>${q.sample.slice(0, 5).map((row) => `<tr>${Object.entries(row).slice(0, 6).map(([k, val]) => `<td class="wrap-cell"><span class="muted">${escapeHtml(k)}</span> ${escapeHtml(String(val))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
-        <label>Result <select data-q="${i}">${RESULTS.map((r) => `<option value="${r}"${(q.result || "") === r ? " selected" : ""}>${r || "(not recorded)"}</option>`).join("")}</select></label>
-        <label>My assessment <select data-a="${i}">${ASSESS.map((r) => `<option value="${r}"${(q.assessment || "") === r ? " selected" : ""}>${r || "(not assessed)"}</option>`).join("")}</select></label>
-        <button type="button" class="secondary-button" data-run="${i}">Run in SIEM</button></div>`).join("") : '<p class="muted">No queries were generated; write them for your data model.</p>'}
-      <form id="df" class="run-form"><label>Notes and findings <textarea name="notes" rows="4">${escapeHtml(h.notes || "")}</textarea></label>
-        <label>Follow-ups <textarea name="follow_ups" rows="2">${escapeHtml(h.follow_ups || "")}</textarea></label>
-        <label>Status <select name="status">${["proposed", "active", "closed"].map((s) => `<option${s === h.status ? " selected" : ""}>${s}</option>`).join("")}</select></label>
-        <label>Outcome <select name="outcome">${["", "confirmed", "not-found", "needs-data"].map((s) => `<option value="${s}"${(h.outcome || "") === s ? " selected" : ""}>${s || "(none yet)"}</option>`).join("")}</select></label>
-        <label><input type="checkbox" name="detection_created"${h.detection_created ? " checked" : ""}> This hunt led to a new detection</label>
-        <div><button type="submit">Save</button> <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=html">Download report (HTML)</a> &middot; <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=md">Markdown for a ticket</a></div></form>`);
-    container.querySelector("#back").addEventListener("click", () => { openHunt = null; show(); });
-    const collect = () => h.queries.map((q, i) => ({ ...q, result: container.querySelector(`[data-q="${i}"]`).value || null, assessment: container.querySelector(`[data-a="${i}"]`).value || null }));
-    container.querySelectorAll("[data-run]").forEach((b) => b.addEventListener("click", async () => {
-      const i = Number(b.dataset.run);
+    body.addEventListener("click", async (e) => {
+      const t = e.target.closest("[data-type]"); if (t) { setUrl({ type: t.dataset.type }); paint(); return; }
+      if (e.target.closest("#hx-ready")) { setUrl({ ready: st.ready === "connected" ? "" : "connected" }); paint(); return; }
+      const tech = e.target.closest("[data-tech]"); if (tech) { setUrl({ technique: tech.dataset.tech }); paint(); return; }
+      if (e.target.closest("[data-tech-clear]")) { setUrl({ technique: "" }); paint(); return; }
+      const why = e.target.closest("[data-why]"); if (why) { open = open === why.dataset.why ? null : why.dataset.why; paint(); return; }
+      if (e.target.closest("#hx-refresh")) { try { const r = await api.huntingSuggestionRefresh(); toast(`Refreshed: ${r.new} new, ${r.updated} updated.`, { tone: "good" }); await fetchList(); paint(); } catch (er) { toast(er.message, { tone: "bad" }); } return; }
+      const d = e.target.closest("[data-do]"); if (!d) return;
+      const id = d.closest("[data-s]").dataset.s;
       try {
-        const pre = await api.huntingRunQuery(h.id, i, {});
-        if (!window.confirm(`Run this read-only search in "${pre.connection}" over the last 24 hours?\n\n${pre.query}`)) return;
-        const done = await api.huntingRunQuery(h.id, i, { confirm: true });
-        flash(`The search found ${done.query.count} event(s).`, "success");
-        show();
-      } catch (e) { flash(e.message, "error"); }
-    }));
-    const ra = container.querySelector("#run-all");
-    if (ra) ra.addEventListener("click", async () => {
-      const body = { earliest: container.querySelector("#ra-earliest").value, justification: container.querySelector("#ra-why").value };
-      try {
-        const pre = await api.huntingRunAll(h.id, body);
-        if (!window.confirm(`${pre.message}\n\nLeads: ${pre.leads.map((l) => l.name).join("; ") || "none to run"}${pre.not_run_because_of_the_cap ? `\n\n${pre.not_run_because_of_the_cap} more are held back by the per-run cap of ${pre.cap}.` : ""}`)) return;
-        const done = await api.huntingRunAll(h.id, { ...body, confirm: true });
-        flash(`Ran ${done.ran} lead(s); ${done.failed} failed.`, done.failed ? "error" : "success");
-        show();
-      } catch (e) { flash(e.message, "error"); }
-    });
-    container.querySelector("#df").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
-      const body = { notes: f.notes.value, follow_ups: f.follow_ups.value, status: f.status.value, detection_created: f.detection_created.checked, queries: collect() };
-      if (f.outcome.value) body.outcome = f.outcome.value;
-      try { await api.huntingUpdate(h.id, body); flash("Saved.", "success"); show(); } catch (err) { flash(err.message, "error"); }
-    });
-  }
-
-  async function alerts() {
-    const { alerts: as } = await api.socAlerts();
-    const a = openAlert && as.find((x) => x.id === openAlert);
-    if (a) return alertDetail(await api.socAlert(a.id));
-    shell(`<div class="table-scroll"><table class="data-table"><thead><tr><th>Alert</th><th>Severity</th><th>Host</th><th>Priority</th><th>Why</th><th>Status</th><th></th></tr></thead><tbody>
-      ${as.length ? as.map((x) => `<tr><td class="wrap-cell">${escapeHtml(x.title)}<br><span class="muted">${escapeHtml(x.source)}${x.rule_name ? " &middot; " + escapeHtml(x.rule_name) : ""}${x.technique ? " &middot; " + escapeHtml(x.technique) : ""}</span></td>
-        <td><span class="badge ${SEV[x.severity]}">${escapeHtml(x.severity)}</span></td><td>${escapeHtml(x.asset || "-")}</td><td><strong>${x.context.priority}</strong></td>
-        <td class="wrap-cell"><span class="muted">${x.context.reasons.map(escapeHtml).join("; ")}</span></td><td>${escapeHtml(x.status)}${x.disposition ? "<br>" + escapeHtml(x.disposition) : ""}</td>
-        <td><button type="button" class="link-button" data-open="${x.id}">Open</button></td></tr>`).join("") : '<tr><td colspan="7" class="empty-state">No alerts yet. Send them from your SIEM or XDR with a <code>soc:write</code> API key.</td></tr>'}</tbody></table></div>`);
-    container.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => { openAlert = Number(b.dataset.open); show(); }));
-  }
-
-  function table(rows, head) {
-    return rows.length ? `<div class="table-scroll"><table class="data-table"><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td class="wrap-cell">${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
-  }
-
-  function invPanel(r) {
-    if (!r) return '<p class="muted">Not investigated yet.</p>';
-    const inv = r.investigation, rep = inv.report;
-    const card = (inner) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 16px;margin:10px 0">${inner}</div>`;
-    const head = card(`<p><span class="badge ${VERDICT[r.verdict]}">${escapeHtml(r.verdict)}</span> confidence ${escapeHtml(r.confidence)} &middot; ${escapeHtml(r.created_at)}. <span class="muted">A recommendation for you to validate; nothing has been closed.</span></p>
-      ${rep ? `<p>${escapeHtml(rep.gist)}</p>` : ""}<ul class="guidance-list">${r.reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>`);
-    if (!rep) return head + `<details><summary>Report to paste into the ticket</summary><pre class="code-block">${escapeHtml(r.report_md)}</pre></details>`;
-    const sec = (title, inner) => `<h4>${title}</h4>${inner}`;
-    const att = rep.attack;
-    return head + card(
-      sec("Historical correlation", rep.history.length ? `<ul class="guidance-list">${rep.history.map((h) => `<li>${escapeHtml(h.text)}</li>`).join("")}</ul>` : '<p class="muted">The alert names no host, user or address to correlate.</p>')
-      + sec("Associated entities", table(rep.entities.map((e) => [escapeHtml(e.kind), escapeHtml(e.value), escapeHtml(e.detail)]), ["Kind", "Value", "Detail"]) || '<p class="muted">None named in the alert.</p>')
-      + sec("ATT&amp;CK", att ? `<p><strong>${escapeHtml(att.id)} ${escapeHtml(att.name || "")}</strong> ${att.tactics.length ? "&middot; " + att.tactics.map(escapeHtml).join(", ") : ""}</p>${att.what_to_check ? `<p>Check next: ${escapeHtml(att.what_to_check)}</p>` : ""}${att.data_sources.length ? `<p class="muted">Look in: ${att.data_sources.map(escapeHtml).join("; ")}</p>` : ""}` : '<p class="muted">The alert carries no technique.</p>')
-      + sec("Attack flow", (rep.flow.stages.length ? `<p class="muted">${rep.flow.stages.map(escapeHtml).join(" &rarr; ")}</p>` : "") + table(rep.flow.steps.map((s) => [escapeHtml(s.at || ""), (s.current ? "<strong>&rarr; " : "") + escapeHtml(s.title) + (s.current ? "</strong>" : ""), escapeHtml(s.tactic || "-"), escapeHtml(s.technique || "-")]), ["When", "Alert", "Tactic", "Technique"]))
-      + sec("Indicators", inv.indicators.length ? table(inv.indicators.map((x) => [escapeHtml(x.value), escapeHtml(x.type), escapeHtml(x.result || "not looked up"), x.malicious == null ? "-" : escapeHtml(String(x.malicious)) + (x.total ? " of " + x.total : "")]), ["Indicator", "Type", "Result", "Flagged"]) + (inv.lookup_note ? `<p class="muted">${escapeHtml(inv.lookup_note)}</p>` : "") : '<p class="muted">None in the alert.</p>')
-      + sec("Blast radius", `<p>${escapeHtml(rep.blast_radius.text)} <span class="muted">Scope: ${escapeHtml(rep.blast_radius.scope)}.</span></p>${rep.blast_radius.exposed.length ? `<ul class="guidance-list">${rep.blast_radius.exposed.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""}`)
-      + sec("What your tools did", `<p>${rep.tool_action.text ? "Reported outcome: " + escapeHtml(rep.tool_action.text) + ". " : ""}${escapeHtml(rep.tool_action.advice)}</p>`)
-      + sec("Recommended actions", `<ul class="guidance-list">${rep.actions.map((x) => `<li><strong>${escapeHtml(x.action)}</strong>: ${escapeHtml(x.why)}</li>`).join("")}</ul><div id="rec-out"></div>`)
-      + (rep.widen_note ? `<p class="callout callout-warn">${escapeHtml(rep.widen_note)}</p>` : "")
-      + sec("References", `<ul class="guidance-list">${rep.references.map((x) => `<li>${escapeHtml(x.kind)}: ${escapeHtml(x.name)}${x.detail ? " <span class='muted'>(" + escapeHtml(x.detail) + ")</span>" : ""}</li>`).join("")}</ul>`)
-      + sec("Follow-ups", `<div id="fu-list">${rep.followups.map((f) => `<p><strong>${escapeHtml(f.question)}</strong><br>${escapeHtml(f.answer)}</p>`).join("") || '<p class="muted">None asked yet.</p>'}</div>
-        <p><select id="fu-kind"><option value="similar-alerts">Similar alerts involving</option><option value="entity-history">History of</option><option value="indicator-sightings">Where else was seen</option></select>
-        <input id="fu-value" placeholder="host, user, address, domain or hash" size="34"> <label><input type="checkbox" id="fu-siem"> also search the SIEM (read-only)</label> <button type="button" id="fu-ask">Ask</button></p>`)
-    ) + `<details><summary>Report to paste into the ticket</summary><pre class="code-block">${escapeHtml(r.report_md)}</pre></details>`;
-  }
-
-  async function alertDetail(a) {
-    const c = a.context;
-    let inv = null;
-    try { inv = await api.socInvestigation(a.id); } catch { inv = null; }
-    shell(`<p><button type="button" class="link-button" id="back">&larr; All alerts</button></p>
-      <h3>${escapeHtml(a.title)}</h3><p><span class="badge ${SEV[a.severity]}">${escapeHtml(a.severity)}</span> ${escapeHtml(a.source)} ${a.rule_name ? "&middot; rule " + escapeHtml(a.rule_name) : ""} ${a.asset ? "&middot; host " + escapeHtml(a.asset) : ""} ${a.technique ? "&middot; " + escapeHtml(a.technique) : ""}</p>
-      <p>${escapeHtml(a.detail || "")}</p>
-      <h3>What Quanta knows about this host</h3>
-      <p>Priority <strong>${c.priority}</strong>: ${c.reasons.map(escapeHtml).join("; ")}.</p>
-      <p>Owner: ${escapeHtml(c.owner || "none recorded")} &middot; ${c.open_findings} open finding(s), ${c.kev_findings} known-exploited.</p>
-      ${c.findings.length ? `<ul class="guidance-list">${c.findings.map((f) => `<li>${f.kev ? '<span class="badge badge-critical">KEV</span> ' : ""}${f.related_to_alert ? '<span class="badge badge-high">matches this alert</span> ' : ""}${escapeHtml(f.id)} ${escapeHtml(f.title || "")} (${escapeHtml(f.severity || "")}${f.cve ? ", " + escapeHtml(f.cve) : ""})</li>`).join("")}</ul>` : ""}
-      <h3>L1 investigation</h3>
-      <p class="muted">Classifies the alert, reads the history of the rule and host, extracts the indicators and weighs the signals. Looking up indicators sends only the public ones to your reputation connection; searching your SIEM is read-only. Both ask first.</p>
-      <p><label><input type="checkbox" id="inv-rep"> Look up indicators</label> <label><input type="checkbox" id="inv-siem"> Search the SIEM for matching events</label> <button type="button" id="inv-run">Investigate</button></p>
-      <p class="muted">Searches look back at most 90 days. <label>Look back <input id="inv-days" type="number" min="1" max="365" placeholder="90" style="width:5em"> days</label> <label>Why (needed past 90 days) <input id="inv-why" size="40" placeholder="at least 20 characters"></label></p>
-      <div id="inv-out">${invPanel(inv)}</div>
-      ${c.runbook ? `<h3>Runbook: ${escapeHtml(c.runbook.title)}</h3><ol>${c.runbook.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol><p class="muted">Quanta shows the steps; responding stays with your team or SOAR.</p>` : ""}
-      <form id="af" class="run-form"><label>Status <select name="status">${["new", "investigating", "closed"].map((s) => `<option${s === a.status ? " selected" : ""}>${s}</option>`).join("")}</select></label>
-        <label>Disposition <select name="disposition">${["", "true-positive", "benign", "false-positive", "needs-data"].map((s) => `<option value="${s}"${(a.disposition || "") === s ? " selected" : ""}>${s || "(none yet)"}</option>`).join("")}</select></label>
-        <label>Assignee <input name="assignee" value="${escapeHtml(a.assignee || "")}" placeholder="name@company.com"></label>
-        <label>Notes <textarea name="notes" rows="3">${escapeHtml(a.notes || "")}</textarea></label><div><button type="submit">Save</button></div></form>`);
-    container.querySelector("#back").addEventListener("click", () => { openAlert = null; show(); });
-    const ask = container.querySelector("#fu-ask");
-    if (ask) ask.addEventListener("click", async () => {
-      const body = { kind: container.querySelector("#fu-kind").value, value: container.querySelector("#fu-value").value, siem: container.querySelector("#fu-siem").checked };
-      try {
-        if (body.siem) {
-          const pre = await api.socFollowUp(a.id, body);
-          if (!window.confirm(pre.message + `\n\nConnection: ${pre.siem_connection}`)) return;
-          body.confirm = true;
+        if (d.dataset.do === "accept") { const r = await api.huntingSuggestionAccept(id); toast("Accepted. The hunt is ready with its queries.", { tone: "good", href: `/hunting?hunt=${r.hunt_id}`, action: "Open hunt" }); await fetchList(); paint(); }
+        else if (d.dataset.do === "dismiss") {
+          const out = await modal({ title: "Dismiss this suggestion", confirmLabel: "Dismiss", description: "It returns only when materially new evidence appears.", body: `<label>Reason<select id="m-r">${[["not-relevant", "Not relevant to us"], ["already-covered", "Already covered"], ["no-data", "No data to test it"], ["accepted-risk", "Accepted risk"], ["other", "Other (say why)"]].map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label><label>Notes<input type="text" id="m-n"></label>`,
+            validate: (m) => (m.querySelector("#m-r").value === "other" && !m.querySelector("#m-n").value.trim() ? "Say why when you choose Other." : ""), collect: (m) => ({ reason: m.querySelector("#m-r").value, notes: m.querySelector("#m-n").value.trim() }) });
+          if (out) { await api.huntingSuggestionDismiss(id, out); toast("Dismissed.", { tone: "good" }); await fetchList(); paint(); }
+        } else if (d.dataset.do === "conclude") {
+          const out = await modal({ title: "Conclude this hunt", confirmLabel: "Conclude", description: "Closes the hunt and teaches the engine which kinds of hunt pay off.", body: `<label>Outcome<select id="m-o"><option value="true-positive">True positive: found something real</option><option value="benign">Benign: explained</option><option value="inconclusive-needs-data">Inconclusive: needs data</option></select></label><label>Notes (required)<textarea id="m-n"></textarea></label>`,
+            validate: (m) => (m.querySelector("#m-n").value.trim() ? "" : "Notes are required."), collect: (m) => ({ outcome: m.querySelector("#m-o").value, notes: m.querySelector("#m-n").value.trim() }) });
+          if (out) { await api.huntingSuggestionConclude(id, out); toast("Concluded.", { tone: "good" }); await fetchList(); paint(); }
+        } else if (d.dataset.do === "promote") {
+          const r = await api.huntingSuggestionPromote(id); toast(`Promoted to a proposed detection use case (${r.promoted_key}). It is not counted as coverage until it is deployed.`, { tone: "good", href: "/hunting?tab=detections", action: "Open" }); await fetchList(); paint();
         }
-        await api.socFollowUp(a.id, body);
-        flash("Added to the report.", "success");
-        show();
-      } catch (e) { flash(e.message, "error"); }
+      } catch (er) { toast(er.message, { tone: "bad", ms: 7000 }); }
     });
-    const rec = container.querySelector("#rec-out");
-    if (rec) api.socRecommendPlaybook(a.id).then((r) => {
-      rec.innerHTML = r.recommendations.length ? `<p class="muted">Playbooks that could carry this out (${escapeHtml(r.basis)}): ${r.recommendations.map((x) => `<strong>${escapeHtml(x.name)}</strong> &mdash; ${escapeHtml(x.why)}${x.needs_second_person ? " Needs a second person." : ""}`).join("; ")}. Start one on the SOAR page; a dry run comes first.</p>` : "";
-    }).catch(() => {});
-    container.querySelector("#inv-run").addEventListener("click", async () => {
-      const body = { reputation: container.querySelector("#inv-rep").checked, siem: container.querySelector("#inv-siem").checked };
-      const days = Number(container.querySelector("#inv-days").value);
-      if (days) { body.lookback_days = days; body.justification = container.querySelector("#inv-why").value; }
-      try {
-        if (body.reputation || body.siem) {
-          const pre = await api.socInvestigate(a.id, body);
-          const msg = (pre.indicators_that_would_be_sent && pre.indicators_that_would_be_sent.length ? `These public indicators will be sent to "${pre.reputation_connection}":\n${pre.indicators_that_would_be_sent.join("\n")}\n\n` : "") + (pre.siem_connection ? `Read-only searches will run in "${pre.siem_connection}".\n\n` : "") + "Continue?";
-          if (!window.confirm(msg)) return;
-          body.confirm = true;
-        }
-        await api.socInvestigate(a.id, body);
-        flash("Investigation recorded.", "success");
-        show();
-      } catch (e) { flash(e.message, "error"); }
-    });
-    container.querySelector("#af").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target, body = { status: f.status.value, assignee: f.assignee.value, notes: f.notes.value };
-      if (f.disposition.value) body.disposition = f.disposition.value;
-      try { await api.socUpdateAlert(a.id, body); flash("Saved.", "success"); show(); } catch (err) { flash(err.message, "error"); }
+    const off = live.subscribe("activity", debounce(async () => { if (alive && !modalOpenNow()) { try { await fetchList(); paint(); stamp(); } catch { /* next time */ } } }, 1500));
+    onCleanup(off);
+  }
+  const modalOpenNow = () => !!document.querySelector(".sx-modal-root");
+
+  // ------------------------------------------------------------------ ATT&CK matrix
+  async function matrix() {
+    body.innerHTML = '<div class="ui-skel ui-skel-table"></div>';
+    let M;
+    try { M = await api.huntingAttackMatrix(); } catch (e) { body.innerHTML = `<div class="sx-callout warn">${escapeHtml(e.message)}</div>`; return; }
+    stamp();
+    const f = { state: "", observedOnly: true, q: "" };
+    let sel = st.technique || "";
+    const draw = () => {
+      const agg = aggregateMatrix(M, { state: f.state, observedOnly: f.observedOnly, q: f.q });
+      const t = agg.totals;
+      body.innerHTML = `<div class="sx-row"><div class="sx-kpis" style="flex:1">
+          <div class="ui-kpi"><div class="ui-kpi-top"><span class="ui-kpi-label">Observed techniques</span></div><div class="ui-kpi-value">${t.observed || 0}</div><div class="ui-kpi-foot"><span class="ui-muted" style="font-size:.76rem">in open findings or alerts</span></div></div>
+          <div class="ui-kpi ${agg.observedCoveragePct === null ? "" : agg.observedCoveragePct >= 60 ? "ui-kpi-good" : "ui-kpi-warn"}"><div class="ui-kpi-top"><span class="ui-kpi-label">Covered by a rule</span></div><div class="ui-kpi-value">${agg.observedCoveragePct === null ? "n/a" : agg.observedCoveragePct + "%"}</div><div class="ui-kpi-foot"><span class="ui-muted" style="font-size:.76rem">${agg.rulesRecorded ? `${t.observed_covered || 0} of ${t.observed || 0} observed` : "no detection rules recorded: coverage cannot be judged"}</span></div></div>
+          <div class="ui-kpi"><div class="ui-kpi-top"><span class="ui-kpi-label">Hunted, no rule</span></div><div class="ui-kpi-value">${t.observed_hunted || 0}</div></div>
+          <div class="ui-kpi ${t.observed_gap ? "ui-kpi-danger" : "ui-kpi-good"}"><div class="ui-kpi-top"><span class="ui-kpi-label">Exposed, no rule or hunt</span></div><div class="ui-kpi-value">${t.observed_gap || 0}</div></div></div></div>
+        <div class="sx-toolbar"><div class="hx-legend">${CELL_STATES.map((s) => `<button type="button" class="hx-fchip" data-state="${s}" aria-pressed="${f.state === s}"><i style="--cc:var(--${{ covered: "sx-good", hunted: "sx-low", gap: "sx-bad", quiet: "border" }[s]})"></i> ${STATE_LABEL[s]}</button>`).join("")}</div>
+          <button type="button" class="hx-fchip" id="mx-obs" aria-pressed="${f.observedOnly}">Observed only</button><input type="search" class="sx-field" id="mx-q" placeholder="Filter by technique" value="${escapeHtml(f.q)}" aria-label="Filter techniques"></div>
+        <p class="ui-muted" style="margin:0;font-size:.8rem">Cell shade shows how many open findings and alerts involve the technique. ${escapeHtml(M.note)}</p>
+        ${agg.columns.length ? `<div class="hx-matrix-wrap"><div class="hx-matrix">${agg.columns.map((c) => `<div class="hx-mcol"><h4>${escapeHtml(c.tactic)}</h4><span class="tot">${c.observed} observed · ${c.covered} covered</span><div class="hx-cells">${c.cells.map((x) => `<button type="button" class="sx-cell s-${x.state} h${heatLevel(x.exposure, agg.max)}${sel === x.technique_id ? " sel" : ""}" data-cell="${escapeHtml(x.technique_id)}" ${tipAttr(cellTitle(x))} aria-label="${escapeHtml(cellTitle(x))}"><b>${escapeHtml(x.technique_id)}</b><span class="n">${escapeHtml(x.name)}</span></button>`).join("")}</div></div>`).join("")}</div></div>` : `<div class="sx-panel">${emptyState({ title: "Nothing to show", body: "No technique matches these filters, or nothing is tagged yet. Findings and alerts carry ATT&CK techniques when they are ingested.", iconName: "search" })}</div>`}
+        <div id="mx-detail">${sel ? detail(sel) : '<p class="ui-muted">Select a technique to see the detections, hunts, findings and suggestions behind it.</p>'}</div>`;
+    };
+    const detail = (tid) => {
+      const c = M.techniques.find((x) => x.technique_id === tid); if (!c) return "";
+      return `<div class="hx-detail"><h3 style="margin:0">${escapeHtml(c.technique_id)} ${escapeHtml(c.name)} ${chip(STATE_LABEL[c.state], { tone: c.state === "covered" ? "good" : c.state === "gap" ? "critical" : c.state === "hunted" ? "info" : "neutral" })}</h3>
+        <div class="ui-muted">${escapeHtml(c.tactic)}${c.in_library ? " · Quanta has a hunt query for this technique" : ""}</div>
+        <div class="hx-facts"><span><b>${c.rules.length}</b> enabled rule(s)${c.rules.length ? ": " + escapeHtml(c.rules.join(", ")) : ""}</span>${c.rules_disabled.length ? `<span><b>${c.rules_disabled.length}</b> disabled</span>` : ""}<span><b>${c.findings}</b> open finding(s)</span><span><b>${c.alerts}</b> alert(s)</span></div>
+        <div class="sx-row">${c.hunts.map((h) => `<a class="ui-btn ui-btn-ghost sx-btn-sm" href="/hunting?hunt=${h}" data-link>Hunt #${h}</a>`).join("")}${c.suggestions.length ? `<a class="ui-btn sx-btn-sm" href="/hunting?tab=suggested&technique=${encodeURIComponent(c.technique_id)}" data-link>${c.suggestions.length} suggested hunt(s)</a>` : ""}${c.findings ? `<a class="ui-btn ui-btn-ghost sx-btn-sm" href="/queue?q=${encodeURIComponent(c.technique_id)}" data-link>Findings</a>` : ""}<a class="ui-btn ui-btn-ghost sx-btn-sm" href="/hunting?tab=detections" data-link>Detection engineering</a></div></div>`;
+    };
+    draw();
+    const typeQ = debounce((v) => { f.q = v; draw(); const el = body.querySelector("#mx-q"); if (el) { el.focus(); el.setSelectionRange(v.length, v.length); } }, 200);
+    body.addEventListener("input", (e) => { if (e.target.id === "mx-q") typeQ(e.target.value); });
+    body.addEventListener("click", (e) => {
+      const s = e.target.closest("[data-state]"); if (s) { f.state = f.state === s.dataset.state ? "" : s.dataset.state; draw(); return; }
+      if (e.target.closest("#mx-obs")) { f.observedOnly = !f.observedOnly; draw(); return; }
+      const c = e.target.closest("[data-cell]"); if (c) { sel = c.dataset.cell; setUrl({ technique: sel }); draw(); const d = body.querySelector("#mx-detail"); if (d) d.scrollIntoView({ block: "nearest" }); }
     });
   }
 
-  async function detections() {
-    const o = await api.detectionsOverview();
-    shell(`<div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">rules judged</div><div class="kpi-value">${o.totals.rules}</div></div>
-        <div class="kpi-card kpi-danger"><div class="kpi-label">noisy or critical noise</div><div class="kpi-value">${o.tier_counts.noisy + o.tier_counts.critical_noise}</div></div>
-        <div class="kpi-card"><div class="kpi-label">overall noise rate</div><div class="kpi-value">${pct(o.totals.noise_rate)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">ATT&CK coverage of your estate</div><div class="kpi-value">${o.coverage.pct === null ? "-" : o.coverage.pct + "%"}</div></div>
-      </div>
-      <p class="muted">${escapeHtml(o.note)} Window: ${o.window_days} days. <button type="button" class="link-button" id="snap">Record a snapshot</button> (one is also taken weekly) &middot;
-        <a style="color:var(--brand-accent)" href="/api/detections/report?format=html">Summary report</a></p>
-      <div class="table-scroll"><table class="data-table"><thead><tr><th>Rule</th><th>Health</th><th>Recommendation</th><th>Decided</th><th>TP</th><th>Noise</th><th>Trend (noise)</th><th></th></tr></thead><tbody>
-      ${o.rules.length ? o.rules.map((r, i) => { const m = r.metrics; return `<tr><td class="wrap-cell"><strong>${escapeHtml(r.rule)}</strong><br><span class="muted">${escapeHtml(r.platform || "not in the inventory")}${r.techniques.length ? " &middot; " + r.techniques.map(escapeHtml).join(", ") : ""}</span></td>
-        <td><span class="badge ${TIER[m.tier]}">${escapeHtml(m.tier_label)}</span></td><td>${escapeHtml(m.recommendation)}</td><td>${m.decided}</td><td>${pct(m.tp_rate)}</td><td>${pct(m.noise_rate)}</td>
-        <td class="muted">${m.trend.map((w) => (w.noise_rate === null ? "·" : Math.round(w.noise_rate * 100))).join(" ")}</td>
-        <td><button type="button" class="link-button" data-rule="${i}">Details</button></td></tr>`; }).join("") : '<tr><td colspan="8" class="empty-state">No rules or alerts yet. Import Sigma rules below and send alerts that name their rule.</td></tr>'}</tbody></table></div>
-      <div id="rule-detail"></div>
-      <h3>ATT&CK coverage</h3>
-      <p>${o.coverage.estate_techniques ? `${o.coverage.estate_covered} of ${o.coverage.estate_techniques} techniques tagged on your open findings are claimed by an enabled rule.` : "No techniques are tagged on current findings."}</p>
-      ${o.coverage.gaps.length ? `<ul class="guidance-list">${o.coverage.gaps.map((g) => `<li>${escapeHtml(g.technique_id)} ${escapeHtml(g.technique_name)} - no enabled rule${g.hunt_queries ? "; hunt queries exist" : "; no hunt queries either"}</li>`).join("")}</ul>` : ""}
-      <h3>Rule inventory</h3>
-      <form id="imp" class="run-form"><label>Import Sigma rules (YAML file) <input type="file" name="file" accept=".yml,.yaml,.txt" required></label><div><button type="submit">Import</button></div></form>
-      <form id="addr" class="run-form"><label>Or add a rule by name <input name="name" required placeholder="the rule name exactly as your alerts carry it"></label>
-        <label>Platform <input name="platform" placeholder="Splunk, XSIAM, Sentinel..."></label><label>ATT&CK techniques (comma separated) <input name="techniques" placeholder="T1190, T1059"></label><div><button type="submit">Add</button></div></form>
-      ${o.history.length ? `<p class="muted">Snapshots: ${o.history.map((s) => escapeHtml(s.created_at.slice(0, 10)) + " (" + s.totals.rules + " rules, noise " + pct(s.totals.noise_rate) + ")").join("; ")}</p>` : ""}`);
-    container.querySelector("#snap").addEventListener("click", async () => { try { await api.detectionsAssess(); flash("Snapshot recorded.", "success"); show(); } catch (e) { flash(e.message, "error"); } });
-    container.querySelectorAll("[data-rule]").forEach((b) => b.addEventListener("click", () => {
-      const r = o.rules[Number(b.dataset.rule)], m = r.metrics, tu = r.tuning;
-      container.querySelector("#rule-detail").innerHTML = `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 16px;margin:14px 0"><h3>${escapeHtml(r.rule)}: ${escapeHtml(m.recommendation)}</h3>
-        <p>${m.alerts} alert(s), ${m.decided} decided: ${m.tp} true positive, ${m.benign} benign, ${m.fp} false positive. Median time to close ${m.median_resolution_hours ?? "n/a"} hours.</p>
-        ${m.recurring_noise_entities.length ? `<ul class="guidance-list">${m.recurring_noise_entities.map((e) => `<li>${escapeHtml(e.kind)} ${escapeHtml(e.value)}: ${e.alerts} noise alert(s), ${pct(e.share)} of the noise</li>`).join("")}</ul>` : ""}
-        ${tu ? `<p><strong>Suggested change:</strong> exclude ${tu.exclude_hosts.map(escapeHtml).join(", ")}. ${escapeHtml(tu.basis)} Estimated noise reduction ${pct(tu.estimated_noise_reduction)}. <span class="muted">${escapeHtml(tu.note || "")}</span></p>
-          ${tu.before ? `<div style="display:flex;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:280px"><strong>Before</strong><pre class="code-block">${escapeHtml(tu.before)}</pre></div><div style="flex:1;min-width:280px"><strong>After</strong><pre class="code-block">${escapeHtml(tu.after)}</pre></div></div>` : ""}` : '<p class="muted">No single host accounts for enough of the noise to suggest an exclusion.</p>'}
-        <p><a style="color:var(--brand-accent)" href="/api/detections/report?rule=${encodeURIComponent(r.rule)}&format=html">Tuning report (HTML)</a> &middot; <a style="color:var(--brand-accent)" href="/api/detections/report?rule=${encodeURIComponent(r.rule)}">Markdown for a ticket</a>
-          ${r.rule_id ? ` &middot; <button type="button" class="link-button" data-toggle="${r.rule_id}">${r.enabled ? "Disable in inventory" : "Enable in inventory"}</button> <button type="button" class="link-button danger-link" data-del="${r.rule_id}">Remove</button>` : ""}</p></div>`;
-      container.querySelectorAll("[data-toggle]").forEach((t) => t.addEventListener("click", async () => { try { await api.detectionsToggle(Number(t.dataset.toggle), !r.enabled); show(); } catch (e) { flash(e.message, "error"); } }));
-      container.querySelectorAll("[data-del]").forEach((t) => t.addEventListener("click", async () => { if (window.confirm("Remove this rule from the inventory?")) { try { await api.detectionsDelete(Number(t.dataset.del)); show(); } catch (e) { flash(e.message, "error"); } } }));
-    }));
-    container.querySelector("#imp").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      try { const r = await api.detectionsImport(await e.target.file.files[0].text()); flash(`${r.imported} rule(s) imported.`, "success"); show(); } catch (err) { flash(err.message, "error"); }
-    });
-    container.querySelector("#addr").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const f = e.target;
-      try { await api.detectionsAddRule({ name: f.name.value, platform: f.platform.value || null, techniques: f.techniques.value.split(",").map((x) => x.trim()).filter(Boolean) }); show(); } catch (err) { flash(err.message, "error"); }
-    });
+  // ------------------------------------------------------------------ active hunts
+  async function active() {
+    body.innerHTML = '<div class="hx-active"><div class="ui-skel ui-skel-card"></div><div class="ui-skel ui-skel-card"></div></div>';
+    const draw = async () => {
+      let list;
+      try { list = (await api.huntingList()).hunts; } catch (e) { body.innerHTML = `<div class="sx-callout warn">${escapeHtml(e.message)}</div>`; return; }
+      const live_ = list.filter((h) => h.status !== "closed");
+      const reports = await Promise.all(live_.slice(0, 12).map((h) => api.huntReport(h.id).catch(() => null)));
+      if (!alive) return;
+      stamp();
+      body.innerHTML = `${live_.length ? `<div class="hx-active">${live_.slice(0, 12).map((h, i) => { const r = reports[i]; const p = huntProgress(r && r.counts); return `<a class="hx-active-card" href="/hunting?hunt=${h.id}" data-link><div class="sx-row">${chip(h.status, { tone: "info" })}${r ? chip(verdictText(r.verdict.label), { tone: r.verdict.label === "confirmed" ? "critical" : r.verdict.label === "needs-investigation" ? "warn" : r.verdict.label === "no-ioc-match" ? "good" : "neutral" }) : ""}</div>
+          <b>${escapeHtml(h.title)}</b><span class="hx-prog" role="progressbar" aria-valuenow="${p.pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Trial hits run"><i style="width:${p.pct}%"></i></span><span class="ui-muted" style="font-size:.8rem">${escapeHtml(p.label)}${r ? ` · ${r.counts.needs_investigation} to investigate · ${r.counts.hits} hit(s)` : ""}</span></a>`; }).join("")}</div>` : `<div class="sx-panel">${emptyState({ title: "No active hunts", body: "Accept a suggested hunt to start one. Each hunt becomes a report with a row per trial hit.", actionLabel: "See suggested hunts", actionHref: "/hunting?tab=suggested", iconName: "search" })}</div>`}
+        ${list.some((h) => h.status === "closed") ? `<section class="sx-panel" style="margin-top:12px"><h3>Closed hunts</h3><div class="sx-table-wrap"><table class="sx-table"><tbody>${list.filter((h) => h.status === "closed").slice(0, 15).map((h) => `<tr><td><a href="/hunting?hunt=${h.id}" data-link>#${h.id} ${escapeHtml(h.title)}</a></td><td>${escapeHtml(h.outcome || "")}</td></tr>`).join("")}</tbody></table></div></section>` : ""}`;
+    };
+    await draw();
+    const t = setInterval(() => { if (!document.hidden && alive) draw(); }, 20000);
+    onCleanup(() => clearInterval(t));
+    onCleanup(live.subscribe("activity", debounce(() => { if (alive) draw(); }, 1500)));
   }
-
-  async function show() {
-    try { await { suggested, overview, intel, proposals, hunts, alerts, detections }[tab](); } catch (err) { shell(`<p class="callout callout-warn">${escapeHtml(err.message)}</p>`); }
-  }
-  await show();
 }

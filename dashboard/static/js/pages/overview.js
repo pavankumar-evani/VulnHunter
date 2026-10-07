@@ -14,6 +14,7 @@ import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../ins
 import { icon } from "../icons.js";
 import { kpiTile, dataAgeBadge, mountDataAge, mountCounters, debounce } from "../ui.js";
 import { live } from "../live.js";
+import { kpis as socKpis } from "../socLogic.js";
 
 export const title = "Security Posture Overview";
 
@@ -796,6 +797,18 @@ async function buildOverviewAiStats() {
   };
 }
 
+// "Today in the SOC": a compact card from the incident list, shown only to people who can read it (administrators on a licence that covers the SOC module).
+async function socTodayCard(bodyEl) {
+  try {
+    const [open, auto] = await Promise.all([api.socIncidents({ open_only: "true" }), api.socIncidents({ status: "auto_closed" })]);
+    if (!bodyEl.isConnected) return;
+    const k = socKpis([...open.incidents, ...auto.incidents], "");
+    const host = bodyEl.querySelector(".home-kpis");
+    if (!host) return;
+    host.insertAdjacentHTML("afterend", `<section class="ui-card" aria-label="Today in the SOC"><div class="ui-card-head"><div><h3>Today in the SOC</h3><p class="ui-muted">${k.open ? `${k.open} open incident(s)` : "No open incidents"}${k.unassigned ? `, ${k.unassigned} waiting for an owner` : ""}${k.breached ? `, ${k.breached} past their service level` : k.atRisk ? `, ${k.atRisk} close to breaching` : ""}. ${k.autoClosedToday} auto-closed today.</p></div><a class="ui-btn ui-btn-ghost" href="/soc" data-link>Open the SOC</a></div></section>`);
+  } catch { /* not an administrator, or the SOC module is not licensed: nothing to show */ }
+}
+
 export async function render(container) {
   const topbarExtra = document.getElementById("topbar-extra");
   let lastFetched = null;
@@ -825,6 +838,7 @@ export async function render(container) {
     const rankings = buildTopRankings(queue.findings, ownerByAssetName, teamByAssetName);
     bodyEl.innerHTML = renderBody(data, queue, vh, rankings, assetsData.assets, teamByAssetName, remediationApprovalsData.approvals);
     renderLiveBadge();
+    socTodayCard(bodyEl);
     mountDataAge(bodyEl);
     if (!painted) { painted = true; mountCounters(bodyEl); } // count up once; the 20-second refresh must not replay it
     wireTopRankings(bodyEl, "overview", rankings);
