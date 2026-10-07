@@ -16,43 +16,72 @@ queries:
     needs: [host]
     lookback_days: 7
     spl: 'search host="{host}" | stats count by sourcetype | sort - count | head 10'
+    kql: 'union * | where Computer =~ "{host}" or DeviceName =~ "{host}" | summarize count() by Type | top 10 by count_'
+    esql: 'FROM logs-* | WHERE TO_LOWER(host.name) == "{host}" | STATS count = COUNT(*) BY data_stream.dataset | SORT count DESC | LIMIT 10'
+    udm: 'principal.hostname = "{host}" nocase OR target.hostname = "{host}" nocase'
+    fql: 'hosts hostname:''{host}'''
   - name: Earlier activity by the user
     for: []
     needs: [user]
     lookback_days: 90
     spl: 'search user="{user}" | stats count, dc(host) as hosts by action | sort - count | head 10'
+    kql: 'union * | where tostring(pack_all()) has "{user}" | summarize count = count(), hosts = dcount(Computer) by Type | top 10 by count'
+    esql: 'FROM logs-* | WHERE TO_LOWER(user.name) == "{user}" | STATS count = COUNT(*), hosts = COUNT_DISTINCT(host.name) BY event.action | SORT count DESC | LIMIT 10'
+    udm: 'principal.user.userid = "{user}" nocase'
   - name: Where else the address was seen
     for: []
     needs: [ip]
     lookback_days: 90
     spl: 'search ("{ip}") | stats count, dc(host) as hosts, min(_time) as first_seen, max(_time) as last_seen'
+    kql: 'search "{ip}" | summarize count = count(), hosts = dcount(Computer), first_seen = min(TimeGenerated), last_seen = max(TimeGenerated)'
+    esql: 'FROM logs-* | WHERE source.ip == "{ip}" OR destination.ip == "{ip}" | STATS count = COUNT(*), hosts = COUNT_DISTINCT(host.name), first_seen = MIN(@timestamp), last_seen = MAX(@timestamp)'
+    udm: 'principal.ip = "{ip}" OR target.ip = "{ip}"'
+    fql: 'hosts local_ip:''{ip}'''
   - name: Where else the domain was seen
     for: []
     needs: [domain]
     lookback_days: 90
     spl: 'search ("{domain}") | stats count, dc(host) as hosts'
+    kql: 'search "{domain}" | summarize count = count(), hosts = dcount(Computer)'
+    esql: 'FROM logs-* | WHERE dns.question.name == "{domain}" OR url.domain == "{domain}" | STATS count = COUNT(*), hosts = COUNT_DISTINCT(host.name)'
+    udm: 'network.dns.questions.name = "{domain}" nocase'
   - name: Where else the file hash was seen
     for: []
     needs: [hash]
     lookback_days: 90
     spl: 'search ("{hash}") | stats count, dc(host) as hosts'
+    kql: 'search "{hash}" | summarize count = count(), hosts = dcount(Computer)'
+    esql: 'FROM logs-* | WHERE file.hash.sha256 == "{hash}" OR file.hash.md5 == "{hash}" | STATS count = COUNT(*), hosts = COUNT_DISTINCT(host.name)'
+    udm: 'target.file.sha256 = "{hash}" OR target.file.md5 = "{hash}"'
   - name: Child processes started on the host
     for: [endpoint, T1059, T1218, T1047]
     needs: [host]
     lookback_days: 7
     spl: 'search host="{host}" (EventCode=4688 OR EventCode=1) | stats count by ParentImage, Image | sort - count | head 15'
+    kql: 'union * | where Computer =~ "{host}" or DeviceName =~ "{host}" | where EventID in (4688) or isnotempty(InitiatingProcessFileName) | summarize count() by InitiatingProcessFileName, FileName | top 15 by count_'
+    esql: 'FROM logs-* | WHERE TO_LOWER(host.name) == "{host}" AND process.name IS NOT NULL | STATS count = COUNT(*) BY process.parent.name, process.name | SORT count DESC | LIMIT 15'
+    udm: 'principal.hostname = "{host}" nocase AND metadata.event_type = "PROCESS_LAUNCH"'
   - name: Failed and successful logons for the user
     for: [identity, T1110, T1078, T1556]
     needs: [user]
     lookback_days: 30
     spl: 'search user="{user}" (EventCode=4624 OR EventCode=4625) | stats count by EventCode, src_ip | sort - count | head 15'
+    kql: 'SecurityEvent | where Account has "{user}" | where EventID in (4624, 4625) | summarize count() by EventID, IpAddress | top 15 by count_'
+    esql: 'FROM logs-* | WHERE TO_LOWER(user.name) == "{user}" AND event.code IN ("4624", "4625") | STATS count = COUNT(*) BY event.code, source.ip | SORT count DESC | LIMIT 15'
+    udm: 'target.user.userid = "{user}" nocase AND metadata.event_type = "USER_LOGIN"'
   - name: Connections from the host to the address
     for: [network, T1071, T1105, T1041]
     needs: [host, ip]
     lookback_days: 30
     spl: 'search host="{host}" ("{ip}") | stats count, values(dest_port) as ports by dest_ip'
+    kql: 'union * | where Computer =~ "{host}" or DeviceName =~ "{host}" | where tostring(pack_all()) has "{ip}" | summarize count() by Type'
+    esql: 'FROM logs-* | WHERE TO_LOWER(host.name) == "{host}" AND destination.ip == "{ip}" | STATS count = COUNT(*) BY destination.port'
+    udm: 'principal.hostname = "{host}" nocase AND target.ip = "{ip}"'
   - name: Cloud API calls by the user
     for: [cloud, T1580, T1526, T1078]
     needs: [user]
     lookback_days: 30
     spl: 'search user="{user}" sourcetype=aws:cloudtrail | stats count by eventName | sort - count | head 15'
+    kql: 'AzureActivity | where Caller has "{user}" | summarize count() by OperationNameValue | top 15 by count_'
+    esql: 'FROM logs-* | WHERE TO_LOWER(user.name) == "{user}" AND event.dataset LIKE "*cloud*" | STATS count = COUNT(*) BY event.action | SORT count DESC | LIMIT 15'
+    udm: 'principal.user.userid = "{user}" nocase AND metadata.product_name = "AWS CloudTrail"'

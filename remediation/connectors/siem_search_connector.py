@@ -25,20 +25,10 @@ import time
 import requests
 
 from remediation.connectors import url_safety
-
-DEFAULT_MAX_ROWS = 25
-HARD_MAX_ROWS = 100
-DEFAULT_DEADLINE_SECONDS = 90
+from remediation.hunting import search_base
+from remediation.hunting.search_base import DEFAULT_DEADLINE_SECONDS, DEFAULT_MAX_ROWS, HARD_MAX_ROWS, SearchError as SiemSearchError, SearchRefused  # noqa: F401 - names kept for older callers
 _FORBIDDEN = ("delete", "outputlookup", "outputcsv", "collect", "mcollect", "sendemail", "sendalert", "script", "run", "rest", "map", "dbxquery",
               "tscollect", "outputtext", "audit", "loadjob", "savedsearch", "inputlookup", "fit", "apply", "crawl")
-
-
-class SearchRefused(ValueError):
-    """The query is not one Quanta will send."""
-
-
-class SiemSearchError(RuntimeError):
-    pass
 
 
 def check_query(query):
@@ -56,20 +46,19 @@ def check_query(query):
     return q
 
 
-def _clip(row):
-    out = {}
-    for k, v in list(row.items())[:30]:
-        if k.startswith("_") and k not in ("_time", "_raw"):
-            continue
-        s = v if isinstance(v, str) else str(v)
-        out[k] = s if len(s) <= 300 else s[:297] + "..."
-    return out
+_clip = search_base.clip_row
 
 
-class SplunkSearchConnector:
+class SplunkSearchConnector(search_base.SearchConnector):
+    """The Splunk implementation of search_base.SearchConnector (language splunk-spl). Splunk takes relative times such as -24h natively, so `earliest` and
+    `latest` are passed through as given."""
+    language = "splunk-spl"
+    type = "splunk-search"
+
     def __init__(self, base_url, token=None, username=None, password=None, verify_tls=True, session=None, clock=time.monotonic, sleep=time.sleep):
         if not token and not (username and password):
             raise ValueError("A Splunk token, or a username and password, is required")
+        self.secrets = (token, password)
         self.base_url = base_url.rstrip("/")
         self.session = session or url_safety.safe_session()
         self.session.verify = bool(verify_tls)
@@ -79,6 +68,9 @@ class SplunkSearchConnector:
             self.session.auth = (username, password)
         self._clock, self._sleep = clock, sleep
 
+    def check_query(self, query):
+        return check_query(query)
+
     def test_connection(self):
         resp = self.session.get(f"{self.base_url}/services/server/info", params={"output_mode": "json"}, timeout=20)
         resp.raise_for_status()
@@ -86,7 +78,7 @@ class SplunkSearchConnector:
         return {"server": entry.get("serverName"), "version": entry.get("version")}
 
     def search(self, query, earliest="-24h", latest="now", max_rows=DEFAULT_MAX_ROWS, deadline=DEFAULT_DEADLINE_SECONDS):
-        """Runs the search and returns {count, rows, truncated, sid}. Raises SearchRefused or SiemSearchError."""
+        """Runs the search and returns the common envelope {rows, count, truncated, took_ms, query_language} plus the Splunk `sid`. Raises SearchRefused or SiemSearchError."""
         q = check_query(query)
         max_rows = max(1, min(int(max_rows), HARD_MAX_ROWS))
         start = self._clock()
@@ -117,4 +109,4 @@ class SplunkSearchConnector:
             r = self.session.get(f"{self.base_url}/services/search/jobs/{sid}/results", params={"output_mode": "json", "count": max_rows}, timeout=60)
             r.raise_for_status()
             rows = [_clip(x) for x in (r.json().get("results") or [])][:max_rows]
-        return {"count": count, "rows": rows, "truncated": count > len(rows), "sid": sid}
+        return search_base.envelope(rows, self.language, (self._clock() - start) * 1000, count=count, truncated=count > len(rows), sid=sid)

@@ -873,6 +873,34 @@ threat_intel_reports = Table(
     Column("hunt_id", Integer, nullable=True),
     Column("received_by", String, nullable=True),
     Column("received_at", String, nullable=False),
+    # added by migration 13 (report watcher): when the source published it, when Quanta fetched it, where it came from, and why it triggered a hunt
+    Column("published_at", String, nullable=True),
+    Column("fetched_at", String, nullable=True),
+    Column("source_id", Integer, nullable=True),
+    Column("external_id", String, nullable=True),
+    Column("url", String, nullable=True),
+    Column("trigger_json", Text, nullable=True),
+)
+
+intel_sources = Table(
+    "intel_sources", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String, nullable=False, unique=True),
+    Column("kind", String, nullable=False),            # feed (RSS, Atom or JSON, public) or taxii (a stored taxii connection + a collection)
+    Column("url", String, nullable=True),
+    Column("connection_id", Integer, nullable=True),
+    Column("collection_id", String, nullable=True),
+    Column("enabled", Integer, nullable=False, default=1),
+    Column("etag", String, nullable=True),
+    Column("last_modified", String, nullable=True),
+    Column("added_after", String, nullable=True),      # TAXII cursor
+    Column("last_poll_at", String, nullable=True),
+    Column("last_status", String, nullable=True),      # ok | not-modified | error
+    Column("last_error", String, nullable=True),
+    Column("last_new", Integer, nullable=True),
+    Column("total_reports", Integer, nullable=False, default=0),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
 )
 
 soc_investigations = Table(
@@ -1506,7 +1534,7 @@ def ensure_schema(engine):
             activity_log, ai_usage_log, asset_ownership, users, live_data_findings,
             teams, finding_assignments, support_tickets, support_ticket_comments, connections, api_keys, ticket_links, leases, jobs, file_snapshots, asset_controls, ai_usage_events, ai_apps, ai_budgets, threat_models, threat_reviews,
             grc_frameworks, grc_controls, grc_risks, grc_evidence, grc_attestations, grc_policies, grc_policy_acks,
-            hunts, hunt_hypotheses, hunt_hypothesis_events, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
+            hunts, hunt_hypotheses, hunt_hypothesis_events, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, intel_sources, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
             applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log, asm_assets, asm_runs, asm_changes, asm_scope, asm_settings, soc_incidents, soc_incident_alerts, soc_incident_events, investigation_reports, incident_followups, hunt_allowlist, hunt_report_meta, insights, insight_baselines,
         ])

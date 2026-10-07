@@ -19,7 +19,7 @@ OUTCOMES = ("confirmed", "not-found", "needs-data")
 ALERT_STATUSES = ("new", "investigating", "closed")
 DISPOSITIONS = ("true-positive", "benign", "false-positive", "needs-data")
 SEVERITIES = ("Critical", "High", "Medium", "Low", "Informational")
-QUERY_RESULTS = ("hits", "no-hits", "not-run", "error")
+QUERY_RESULTS = ("hits", "no-hits", "not-run", "error", "not-expressible")
 ASSESSMENTS = ("benign", "suspicious", "malicious")
 
 

@@ -36,6 +36,11 @@ from remediation.connectors.qualys_connector import QualysConnector
 from remediation.connectors.reputation_connector import ReputationConnector
 from remediation.connectors.servicenow_connector import ServiceNowConnector
 from remediation.connectors.siem_search_connector import SplunkSearchConnector
+from remediation.connectors.sentinel_search_connector import SentinelSearchConnector
+from remediation.connectors.chronicle_search_connector import ChronicleSearchConnector
+from remediation.connectors.elastic_search_connector import ElasticSearchConnector
+from remediation.connectors.falcon_search_connector import FalconSearchConnector
+from remediation.connectors.taxii_connector import TaxiiConnector
 from remediation.connectors.splunk_connector import SplunkConnector
 from remediation.connectors.webhook_connector import NotifyWebhook, PolicyWebhook, ResponseWebhook
 from remediation.connectors.tenable_connector import TenableConnector
@@ -333,6 +338,116 @@ SPECS.update({
                 "The public key is rate limited.",
         "note": "Not synced on a schedule. Used on demand when an alert is investigated.",
         "build": lambda c: ReputationConnector(c["api_key"]), "test": lambda c: ReputationConnector(c["api_key"]).test_connection(),
+    },
+})
+
+
+SEARCH_TYPES = ("splunk-search", "sentinel-search", "chronicle-search", "elastic-search", "falcon-search")   # read-only search connections, in the order one is chosen when none is named
+_SEARCH_NOTE = "Not synced on a schedule. Used on demand from Hunting & SOC, after an administrator confirms."
+
+
+def _need(values, *names):
+    miss = [n for n in names if not values.get(n)]
+    if miss:
+        raise ValueError("Missing: " + ", ".join(miss))
+
+
+def _validate_sentinel(v):
+    if not v.get("access_token"):
+        _need(v, "tenant_id", "client_id", "client_secret")
+
+
+def _sentinel(c):
+    return SentinelSearchConnector(c["workspace_id"], c.get("tenant_id"), c.get("client_id"), c.get("client_secret"), c.get("access_token") or None,
+                                   base_url=c.get("base_url") or "https://api.loganalytics.azure.com")
+
+
+def _chronicle(c):
+    return ChronicleSearchConnector(c["base_url"], c["instance"], c["access_token"])
+
+
+def _validate_elastic(v):
+    if not (v.get("api_key") or v.get("token") or (v.get("username") and v.get("password"))):
+        raise ValueError("Give an API key, a bearer token, or a username and password")
+
+
+def _elastic(c):
+    return ElasticSearchConnector(c["base_url"], api_key=c.get("api_key") or None, token=c.get("token") or None, username=c.get("username") or None,
+                                  password=c.get("password") or None, language=c.get("language") or "esql", index=c.get("index") or "logs-*,winlogbeat-*,filebeat-*",
+                                  verify_tls=not c.get("skip_tls_verify"))
+
+
+def _falcon(c):
+    return FalconSearchConnector(c["client_id"], c["client_secret"], base_url=c.get("base_url") or "https://api.crowdstrike.com")
+
+
+SPECS.update({
+    "sentinel-search": {
+        "label": "Microsoft Sentinel search (hunting and triage)", "category": "SIEM / logging", "output": "searches", "kind": "tool",
+        "fields": [_f("workspace_id", "Log Analytics workspace id (GUID)"), _f("tenant_id", "Entra tenant id", required=False), _f("client_id", "App registration client id", required=False),
+                   _f("client_secret", "Client secret", secret=True, required=False), _f("access_token", "Ready access token (instead of the three above)", secret=True, required=False),
+                   _f("base_url", "API base URL (blank for the public cloud)", required=False, placeholder="https://api.loganalytics.azure.com")],
+        "safe_targets": ["base_url"], "validate": _validate_sentinel,
+        "docs": "Register an app in Microsoft Entra and give it the Log Analytics Reader role on the workspace Sentinel uses, and nothing else. Quanta sends read-only KQL "
+                "to the Log Analytics query API only, caps the rows and abandons a slow query.",
+        "note": _SEARCH_NOTE, "build": _sentinel, "test": lambda c: _sentinel(c).test_connection(),
+    },
+    "chronicle-search": {
+        "label": "Google SecOps (Chronicle) UDM search", "category": "SIEM / logging", "output": "searches", "kind": "tool",
+        "fields": [_f("base_url", "Chronicle API URL", placeholder="https://us-chronicle.googleapis.com"),
+                   _f("instance", "Instance resource", placeholder="projects/123/locations/us/instances/abc"),
+                   _f("access_token", "OAuth2 access token", secret=True)],
+        "safe_targets": ["base_url"],
+        "docs": "Use a token for a service account that holds only search permission, issued by your own token broker (Quanta does not store a service-account key). "
+                "Quanta sends read-only UDM searches and never creates or edits a rule, a reference list or a feed.",
+        "note": _SEARCH_NOTE, "build": _chronicle, "test": lambda c: _chronicle(c).test_connection(),
+    },
+    "elastic-search": {
+        "label": "Elastic search (EQL or ES|QL)", "category": "SIEM / logging", "output": "searches", "kind": "tool",
+        "fields": [_f("base_url", "Elasticsearch URL", placeholder="https://elastic.acme.com:9200"), _f("language", "Query language", kind="select", options=["esql", "eql"], required=False,
+                                                                                                     help="ES|QL by default"),
+                   _f("index", "Index pattern", required=False, placeholder="logs-*,winlogbeat-*"), _f("api_key", "API key (base64 id:key)", secret=True, required=False),
+                   _f("token", "Bearer token", secret=True, required=False), _f("username", "Username (if no key)", required=False),
+                   _f("password", "Password (if no key)", secret=True, required=False),
+                   _f("skip_tls_verify", "Skip TLS certificate verification (self-signed lab only)", required=False, kind="checkbox")],
+        "safe_targets": ["base_url"], "validate": _validate_elastic,
+        "docs": "Create an API key restricted to read on the indexes you hunt in. Quanta calls only the EQL search, ES|QL query and cluster info endpoints, so it cannot index or delete.",
+        "note": _SEARCH_NOTE, "build": _elastic, "test": lambda c: _elastic(c).test_connection(),
+    },
+    "falcon-search": {
+        "label": "CrowdStrike Falcon host and detection lookup", "category": "SIEM / logging", "output": "searches", "kind": "tool",
+        "fields": [_f("client_id", "API client id"), _f("client_secret", "API client secret", secret=True),
+                   _f("base_url", "API base URL (blank for US-1)", required=False, placeholder="https://api.crowdstrike.com")],
+        "safe_targets": ["base_url"],
+        "docs": "Create an API client with Hosts: Read and Alerts: Read only. Quanta looks up hosts and detections; it cannot contain a host or change a policy "
+                "(only five read calls are allowed in code).",
+        "note": _SEARCH_NOTE, "build": _falcon, "test": lambda c: _falcon(c).test_connection(),
+    },
+})
+
+
+def _taxii(c):
+    return TaxiiConnector(c["api_root"], username=c.get("username") or None, password=c.get("password") or None, token=c.get("token") or None,
+                          api_key=c.get("api_key") or None, verify_tls=not c.get("skip_tls_verify"))
+
+
+def _validate_taxii(v):
+    if not (v.get("token") or v.get("api_key") or (v.get("username") and v.get("password"))):
+        raise ValueError("Give a token, an API key, or a username and password")
+
+
+SPECS.update({
+    "taxii": {
+        "label": "TAXII 2.1 threat-intelligence server (reports)", "category": "Threat intelligence", "output": "reports", "kind": "tool",
+        "fields": [_f("api_root", "TAXII API root URL", placeholder="https://cti.acme.com/taxii2/api1"), _f("token", "Bearer token", secret=True, required=False),
+                   _f("api_key", "API key", secret=True, required=False), _f("username", "Username (if no token or key)", required=False),
+                   _f("password", "Password (if no token or key)", secret=True, required=False),
+                   _f("skip_tls_verify", "Skip TLS certificate verification (self-signed lab only)", required=False, kind="checkbox")],
+        "safe_targets": ["api_root"], "validate": _validate_taxii,
+        "docs": "Give Quanta an account that can only read the collections you choose. It issues GET requests only and never writes to the server. Reports are polled on the "
+                "Threat Intelligence page's Report sources panel, by a collection id.",
+        "note": "Polled by the report watcher (off until a source is added); not part of the scanner sync.",
+        "build": _taxii, "test": lambda c: _taxii(c).test_connection(),
     },
 })
 

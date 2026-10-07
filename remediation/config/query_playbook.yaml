@@ -1,6 +1,8 @@
 # The query playbook: the small, fixed set of read-only SIEM searches an incident investigation may run, per ATT&CK technique and entity type.
 # Searches run only after a person confirms (the same confirm gate and look-back ceiling as the rest of the SOC), against a stored read-only search
 # connection, and stop at the first budget below. Nothing is ever planned from a search's own results, so an investigation cannot wander.
+# Each pattern has `spl` (Splunk) and, where one is written, `kql` (Sentinel), `esql` / `eql` (Elastic), `udm` (Google SecOps) and `fql` (CrowdStrike host lookup).
+# A pattern with no template for the connection's language is listed as skipped, never translated by guesswork.
 # Placeholders: {host} {user} {ip} {domain} {hash} {url}. A value that is not plain host, user or address text is refused, not escaped.
 version: 1
 
@@ -31,6 +33,9 @@ patterns:
     purpose: Look for the exploit strings this technique uses in requests to the host.
     for: {techniques: [T1190]}
     spl: 'search host="{host}" ("../" OR "%2e%2e" OR "${jndi:" OR "union select" OR "/etc/passwd") | stats count by src_ip, uri_path'
+    kql: 'union * | where Computer =~ "{host}" or DeviceName =~ "{host}" | where tostring(pack_all()) has_any ("../", "%2e%2e", "${jndi:", "union select", "/etc/passwd") | summarize count() by Type'
+    esql: 'FROM logs-* | WHERE TO_LOWER(host.name) == "{host}" AND (url.original LIKE "*../*" OR url.original LIKE "*%2e%2e*" OR url.original LIKE "*${jndi:*" OR url.original LIKE "*/etc/passwd*") | STATS count = COUNT(*) BY source.ip, url.path'
+    udm: 'target.hostname = "{host}" nocase AND target.url = /(\.\.\/|%2e%2e|\$\{jndi:|union select|\/etc\/passwd)/ nocase'
     lookback_days: 7
     needs: [host]
   - id: child-processes-of-service
@@ -38,6 +43,10 @@ patterns:
     purpose: Check whether a web, print or office service on the host started a command interpreter.
     for: {techniques: [T1059, T1190, T1203]}
     spl: 'search host="{host}" (Image="*\\cmd.exe" OR Image="*\\powershell.exe" OR Image="*/bin/sh" OR Image="*/bin/bash") | stats count by Image, ParentImage'
+    kql: 'union * | where Computer =~ "{host}" or DeviceName =~ "{host}" | where FileName in~ ("cmd.exe", "powershell.exe", "sh", "bash") | summarize count() by FileName, InitiatingProcessFileName'
+    esql: 'FROM logs-* | WHERE TO_LOWER(host.name) == "{host}" AND process.name IN ("cmd.exe", "powershell.exe", "sh", "bash") | STATS count = COUNT(*) BY process.name, process.parent.name'
+    eql: 'process where host.name : "{host}" and process.name : ("cmd.exe", "powershell.exe", "sh", "bash")'
+    udm: 'principal.hostname = "{host}" nocase AND target.process.file.full_path = /(cmd\.exe|powershell\.exe|\/bin\/sh|\/bin\/bash)$/ nocase'
     lookback_days: 7
     needs: [host]
   - id: privilege-use
@@ -45,6 +54,9 @@ patterns:
     purpose: Look for elevation or special-privilege logons by the account.
     for: {techniques: [T1068, T1548, T1078]}
     spl: 'search user="{user}" (EventCode=4672 OR EventCode=4673 OR EventCode=4648) | stats count by host, EventCode'
+    kql: 'SecurityEvent | where Account has "{user}" | where EventID in (4672, 4673, 4648) | summarize count() by Computer, EventID'
+    esql: 'FROM logs-* | WHERE TO_LOWER(user.name) == "{user}" AND event.code IN ("4672", "4673", "4648") | STATS count = COUNT(*) BY host.name, event.code'
+    udm: 'principal.user.userid = "{user}" nocase AND metadata.product_event_type = /^(4672|4673|4648)$/'
     lookback_days: 14
     needs: [user]
   - id: logon-pattern
@@ -52,6 +64,10 @@ patterns:
     purpose: Look for a burst of failures followed by a success for the account.
     for: {techniques: [T1110, T1078, T1021]}
     spl: 'search user="{user}" (EventCode=4625 OR EventCode=4624) | stats count by EventCode, src_ip'
+    kql: 'SecurityEvent | where Account has "{user}" | where EventID in (4624, 4625) | summarize count() by EventID, IpAddress'
+    esql: 'FROM logs-* | WHERE TO_LOWER(user.name) == "{user}" AND event.code IN ("4624", "4625") | STATS count = COUNT(*) BY event.code, source.ip'
+    eql: 'authentication where user.name : "{user}"'
+    udm: 'target.user.userid = "{user}" nocase AND metadata.event_type = "USER_LOGIN"'
     lookback_days: 14
     needs: [user]
   - id: host-sightings
@@ -59,6 +75,10 @@ patterns:
     purpose: Count what else the host logged, by source type, to see whether anything else changed around the alert.
     for: {techniques: []}
     spl: 'search host="{host}" | stats count by sourcetype'
+    kql: 'union * | where Computer =~ "{host}" or DeviceName =~ "{host}" | summarize count() by Type'
+    esql: 'FROM logs-* | WHERE TO_LOWER(host.name) == "{host}" | STATS count = COUNT(*) BY data_stream.dataset'
+    udm: 'principal.hostname = "{host}" nocase OR target.hostname = "{host}" nocase'
+    fql: 'hosts hostname:''{host}'''
     lookback_days: 7
     needs: [host]
   - id: ip-sightings
@@ -66,6 +86,10 @@ patterns:
     purpose: See which other hosts talked to the same address.
     for: {techniques: []}
     spl: 'search "{ip}" | stats count, dc(host) as hosts by sourcetype'
+    kql: 'search "{ip}" | summarize count = count(), hosts = dcount(Computer) by $table'
+    esql: 'FROM logs-* | WHERE source.ip == "{ip}" OR destination.ip == "{ip}" | STATS count = COUNT(*), hosts = COUNT_DISTINCT(host.name) BY data_stream.dataset'
+    udm: 'principal.ip = "{ip}" OR target.ip = "{ip}"'
+    fql: 'hosts local_ip:''{ip}'''
     lookback_days: 30
     needs: [ip]
   - id: domain-sightings
@@ -73,6 +97,9 @@ patterns:
     purpose: See which hosts resolved or contacted the same domain.
     for: {techniques: []}
     spl: 'search "{domain}" | stats count, dc(host) as hosts by sourcetype'
+    kql: 'search "{domain}" | summarize count = count(), hosts = dcount(Computer) by $table'
+    esql: 'FROM logs-* | WHERE dns.question.name == "{domain}" OR url.domain == "{domain}" | STATS count = COUNT(*), hosts = COUNT_DISTINCT(host.name) BY data_stream.dataset'
+    udm: 'network.dns.questions.name = "{domain}" nocase'
     lookback_days: 30
     needs: [domain]
   - id: hash-sightings
@@ -80,6 +107,9 @@ patterns:
     purpose: See which hosts ran or stored the same file.
     for: {techniques: []}
     spl: 'search "{hash}" | stats count, dc(host) as hosts by sourcetype'
+    kql: 'search "{hash}" | summarize count = count(), hosts = dcount(Computer) by $table'
+    esql: 'FROM logs-* | WHERE file.hash.sha256 == "{hash}" OR file.hash.md5 == "{hash}" OR process.hash.sha256 == "{hash}" | STATS count = COUNT(*), hosts = COUNT_DISTINCT(host.name) BY data_stream.dataset'
+    udm: 'target.file.sha256 = "{hash}" OR target.file.md5 = "{hash}" OR target.process.file.sha256 = "{hash}"'
     lookback_days: 30
     needs: [hash]
 
