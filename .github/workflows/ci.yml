@@ -52,7 +52,19 @@ jobs:
         run: pip install -r remediation/config/requirements.txt
 
       - name: Run test suite (this shard)
-        run: python -m unittest -v $(python scripts/ci_shard.py ${{ matrix.shard }} 4)
+        # Each module runs in its own process with a time limit, so one hung test cannot stall the whole job, and the per-module
+        # durations at the end show where the time goes.
+        run: |
+          status=0
+          : > /tmp/durations
+          for m in $(python scripts/ci_shard.py ${{ matrix.shard }} 4); do
+            start=$(date +%s)
+            timeout 900 python -m unittest -v "$m" || { echo "::error::$m failed or timed out"; status=1; }
+            echo "$(( $(date +%s) - start ))s $m" >> /tmp/durations
+          done
+          echo "---- slowest modules in this shard ----"
+          sort -rn /tmp/durations | head -8
+          exit $status
 
   all-tests:
     # One stable check name that is green only when every shard is green.
