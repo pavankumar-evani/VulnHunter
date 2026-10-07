@@ -267,6 +267,61 @@ export function frameworkBar(counts) {
     { label: "No usable evidence", value: counts["no-evidence"] || 0, key: "none" }, { label: "Not observed by Quanta", value: counts["not-evidenced"] || 0, key: "dim" }];
 }
 
+// ---------------------------------------------------------------- application security and release gates (modules 2 and 3)
+export const PR_LANES = ["proposed", "approved", "open", "merged", "verified", "stopped"];
+export const PR_LANE_LABEL = { proposed: "Proposed", approved: "Approved", open: "Pull request open", merged: "Merged", verified: "Verified by a scan", stopped: "Stopped or failed" };
+export function prLane(p) {
+  switch (p.status) {
+    case "draft": return "proposed";
+    case "approved": return "approved";
+    case "pr-opened": case "in-review": return "open";
+    case "merged": return p.verified_state === "verified" ? "verified" : "merged";
+    default: return "stopped"; // failed, closed, discarded
+  }
+}
+export function prGroups(proposals) {
+  const g = Object.fromEntries(PR_LANES.map((l) => [l, []]));
+  for (const p of proposals) g[prLane(p)].push(p);
+  return g;
+}
+// What needs a person's attention on a proposal, as short reasons (empty when nothing does).
+export function prAttention(p) {
+  const out = [];
+  if (p.status === "failed") out.push("Opening it failed");
+  if (p.checks_state === "failing" || p.checks_state === "failure") out.push("Checks are failing");
+  if (p.status === "merged" && p.verified_state === "still-present") out.push("Merged, but the finding is still reported");
+  if ((p.status === "pr-opened" || p.status === "in-review") && (p.review_state === "changes_requested" || p.review_state === "changes-requested")) out.push("Changes were requested");
+  return out;
+}
+export function prKpis(proposals) {
+  const g = prGroups(proposals);
+  return { total: proposals.length, proposed: g.proposed.length, approved: g.approved.length, open: g.open.length, merged: g.merged.length, verified: g.verified.length, stopped: g.stopped.length, attention: proposals.filter((p) => prAttention(p).length).length };
+}
+// Which actions make sense for a proposal, and who may take them (the server stays the authority).
+export function prActions(p, admin) {
+  if (!admin) return [];
+  const a = [];
+  if (p.status === "draft") a.push("approve");
+  if (p.status === "approved" || p.status === "failed") a.push("preview");
+  if (["draft", "approved", "failed"].includes(p.status)) a.push("discard");
+  if (["pr-opened", "in-review"].includes(p.status)) a.push("sync");
+  return a;
+}
+// Gate history: share of evaluations by decision, the latest decision per application, and a run of the most recent decisions for a strip.
+export function gateStats(history) {
+  const c = { pass: 0, warn: 0, fail: 0 };
+  for (const h of history) if (h.decision in c) c[h.decision] += 1;
+  const n = c.pass + c.warn + c.fail;
+  const latest = new Map();
+  for (const h of history) { const cur = latest.get(h.application); if (!cur || String(h.evaluated_at) > String(cur.evaluated_at)) latest.set(h.application, h); }
+  return { n, ...c, passRate: n ? Math.round((c.pass / n) * 100) : null, latest: [...latest.values()].sort((a, b) => String(b.evaluated_at).localeCompare(String(a.evaluated_at))) };
+}
+export function groupByDay(items, getTs) {
+  const m = new Map();
+  for (const it of items) { const day = String(getTs(it) || "").slice(0, 10) || "unknown"; if (!m.has(day)) m.set(day, []); m.get(day).push(it); }
+  return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, list]) => ({ day, items: list }));
+}
+
 export function filterRecords(list, q, getters) {
   const words = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return list;

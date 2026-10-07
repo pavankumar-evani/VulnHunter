@@ -100,7 +100,7 @@
 /* meter and radar */
 .mx-meter { display: inline-block; width: 100%; max-width: 120px; height: 7px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; vertical-align: middle; }
 .mx-meter i { display: block; height: 100%; background: var(--sx-good); } .mx-meter.warn i { background: var(--sx-warn); } .mx-meter.bad i { background: var(--sx-bad); }
-.mx-radar { width: 100%; max-width: 300px; height: auto; display: block; margin: 0 auto; }
+.mx-radar { width: 100%; max-width: 560px; height: auto; display: block; margin: 0 auto; }
 .mx-radar-ring { fill: none; stroke: var(--border); stroke-width: 1; }
 .mx-radar-area { fill: color-mix(in srgb, var(--brand-accent) 28%, transparent); stroke: var(--brand-accent); stroke-width: 2; }
 .mx-radar-dot { fill: var(--brand-accent); } .mx-radar-t { fill: var(--text-muted); font-size: 9.5px; }
@@ -160,6 +160,22 @@
 .mx-rcell-high { background: color-mix(in srgb, var(--sx-high) 28%, var(--surface)); } .mx-rcell-critical { background: color-mix(in srgb, var(--sx-crit) 34%, var(--surface)); }
 .mx-rcell.on, .mx-rcell:hover { border-color: var(--brand-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-accent) 50%, transparent); } .mx-rcell:focus-visible { outline: none; box-shadow: var(--ui-focus); }
 
+/* release gate and fix PRs */
+.mx-verdict { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 16px; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--sx-info); border-radius: var(--ui-radius); padding: 14px 18px; }
+.mx-verdict-good { border-left-color: var(--sx-good); } .mx-verdict-warn { border-left-color: var(--sx-warn); } .mx-verdict-critical { border-left-color: var(--sx-bad); }
+.mx-verdict-good .mx-score { color: var(--sx-good); } .mx-verdict-warn .mx-score { color: var(--sx-warn); } .mx-verdict-critical .mx-score { color: var(--sx-bad); }
+.mx-verdict > .mx-sub { grid-column: 1 / -1; }
+.mx-rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mx-rule { display: flex; gap: 10px; } .mx-rule-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--sx-info); }
+.mx-rule-good .mx-rule-dot { background: var(--sx-good); } .mx-rule-warn .mx-rule-dot { background: var(--sx-warn); } .mx-rule-critical .mx-rule-dot { background: var(--sx-bad); }
+.mx-gateform { margin: 0; } .mx-gateform h4 { margin: 0 0 6px; }
+.mx-plain { width: 100%; border-collapse: collapse; } .mx-plain th, .mx-plain td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: .88rem; vertical-align: top; }
+.mx-plain th { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.mx-day h4 { margin: 12px 0 4px; font-size: .84rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.mx-steps-list { margin: 8px 0; padding-left: 22px; } .mx-steps-list li { margin: 4px 0; }
+.mx-prcard .mx-actions { margin-top: 4px; }
+@media (max-width: 700px) { .mx-verdict { grid-template-columns: minmax(0, 1fr); } }
+
 /* forms and dialogs */
 .mx-check { display: inline-flex; gap: 8px; align-items: center; font-size: .86rem; cursor: pointer; }
 .mx-inline { display: inline-flex; gap: 8px; align-items: center; }
@@ -190,7 +206,8 @@
 .mx-st-in_progress { border-color: var(--sx-low); } .mx-st-blocked { border-color: var(--sx-warn); color: var(--sx-warn); } .mx-st-resolved { border-color: var(--sx-good); color: var(--sx-good); }
 .mx-status-sel { padding: 3px 8px; font-size: .82rem; }
 
-@media (max-width: 860px) { .mx-hero { grid-template-columns: minmax(0, 1fr); } .mx-area { grid-template-columns: 1fr 1fr 36px; } .mx-area > .mx-sub { display: none; } .mx-split { grid-template-columns: minmax(0, 1fr); } .mx-chain { grid-template-columns: 1fr; } .mx-arrow { transform: rotate(90deg); justify-self: center; } .mx-mix { grid-column: span 1; } }
+@media (max-width: 700px) { .mx-hero { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { .mx-area { grid-template-columns: 1fr 1fr 36px; } .mx-area > .mx-sub { display: none; } .mx-split { grid-template-columns: minmax(0, 1fr); } .mx-chain { grid-template-columns: 1fr; } .mx-arrow { transform: rotate(90deg); justify-self: center; } .mx-mix { grid-column: span 1; } }
 @media (max-width: 520px) {
   .mx-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mx-mix { grid-column: span 2; } .mx-cover { grid-template-columns: 1fr; }
   .mx-log .row { grid-template-columns: 1fr; gap: 0; } .mx-more-body { position: static; margin-top: 6px; }

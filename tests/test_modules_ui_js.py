@@ -422,5 +422,64 @@ class ComplianceLogicTests(unittest.TestCase):
         self.assertEqual([p["value"] for p in parts], [3, 1, 2, 0, 4])
 
 
+@unittest.skipUnless(NODE, "node is not installed")
+class FixPrLifecycleTests(unittest.TestCase):
+    def lane(self, **kw):
+        return call("moduleLogic.js", f"M.prLane({json.dumps(kw)})")
+
+    def test_each_status_has_one_lane(self):
+        self.assertEqual(self.lane(status="draft"), "proposed")
+        self.assertEqual(self.lane(status="approved"), "approved")
+        self.assertEqual(self.lane(status="pr-opened"), "open")
+        self.assertEqual(self.lane(status="in-review"), "open")
+        self.assertEqual(self.lane(status="merged", verified_state="awaiting-rescan"), "merged")
+        self.assertEqual(self.lane(status="merged", verified_state="still-present"), "merged")
+        self.assertEqual(self.lane(status="merged", verified_state="verified"), "verified")
+        for s in ("failed", "closed", "discarded", "something-new"):
+            self.assertEqual(self.lane(status=s), "stopped")
+
+    def test_groups_and_kpis(self):
+        ps = [{"id": 1, "status": "draft"}, {"id": 2, "status": "pr-opened", "checks_state": "failing"}, {"id": 3, "status": "merged", "verified_state": "still-present"}, {"id": 4, "status": "merged", "verified_state": "verified"}, {"id": 5, "status": "failed"}]
+        k = call("moduleLogic.js", f"M.prKpis({json.dumps(ps)})")
+        self.assertEqual((k["total"], k["proposed"], k["open"], k["merged"], k["verified"], k["stopped"], k["attention"]), (5, 1, 1, 1, 1, 1, 3))
+
+    def test_attention_reasons(self):
+        out = call("moduleLogic.js", 'M.prAttention({status:"in-review", review_state:"changes_requested", checks_state:"failure"})')
+        self.assertEqual(out, ["Checks are failing", "Changes were requested"])
+        self.assertEqual(call("moduleLogic.js", 'M.prAttention({status:"draft"})'), [])
+
+    def test_actions_depend_on_status_and_role(self):
+        self.assertEqual(call("moduleLogic.js", 'M.prActions({status:"draft"}, true)'), ["approve", "discard"])
+        self.assertEqual(call("moduleLogic.js", 'M.prActions({status:"approved"}, true)'), ["preview", "discard"])
+        self.assertEqual(call("moduleLogic.js", 'M.prActions({status:"failed"}, true)'), ["preview", "discard"])
+        self.assertEqual(call("moduleLogic.js", 'M.prActions({status:"in-review"}, true)'), ["sync"])
+        self.assertEqual(call("moduleLogic.js", 'M.prActions({status:"merged"}, true)'), [])
+        self.assertEqual(call("moduleLogic.js", 'M.prActions({status:"draft"}, false)'), [])
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class GateHistoryTests(unittest.TestCase):
+    HIST = [
+        {"application": "web", "environment": "prod", "decision": "fail", "evaluated_at": "2026-01-02T10:00:00Z"},
+        {"application": "web", "environment": "prod", "decision": "pass", "evaluated_at": "2026-01-03T10:00:00Z"},
+        {"application": "api", "environment": "prod", "decision": "warn", "evaluated_at": "2026-01-03T12:00:00Z"},
+        {"application": "api", "environment": "dev", "decision": "pass", "evaluated_at": "2026-01-01T09:00:00Z"},
+    ]
+
+    def test_stats(self):
+        s = call("moduleLogic.js", f"M.gateStats({json.dumps(self.HIST)})")
+        self.assertEqual((s["n"], s["pass"], s["warn"], s["fail"], s["passRate"]), (4, 2, 1, 1, 50))
+        self.assertEqual([(h["application"], h["decision"]) for h in s["latest"]], [("api", "warn"), ("web", "pass")])
+
+    def test_empty_history_has_no_rate(self):
+        s = call("moduleLogic.js", "M.gateStats([])")
+        self.assertEqual((s["n"], s["passRate"], s["latest"]), (0, None, []))
+
+    def test_grouping_by_day_newest_first(self):
+        g = call("moduleLogic.js", f"M.groupByDay({json.dumps(self.HIST)}, (h) => h.evaluated_at)")
+        self.assertEqual([x["day"] for x in g], ["2026-01-03", "2026-01-02", "2026-01-01"])
+        self.assertEqual(len(g[0]["items"]), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

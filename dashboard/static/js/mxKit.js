@@ -243,13 +243,13 @@ export function meter(fraction, { tone = "", label = "" } = {}) {
 export function radarSvg(axes, { size = 240, label = "Scores by area" } = {}) {
   const n = axes.length;
   if (n < 3) return "";
-  const c = size / 2; const r = size / 2 - 38;
-  const pt = (i, f) => { const a = (-Math.PI / 2) + (i * 2 * Math.PI) / n; return [c + Math.cos(a) * r * f, c + Math.sin(a) * r * f]; };
+  const W = Math.round(size * 1.7); const H = size; const cx = W / 2; const c = size / 2; const r = size / 2 - 30;
+  const pt = (i, f) => { const a = (-Math.PI / 2) + (i * 2 * Math.PI) / n; return [cx + Math.cos(a) * r * f, c + Math.sin(a) * r * f]; };
   const ring = (f) => axes.map((_, i) => pt(i, f).map((v) => v.toFixed(1)).join(",")).join(" ");
   const poly = axes.map((a, i) => pt(i, Math.max(0.02, Math.min(1, a.value))).map((v) => v.toFixed(1)).join(",")).join(" ");
-  const labels = axes.map((a, i) => { const [x, y] = pt(i, 1.2); const anchor = x < c - 6 ? "end" : x > c + 6 ? "start" : "middle"; return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" class="mx-radar-t">${escapeHtml(a.label)}</text>`; }).join("");
-  return `<svg class="mx-radar" viewBox="0 0 ${size} ${size}" role="img" aria-label="${escapeHtml(label)}: ${axes.map((a) => `${a.label} ${Math.round(a.value * 100)}%`).join(", ")}">
-    ${[0.25, 0.5, 0.75, 1].map((f) => `<polygon points="${ring(f)}" class="mx-radar-ring"/>`).join("")}${axes.map((_, i) => `<line x1="${c}" y1="${c}" x2="${pt(i, 1)[0].toFixed(1)}" y2="${pt(i, 1)[1].toFixed(1)}" class="mx-radar-ring"/>`).join("")}
+  const labels = axes.map((a, i) => { const [x, y] = pt(i, 1.14); const anchor = x < cx - 8 ? "end" : x > cx + 8 ? "start" : "middle"; const t = a.label.length > 26 ? `${a.label.slice(0, 25)}…` : a.label; return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" class="mx-radar-t"><title>${escapeHtml(a.label)}: ${Math.round(a.value * 100)}%</title>${escapeHtml(t)}</text>`; }).join("");
+  return `<svg class="mx-radar" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(label)}: ${axes.map((a) => `${a.label} ${Math.round(a.value * 100)}%`).join(", ")}">
+    ${[0.25, 0.5, 0.75, 1].map((f) => `<polygon points="${ring(f)}" class="mx-radar-ring"/>`).join("")}${axes.map((_, i) => `<line x1="${cx}" y1="${c}" x2="${pt(i, 1)[0].toFixed(1)}" y2="${pt(i, 1)[1].toFixed(1)}" class="mx-radar-ring"/>`).join("")}
     <polygon points="${poly}" class="mx-radar-area"/>${axes.map((a, i) => { const [x, y] = pt(i, Math.max(0.02, Math.min(1, a.value))); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="mx-radar-dot"/>`; }).join("")}${labels}</svg>`;
 }
 
