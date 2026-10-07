@@ -15,6 +15,9 @@ import { countBy, wireChartLinks } from "../charts.js";
 import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.js";
 import { makeChartsReorderable } from "../chartLayout.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
+import { dataAgeBadge, mountDataAge, onCleanup } from "../ui.js";
+import { kpiStrip, stackedBar, skeletonPage, readJson, writeJson, pageActions } from "../mxKit.js";
+import { pushReading, readingSeries } from "../moduleLogic.js";
 
 export const title = "Risk Management";
 
@@ -109,10 +112,13 @@ function topAssetsRows(assets) {
 }
 
 export async function render(container) {
-  container.innerHTML = `<div class="empty-state">Loading…</div>`;
+  let alive = true;
+  onCleanup(() => { alive = false; });
+  container.innerHTML = skeletonPage(5);
   const [heatmapData, assetsData, queueData] = await Promise.all([
     api.attackHeatmap(), api.assetsList(), api.queue(),
   ]);
+  if (!alive) return;
   const assets = assetsData.assets;
   const { ownerByAssetName, teamByAssetName } = buildOwnerTeamMaps(assets);
   const rankings = buildTopRankings(queueData.findings, ownerByAssetName, teamByAssetName);
@@ -134,17 +140,12 @@ export async function render(container) {
   const externalCritical = [...assets].filter((a) => a.facing === "external" && a.critical_count > 0)
     .sort((a, b) => b.critical_count - a.critical_count);
 
+  const TIER_COLOR = { Critical: "var(--sx-crit)", High: "var(--sx-high)", Medium: "var(--sx-med)", Low: "var(--sx-low)", Unscored: "var(--border)" };
+  const tierParts = ["Critical", "High", "Medium", "Low", "Unscored"].map((t) => ({ label: t, value: assets.filter((a) => (a.risk_tier || "Unscored") === t).length, color: TIER_COLOR[t] }));
   container.innerHTML = `
-    <p class="subtitle">A different lens on the same real /api/queue and /api/assets
-    data the Remediation Queue and Asset Inventory pages show - not a separate data
-    source. Internal/external-facing is a manually-set classification (editable in the
-    table below), never auto-detected from a network scan - see the FAQ.</p>
-
-    <div class="kpi-grid">
-      <div class="kpi-card kpi-danger"><div class="kpi-value">${facingCriticalCounts.external || 0}</div><div class="kpi-label">Critical findings on external-facing assets</div></div>
-      <div class="kpi-card kpi-warn"><div class="kpi-value">${facingCriticalCounts.internal || 0}</div><div class="kpi-label">Critical findings on internal-only assets</div></div>
-      <div class="kpi-card"><div class="kpi-value">${facingCounts.unknown || 0}</div><div class="kpi-label">Assets with no facing classification yet</div></div>
-    </div>
+    <div class="sx-head"><div><h2>Risk management</h2><p>A different lens on the same live queue and asset data the Remediation queue and Asset inventory show, not a separate data source. Internal or external facing is a classification you set (editable in the table below), never detected from a network scan.</p></div><div class="sx-row"><span id="rk-age">${dataAgeBadge(Date.now(), { fresh: 300000, stale: 3600000 })}</span></div></div>
+    <div id="rk-kpis" class="sx-kpis mx-kpis"></div>
+    <div class="mx-callout">Assets by risk tier: ${stackedBar(tierParts, { label: "Assets by risk tier", height: 12 })}<span class="ui-muted mx-sub">${tierParts.map((p) => `${p.value} ${p.label}`).join(" &middot; ")}</span></div>
 
     <div class="chart-row">
       ${severityChartBlockHtml(queueData.findings)}
@@ -226,6 +227,20 @@ export async function render(container) {
       and this app never re-scores a finding itself.</p>
     ${aiTrendAnalysisFabHtml("risk-hub")}`;
 
+  const hist = pushReading(readJson("quanta.risk.history", []), { ext: facingCriticalCounts.external || 0, int: facingCriticalCounts.internal || 0, unk: facingCounts.unknown || 0, top: topCritical[0] ? topCritical[0].risk_score || 0 : 0 });
+  writeJson("quanta.risk.history", hist);
+  const ser = (k) => readingSeries(hist, (r) => r[k]);
+  const tile = (key, label, value, extra = {}) => ({ key, label, value, filterable: false, previous: ser(key).previous ?? undefined, spark: ser(key).values.length > 1 ? ser(key).values : undefined, goodWhen: "down", ...extra });
+  kpiStrip(container.querySelector("#rk-kpis"), [
+    tile("ext", "Critical findings, external-facing assets", facingCriticalCounts.external || 0, { tone: facingCriticalCounts.external ? "danger" : "good", hint: "External exposure plus Critical severity is the highest-priority combination on this page." }),
+    tile("int", "Critical findings, internal-only assets", facingCriticalCounts.internal || 0, { tone: facingCriticalCounts.internal ? "warn" : "good" }),
+    tile("unk", "Assets with no facing classification", facingCounts.unknown || 0, { tone: facingCounts.unknown ? "warn" : "good", hint: "Set internal or external in the table below so exposure is ranked properly." }),
+    tile("assets", "Assets in the inventory", assets.length, { goodWhen: "up", previous: undefined, spark: undefined }),
+    tile("top", "Highest asset risk score", topCritical[0] ? topCritical[0].risk_score || 0 : 0, { hint: "Impact times likelihood for the top asset with a Critical finding." }),
+  ], () => {});
+  mountDataAge(container);
+  pageActions([{ label: "Risk management: open the full asset mapping", icon: "risk", run: () => { window.history.pushState({}, "", "/asset-mapping"); window.dispatchEvent(new PopStateEvent("popstate")); } }]);
+  onCleanup(() => {});
   wireExportButtons(container, "top-assets", {
     getRows: () => topCritical,
     columns: ASSET_EXPORT_COLUMNS,

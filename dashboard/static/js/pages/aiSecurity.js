@@ -1,7 +1,16 @@
+// AI Security: where AI is used, what each system can do and how it is defended, checked against the OWASP Top 10 for LLM Applications and agent / MCP hygiene.
+// Rebuilt on the UI kit: a scorecard (severity mix per asset, OWASP categories, unanswered questions), the register and findings as tables, a modal confirm before
+// publishing. The long asset form is unchanged in behaviour. Quanta does not probe a model; it applies rules to the facts you record.
 import { api } from "../api.js";
-import { escapeHtml, flash } from "../dom.js";
+import { escapeHtml } from "../dom.js";
+import { chip, severityChip, toast, emptyState, onCleanup, dataAgeBadge, mountDataAge, mountCounters, tipAttr } from "../ui.js";
+import { modal } from "../sxKit.js";
+import { selectableTable, kpiStrip, tabBar, wireTabBar, stackedBar, pageActions, replaceSearch, readJson, writeJson, skeletonPage } from "../mxKit.js";
+import { pushReading, readingSeries } from "../moduleLogic.js";
 
 export const title = "AI Security";
+const SEV_COLOR = { Critical: "var(--sx-crit)", High: "var(--sx-high)", Medium: "var(--sx-med)", Low: "var(--sx-low)" };
+const HIST_KEY = "quanta.aisec.history";
 
 const TABS = [["overview", "Overview"], ["register", "Register"], ["findings", "Findings"]];
 const SEV = { Critical: "badge-critical", High: "badge-high", Medium: "badge-medium", Low: "badge-low" };
@@ -14,40 +23,58 @@ export async function render(container) {
   let data = null;
   let draft = null;
 
+  let alive = true;
+  onCleanup(() => { alive = false; });
   const shell = (inner) => {
-    container.innerHTML = `<p class="subtitle">${NOTE}</p>
-      <p>${TABS.map(([k, l]) => `<button type="button" class="${k === tab ? "" : "secondary-button"}" data-tab="${k}">${l}</button>`).join(" ")}</p><div id="ais-body">${inner}</div>`;
-    container.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; draft = null; show(); }));
+    if (!alive) return;
+    container.innerHTML = `<div class="sx-page mx-page"><div class="sx-head"><div><h2>AI security</h2><p>${NOTE}</p></div><div class="sx-row"><span id="ais-age">${dataAgeBadge(Date.now(), { fresh: 300000, stale: 3600000 })}</span></div></div>
+      ${tabBar("AI security sections", TABS.map(([id, label]) => ({ id, label })), tab)}<div id="ais-body">${inner}</div></div>`;
+    wireTabBar(container.querySelector(".mx-tabs"), (id) => { tab = id; draft = null; replaceSearch(id === "overview" ? "" : `?tab=${id}`); show(); });
+    mountDataAge(container);
   };
   const load = async () => { data = await api.aiSecurityOverview(); return data; };
+  pageActions([{ label: "AI security: add an AI asset", icon: "aiVuln", run: () => { tab = "register"; draft = null; show().then(() => { const b = container.querySelector("#new"); if (b) b.click(); }); } }, { label: "AI security: show the findings", icon: "aiVuln", run: () => { tab = "findings"; show(); } }, { label: "AI security: show the overview", icon: "aiVuln", run: () => { tab = "overview"; show(); } }]);
 
   async function overview() {
     const d = await load(), a = d.assessment;
-    shell(`<div class="kpi-grid"><div class="kpi-card"><div class="kpi-label">AI assets recorded</div><div class="kpi-value">${d.assets.length}</div></div>
-        <div class="kpi-card kpi-danger"><div class="kpi-label">critical or high findings</div><div class="kpi-value">${a.by_severity.Critical + a.by_severity.High}</div></div>
-        <div class="kpi-card"><div class="kpi-label">all findings</div><div class="kpi-value">${a.findings.length}</div></div>
-        <div class="kpi-card kpi-warn"><div class="kpi-label">questions still unanswered</div><div class="kpi-value">${a.unanswered_total}</div></div></div>
-      ${d.assets.length ? "" : '<p class="callout">No AI assets recorded yet. Add them on the Register tab, or copy in the AI applications Quanta found in your traffic.</p>'}
-      <h3>Assets by risk</h3>
-      <div class="table-scroll"><table class="data-table"><thead><tr><th>Asset</th><th>Kind</th><th>Worst finding</th><th>Findings</th><th>Unanswered</th></tr></thead><tbody>
-      ${a.assets.length ? a.assets.map((x) => `<tr><td>${escapeHtml(x.name)}<br><span class="muted">${escapeHtml(x.owner || "no owner")} &middot; ${escapeHtml(x.environment || "environment unknown")}</span></td><td>${escapeHtml(x.kind)}</td>
-        <td>${x.worst ? `<span class="badge ${SEV[x.worst]}">${x.worst}</span>` : '<span class="muted">none</span>'}</td><td>${x.findings}</td><td>${x.unanswered.length}</td></tr>`).join("") : '<tr><td colspan="5" class="empty-state">None.</td></tr>'}</tbody></table></div>
-      <h3>By OWASP category</h3>
-      <p>${Object.entries(a.by_rule).map(([k, v]) => `<span class="badge badge-outline">${escapeHtml(k)}: ${v}</span>`).join(" ") || '<span class="muted">No findings.</span>'}</p>
-      <p class="muted">${escapeHtml(a.note)}</p>`);
+    if (!alive) return;
+    const hist = pushReading(readJson(HIST_KEY, []), { assets: d.assets.length, high: a.by_severity.Critical + a.by_severity.High, all: a.findings.length, unanswered: a.unanswered_total }); writeJson(HIST_KEY, hist);
+    const ser = (k) => readingSeries(hist, (r) => r[k]);
+    const t = (key, label, value, extra = {}) => ({ key, label, value, filterable: false, previous: ser(key).previous ?? undefined, spark: ser(key).values.length > 1 ? ser(key).values : undefined, goodWhen: "down", ...extra });
+    const maxRule = Math.max(1, ...Object.values(a.by_rule));
+    shell(`<div id="ais-kpis" class="sx-kpis mx-kpis"></div>
+      ${d.assets.length ? "" : emptyState({ title: "No AI assets recorded yet", body: "Add them on the Register tab, or copy in the AI applications Quanta found in your traffic. An unanswered question is a gap, not a pass.", actionLabel: "Open the register", actionHref: "/ai-security?tab=register", iconName: "aiVuln" })}
+      <div class="mx-split"><div><h3 class="mx-h3">Assets by risk</h3><div id="ais-assets"></div></div>
+        <div><h3 class="mx-h3">By OWASP category</h3>${Object.keys(a.by_rule).length ? `<div class="mx-areas">${Object.entries(a.by_rule).sort((x, y) => y[1] - x[1]).map(([k, v]) => `<div class="mx-area" style="grid-template-columns:minmax(80px,1fr) minmax(60px,1fr) 28px"><span>${escapeHtml(k)}</span><span class="mx-meter" role="img" aria-label="${v} finding${v === 1 ? "" : "s"}"><i style="width:${Math.max(4, (v / maxRule) * 100)}%"></i></span><b>${v}</b></div>`).join("")}</div>` : '<p class="ui-muted">No findings.</p>'}
+          <h3 class="mx-h3">Severity mix</h3>${stackedBar(["Critical", "High", "Medium", "Low"].map((s) => ({ label: s, value: a.by_severity[s] || 0, color: SEV_COLOR[s] })), { label: "AI security findings by severity", height: 12 })}</div></div>
+      <p class="ui-muted">${escapeHtml(a.note)}${hist.length < 2 ? " Trends appear after a second reading in this browser." : ""}</p>`);
+    kpiStrip(container.querySelector("#ais-kpis"), [t("assets", "AI assets recorded", d.assets.length, { goodWhen: "up" }), t("high", "Critical or high findings", a.by_severity.Critical + a.by_severity.High, { tone: a.by_severity.Critical + a.by_severity.High ? "danger" : "good" }),
+      t("all", "All findings", a.findings.length), t("unanswered", "Questions still unanswered", a.unanswered_total, { tone: a.unanswered_total ? "warn" : "good", hint: "A question you left unanswered is a gap in the picture, never counted as a pass." })], () => {});
+    selectableTable(container.querySelector("#ais-assets"), { rows: a.assets, rowKey: (x) => x.name, caption: "AI assets by risk", csvName: "quanta-ai-assets-by-risk", storageKey: "aisec-assets", rowHeight: 58, maxHeight: 420,
+      emptyHtml: emptyState({ title: "None yet", body: "", iconName: "aiVuln" }),
+      columns: [{ key: "n", label: "Asset", width: 220, csv: (x) => x.name, render: (x) => `<strong>${escapeHtml(x.name)}</strong><div class="mx-sub">${escapeHtml(x.owner || "no owner")} &middot; ${escapeHtml(x.environment || "environment unknown")}</div>` }, { key: "k", label: "Kind", width: 100, csv: (x) => x.kind, render: (x) => chip(x.kind, { tone: "neutral" }) },
+        { key: "w", label: "Worst", width: 100, csv: (x) => x.worst || "", render: (x) => (x.worst ? severityChip(x.worst) : '<span class="ui-muted">none</span>') }, { key: "f", label: "Findings", width: 80, align: "right", csv: (x) => x.findings, render: (x) => x.findings }, { key: "u", label: "Unanswered", width: 100, align: "right", csv: (x) => x.unanswered.length, render: (x) => x.unanswered.length }] });
   }
 
   async function register() {
     const d = data || await load();
     if (draft) return form(d);
-    shell(`<p><button type="button" id="new">Add an AI asset</button> <button type="button" class="secondary-button" id="imp">Copy in the AI applications found in traffic</button></p>
-      <div class="table-scroll"><table class="data-table"><thead><tr><th>Asset</th><th>Kind</th><th>Owner</th><th>Environment</th><th>Last reviewed</th><th></th></tr></thead><tbody>
-      ${d.assets.length ? d.assets.map((x) => `<tr><td>${escapeHtml(x.name)}<br><span class="muted">${escapeHtml(x.vendor_model || "")}</span></td><td>${escapeHtml(x.kind)}</td><td>${escapeHtml(x.owner || "-")}</td><td>${escapeHtml(x.environment || "-")}</td><td>${escapeHtml(x.last_reviewed || "never")}</td>
-        <td><button type="button" class="link-button" data-edit="${x.id}">Edit</button> <button type="button" class="link-button danger-link" data-del="${x.id}">Delete</button></td></tr>`).join("") : '<tr><td colspan="6" class="empty-state">None.</td></tr>'}</tbody></table></div>`);
+    shell(`<p class="sx-row"><button type="button" class="ui-btn sx-btn-sm" id="new">Add an AI asset</button> <button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" id="imp">Copy in the AI applications found in traffic</button></p><div id="ais-reg"></div>`);
+    selectableTable(container.querySelector("#ais-reg"), { rows: d.assets, rowKey: (x) => x.id, caption: "AI asset register", csvName: "quanta-ai-assets", storageKey: "aisec-register", rowHeight: 58, maxHeight: 520,
+      emptyHtml: emptyState({ title: "No AI assets recorded yet", body: "Add one, or copy in the AI applications Quanta found in your traffic.", iconName: "aiVuln" }),
+      columns: [{ key: "n", label: "Asset", width: 260, csv: (x) => x.name, render: (x) => `<strong>${escapeHtml(x.name)}</strong><div class="mx-sub">${escapeHtml(x.vendor_model || "")}</div>` }, { key: "k", label: "Kind", width: 110, csv: (x) => x.kind, render: (x) => chip(x.kind, { tone: "neutral" }) },
+        { key: "o", label: "Owner", width: 170, csv: (x) => x.owner || "", render: (x) => (x.owner ? escapeHtml(x.owner) : '<span class="mx-unowned">no owner</span>') }, { key: "e", label: "Environment", width: 120, csv: (x) => x.environment || "", render: (x) => escapeHtml(x.environment || "-") },
+        { key: "r", label: "Last reviewed", width: 130, csv: (x) => x.last_reviewed || "", render: (x) => escapeHtml(x.last_reviewed || "never") },
+        { key: "a", label: "", width: 150, csv: () => "", render: (x) => `<button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" data-edit="${x.id}">Edit</button> <button type="button" class="ui-btn ui-btn-ghost sx-btn-sm" data-del="${x.id}">Delete</button>` }] });
     container.querySelector("#new").addEventListener("click", () => { draft = { name: "", kind: d.meta.kinds[0], data_classes: [] }; show(); });
-    container.querySelector("#imp").addEventListener("click", async () => { try { const r = await api.aiSecurityImport(); flash(`${r.added.length} application(s) copied in.`, "success"); data = null; show(); } catch (e) { flash(e.message, "error"); } });
-    container.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => { draft = JSON.parse(JSON.stringify(d.assets.find((x) => x.id === Number(b.dataset.edit)))); show(); }));
-    container.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => { if (window.confirm("Delete this asset?")) { try { await api.aiSecurityDelete(Number(b.dataset.del)); data = null; show(); } catch (e) { flash(e.message, "error"); } } }));
+    container.querySelector("#imp").addEventListener("click", async () => { try { const r = await api.aiSecurityImport(); toast(`${r.added.length} application(s) copied in.`, { tone: "good" }); data = null; show(); } catch (e) { toast(e.message, { tone: "bad" }); } });
+    container.querySelector("#ais-reg").addEventListener("click", async (e) => {
+      const ed = e.target.closest("[data-edit]"); if (ed) { draft = JSON.parse(JSON.stringify(d.assets.find((x) => x.id === Number(ed.dataset.edit)))); show(); return; }
+      const del = e.target.closest("[data-del]"); if (!del) return;
+      const ok = await modal({ title: "Delete this AI asset?", confirmLabel: "Delete", danger: true, description: "It leaves the register, and its findings leave the next published set.", body: "" });
+      if (!ok) return;
+      try { await api.aiSecurityDelete(Number(del.dataset.del)); toast("Deleted.", { tone: "good" }); data = null; show(); } catch (er) { toast(er.message, { tone: "bad" }); }
+    });
   }
 
   const triOpt = (v) => `<option value="">?</option><option value="true"${v === true ? " selected" : ""}>Yes</option><option value="false"${v === false ? " selected" : ""}>No</option>`;
@@ -122,29 +149,32 @@ export async function render(container) {
       const f = e.target, body = { name: f.name.value, kind: f.kind.value, data_classes: [...f.querySelectorAll("[name=dc]:checked")].map((c) => c.value), notes: f.notes.value, ...collectAgent(f) };
       for (const k of ["owner", "environment", "hosting", "vendor_model", "last_reviewed", "permissions_scope", "provenance", "serialization"]) body[k] = f[k].value || null;
       for (const k of TRI_ORDER) body[k] = f[k].value === "" ? null : f[k].value === "true";
-      try { if (x.id) await api.aiSecurityUpdate(x.id, body); else await api.aiSecurityAdd(body); draft = null; data = null; flash("Saved.", "success"); show(); } catch (err) { flash(err.message, "error"); }
+      try { if (x.id) await api.aiSecurityUpdate(x.id, body); else await api.aiSecurityAdd(body); draft = null; data = null; toast("Saved.", { tone: "good" }); show(); } catch (err) { toast(err.message, { tone: "bad", ms: 8000 }); }
     });
   }
 
   async function findings() {
     const d = await load(), a = d.assessment;
-    shell(`<p><button type="button" id="pub">Publish to the main queue</button> <span class="muted">Sends this set as source ai-security. It is the complete set, so a finding leaves the queue when the record shows it fixed.</span></p>
-      <div class="table-scroll"><table class="data-table"><thead><tr><th>Severity</th><th>Asset</th><th>Finding</th><th>What to do</th></tr></thead><tbody>
-      ${a.findings.length ? a.findings.map((f) => `<tr><td><span class="badge ${SEV[f.severity]}">${f.severity}</span><br><span class="muted">${escapeHtml(f.rule)}</span></td><td>${escapeHtml(f.asset)}</td>
-        <td class="wrap-cell"><strong>${escapeHtml(f.title)}</strong><br><span class="muted">${escapeHtml(f.owasp)}${f.atlas ? ` &middot; ATLAS ${escapeHtml(f.atlas)}` : ""}. ${escapeHtml(f.why)}</span></td><td class="wrap-cell">${escapeHtml(f.fix)}</td></tr>`).join("") : '<tr><td colspan="4" class="empty-state">No findings.</td></tr>'}</tbody></table></div>
-      ${a.assets.some((x) => x.unanswered.length) ? `<h3>Unanswered questions</h3>${a.assets.filter((x) => x.unanswered.length).map((x) => `<p><strong>${escapeHtml(x.name)}</strong>: <span class="muted">${x.unanswered.map((u) => escapeHtml(u.question)).join(" &middot; ")}</span></p>`).join("")}` : ""}`);
+    shell(`<p class="sx-row"><button type="button" class="ui-btn sx-btn-sm" id="pub">Publish to the main queue</button> <span class="ui-muted">Sends this set as source ai-security. It is the complete set, so a finding leaves the queue when the record shows it fixed.</span></p><div id="ais-find"></div>
+      ${a.assets.some((x) => x.unanswered.length) ? `<h3 class="mx-h3">Unanswered questions</h3><div class="mx-grid-cards">${a.assets.filter((x) => x.unanswered.length).map((x) => `<article class="mx-card"><h4>${escapeHtml(x.name)}</h4><ul class="mx-list">${x.unanswered.map((u) => `<li>${escapeHtml(u.question)}</li>`).join("")}</ul></article>`).join("")}</div>` : ""}`);
+    selectableTable(container.querySelector("#ais-find"), { rows: a.findings, rowKey: (f) => `${f.rule}:${f.asset}:${f.title}`, caption: "AI security findings", csvName: "quanta-ai-security-findings", storageKey: "aisec-findings", rowHeight: 84, maxHeight: 560,
+      emptyHtml: emptyState({ title: "No findings", body: "Nothing in the recorded facts breaks a rule. An unanswered question is a gap, not a pass: see below.", iconName: "approved" }),
+      columns: [{ key: "s", label: "Severity", width: 110, csv: (f) => f.severity, render: (f) => `${severityChip(f.severity)}<div class="mx-sub">${escapeHtml(f.rule)}</div>` }, { key: "a", label: "Asset", width: 160, csv: (f) => f.asset, render: (f) => `<span class="mx-clip">${escapeHtml(f.asset)}</span>` },
+        { key: "f", label: "Finding", width: 380, csv: (f) => f.title, render: (f) => `<strong class="mx-title">${escapeHtml(f.title)}</strong><div class="mx-sub" title="${escapeHtml(f.why)}">${escapeHtml(f.owasp)}${f.atlas ? ` &middot; ATLAS ${escapeHtml(f.atlas)}` : ""}. ${escapeHtml(f.why)}</div>` },
+        { key: "x", label: "What to do", width: 320, csv: (f) => f.fix, render: (f) => `<span class="mx-title" title="${escapeHtml(f.fix)}">${escapeHtml(f.fix)}</span>` }] });
     container.querySelector("#pub").addEventListener("click", async () => {
       try {
         const pre = await api.aiSecurityPublish({});
-        if (!window.confirm(`${pre.message}\n\n${pre.findings} finding(s) will be in the queue.`)) return;
+        const ok = await modal({ title: "Publish to the main queue?", confirmLabel: `Publish ${pre.findings}`, description: pre.message, body: `<p>${pre.findings} finding(s) will be in the queue as source ai-security. A finding that no longer applies is removed in the same step.</p>` });
+        if (!ok) return;
         const r = await api.aiSecurityPublish({ confirm: true });
-        flash(`Published ${r.published}: ${r.added} new, ${r.updated} updated, ${r.removed} removed.`, "success");
-      } catch (e) { flash(e.message, "error"); }
+        toast(`Published ${r.published}: ${r.added} new, ${r.updated} updated, ${r.removed} removed.`, { tone: "good", ms: 7000 });
+      } catch (e) { toast(e.message, { tone: "bad", ms: 8000 }); }
     });
   }
 
   async function show() {
-    try { await { overview, register, findings }[tab](); } catch (err) { shell(`<p class="callout callout-warn">${escapeHtml(err.message)}</p>`); }
+    try { await { overview, register, findings }[tab](); } catch (err) { shell(emptyState({ title: err.status === 403 || err.status === 401 ? "This page is for administrators" : "This could not be loaded", body: err.message || "Try again in a moment.", iconName: "risk" })); }
   }
   await show();
 }
