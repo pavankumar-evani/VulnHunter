@@ -25,6 +25,7 @@ core:
   - /api/findings
   - /api/search
   - /api/notifications
+  - /api/events
   - /api/support
   - /api/teams
   - /api/assignable-users

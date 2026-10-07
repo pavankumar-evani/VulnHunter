@@ -7,6 +7,10 @@ release/versioning scheme (tracked in [KNOWLEDGE_TRANSFER.md §9 Roadmap](KNOWLE
 ## [Unreleased]
 
 ### Added
+- **Application shell and UI kit** (`dashboard/static/ui.css`, `js/ui.js`, `live.js`, `fuzzy.js`, `tableMath.js`, `commandPalette.js`, `pages/designSystem.js`, `dashboard/events.py`, `docs/UI_KIT.md`, page `/design-system`): a command palette (Ctrl/Cmd+K: fuzzy search over every page the user may open, recent pages, actions, findings and assets; `/` focuses search, `?` shows the shortcut sheet),
+  one shared live stream (`GET /api/events` Server-Sent Events, read only, session auth, bounded per-client queues, replay from `Last-Event-ID`; the browser falls back to polling with backoff that pauses in a hidden tab), a grouped notification bell with mark-all-read and toasts, a component kit (KPI tiles with sparkline and change chip, skeletons, empty states, data-age badge,
+  drawers, toasts, chips on the shared severity palette, a sortable/resizable table with column chooser, CSV export and row virtualisation above 500 rows), a page cleanup contract with a per-page error boundary and skeleton loading, and a living style guide. Home and the module picker use the kit. The top bar no longer overflows at phone width.
+  Trends on Home come from this browser's own earlier visits (no server history). Not exercised: Safari/Firefox, a reverse proxy in front of the stream, several replicas.
 - **Proactive hunt engine** (`remediation/hunting/engine/`, `docs/HUNT_ENGINE.md`, `GET/POST /api/hunting/suggestions*`, migration 9, tables `hunt_hypotheses` and `hunt_hypothesis_events`,
   policy `remediation/config/hunt_engine.yaml`): hypothesis-driven suggestions (intel, coverage gaps, baseline/anomaly, exposure, identity, lessons learned, dark web, model-assisted) with the
   evidence chain, ATT&CK tactics, data readiness ("cannot tell" rather than guessing), SPL/KQL/Sigma leads, a scored priority with its working, a lifecycle through accept (creates the existing hunt),
