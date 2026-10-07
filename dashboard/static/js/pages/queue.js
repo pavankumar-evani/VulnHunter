@@ -378,7 +378,7 @@ export async function render(container) {
   }
 
   // ------------------------------------------------------------------ go
-  try { await load(); } catch (e) { $("#q-skel").hidden = true; $("#q-table").innerHTML = emptyState({ title: "The queue could not be loaded", body: e.message || "Try again in a moment.", iconName: "risk" }); return; }
+  try { await load(); if (!alive) return; } catch (e) { if (!alive) return; $("#q-skel").hidden = true; $("#q-table").innerHTML = emptyState({ title: "The queue could not be loaded", body: e.message || "Try again in a moment.", iconName: "risk" }); return; }
   S.view = currentView();
   paintKpis(); paintToolbar(); paintChips(); paintTable();
   $("#q-age").innerHTML = dataAgeBadge(S.loadedAt); mountDataAge($("#q-age"));

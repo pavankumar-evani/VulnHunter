@@ -32,7 +32,7 @@ export async function render(container) {
   const body = () => $("#g-body");
   const stamp = () => { const age = $("#g-age"); if (age) { S.loadedAt = Date.now(); age.innerHTML = dataAgeBadge(S.loadedAt, { fresh: 300000, stale: 3600000 }); mountDataAge(age); } };
   const paintTabs = () => { $("#g-tabs").innerHTML = tabBar("Risk and compliance sections", TABS.map(([id, label]) => ({ id, label })), S.tab); };
-  const fail = (err) => { body().innerHTML = emptyState({ title: err.status === 401 || err.status === 403 ? "This page is for administrators" : "This could not be loaded", body: err.message || "Try again in a moment.", iconName: "risk" }); };
+  const fail = (err) => { if (!alive) return; body().innerHTML = emptyState({ title: err.status === 401 || err.status === 403 ? "This page is for administrators" : "This could not be loaded", body: err.message || "Try again in a moment.", iconName: "risk" }); };
 
   // ------------------------------------------------------------------ overview
   async function overview() {

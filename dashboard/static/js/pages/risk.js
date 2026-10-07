@@ -112,10 +112,13 @@ function topAssetsRows(assets) {
 }
 
 export async function render(container) {
+  let alive = true;
+  onCleanup(() => { alive = false; });
   container.innerHTML = skeletonPage(5);
   const [heatmapData, assetsData, queueData] = await Promise.all([
     api.attackHeatmap(), api.assetsList(), api.queue(),
   ]);
+  if (!alive) return;
   const assets = assetsData.assets;
   const { ownerByAssetName, teamByAssetName } = buildOwnerTeamMaps(assets);
   const rankings = buildTopRankings(queueData.findings, ownerByAssetName, teamByAssetName);

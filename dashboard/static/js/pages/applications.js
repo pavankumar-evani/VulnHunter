@@ -4,7 +4,7 @@ import { api } from "../api.js";
 import { escapeHtml, flash, openModal, closeModal } from "../dom.js";
 import { openFindingDetail } from "../findingDetail.js";
 import { renderDependencyGraph } from "../depGraph.js";
-import { kpiTile, chip, emptyState, dataAgeBadge, mountDataAge, mountCounters, debounce } from "../ui.js";
+import { kpiTile, chip, emptyState, dataAgeBadge, mountDataAge, mountCounters, debounce, onCleanup } from "../ui.js";
 import { selectableTable, pageActions, skeletonPage, replaceSearch, tabBar, wireTabBar } from "../mxKit.js";
 import { filterRecords } from "../moduleLogic.js";
 
@@ -18,6 +18,8 @@ const FIELDS = [["environment", "Environment", "select", "environments"], ["busi
   ["default_branch", "Default branch", "text"], ["manifest_paths", "Dependency files (one path per line)", "area"], ["connection_id", "Git connection id (blank = the first enabled one)", "text"]];
 
 export async function render(container) {
+  let alive = true;
+  onCleanup(() => { alive = false; });
   const params = new URLSearchParams(window.location.search);
   let name = params.get("app");
   let tab = params.get("tab") || "work";
@@ -52,6 +54,7 @@ export async function render(container) {
   async function list() {
     container.innerHTML = skeletonPage(4);
     const d = await api.applications();
+    if (!alive) return;
     const withSbom = d.applications.filter((a) => a.sbom).length;
     const F = { q: params.get("q") || "", env: params.get("env") || "", crit: params.get("crit") || "", exposure: params.get("exposure") || "", sbom: params.get("sbom") || "" };
     const uniq = (k) => [...new Set(d.applications.map((a) => a[k]).filter(Boolean))].sort();

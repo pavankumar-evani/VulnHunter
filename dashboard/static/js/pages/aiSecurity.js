@@ -26,6 +26,7 @@ export async function render(container) {
   let alive = true;
   onCleanup(() => { alive = false; });
   const shell = (inner) => {
+    if (!alive) return;
     container.innerHTML = `<div class="sx-page mx-page"><div class="sx-head"><div><h2>AI security</h2><p>${NOTE}</p></div><div class="sx-row"><span id="ais-age">${dataAgeBadge(Date.now(), { fresh: 300000, stale: 3600000 })}</span></div></div>
       ${tabBar("AI security sections", TABS.map(([id, label]) => ({ id, label })), tab)}<div id="ais-body">${inner}</div></div>`;
     wireTabBar(container.querySelector(".mx-tabs"), (id) => { tab = id; draft = null; replaceSearch(id === "overview" ? "" : `?tab=${id}`); show(); });

@@ -39,7 +39,7 @@ export async function render(container) {
     el.innerHTML = `<div class="mx-callout${bad ? " mx-callout-warn" : ""}" role="${bad ? "alert" : "status"}"><strong>Data age.</strong> ${escapeHtml(a.message)}${a.last_import_at ? ` Last import: ${escapeHtml(a.last_import_at)}. ${dataAgeBadge(new Date(a.last_import_at).getTime() || Date.now(), { fresh: 6 * 3600000, stale: 48 * 3600000, label: "Imported" })}` : ""}</div>`;
     mountDataAge(el);
   }
-  const fail = (e) => { body().innerHTML = emptyState({ title: e.status === 403 || e.status === 401 ? "This page is for administrators" : "This could not be loaded", body: e.message || "Try again in a moment.", iconName: "risk" }); };
+  const fail = (e) => { if (!alive) return; body().innerHTML = emptyState({ title: e.status === 403 || e.status === 401 ? "This page is for administrators" : "This could not be loaded", body: e.message || "Try again in a moment.", iconName: "risk" }); };
 
   // ------------------------------------------------------------------ overview
   async function overview() {

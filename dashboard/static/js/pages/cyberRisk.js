@@ -36,8 +36,11 @@ export async function render(container) {
   let tab = new URLSearchParams(window.location.search).get("tab") || "overview";
   let draft = null;
   let analysisId = null;
+  let alive = true;
+  onCleanup(() => { alive = false; });
 
   const shell = (inner) => {
+    if (!alive) return;
     container.innerHTML = `<div class="sx-page mx-page"><div class="sx-head"><div><h2>Cyber risk</h2><p>${NOTE}</p></div><div class="sx-row"><span id="cr-age">${dataAgeBadge(Date.now(), { fresh: 300000, stale: 3600000 })}</span></div></div>
       ${tabBar("Cyber risk sections", TABS.map(([id, label]) => ({ id, label })), tab)}<div id="risk-body">${inner}</div></div>`;
     wireTabBar(container.querySelector(".mx-tabs"), (id) => { tab = id; replaceSearch(id === "overview" ? "" : `?tab=${id}`); show(); });

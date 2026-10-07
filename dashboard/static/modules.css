@@ -13,6 +13,7 @@
 .mx-stack i { display: block; height: 100%; }
 .mx-count { margin-left: auto; font-size: .82rem; }
 .mx-sub { font-size: .74rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-card .mx-sub, .sx-card .mx-sub, .mx-callout .mx-sub { white-space: normal; overflow-wrap: anywhere; }
 .mx-clip { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mx-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; line-height: 1.25; font-weight: 600; }
 .mx-id { font-weight: 700; }
