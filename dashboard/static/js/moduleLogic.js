@@ -186,6 +186,87 @@ export function assignStateToSearch(s) {
   return t ? `?${t}` : "";
 }
 
+// ---------------------------------------------------------------- posture review (module 7)
+// The exact text to put where a recommendation says to change something, by kind of change. A page or a process step has no setting to paste,
+// so it returns an empty string and the page offers a link instead.
+export function settingText(change) {
+  if (!change) return "";
+  const v = change.value;
+  const val = Array.isArray(v) || (v && typeof v === "object") ? JSON.stringify(v) : String(v ?? "");
+  if (change.kind === "env") return `${change.key}=${val}`;
+  if (change.kind === "helm") return `--set ${change.key}=${val}`;
+  if (change.kind === "yaml") return `# ${change.where}\n${change.key}: ${val}`;
+  return "";
+}
+export const POSTURE_KIND_LABEL = { env: "Environment variable", yaml: "Config file", helm: "Helm value", page: "Quanta page", process: "Process" };
+export function actionsMarkdown(actions, generated = "") {
+  const lines = [`# Security posture actions${generated ? ` (${generated})` : ""}`, ""];
+  actions.forEach((a, i) => {
+    lines.push(`${i + 1}. **${a.title}** (${a.framework_title}, ${a.status === "fail" ? "gap" : a.status})`);
+    if (a.evidence && a.evidence[0]) lines.push(`   - Recorded: ${a.evidence[0]}`);
+    if (a.recommendation) lines.push(`   - Do: ${a.recommendation}`);
+    const s = settingText(a.change);
+    if (s) lines.push("   - Setting:", "     ```", ...s.split("\n").map((l) => `     ${l}`), "     ```");
+    else if (a.change) lines.push(`   - Where: ${a.change.where} > ${a.change.key} (${a.change.value})`);
+  });
+  return lines.join("\n");
+}
+// Trend kept in this browser only (the server keeps no history): one reading per 5 minutes, 24 kept. Honest: it needs two readings to say anything.
+export const READING_GAP_MS = 5 * 60 * 1000;
+export function pushReading(history, reading, now = Date.now()) {
+  const list = Array.isArray(history) ? history.filter((r) => r && Number.isFinite(r.t)) : [];
+  const last = list[list.length - 1];
+  if (last && now - last.t < READING_GAP_MS) return list;
+  return [...list, { ...reading, t: now }].slice(-24);
+}
+// values of one measure across the history (null where a reading had none), the latest, and the one before it
+export function readingSeries(history, getter) {
+  const vals = (history || []).map((r) => { const v = getter(r); return typeof v === "number" ? v : null; });
+  const real = vals.filter((v) => v !== null);
+  return { values: real, current: real.length ? real[real.length - 1] : null, previous: real.length > 1 ? real[real.length - 2] : null };
+}
+export function scoreTone(score) { return score === null || score === undefined ? "none" : score >= 70 ? "good" : score >= 40 ? "warn" : "bad"; }
+export function postureTotals(frameworks) {
+  const t = { pass: 0, partial: 0, fail: 0, unknown: 0, na: 0 };
+  for (const f of frameworks) for (const k of Object.keys(t)) t[k] += (f.counts && f.counts[k]) || 0;
+  return t;
+}
+export function filterChecks(checks, filter, q = "") {
+  const words = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return checks.filter((c) => (filter === "all" || c.status === filter || (filter === "gaps" && (c.status === "fail" || c.status === "partial")))
+    && (!words.length || words.every((w) => `${c.title} ${c.detail || ""} ${c.recommendation || ""}`.toLowerCase().includes(w))));
+}
+
+// ---------------------------------------------------------------- risk and compliance (module 7)
+// A 5x5 likelihood-by-impact grid of risk counts. rows[0] is impact 5 (top); cell = { likelihood, impact, count, ids }.
+export function riskGrid(risks, key = "inherent") {
+  const cells = {};
+  for (let imp = 5; imp >= 1; imp -= 1) for (let lik = 1; lik <= 5; lik += 1) cells[`${lik}:${imp}`] = { likelihood: lik, impact: imp, count: 0, ids: [] };
+  for (const r of risks) {
+    const lik = Number(r[`${key}_likelihood`]); const imp = Number(r[`${key}_impact`]);
+    const c = cells[`${lik}:${imp}`];
+    if (c) { c.count += 1; c.ids.push(r.id); }
+  }
+  const rows = [];
+  for (let imp = 5; imp >= 1; imp -= 1) rows.push(Array.from({ length: 5 }, (_, i) => cells[`${i + 1}:${imp}`]));
+  return rows;
+}
+// severity of a grid cell from its likelihood x impact product, using the same bands as the register (Low <5, Medium <10, High <15, Critical 15+)
+export function gridLevel(likelihood, impact) { const s = likelihood * impact; return s >= 15 ? "Critical" : s >= 10 ? "High" : s >= 5 ? "Medium" : "Low"; }
+export function resultCounts(tests) {
+  const c = { pass: 0, fail: 0, warn: 0, na: 0, error: 0 };
+  for (const t of tests) if (t.result in c) c[t.result] += 1;
+  return c;
+}
+export function filterByResult(items, result, getResult = (x) => x.result) { return result === "all" ? items : items.filter((x) => getResult(x) === result); }
+// A control's best status for sorting: not-satisfied first (what needs work), then partly, then no evidence, then satisfied.
+export const CONTROL_STATUS_ORDER = ["not-satisfied", "partially", "no-evidence", "not-evidenced", "satisfied"];
+export function sortControls(controls) { return controls.slice().sort((a, b) => CONTROL_STATUS_ORDER.indexOf(a.status) - CONTROL_STATUS_ORDER.indexOf(b.status) || String(a.control_id).localeCompare(String(b.control_id), undefined, { numeric: true })); }
+export function frameworkBar(counts) {
+  return [{ label: "Satisfied", value: counts.satisfied || 0, key: "good" }, { label: "Partly", value: counts.partially || 0, key: "warn" }, { label: "Not satisfied", value: counts["not-satisfied"] || 0, key: "bad" },
+    { label: "No usable evidence", value: counts["no-evidence"] || 0, key: "none" }, { label: "Not observed by Quanta", value: counts["not-evidenced"] || 0, key: "dim" }];
+}
+
 export function filterRecords(list, q, getters) {
   const words = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return list;

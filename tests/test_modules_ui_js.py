@@ -340,5 +340,87 @@ class ExceptionRuleTests(unittest.TestCase):
         self.assertEqual(out, 1)
 
 
+@unittest.skipUnless(NODE, "node is not installed")
+class PostureLogicTests(unittest.TestCase):
+    def test_setting_text_by_kind(self):
+        out = run_js('''console.log(JSON.stringify([
+          M.settingText({kind:"env", key:"QUANTA_PRODUCTION", value:"true"}),
+          M.settingText({kind:"helm", key:"replicaCount", value:3}),
+          M.settingText({kind:"yaml", where:"remediation/config/ai_usage_policy.yaml", key:"allowed_models", value:["a","b"]}),
+          M.settingText({kind:"page", where:"/applications", key:"x", value:"y"}),
+          M.settingText({kind:"process", where:"CI", key:"POST /api/ingest/sbom", value:"on every release"}),
+          M.settingText(null)]));''', "moduleLogic.js")
+        self.assertEqual(out[0], "QUANTA_PRODUCTION=true")
+        self.assertEqual(out[1], "--set replicaCount=3")
+        self.assertEqual(out[2], '# remediation/config/ai_usage_policy.yaml\nallowed_models: ["a","b"]')
+        self.assertEqual(out[3:], ["", "", ""])  # a page or a process has no setting to paste
+
+    def test_actions_markdown_lists_each_action_with_its_setting(self):
+        actions = [{"title": "Turn on X", "framework_title": "Zero trust", "status": "fail", "evidence": ["0 of 5"], "recommendation": "Set it.", "change": {"kind": "env", "key": "A", "value": "1", "where": "environment"}},
+                   {"title": "Open it", "framework_title": "SDLC", "status": "partial", "evidence": [], "recommendation": "", "change": {"kind": "page", "where": "/x", "key": "k", "value": "v"}}]
+        md = call("moduleLogic.js", f'M.actionsMarkdown({json.dumps(actions)}, "2026-01-01")')
+        self.assertIn("# Security posture actions (2026-01-01)", md)
+        self.assertIn("1. **Turn on X** (Zero trust, gap)", md)
+        self.assertIn("A=1", md)
+        self.assertIn("2. **Open it** (SDLC, partial)", md)
+        self.assertIn("Where: /x > k (v)", md)
+
+    def test_reading_history_is_throttled_and_capped(self):
+        out = run_js('''let h=[]; h=M.pushReading(h,{overall:10},1000); h=M.pushReading(h,{overall:11},1000+60000); const afterGap=M.pushReading(h,{overall:12},1000+M.READING_GAP_MS+1);
+          let big=[]; for(let i=0;i<40;i++) big=M.pushReading(big,{overall:i},i*M.READING_GAP_MS*2);
+          console.log(JSON.stringify({sameWindow:h.length, afterGap:afterGap.length, capped:big.length, last:big[big.length-1].overall, junk:M.pushReading([null,{x:1},{t:5,overall:1}],{overall:2},9e9).length}));''', "moduleLogic.js")
+        self.assertEqual(out, {"sameWindow": 1, "afterGap": 2, "capped": 24, "last": 39, "junk": 2})
+
+    def test_reading_series_skips_missing_values(self):
+        out = call("moduleLogic.js", 'M.readingSeries([{fw:{a:10}},{fw:{a:null}},{fw:{a:30}},{fw:{a:25}}], (r)=>r.fw.a)')
+        self.assertEqual(out, {"values": [10, 30, 25], "current": 25, "previous": 30})
+        self.assertEqual(call("moduleLogic.js", 'M.readingSeries([], (r)=>1)'), {"values": [], "current": None, "previous": None})
+
+    def test_score_tone_and_totals(self):
+        self.assertEqual(call("moduleLogic.js", '[M.scoreTone(null), M.scoreTone(10), M.scoreTone(40), M.scoreTone(70)]'), ["none", "bad", "warn", "good"])
+        t = call("moduleLogic.js", 'M.postureTotals([{counts:{pass:1,fail:2}},{counts:{pass:3,unknown:4}},{}])')
+        self.assertEqual(t, {"pass": 4, "partial": 0, "fail": 2, "unknown": 4, "na": 0})
+
+    def test_filter_checks(self):
+        checks = [{"status": "fail", "title": "Backups tested"}, {"status": "partial", "title": "Logging", "detail": "retention is short"}, {"status": "pass", "title": "MFA"}, {"status": "unknown", "title": "Backups offsite"}]
+        out = run_js(f'const c={json.dumps(checks)}; console.log(JSON.stringify([M.filterChecks(c,"gaps").length, M.filterChecks(c,"fail").length, M.filterChecks(c,"all","backups").length, M.filterChecks(c,"all","retention short").length, M.filterChecks(c,"pass","backups").length]));', "moduleLogic.js")
+        self.assertEqual(out, [2, 1, 2, 1, 0])
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class ComplianceLogicTests(unittest.TestCase):
+    RISKS = [{"id": 1, "inherent_likelihood": 5, "inherent_impact": 5}, {"id": 2, "inherent_likelihood": 5, "inherent_impact": 5}, {"id": 3, "inherent_likelihood": 1, "inherent_impact": 1}, {"id": 4, "inherent_likelihood": 9, "inherent_impact": 0}]
+
+    def test_grid_is_five_by_five_with_impact_five_on_top(self):
+        grid = call("moduleLogic.js", f"M.riskGrid({json.dumps(self.RISKS)})")
+        self.assertEqual((len(grid), len(grid[0])), (5, 5))
+        self.assertEqual((grid[0][4]["likelihood"], grid[0][4]["impact"], grid[0][4]["count"], grid[0][4]["ids"]), (5, 5, 2, [1, 2]))
+        self.assertEqual((grid[4][0]["likelihood"], grid[4][0]["impact"], grid[4][0]["count"]), (1, 1, 1))
+        self.assertEqual(sum(c["count"] for row in grid for c in row), 3)  # an out-of-range risk is not drawn
+
+    def test_residual_grid_uses_residual_fields(self):
+        grid = call("moduleLogic.js", 'M.riskGrid([{id:1,residual_likelihood:2,residual_impact:3}], "residual")')
+        self.assertEqual(grid[2][1]["count"], 1)  # impact 3 is row index 2, likelihood 2 is column index 1
+
+    def test_grid_levels_match_the_register_bands(self):
+        out = call("moduleLogic.js", "[M.gridLevel(1,4), M.gridLevel(1,5), M.gridLevel(2,5), M.gridLevel(3,5), M.gridLevel(5,5)]")
+        self.assertEqual(out, ["Low", "Medium", "High", "Critical", "Critical"])
+
+    def test_result_counts_and_filter(self):
+        tests = [{"result": "pass"}, {"result": "fail"}, {"result": "pass"}, {"result": "weird"}]
+        self.assertEqual(call("moduleLogic.js", f"M.resultCounts({json.dumps(tests)})"), {"pass": 2, "fail": 1, "warn": 0, "na": 0, "error": 0})
+        self.assertEqual(call("moduleLogic.js", f'M.filterByResult({json.dumps(tests)}, "fail").length'), 1)
+        self.assertEqual(call("moduleLogic.js", f'M.filterByResult({json.dumps(tests)}, "all").length'), 4)
+
+    def test_controls_sort_with_what_needs_work_first(self):
+        cs = [{"control_id": "AC-10", "status": "satisfied"}, {"control_id": "AC-2", "status": "not-satisfied"}, {"control_id": "AC-1", "status": "partially"}, {"control_id": "AC-3", "status": "not-satisfied"}]
+        out = call("moduleLogic.js", f"M.sortControls({json.dumps(cs)}).map((c) => c.control_id)")
+        self.assertEqual(out, ["AC-2", "AC-3", "AC-1", "AC-10"])
+
+    def test_framework_bar_has_every_status(self):
+        parts = call("moduleLogic.js", 'M.frameworkBar({satisfied:3, partially:1, "not-satisfied":2, "not-evidenced":4})')
+        self.assertEqual([p["value"] for p in parts], [3, 1, 2, 0, 4])
+
+
 if __name__ == "__main__":
     unittest.main()
