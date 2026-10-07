@@ -24,11 +24,13 @@ a real, deployable web application. Both halves are real and current today:
   manifest of their own. See "Architecture: the 3-stage subagent pipeline" and
   "Architecture: the remediation engine" below.
 - **The dashboard** (`dashboard/app.py`) — a FastAPI backend plus a hand-rolled vanilla-JS
-  single-page frontend (~50 routes), a real auth/RBAC/session model, 8 live pull
+  single-page frontend (about 410 API routes, about 80 page modules, organised into eight
+  modules - see "Module layout"), a real auth/RBAC/session model, 8 live pull
   connectors and 3 push connectors, a headless CLI (`cli/quanta.py`) that drives either
-  pipeline non-interactively, and a Python `unittest` suite of 2,302 tests — all passing as
-  of 2026-09-03 (`python -m unittest discover -s tests -p "test_*.py"`). See "Architecture:
-  the dashboard" below.
+  pipeline non-interactively, and a Python `unittest` suite of about 3,700 tests (3,707
+  collected on 2026-10-07; CI runs them in four shards - see "CI shards"). Count them with
+  `unittest.TestLoader().discover("tests").countTestCases()`; the last full green run is the CI
+  badge, not this file. See "Architecture: the dashboard" below.
 
 The dashboard reads the pipelines' own output artifacts (`SECURITY_REPORT.md`,
 `remediation/output/normalized-findings.json`, `REMEDIATION_PLAN.md`) directly off disk,
@@ -37,7 +39,7 @@ unrelated projects sharing a repo.
 
 For depth beyond this file: [dashboard/README.md](dashboard/README.md) and
 [cli/README.md](cli/README.md) are the primary sources this file draws from and defers to.
-`docs/enterprise-suite/` holds nine longer technical references (`architecture.html`,
+`docs/enterprise-suite/` holds ten longer technical references (`architecture.html`,
 `vuln-engine.html`, `remediation-engine.html`, `connectors.html`, `rbac-governance.html`,
 `ai-capabilities.html`, `reporting.html`, `pages.html`, `developer-guide.html`) plus a
 task-oriented `user-guide.html` for
@@ -95,7 +97,7 @@ dashboard and `remediation/` Python modules are ordinary Python: edit, then re-r
 
 ## Architecture: the dashboard
 
-One FastAPI process (`dashboard/app.py`, ~2,450 lines) serves the JSON API, the SPA shell,
+One FastAPI process (`dashboard/app.py`, ~7,800 lines, plus the routers `appsec_api.py`, `investigation_api.py`, `mcp_api.py`, `simulation_api.py` and `events.py`) serves the JSON API, the SPA shell,
 and every static asset — no message queue, cache layer, or microservice boundary to
 operate. Admin-editable policy still lives in YAML files under `remediation/config/`, read
 fresh on every request; the record stores that see real read-modify-write traffic
@@ -128,7 +130,7 @@ bundler, no `node_modules`. Shared libraries: `api.js` (every backend call in on
 `dom.js` (HTML-escaping, flash messages, KPI-card helpers), `charts.js` (hand-rolled SVG
 bar/pie charts, shared severity palette).
 
-For the full route table (every one of the ~50 pages and what it shows), see the "Pages"
+For the full route table (every one of the roughly 80 pages and what it shows), see the "Pages"
 section of [dashboard/README.md](dashboard/README.md) or `docs/enterprise-suite/pages.html`
 — it's long enough that reproducing it here would just be a second copy to keep in sync.
 The shape worth knowing without opening either: a "Security Domains" layer of hub pages
@@ -300,7 +302,7 @@ expected state for a new connector, not something to gloss over.
 ## Testing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - 2,302 tests today, all passing
+python -m unittest discover -s tests -p "test_*.py"   # everything, repo-wide - about 3,700 tests (3,707 collected 2026-10-07); takes a long time, so CI shards it
 python -m unittest tests.test_dashboard -v              # dashboard API + auth-gating tests
 python -m unittest tests.test_auth -v                    # passwords/sessions/users/OIDC unit tests
 ```
@@ -315,7 +317,7 @@ and out around gated-route tests, so the suite never depends on or mutates the r
 shipped `dashboard/auth/users.json`. `.github/workflows/ci.yml` installs
 `dashboard/requirements.txt`, `remediation/connectors/requirements.txt`,
 `remediation/enrichment/requirements.txt`, and `remediation/config/requirements.txt` (in
-that order) and runs the full suite on every push and PR.
+that order) and runs the full suite on every push and PR, in four shards (see "CI shards").
 
 For JS: `node --check <file>` catches syntax errors only — necessary, never sufficient. It
 will not catch a missing or mismatched import, which only surfaces as a runtime
@@ -482,8 +484,8 @@ image tag, secret baked into an image layer via `ENV`.
 
 ## Enterprise documentation suite — keep it in sync with the application
 
-`docs/enterprise-suite/` holds 14 HTML documents (an executive brief, a companion
-whitepaper, 9 technical references, a POC methodology, a commercial pricing/SLA page,
+`docs/enterprise-suite/` holds 16 HTML documents (a hub page, an executive brief, a companion
+whitepaper, 10 technical references (including `soc-operations.html`), a POC methodology, a commercial pricing/SLA page,
 and a task-oriented user guide — indexed in `docs/enterprise-suite/MANIFEST.md`, each
 also published as a live, shareable Artifact page at the URL listed there) plus
 `docs/PRICING.md`, the plain-markdown source of truth for pricing/SLA terms.
@@ -683,12 +685,36 @@ remains. A technical guardrail and a clear contract, not copy protection; never 
 
 **Ontology and multi-hop questions** (`remediation/ontology/`, `config/ontology.yaml`, `config/ontology_questions.yaml`, `GET /api/ontology*`, section on `/graphs`; reference `docs/ONTOLOGY.md`): a vocabulary (classes, is-a, typed relations with domain/range, transitive/inverse axioms, cardinalities, per-module kind mappings), `validate.py` (SHACL-like report, never mutates), optional provenance on graph nodes/edges (`prov=` on `GraphBuilder.node/edge`; absent = unknown, never guessed; `provenance.py` is the Fact view), `estate.py` (all module graphs + findings + controls in ontology terms, capped) and `query.py` (structured JSON patterns only, parsed against the ontology, bounded; named questions in `ontology_questions.yaml`). When you add a module graph kind or edge kind, add it to the `mappings` in `ontology.yaml` (`tests/test_ontology_core.py` lists the known kinds). `/api/ontology` is a shared licensing prefix.
 
+**Typed decisions and the confidence gate** (`remediation/decisions/`, `config/decision_policy.yaml`, `POST /api/decisions/evaluate`, `GET /api/decisions/policy`, `GET /api/decisions/calibration`; reference `docs/DECISIONS.md`): a decision is a state plus named questions with fixed answer spaces (`Choice`, `Score`, `YesNo` in `schema.py`); an evaluator returns `Answer(value, probability, confidence, evidence)` and `run()` rejects a missing, foreign or out-of-space answer. `gate.py` routes each decision to `auto`, `review` or `human` from the lowest `min(probability, confidence)` and the policy's thresholds; `auto` is possible only when the policy says `reversible` and `local` AND the code-registered decision has `touches_environment = False` (that flag is not in the YAML), and a Critical alert is never closed as a likely false positive. Three decisions are registered (`soc-alert-triage`, `finding-routing`, `change-approval-needed`), all deterministic and reusing existing scoring; no third-party model is called. `calibration.py` (table `decision_log`) records outcomes and reports reliability bins, Brier, ECE and override rate. With the shipped priors nothing reaches `auto`.
+
+**Integrity and safe self-heal** (`remediation/integrity/`, `GET /api/integrity`, `POST /api/integrity/heal`, `quanta-admin integrity-manifest` and `check-integrity [--heal --confirm]`; reference `docs/INTEGRITY.md`): `manifest.py` writes a SHA-256 baseline of code and shipped files at image build time (code must not change; `remediation/config/*.yaml` policy is expected to and is reported as `policy-changed`; no manifest is `no-baseline`, never `ok`); `checks.py` is read-only (database integrity, tables vs schema/migrations, findings file, orphans, stale locks, file snapshots, disk, clock, key and licence expiry) and "could not check" is never `ok`; `heal.py` has exactly four repairs (stale locks of dead owners, findings file from `.bak` keeping the bad copy, missing tables, file snapshots) that preview unless `confirm=True` and are written to the activity log as `integrity.heal.<name>`. A summary is in `/readyz` (never fails readiness); an hourly leader-tick check alerts once per problem (`QUANTA_INTEGRITY_CHECKS=false` turns it off).
+
+**MCP endpoint** (`POST /mcp`, `remediation/mcp/`, `dashboard/mcp_api.py`, `config/mcp_policy.yaml`, `GET /api/mcp/status`; reference `docs/MCP_ENDPOINT.md`): a read-only Model Context Protocol server (revision 2025-11-25, Streamable HTTP, written by hand, replies are single JSON objects, no sessions). Off unless `QUANTA_MCP_ENABLED=true` (otherwise 404). Only a Quanta API key with scope `mcp:read` opens it (never anonymous, never in a URL, a browser Origin is refused unless listed), and every `tools/call` re-checks `mcp:read` plus the tool's own scope (`read:findings`); a key can be bound to one team (`api_keys.team`, migration 8) and then sees only that team's records. Tools are an allowlist of read tools (`search_findings`, `get_finding`, `list_assets`, `kev_open_findings`, `top_priorities`, `attack_paths_for_asset`, `posture_summary`) with closed JSON schemas and whitelisted, size-capped, secret-masked output marked `_untrusted: true`; registering a non-read tool raises. Calls are rate limited, timed out and audited (denials too, never result bodies). Never run against a real MCP client in CI.
+
+**External attack surface management** (`remediation/asm/`, `config/asm_policy.yaml`, page `/attack-surface` in Module 4, admin only, `POST /api/ingest/asm` with key scope `asm:write`; reference `docs/ATTACK_SURFACE.md`): import-based. Quanta never scans or contacts a target; it reads the JSON of subfinder, dnsx, httpx, naabu and nuclei (and a scope-seeds CSV, administrator only), keeps assets under stable keys (`kind:value`) so a repeat import changes nothing, records a delta per import (new, changed, disappeared, where "disappeared" needs a complete import by a tool that can speak for absence, within a named scope), flags assets outside the declared scope without raising findings, and publishes findings (source `asm`, rules ASM-* in `asm_policy.yaml`) as a complete set. Everything states the age of the import.
+
+**Anthropic CVD feed** (`remediation/connectors/cvd_feed_connector.py`, `remediation/cvd/`, `/api/cvd/*`, a section on `/zero-day-watch`, `docs/CVD_FEED.md`, migration 6 / table `cvd_advisories`): reads only Anthropic's PUBLIC coordinated-disclosure page and its published `payload.json` (https only, through the `session=` seam and `url_safety`); a CVE match is exact, a name match reuses the zero-day-watch vocabulary and is not a version check. Fetch is admin-confirmed; the hourly refresh is off unless `QUANTA_CVD_FEED_REFRESH=true`. The payload schema was undocumented, so the parser is tolerant (`FIELD_ALIASES`); never run against the live site.
+
+**Insights and structured Ask** (`remediation/insights/`, `config/insights.yaml`, `GET /api/insights`, `POST /api/insights/{id}/snooze|dismiss|acted`, admin `refresh` and `settings`, `POST /api/ask/structured`, migration 12; reference `docs/INSIGHTS.md`): 17 deterministic detectors over robust statistics (median/MAD, EWMA, seasonal-naive, change-point) say what changed and why it matters, with evidence, confidence, a next best action and "not enough history" instead of a guess; an insight id hashes the detector and subject (never a number) so a decision about it survives refreshes; a missing source is a gap note, never "nothing happened". Score is impact x confidence x urgency x role relevance x a bounded learned weight. Hourly leader refresh (`QUANTA_INSIGHTS=false` turns it off); Home shows the top cards. Structured Ask parses a fixed grammar, runs it with the asker's permissions and returns the exact query; no model is called.
+
+**Proactive hunt engine** (`remediation/hunting/engine/`, `config/hunt_engine.yaml`, `GET/POST /api/hunting/suggestions*`, migration 9, tables `hunt_hypotheses` and `hunt_hypothesis_events`; reference `docs/HUNT_ENGINE.md`): turns data Quanta holds into hypotheses to test (PEAK / TaHiTI / SANS hunt types / ATT&CK), not a vulnerability list. Generators (`generators.py`: intel report, threat actor, CVD advisory, KEV exposure, coverage gap, baseline/anomaly, exposure, identity, lessons learned, dark web, model-assisted) are pure functions of a `Context` and return plain-sentence gap notes when their data is absent; `readiness.py` says "cannot tell" instead of guessing; each hypothesis has an evidence chain, SPL/KQL/Sigma leads and a scored priority with its working. Lifecycle suggested, accepted (creates an ordinary `hunts` record), running, evidence-recorded, concluded, promoted (a detection use case, never counted as coverage) or dismissed with a reason; ids are hashes so a refresh updates rather than duplicates. Quanta runs no search on its own.
+
+**SOC incident automation** (`remediation/soc/incidents/`, `config/soc_routing.yaml`, `/api/soc/incidents*`, `/api/soc/routing/preview`, `PUT /api/soc/analysts`, migration 10; reference `docs/SOC_INCIDENTS.md`): analysts do not create cases. Every investigated alert is grouped into an incident (`correlate.py`: weighted reasons such as shared host, account or public indicator, same-rule burst, shared CVE, technique, kill-chain progression, each stored as plain text; same-rule repeats are duplicates, counted not dropped), summarised (`summary.py`, deterministic) and routed (`routing.py`, `roster.py`: tier from severity, KEV, crown jewels, kill-chain stage and confidence, then analyst by specialty, continuity, lowest sufficient tier and load among those available, with a stored "why routed here"; nobody qualified means queued and the lead alerted). The existing `soc_cases` row is the work item an incident is routed as and keeps the SLA clocks (`incidents.enabled: false` restores one case per alert). Cases are auto-created from incidents; manual creation survives only as an audited exception under "More". Alerts the decision layer rates a likely false positive with `auto` confidence are auto-closed only under its reversible-and-local rule (never Critical, never with a KEV on the host) into a lane with undo that records an override; with the shipped policy nothing auto-closes. Resolving needs a verdict, which feeds calibration. Routes are admin only.
+
+**Investigation reports and hunt reports** (`remediation/investigation/`, `remediation/hunting/hunt_report.py`, `dashboard/investigation_api.py`, `config/query_playbook.yaml`, migration 11; reference `docs/INVESTIGATION_REPORTS.md`): `GET /api/soc/incidents/{id}/report` assembles a structured report from stored data (verdict with rationale, bounded historical correlation, entities, indicators with reputation, ATT&CK next steps, attack-flow data, recommended actions that need a second person, references); every statement cites evidence listed in the report and one with no valid reference is dropped and counted; unknown is a value (`unknown`, `not-looked-up`), never "clean". Live evidence runs only after a person confirms, from a fixed query playbook with hard stops and the look-back ceiling. `POST /api/ingest/itsm-ticket` (key scope `soc:write`) turns a ServiceNow or Jira ticket into an alert; a comment back to the ticket is a dry run unless confirmed and never posted twice. `GET /api/hunting/hunts/{id}/report` (JSON default; `?format=md|html`) has one row per trial hit, an allow-list for benign activity (set-aside rows are counted) and detection recommendations. Nothing is written by a model; never run against a live SIEM, reputation service or ITSM.
+
+**UI kit and live events** (`dashboard/static/ui.css`, `js/ui.js`, `live.js`, `fuzzy.js`, `tableMath.js`, `commandPalette.js`, `js/pages/designSystem.js`, `dashboard/events.py`, page `/design-system`; reference `docs/UI_KIT.md`): plain JS and CSS (no bundler, nothing loaded from outside the app, so the same-origin CSP stays valid). Ctrl/Cmd+K is the command palette (fuzzy over every page the user may open, honouring licence, feature flags and admin-only tips); `GET /api/events` is one shared read-only Server-Sent Events stream (session auth, bounded per-client queues, `Last-Event-ID` replay) with a polling fallback in `live.js`; pages follow a cleanup contract with an error boundary and skeleton loading. The SOC command center and Threat Hunting pages are built on it (`pages/soc.js`, `socIncident.js`, `pages/hunting.js`, `huntReport.js`, pure logic in `socLogic.js` / `huntLogic.js` tested under Node, `sxKit.js`, `soc.css`, `remediation/hunting/matrix.py`; reference `docs/SOC_HUNT_UI.md`). Pure browser logic goes in a DOM-free module with a Node test.
+
+**CI shards** (`scripts/ci_shard.py`, `.github/workflows/ci.yml`, `tests/test_ci_shard.py`): a serial run grew past 90 minutes, so CI runs four shards in parallel (`python scripts/ci_shard.py <1-based index> <count>` prints the dotted test modules for one shard, balanced by file size, deterministic, every `test_*.py` in exactly one shard). Each module runs in its own process under `timeout 900` (900 s), so one hung test cannot stall the job, and the slowest modules are printed at the end; a final `all-tests` job is the one stable required check. **Any test that GETs every route must skip the Server-Sent Events routes** (routes ending `/stream` or `/events`, such as `/api/events` and the incident stream, hold the connection open for up to an hour; `tests/test_empty_state.py`'s `STREAM_SUFFIXES` is the example): that once made CI runs 30 to 90 minutes.
+
+**Conventions for parallel work**: (1) Schema migrations (`remediation/utils/migrations.py`, `MIGRATIONS`, 12 today): take the next free number, check `origin/master` first because other sessions add them, never renumber a merged one, keep them expand-only (`tests/test_migration_policy.py`), and for a new table only use the table-only pattern (`db.<table>.create(engine, checkfirst=True)`; `ensure_schema` also creates it on a fresh install). A column added to an existing table goes through `_add_missing_columns`. (2) `CHANGELOG.md` `[Unreleased]` entries are added at the TOP of the section, and on a merge conflict keep BOTH sides (then check you did not duplicate an entry; a merged duplicate once carried a wrong migration number). (3) Docs move with code: see "Enterprise documentation suite" and `tests/test_docs_sync.py`.
+
 **Capabilities page / All modules** (`remediation/capabilities.py`, `config/capabilities.yaml`, page `/capabilities`): the eight modules above, each listing its capabilities with a live count,
 what to connect when it is empty, and its connectors. Add a capability to the YAML and it appears.
 
 **Inbound API** (`docs/INTEGRATION_API.md`): `remediation/apikeys/store.py` issues Quanta API keys
 (`qk_<prefix>_<secret>`, SHA-256 hash only, scopes `ingest:write` / `tickets:update` /
-`read:findings` / `controls:write` / `ai-usage:write` / `soc:write` / `api:write`, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
+`read:findings` / `controls:write` / `ai-usage:write` / `soc:write` / `darkweb:write` / `api:write` / `asm:write` / `mcp:read`, optional team binding, expiry, revoke; table `api_keys`). `require_api_key(scope)` in `dashboard/app.py`
 guards `POST /api/ingest/findings`, `/api/ingest/scanner-csv`, `/api/inbound/ticket-status`,
 `GET /api/export/findings`; only `/api/ingest/`, `/api/inbound/`, `/api/export/` are exempt from the
 login gate, and only because each route checks a key itself. `/api/ingest/generic` needs a key when
@@ -760,7 +786,7 @@ Policy: `remediation/config/soc_ops.yaml`. Tables `soc_cases`, `soc_case_events`
 multinomial Naive Bayes technique classifier (phrase list `ttp_lexicon.yaml` + hunt library + analyst-confirmed alerts); `usecases.py` + `usecase_store.py` generate and track
 detection use cases (coverage gap, hunt promotion, tactic-pair sequence mining, indicator watchlist) as Sigma drafts that are never counted as coverage; `remediation/soar/recommend.py`
 ranks playbooks by similarity-weighted past success; `remediation/soar/ai_draft.py` is the only language-model path (playbook drafts validated by `playbooks.validate`, use-case
-refinement), confirm-gated through `_enforce_ai_usage_limit`/`_run_ai_call_and_record_usage`, never auto-saved. Page `/soc`; routes under `/api/soc/*`, `/api/detections/usecases*`,
+refinement), confirm-gated through `_enforce_ai_usage_limit`/`_run_ai_call_and_record_usage`, never auto-saved. Page `/soc` (cases are auto-created from incidents - see "SOC incident automation" below; manual creation is an audited exception, not the workflow); routes under `/api/soc/*`, `/api/detections/usecases*`,
 `/api/soar/draft-playbook`. Method and models: `docs/enterprise-suite/soc-operations.html`. None of this is deep learning, and none has run against a live SIEM.
 
 **SOC workflow** (`dashboard/app.py`): `_AutoInvestigator` investigates each new alert on both ingest routes, locally (no reputation or SIEM), loading context once per request and capped

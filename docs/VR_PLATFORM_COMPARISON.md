@@ -24,8 +24,7 @@ needs... must not be considered final deliverables." Concretely:
 
 - The deck repeatedly references **"Tyson"** ("consolidating vulnerability findings from
   all key Tyson tools," "integrate Tyson's stack," "positions Tyson for scalable...
-  vulnerability management") — a company name with no connection to Quanta or
-  Deloitte. This is a leftover/hallucinated artifact from generating the deck, not a
+  vulnerability management") — a company name with no connection to Quanta. This is a leftover/hallucinated artifact from generating the deck, not a
   real requirement — a concrete sign the deck was not built specifically for this
   project and wasn't proofread before being shared.
 - Its "References" slide lists two sources with the actual URL replaced by a literal

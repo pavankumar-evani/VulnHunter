@@ -438,8 +438,8 @@ class MigrationTests(unittest.TestCase):
     def test_migration_13_is_table_only_and_idempotent(self):
         with tempfile.TemporaryDirectory() as d:
             e = create_engine(f"sqlite:///{Path(d) / 'm.db'}")
-            self.assertEqual(migrations.MIGRATIONS[-1][0] >= 13, True)
-            m13 = [m for m in migrations.MIGRATIONS if m[0] == 13][0]
+            self.assertEqual(migrations.MIGRATIONS[-1][0] >= 14, True)
+            m13 = [m for m in migrations.MIGRATIONS if m[0] == 14][0]
             self.assertEqual(m13[1], "hunt_knowledge_tables")
             migrations.apply(e)
             names = set(inspect(e).get_table_names())

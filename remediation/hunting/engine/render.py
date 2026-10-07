@@ -70,5 +70,6 @@ def queries_for(technique_ids, hosts=(), identities=(), lib=None, index=None, to
                                          usecases.LOGSOURCE.get(tid, {"category": "process_creation"}), "medium", today)
             out.append({"technique": tid, "name": d["name"], "domain": entry.get("domain", "endpoint"), "source": "SIEM", "language": "splunk-spl",
                         "query": translate.to_spl(sel, scope_hosts, index), "kql": to_kql(sel, scope_hosts), "sigma": sigma,
+                        "selection": sel, "hosts": scope_hosts, "index": index,
                         "description": f"{entry['hunt']}. {entry.get('notes') or ''}".strip(), "result": None, "notes": ""})
     return out, missing

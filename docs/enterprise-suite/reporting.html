@@ -316,6 +316,9 @@
         <p>Those four pages get real, automatic, server-side filtering to a logged-in non-admin's own assigned team. Reports do not work that way: a report's <code>team</code> filter (§01/§02) is a parameter someone explicitly supplies, not something inferred from the caller's session. Logging in with a team assigned doesn't, by itself, narrow what a report shows.</p>
       </div>
 
+      <h3>Incident investigation reports and hunt reports are different documents</h3>
+      <p>The Reports page produces the KPI, SLA and coverage snapshot. Two other reports live with the SOC: the incident investigation report (<code>GET /api/soc/incidents/{id}/report</code>, <code>/soc?incident=ID</code>) and the hunt report (<code>GET /api/hunting/hunts/{id}/report</code>; JSON by default, <code>?format=md</code> or <code>html</code> for a print-friendly copy). Both are assembled from stored data, never written by a model; every statement in the incident report cites listed evidence and one without it is dropped and counted. They need an administrator login and are not part of report scheduling. See <code>docs/INVESTIGATION_REPORTS.md</code>.</p>
+
       <h3>Reports vs. Overview — two honest answers to "what's our posture right now?"</h3>
       <p>The Overview page (<code>/</code>) is the always-on companion to the on-demand/scheduled snapshots on this page: the same KPI family (SLA, KEV, EPSS, coverage), refreshed automatically every 20 seconds, with the real charts described in §03 sitting alongside them. Reports exists for the moment you need that same real data as a static, shareable, emailable artifact — a point-in-time export, not a live view. Use Overview to watch; use Reports to hand someone a snapshot.</p>
 

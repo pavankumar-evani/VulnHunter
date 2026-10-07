@@ -19,6 +19,11 @@ on-premises security tools live there.
 | **Infoblox** | grid master host, username, password | Host IP/MAC records | Reconciled into the asset inventory. |
 | **Axonius** | base URL, API key, API secret | Device records | Reconciled into the asset inventory. |
 | **Active Directory** | server, base DN, optional bind DN and password, LDAPS | Computer objects | Names only (AD carries no IP/MAC); no findings. |
+| **Microsoft Sentinel search** | Log Analytics workspace id, Entra tenant, client id and secret (Log Analytics Reader) | Nothing synced; read-only KQL on demand | Hunts and investigations, after a person confirms. See [SIEM_CONNECTORS.md](SIEM_CONNECTORS.md). |
+| **Google SecOps search** | API URL, instance resource, OAuth2 access token | Nothing synced; read-only UDM search on demand | As above. Quanta does not mint tokens or touch rules. |
+| **Elastic search** | URL, API key (read on the hunted indexes), language eql or esql, index pattern | Nothing synced; read-only EQL or ES\|QL on demand | As above. Only the search, query and info endpoints are reachable. |
+| **CrowdStrike Falcon lookup** | API client id and secret (Hosts: Read, Alerts: Read) | Nothing synced; host and detection lookups on demand | As above. Five fixed read calls; no containment. |
+| **TAXII 2.1 server** | API root URL and a token, key or username and password | Nothing synced by the scanner sync; reports polled by the report watcher | Add the connection, then a source on Threat Intelligence > Report sources. See [INTEL_WATCHER.md](INTEL_WATCHER.md). |
 
 OpenVAS/GVM launches scans that run for a long time, so it stays on its own page under
 Connectors / Adaptors (start, check status, import).

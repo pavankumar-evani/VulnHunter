@@ -18,7 +18,8 @@ CLASS_WORDS = (
 CLASS_LABEL = {"edr": "EDR / endpoint telemetry", "auth": "Authentication logs", "web": "Web / WAF logs", "dns": "DNS logs", "proxy": "Web proxy logs",
                "cloud": "Cloud audit logs", "network": "Network / firewall / flow logs", "other": "Other logs"}
 CONNECTED_BY = {"edr": ("cortex-xsiam",), "cloud": ("prismacloud",)}
-SIEM_TYPES = ("splunk-search", "splunk")
+SEARCH_TYPES = ("splunk-search", "sentinel-search", "chronicle-search", "elastic-search", "falcon-search")   # connections Quanta can run a lead in
+SIEM_TYPES = SEARCH_TYPES + ("splunk",)
 
 
 def classify(source_text):
@@ -33,7 +34,7 @@ def assess(source_names, connections):
     """-> {"sources": [...], "summary": {...}}. `connections` are the public connection dicts (type, enabled)."""
     on = {c["type"] for c in connections or [] if c.get("enabled")}
     siem = bool(on & set(SIEM_TYPES))
-    run_here = "splunk-search" in on
+    run_here = bool(on & set(SEARCH_TYPES))
     rows = []
     for name in source_names:
         cls = classify(name)

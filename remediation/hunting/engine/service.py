@@ -184,7 +184,7 @@ def accept(hid, actor, owner=None, engine=None):
         raise KeyError("No such suggestion")
     if h["status"] != "suggested":
         raise TransitionError(f"A suggestion that is {h['status']} cannot be accepted")
-    spl = [{k: q[k] for k in ("technique", "name", "domain", "source", "language", "query", "result", "notes", "description", "kql", "sigma")} for q in h["queries"]]
+    spl = [{k: q[k] for k in ("technique", "name", "domain", "source", "language", "query", "result", "notes", "description", "kql", "sigma", "selection", "hosts", "index") if k in q} for q in h["queries"]]
     try:
         hunt = hunt_store.create_hunt({"title": h["title"], "hypothesis": h["hypothesis"], "source": "hypothesis", "source_ref": h["id"], "techniques": [{"technique_id": t["technique_id"], "technique_name": t["technique_name"]} for t in h["techniques"]],
                                        "assets": h["scope"]["assets"], "data_sources": [d["name"] for d in h["data_sources"]], "queries": spl, "notes": _prep_notes(h), "owner": owner}, actor, engine)

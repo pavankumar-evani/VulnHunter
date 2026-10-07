@@ -311,11 +311,18 @@
             <tr><td><code>read:findings</code></td><td><code>GET /api/export/findings</code></td></tr>
             <tr><td><code>controls:write</code></td><td><code>POST /api/ingest/controls</code></td></tr>
             <tr><td><code>ai-usage:write</code></td><td><code>POST /api/ingest/ai-usage</code> and <code>POST /api/ingest/otlp/v1/traces</code></td></tr>
-            <tr><td><code>soc:write</code></td><td><code>POST /api/ingest/alerts</code></td></tr>
+            <tr><td><code>soc:write</code></td><td><code>POST /api/ingest/alerts</code>, <code>/api/ingest/alerts/ocsf</code>, <code>/api/ingest/threat-intel</code>, <code>/api/ingest/itsm-ticket</code></td></tr>
+            <tr><td><code>darkweb:write</code></td><td><code>POST /api/ingest/darkweb</code></td></tr>
+            <tr><td><code>api:write</code></td><td><code>POST /api/ingest/api-traffic</code>, <code>/api/ingest/api-test-results</code></td></tr>
+            <tr><td><code>asm:write</code></td><td><code>POST /api/ingest/asm</code> (subfinder, dnsx, httpx, naabu, nuclei JSON; never the scope)</td></tr>
+            <tr><td><code>mcp:read</code></td><td><code>POST /mcp</code> (the read-only MCP endpoint; each tool also needs <code>read:findings</code>)</td></tr>
           </tbody>
         </table>
       </div>
       <p>Only <code>/api/ingest/</code>, <code>/api/inbound/</code> and <code>/api/export/</code> accept a key in place of a browser login, and each checks the key itself. Every other route still requires a signed-in user when <code>QUANTA_REQUIRE_LOGIN_FOR_READS</code> is on.</p>
+      <h3>Attack surface imports, the CVD feed and the MCP endpoint</h3>
+      <p><strong>Attack surface</strong> (<code>POST /api/ingest/asm?tool=&lt;subfinder|dnsx|httpx|naabu|nuclei&gt;&amp;scope=&lt;domain or range&gt;&amp;complete=&lt;bool&gt;&amp;publish=&lt;bool&gt;</code>, scope <code>asm:write</code>): Quanta reads the tools' JSON and never scans or contacts a target. A partial import never removes an asset; only a complete import by a tool that can speak for absence does, within the named scope. <strong>Anthropic CVD feed</strong> (<code>remediation/connectors/cvd_feed_connector.py</code>; <code>/api/cvd/*</code>): a read-only pull of Anthropic's public coordinated-disclosure payload, admin-confirmed, https only; the payload schema is undocumented so the parser is tolerant and has never been run against the live site. <strong>MCP</strong> (<code>POST /mcp</code>, <code>docs/MCP_ENDPOINT.md</code>): inbound, read-only, off unless <code>QUANTA_MCP_ENABLED=true</code>, opened only by a key with <code>mcp:read</code> (never in a URL), seven allowlisted read tools, rate limited and audited. All three are built against public documentation and unit-tested against fakes.</p>
+
       <h3>Git host webhook</h3>
       <p>The one inbound route that takes no API key is <code>POST /api/inbound/git-webhook</code>, which lets GitHub or GitLab report a fix pull request's state as it changes. Set <code>QUANTA_GIT_WEBHOOK_SECRET</code> (or <code>QUANTA_GIT_WEBHOOK_SECRET_FILE</code>) and give the host the same secret. GitHub signs the body (<code>X-Hub-Signature-256</code>, HMAC-SHA256); GitLab sends it as <code>X-Gitlab-Token</code>. With no secret set every delivery is refused (503), a bad signature is 401, and a pull request Quanta did not open is ignored. Only the pull request URL and its open, merged or closed state are used. Built against the hosts' public documentation and tested against hand-signed payloads; no delivery has been received from a live host. See <code>docs/INTEGRATION_API.md</code>.</p>
 

@@ -21,6 +21,7 @@ import { openGroupDetail } from "../groupDetail.js";
 import { sourcesFor, remediationStatusFor, remediationStatusBadgeHtml, REMEDIATION_STATUS_LABELS } from "../threatIntelTagging.js";
 import { exportButtonsHtml, wireExportButtons } from "../export.js";
 import { paginate, paginationHtml, wirePagination } from "../pagination.js";
+import { mountReportSources } from "../reportSources.js";
 
 export const title = "Threat Intel";
 
@@ -436,6 +437,7 @@ export async function render(container) {
     });
   });
 
+  mountReportSources(container);
   renderGroupsRows();
   container.querySelector("#ti-f-industry").addEventListener("change", (e) => {
     industryFilter = e.target.value;
