@@ -1,0 +1,43 @@
+# Controls for MITRE ATLAS techniques. The mitigation ids and names are MITRE's (data/atlas_mitigations.json); this file adds, for each, the control CLASS the controls
+# inventory uses where one fits (the vocabulary in enrichment/attack_mitigations.yaml) or an AI-specific class, and a practical action in plain words.
+# MITRE publishes no NIST SP 800-53 mapping for ATLAS mitigations and none is invented here: `nist` stays empty until you add one you have verified.
+# A control suggested from this file is a SUGGESTION. It is never recorded as implemented; "add to controls as planned" keeps it in a planning list only.
+ai_classes:
+  ai-guardrails: AI guardrails and input/output controls
+  ai-governance: AI governance, guidelines and human oversight
+mitigations:
+  AML.M0000: {class: access-restriction, action: "Limit what technical detail about your AI stack (architecture, datasets, vendors) is published or visible to outsiders."}
+  AML.M0001: {class: access-restriction, action: "Do not release model weights or artefacts beyond the parties that need them; keep them off public hubs."}
+  AML.M0002: {class: ai-guardrails, action: "Return only the output fields users need (no raw confidence scores or logits) so extraction and inference are harder."}
+  AML.M0003: {class: ai-guardrails, action: "Harden the model against adversarial inputs (adversarial training, regularisation) and test it."}
+  AML.M0004: {class: access-restriction, action: "Rate-limit and quota model queries per key, user and address; alert on systematic high-volume querying."}
+  AML.M0005: {class: least-privilege, action: "Control who and what can read or write models and datasets at rest (storage permissions, separate roles for training and serving)."}
+  AML.M0006: {class: ai-guardrails, action: "Use several models or checks so one manipulated model cannot decide alone."}
+  AML.M0007: {class: secure-development, action: "Sanitise and review training data; remove duplicates, outliers and suspicious sources before training."}
+  AML.M0008: {class: secure-development, action: "Validate a model (accuracy, bias, robustness, backdoor tests) before it is deployed and after every change."}
+  AML.M0009: {class: ai-guardrails, action: "Where possible, cross-check inputs with a second kind of sensor so one spoofed channel is not decisive."}
+  AML.M0010: {class: ai-guardrails, action: "Pre-process inputs to remove adversarial perturbations before the model sees them."}
+  AML.M0011: {class: app-control, action: "Restrict which libraries and model-loading formats may run; prefer formats that cannot execute code on load."}
+  AML.M0012: {class: encryption, action: "Encrypt models, datasets and embeddings at rest and in transit; keep keys in a vault."}
+  AML.M0013: {class: app-control, action: "Sign model and agent-tool artefacts and verify signatures before loading."}
+  AML.M0014: {class: secure-development, action: "Verify the hash, signature and provenance of every downloaded model, dataset and tool; scan model files for unsafe content."}
+  AML.M0015: {class: ai-guardrails, action: "Detect adversarial or out-of-distribution inputs and route them to review."}
+  AML.M0016: {class: vuln-scanning, action: "Scan AI platforms, inference servers and their dependencies for vulnerabilities on a schedule."}
+  AML.M0017: {class: secure-development, action: "Distribute models in ways that limit tampering and theft (signed packages, trusted registries, hosted inference)."}
+  AML.M0018: {class: user-training, action: "Train developers and users on prompt injection, unsafe model files and AI-assisted social engineering."}
+  AML.M0019: {class: least-privilege, action: "Control access to production models and the data they use: authentication, authorisation, per-caller limits."}
+  AML.M0020: {class: ai-guardrails, action: "Put guardrails around the model: input filtering, output filtering, topic and tool restrictions, enforced outside the model."}
+  AML.M0021: {class: ai-governance, action: "Publish and enforce guidelines for acceptable AI use, data that may be entered, and review of outputs."}
+  AML.M0022: {class: ai-guardrails, action: "Use models aligned to refuse harmful instructions, and test alignment against jailbreaks."}
+  AML.M0023: {class: secure-development, action: "Keep an AI bill of materials (models, datasets, libraries, tools) so affected systems can be found quickly."}
+  AML.M0024: {class: audit-logging, action: "Log prompts, retrieved context, tool calls and outputs (with secrets removed) in a place defenders can search."}
+  AML.M0025: {class: secure-development, action: "Record where every dataset came from, who changed it and when; make datasets immutable and versioned."}
+  AML.M0026: {class: least-privilege, action: "Give agents only the permissions their task needs; avoid standing privileged credentials in agent configuration."}
+  AML.M0027: {class: least-privilege, action: "Run agents with the permissions of the single user they act for, not a shared powerful identity."}
+  AML.M0028: {class: least-privilege, action: "Scope each agent tool's permissions (read-only where possible, narrow file roots, allow-listed destinations)."}
+  AML.M0029: {class: ai-governance, action: "Require human approval before an agent sends data out, changes systems, spends money or runs commands."}
+  AML.M0030: {class: ai-guardrails, action: "Do not let an agent invoke side-effect tools on instructions that came from untrusted content."}
+  AML.M0031: {class: ai-guardrails, action: "Protect agent memory: validate and scope what can be written, show it to users, and allow it to be cleared."}
+  AML.M0032: {class: network-segmentation, action: "Separate agent components (planner, tools, data stores) so a compromised one cannot reach the rest."}
+  AML.M0033: {class: ai-guardrails, action: "Validate and sanitise inputs to and outputs from agent components, including tool arguments and rendered output."}
+  AML.M0034: {class: ai-guardrails, action: "Use deepfake detection and out-of-band verification for voice and video requests that carry authority."}

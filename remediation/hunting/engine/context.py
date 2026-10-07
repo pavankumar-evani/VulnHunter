@@ -13,7 +13,7 @@ CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "hunt_engine.yaml
 DEFAULT_CFG = {"industry": None, "max_suggestions": 25, "refresh_minutes": 360, "kev_recent_days": 45, "intel_min_priority": "medium", "material_new_refs": 3,
                "business_hours_utc": [6, 20], "low_and_slow": {"min_alerts": 4, "min_days": 3, "max_severity": "Medium"}, "exposure": {"max_assets": 15},
                "identity": {"max_identities": 15}, "lessons": {"max_per_run": 10}, "learning": {"min_samples": 2, "suppress_after_benign": 3}}
-FIELDS = ("findings", "alerts", "rules", "hunts", "intel", "cvd", "darkweb", "entitlements", "roster", "iam_findings", "controls", "ownership", "connections", "usecases")
+FIELDS = ("findings", "alerts", "rules", "hunts", "intel", "cvd", "darkweb", "entitlements", "roster", "iam_findings", "controls", "ownership", "connections", "usecases", "data_signals")
 
 
 def config(path=None):
@@ -81,7 +81,12 @@ def load(findings, engine=None, now=None, cfg=None):
         cvd = [m for m in cvd_store.summary(advisories, findings).get("matches", [])] if advisories else []
     except Exception:  # noqa: BLE001 - an unreadable feed is a gap, never a failed refresh
         cvd = None
-    return Context(now=now, cfg=cfg, findings=findings, alerts=hunt_store.list_alerts(engine), rules=detection.list_rules(engine), hunts=hunt_store.list_hunts(engine),
+    try:   # what the knowledge generator needs to judge data readiness beyond connections and alerts (None = not held)
+        from remediation.asm import store as asm_store
+        data_signals = {"asm_assets": len(asm_store.all_assets(engine))}
+    except Exception:  # noqa: BLE001 - readiness degrades to "cannot tell", never fails a refresh
+        data_signals = None
+    return Context(now=now, cfg=cfg, findings=findings, data_signals=data_signals, alerts=hunt_store.list_alerts(engine), rules=detection.list_rules(engine), hunts=hunt_store.list_hunts(engine),
                    intel=hunt_service.list_intel(engine), cvd=cvd, darkweb=darkweb.list_hits(engine), entitlements=ent, roster=roster,
                    iam_findings=iam_model.analyse(ent, roster) if ent else [], controls=controls_store.list_controls(engine=engine),
                    ownership=asset_inventory.load_ownership(engine), connections=conn_store.list_connections(engine), usecases=usecase_store.list_all(engine))

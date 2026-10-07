@@ -1,0 +1,307 @@
+# Cloud abnormalities: subscription and tenant abuse, new accounts and regions, mining, leaked keys, role abuse, exposure, serverless persistence, billing, logging.
+# AWS CloudTrail, Azure Activity/Entra and GCP Audit field names are used; adapt to your log schema.
+- id: cloud-subscription-tenant-abuse
+  title: New subscription, account or tenant created or taken over
+  category: cloud
+  hypothesis: "If an adversary or an unmanaged team is creating cloud subscriptions, accounts or tenants outside the landing zone, we would expect to see account-creation or subscription-creation calls by an identity that does not normally create them, in {scope}."
+  techniques: [T1136.003, T1578.002, T1098.001]
+  kill_chain: [installation, actions-on-objectives]
+  diamond:
+    capability: ["Organisation-level or billing-level permissions; payment-method abuse"]
+    infrastructure: ["The management account or billing contact used; API source addresses"]
+    victim: ["The organisation's billing and its trust boundary (shared identities, peering, roles)"]
+  data_sources: [cloud-audit, cloud-billing]
+  leads:
+    - name: Organization or subscription created or invited
+      technique: T1136.003
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventSource: "organizations.amazonaws.com", eventName: ["CreateAccount", "InviteAccountToOrganization", "CreateGovCloudAccount", "LeaveOrganization"]}
+    - name: Azure subscription created or moved between tenants
+      technique: T1578.002
+      logsource: {product: azure, service: activitylogs}
+      selection: {operationName|contains: ["Microsoft.Subscription/aliases/write", "Microsoft.Subscription/subscriptions/write", "Microsoft.Subscription/changeTenantRequest"]}
+  malicious: ["An account created by a user who is not in the cloud platform team", "A member account leaving the organisation (and its guardrails)"]
+  benign: ["Planned expansion by the platform team under a change", "Acquisitions onboarding their accounts"]
+  tuning: ["Allow-list the platform team's roles and the pipeline that creates accounts", "Alert on every other creator"]
+  severity: high
+  priority: high
+  playbook: pb-cloud-account-containment
+  response: ["Confirm with the platform team; if unknown, remove the account from billing authority and review what it holds"]
+
+- id: cloud-unused-region-activity
+  title: Activity in a region or service the organisation does not use
+  category: cloud
+  hypothesis: "If an adversary is working in regions you do not monitor, we would expect to see compute, key or role API calls in a region outside your approved list from an identity in {scope}."
+  techniques: [T1535, T1578.002]
+  kill_chain: [exploitation, installation]
+  diamond:
+    capability: ["Stolen cloud credentials used through the API or CLI"]
+    infrastructure: ["API source addresses; resources created in unused regions"]
+    victim: ["The cloud account and its bill"]
+  data_sources: [cloud-audit]
+  leads:
+    - name: Instance or key creation in a region outside the approved list
+      technique: T1535
+      spl: 'search sourcetype=aws:cloudtrail eventName IN ("RunInstances","CreateKeyPair","CreateAccessKey","CreateUser","CreateFunction20150331") NOT awsRegion IN ("eu-west-1","eu-west-2","us-east-1") | stats count, values(eventName) as actions by userIdentity.arn, awsRegion, sourceIPAddress | sort - count | head 50'
+      notes: "Replace the approved-region list with yours."
+    - name: Azure resource created in a location outside the approved list
+      technique: T1578.002
+      kql: 'AzureActivity | where OperationNameValue endswith "/write" and ActivityStatusValue == "Success" | extend loc = tostring(parse_json(Properties).location) | where isnotempty(loc) and loc !in ("uksouth","ukwest","northeurope","westeurope") | summarize n=count() by Caller, loc, OperationNameValue'
+      spl: 'search sourcetype=azure:activity operationName="*/write" status=Succeeded NOT location IN ("uksouth","ukwest","northeurope","westeurope") | stats count by caller, location, operationName | sort - count | head 50'
+  malicious: ["A new instance type for compute-heavy work in an unused region", "A key created in a region the team never uses"]
+  benign: ["Global services recording in us-east-1", "A new region being introduced under a change"]
+  tuning: ["Use service control policies or Azure Policy to deny unused regions, then alert on denials"]
+  severity: high
+  priority: high
+  playbook: pb-cloud-account-containment
+  response: ["Identify the identity and credential; deactivate it and list what was created"]
+
+- id: cloud-account-user-key-creation
+  title: New cloud users, access keys and credentials
+  category: cloud
+  hypothesis: "If an adversary has gained a foothold in the cloud, we would expect to see new users, roles, access keys or federation providers created by an identity that does not usually do so, in {scope}."
+  techniques: [T1136.003, T1098.001, T1078.004]
+  kill_chain: [installation]
+  diamond:
+    capability: ["IAM write permissions obtained through a stolen key or a role"]
+    infrastructure: ["API source address of the creator"]
+    victim: ["The IAM boundary of the account"]
+  data_sources: [cloud-audit]
+  leads:
+    - name: IAM user, key or login profile created
+      technique: T1098.001
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventSource: "iam.amazonaws.com", eventName: ["CreateUser", "CreateAccessKey", "CreateLoginProfile", "UpdateLoginProfile", "CreateRole", "CreateSAMLProvider", "CreateOpenIDConnectProvider"]}
+    - name: Entra application or service principal credentials added
+      technique: T1098.001
+      logsource: {product: azure, service: auditlogs}
+      selection: {operationName: ["Add service principal", "Add service principal credentials", "Add application", "Update application - Certificates and secrets management"]}
+  malicious: ["A new user with administrator policy created at night from a hosting address", "A federation provider added outside a change"]
+  benign: ["Onboarding automation", "Developers rotating their own keys"]
+  tuning: ["Exclude the pipeline role that provisions identities", "Rank by attached permissions"]
+  severity: high
+  priority: high
+  playbook: pb-cloud-account-containment
+  response: ["Disable the new credential and review the creator's session"]
+
+- id: cloud-crypto-mining-compute
+  title: Compute spun up for cryptocurrency mining
+  category: cloud
+  hypothesis: "If an adversary has cloud credentials, we would expect to see many large or GPU instances launched quickly, often in several regions, and sustained high CPU with outbound connections to mining pools from {scope}."
+  techniques: [T1496.001, T1578.002]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Scripted instance launches and miner containers or binaries"]
+    infrastructure: ["Mining pool domains and addresses; the launching identity's source address"]
+    victim: ["The account's compute quota and bill"]
+  data_sources: [cloud-audit, cloud-billing, dns]
+  leads:
+    - name: Burst of instance launches by one identity
+      technique: T1578.002
+      spl: 'search sourcetype=aws:cloudtrail eventName="RunInstances" | bin _time span=1h | stats count, dc(awsRegion) as regions by userIdentity.arn, _time | where count >= 10 OR regions >= 3 | sort - count | head 50'
+      kql: 'AzureActivity | where OperationNameValue =~ "MICROSOFT.COMPUTE/VIRTUALMACHINES/WRITE" and ActivityStatusValue == "Success" | summarize vms=count() by Caller, bin(TimeGenerated, 1h) | where vms >= 10'
+    - name: DNS lookups of mining pools from cloud workloads
+      technique: T1496.001
+      logsource: {category: dns}
+      selection: {query|contains: ["pool.minexmr", "xmrpool", "nanopool.org", "supportxmr", "moneroocean", "2miners", "hashvault.pro", "f2pool", "ethermine"]}
+  malicious: ["Ten or more large instances in minutes in a new region", "Workloads resolving pool domains"]
+  benign: ["Autoscaling events", "Batch or machine-learning jobs that launch many instances"]
+  tuning: ["Exclude autoscaling roles and known batch roles", "Set service quotas so abuse hits a ceiling"]
+  severity: high
+  priority: high
+  playbook: pb-cloud-cost-abuse
+  response: ["Snapshot then stop the instances; rotate the credential used; request abuse credits from the provider"]
+
+- id: cloud-leaked-key-new-geography
+  title: Cloud key used from a new country or hosting network
+  category: cloud
+  hypothesis: "If an access key or token has leaked, we would expect to see it used from a country, address range or user agent it has never used before, in {scope}."
+  techniques: [T1078.004, T1552.001]
+  kill_chain: [exploitation]
+  diamond:
+    capability: ["Key found in a public repository, paste, container image or CI log"]
+    infrastructure: ["Source address, user agent of the CLI or SDK used"]
+    victim: ["Whatever the key can reach"]
+  data_sources: [cloud-audit, vcs-ci]
+  leads:
+    - name: Access key used from a source address not seen for it in 30 days
+      technique: T1078.004
+      spl: 'search sourcetype=aws:cloudtrail userIdentity.type=IAMUser | stats earliest(_time) as first_seen by userIdentity.accessKeyId, sourceIPAddress | where first_seen > relative_time(now(), "-1d@d") | sort - first_seen | head 100'
+      kql: 'AWSCloudTrail | summarize first=min(TimeGenerated) by UserIdentityAccessKeyId, SourceIpAddress | where first > ago(1d)'
+    - name: Common reconnaissance calls right after first use
+      technique: T1078.004
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventName: ["GetCallerIdentity", "ListBuckets", "ListUsers", "ListRoles", "DescribeInstances", "GetAccountAuthorizationDetails"], userIdentity.type: "IAMUser"}
+      notes: "Attackers who find a key usually call GetCallerIdentity first. Single-event form; combine with the first-use lead."
+  malicious: ["GetCallerIdentity followed by a listing spree from a hosting address", "A key last used years ago suddenly active"]
+  benign: ["Engineers on a new network or VPN", "A key moved to a new CI runner"]
+  tuning: ["Prefer role-based short-lived credentials and alert on any long-lived key use", "Exclude your CI egress addresses"]
+  severity: high
+  priority: high
+  playbook: pb-cloud-account-containment
+  response: ["Deactivate the key; search the public repository or log where it leaked; review everything done with it"]
+
+- id: cloud-impossible-travel
+  title: Impossible travel and anomalous cloud sign-ins
+  category: cloud
+  hypothesis: "If a cloud account is used by someone other than its owner, we would expect to see sign-ins from two places further apart than a person could travel in the time between them, or from anonymising networks, in {scope}."
+  techniques: [T1078.004, T1550.004]
+  kill_chain: [exploitation]
+  diamond:
+    capability: ["Valid credentials or stolen session tokens"]
+    infrastructure: ["Proxy, VPN or hosting addresses used by the adversary"]
+    victim: ["The identity and its SaaS access"]
+  data_sources: [identity-provider]
+  leads:
+    - name: Successful sign-ins from two countries within two hours
+      technique: T1078.004
+      spl: 'search sourcetype=signin result=success | sort 0 user _time | streamstats window=2 current=f last(country) as prev_country, last(_time) as prev_time by user | where country!=prev_country AND (_time - prev_time) < 7200 | table _time user country prev_country src_ip | head 100'
+      kql: 'SigninLogs | where ResultType == 0 | project TimeGenerated, UserPrincipalName, Country=tostring(LocationDetails.countryOrRegion), IPAddress | sort by UserPrincipalName, TimeGenerated asc | extend prev_country=prev(Country), pt=prev(TimeGenerated), pu=prev(UserPrincipalName) | where UserPrincipalName == pu and Country != prev_country and TimeGenerated - pt < 2h'
+      notes: "Country-level only; VPN and mobile roaming cause false positives. Use distance if your logs have coordinates."
+    - name: Sign-in through an anonymising or hosting network
+      technique: T1078.004
+      logsource: {product: azure, service: signinlogs}
+      selection: {NetworkLocationDetails|contains: ["anonymizedIPAddress", "hosting", "tor"], ResultType: 0}
+  malicious: ["Two countries in minutes, then a mail rule or token grant", "Sign-ins from a hosting provider for a user who never travels"]
+  benign: ["Corporate VPN egress changes", "Travellers and mobile roaming"]
+  tuning: ["Exclude your VPN and cloud proxy ranges", "Treat a new device plus a new country as stronger than a country alone"]
+  severity: medium
+  priority: medium
+  playbook: pb-credential-compromise
+  response: ["Ask the user; revoke sessions if they did not travel"]
+
+- id: cloud-overprivileged-role-assumption
+  title: Over-privileged role assumption and privilege escalation in the cloud
+  category: cloud
+  hypothesis: "If an identity is escalating its cloud privileges, we would expect to see it assume a more powerful role, attach an administrator policy or change a trust policy, in {scope}."
+  techniques: [T1548.005, T1098.003, T1078.004]
+  kill_chain: [exploitation]
+  diamond:
+    capability: ["IAM permissions that allow policy changes or role passing"]
+    infrastructure: ["The session and source address making the changes"]
+    victim: ["Administrative control of the cloud account"]
+  data_sources: [cloud-audit]
+  leads:
+    - name: Administrator policy attached or trust policy changed
+      technique: T1098.003
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventSource: "iam.amazonaws.com", eventName: ["AttachUserPolicy", "AttachRolePolicy", "PutUserPolicy", "PutRolePolicy", "UpdateAssumeRolePolicy", "CreatePolicyVersion", "SetDefaultPolicyVersion"]}
+    - name: Role assumed by a user who has never assumed it
+      technique: T1548.005
+      spl: 'search sourcetype=aws:cloudtrail eventName="AssumeRole" | stats earliest(_time) as first_seen by userIdentity.arn, requestParameters.roleArn | where first_seen > relative_time(now(), "-1d@d") | head 100'
+  malicious: ["A user attaching AdministratorAccess to themselves", "A trust policy widened to a foreign account"]
+  benign: ["Platform engineers under a change", "Infrastructure-as-code pipelines"]
+  tuning: ["Exclude pipeline roles; alert on human principals"]
+  severity: critical
+  priority: high
+  playbook: pb-cloud-account-containment
+  response: ["Revert the policy change from the last known good; review what the elevated session did"]
+
+- id: cloud-snapshot-bucket-exposure
+  title: Snapshots shared or storage made public
+  category: cloud
+  hypothesis: "If data is being exposed or exfiltrated through cloud features, we would expect to see disk or database snapshots shared to another account, or buckets and blobs made public, in {scope}."
+  techniques: [T1537, T1578.001, T1530]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Storage and snapshot sharing permissions"]
+    infrastructure: ["The foreign account or public internet that gains access"]
+    victim: ["Databases, volumes and buckets"]
+  data_sources: [cloud-audit]
+  leads:
+    - name: Snapshot or image permissions modified to share outside the account
+      technique: T1537
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventName: ["ModifySnapshotAttribute", "ModifyDBSnapshotAttribute", "ModifyImageAttribute", "ModifyFpgaImageAttribute"]}
+    - name: Bucket policy or public-access block changed
+      technique: T1530
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventSource: "s3.amazonaws.com", eventName: ["PutBucketPolicy", "PutBucketAcl", "DeletePublicAccessBlock", "PutPublicAccessBlock", "PutBucketPublicAccessBlock"]}
+  malicious: ["A snapshot shared to an account you do not own", "Public access block removed on a data bucket"]
+  benign: ["Intentional sharing with a known partner account", "Static-website buckets"]
+  tuning: ["Maintain a list of your own and partner account ids and exclude them"]
+  severity: high
+  priority: high
+  playbook: pb-cloud-account-containment
+  response: ["Remove the share or public access immediately; assess whether data was read (access logs)"]
+
+- id: cloud-serverless-persistence
+  title: Serverless functions or automation used for persistence
+  category: cloud
+  hypothesis: "If an adversary wants to keep access in the cloud without hosts, we would expect to see new functions, schedules or event triggers that call out or reset credentials, created by an unusual identity in {scope}."
+  techniques: [T1648, T1098]
+  kill_chain: [installation]
+  diamond:
+    capability: ["Function code and event triggers; automation accounts"]
+    infrastructure: ["External endpoints the function contacts; the creator's session"]
+    victim: ["The cloud account's control plane"]
+  data_sources: [cloud-audit]
+  leads:
+    - name: New function, schedule or trigger
+      technique: T1648
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventSource: ["lambda.amazonaws.com", "events.amazonaws.com"], eventName: ["CreateFunction20150331", "UpdateFunctionCode20150331v2", "AddPermission20150331v2", "PutRule", "PutTargets", "CreateEventSourceMapping20150331"]}
+    - name: Azure automation runbook or logic app created or modified
+      technique: T1648
+      logsource: {product: azure, service: activitylogs}
+      selection: {operationName|contains: ["Microsoft.Automation/automationAccounts/runbooks/write", "Microsoft.Logic/workflows/write", "Microsoft.Web/sites/functions/write"]}
+  malicious: ["A function with administrator role that calls an external address", "A rule that triggers on every IAM change"]
+  benign: ["Deployments through your pipeline", "Platform team automation"]
+  tuning: ["Exclude the deployment role; alert on human creators"]
+  severity: high
+  priority: medium
+  playbook: pb-cloud-account-containment
+  response: ["Review function code and role; delete the trigger after saving evidence"]
+
+- id: cloud-billing-spike
+  title: Unexplained cost or usage spike
+  category: cloud
+  hypothesis: "If cloud resources are being abused, we would expect to see a rise in cost or usage in a service, region or account that does not match approved projects, in {scope}."
+  techniques: [T1496, T1496.004]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Any resource-consuming abuse (mining, proxying, spam, AI API abuse)"]
+    infrastructure: ["The resources and identities incurring cost"]
+    victim: ["The organisation's cloud bill and quotas"]
+  data_sources: [cloud-billing]
+  leads:
+    - name: Daily cost per service rising well above its recent average
+      technique: T1496
+      spl: 'search sourcetype=aws:billing:cur | bin _time span=1d | stats sum(cost) as day_cost by service, account, _time | streamstats window=14 current=f avg(day_cost) as avg14, stdev(day_cost) as sd14 by service, account | where day_cost > avg14 + 3*sd14 AND day_cost > 50 | sort - day_cost | head 50'
+      not_expressible: {sigma: "A cost anomaly is a time-series comparison, not a log event."}
+      notes: "SPL is the reference form. Azure and GCP cost exports differ by table, so a KQL version is not provided here; build it from your cost export."
+  malicious: ["A service that was near zero costing hundreds in a day", "A cost rise confined to a new region"]
+  benign: ["Month-end processing", "A new project nobody told the platform team about"]
+  tuning: ["Use budget alerts per account; tune the three-sigma rule to your seasonality"]
+  severity: medium
+  priority: medium
+  playbook: pb-cloud-cost-abuse
+  response: ["Find the resource and identity behind the spend before assuming abuse"]
+
+- id: cloud-disabled-logging
+  title: Cloud logging or monitoring disabled or reduced
+  category: cloud
+  hypothesis: "If an adversary is blinding the defenders in the cloud, we would expect to see trails, flow logs, audit sinks or security services stopped, deleted or reconfigured, in {scope}."
+  techniques: [T1685.002, T1685]
+  kill_chain: [installation]
+  diamond:
+    capability: ["Permissions to stop or alter logging and detection services"]
+    infrastructure: ["The session performing the change"]
+    victim: ["The audit trail and detective controls"]
+  data_sources: [cloud-audit]
+  leads:
+    - name: Trail stopped or deleted, or security service turned off
+      technique: T1685.002
+      logsource: {product: aws, service: cloudtrail}
+      selection: {eventName: ["StopLogging", "DeleteTrail", "UpdateTrail", "PutEventSelectors", "DeleteFlowLogs", "DeleteDetector", "DisableSecurityHub", "StopConfigurationRecorder", "DeleteConfigRule"]}
+    - name: Azure diagnostic settings or Defender plans removed
+      technique: T1685
+      logsource: {product: azure, service: activitylogs}
+      selection: {operationName|contains: ["Microsoft.Insights/diagnosticSettings/delete", "Microsoft.Security/pricings/write", "Microsoft.OperationalInsights/workspaces/delete"]}
+  malicious: ["StopLogging from an unfamiliar principal", "Logging disabled shortly before resource creation"]
+  benign: ["Intentional trail updates by the security team", "Re-creation during a migration"]
+  tuning: ["Alert on every instance; they are rare and always worth a look"]
+  severity: critical
+  priority: high
+  playbook: pb-cloud-account-containment
+  response: ["Re-enable logging first; treat everything in the gap as unknown"]

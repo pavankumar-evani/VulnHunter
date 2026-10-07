@@ -449,5 +449,8 @@ def gen_model_assisted(ctx, lib):
     return out, []
 
 
+from remediation.hunting.knowledge import generator as _knowledge  # noqa: E402  (registered below; the module reads Context only)
+
 GENERATORS = (("intel", gen_intel), ("coverage_gap", gen_coverage_gap), ("baseline", gen_baseline), ("exposure", gen_exposure), ("identity", gen_identity),
-              ("lessons", gen_lessons), ("darkweb", gen_darkweb), ("model_assisted", gen_model_assisted))
+              ("lessons", gen_lessons), ("darkweb", gen_darkweb), ("model_assisted", gen_model_assisted),
+              ("knowledge", _knowledge.gen_knowledge))
