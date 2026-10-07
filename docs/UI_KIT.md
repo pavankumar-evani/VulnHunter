@@ -19,7 +19,7 @@ The application shell and design-system layer: command palette, live updates, a 
 
 The palette searches, fuzzily and with the matched letters highlighted: every page in `nav.js` the signed-in user may open (a module the licence does not cover is not offered, a feature-flagged page is not offered when its flag is off, and a page whose tip starts with "Admin" is not offered to a non-admin), recent pages, actions (switch module, toggle theme, copy link, shortcuts), and findings and assets through the same data as the top search bar (`search.js`, `lookupData`). Matching: every word of the query must match; a plain substring beats a subsequence; a subsequence must be compact (within three times the word) or be the initials of words (`rq` finds Remediation Queue); secondary text (group name, tip) matches by substring only, so `hunt` does not find unrelated pages.
 
-Not built, because the API does not exist in this build: natural-language rows from `/api/ask/structured`, and incident-id lookup (there is no incident search API yet). When either appears, add a group in `commandPalette.js` (`compute()` and `fetchData()`).
+Not built, because the API does not exist in this build: natural-language rows from `/api/ask/structured`. Incident and hunt lookup (administrators) is in `commandPalette.js` (`loadSocItems()`), from the real list APIs; see `docs/SOC_HUNT_UI.md`.
 
 **Theme.** "Toggle theme" cycles auto (follow the system) / dark / light and remembers it in `localStorage` (`quanta.theme`). It redefines the colour variables only; the few rules in `style.css` that are hard-coded for dark inside `prefers-color-scheme` still follow the system, so a forced light theme on a dark system is approximate.
 
@@ -83,7 +83,7 @@ export async function render(container, ...params) {
 
 * **Home** (`pages/overview.js`): four headline tiles. There is no server-side history, so the change chips and sparklines come from what this browser saw on earlier visits (`localStorage` `quanta.home.history`, at most one reading per five minutes, 24 kept). Until there are two readings the tile shows the number only; the tile hint says so. It refreshes straight away on an `activity` event as well as on its existing 20-second timer, and counts up only on the first paint.
 * **Module picker** (`pages/capabilities.js`): tiles with an in-use meter and counters, a debounced filter over the chosen module's capabilities, empty states, a data-age badge. Behaviour (remembered module, `?area=` link, licence banner) is unchanged.
-* **SOC and Hunting pages were deliberately not touched**; they are meant to be rebuilt on this kit.
+* **SOC and Hunting pages** were rebuilt on this kit: see `docs/SOC_HUNT_UI.md`.
 
 ## Accessibility
 

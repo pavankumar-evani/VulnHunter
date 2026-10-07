@@ -4883,6 +4883,14 @@ def api_hunting_overview(user: dict = Depends(rbac.require_admin)):  # noqa: ARG
     return {"metrics": m, "proposals": len(hunt_generate.propose(findings, hunt_store.existing_refs()))}
 
 
+@app.get("/api/hunting/attack-matrix")
+def api_hunting_attack_matrix(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
+    """The ATT&CK matrix: every technique Quanta knows, with detection coverage, hunts, open findings/alerts and live suggestions joined. Read only; see remediation/hunting/matrix.py."""
+    from remediation.hunting import matrix as hunt_matrix
+    return hunt_matrix.build(rules=hunt_detection.list_rules(), findings=dashboard_data.load_live_queue(), alerts=hunt_store.list_alerts(), hunts=hunt_store.list_hunts(),
+                             suggestions=hunt_engine.listing(include_suppressed=True)["suggestions"], library=hunt_generate.library())
+
+
 @app.get("/api/hunting/proposals")
 def api_hunting_proposals(user: dict = Depends(rbac.require_admin)):  # noqa: ARG001
     return {"proposals": _hunt_proposals()[:100], "note": "A proposed hunt means the exposure makes it worth looking, not that anything happened."}
