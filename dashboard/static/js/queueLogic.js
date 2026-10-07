@@ -144,7 +144,7 @@ export function applyQueueFilters(findings, flt, now = new Date()) {
     if (flt.infraType !== "all" && f.infra_category !== flt.infraType) return false;
     if (flt.kevOnly && !(f.kev && f.kev.listed)) return false;
     if (flt.highEpssOnly && !(f.epss && f.epss.score >= 0.5)) return false;
-    if (flt.unownedOnly && (f.owner || f.team)) return false;
+    if (flt.unownedOnly && (f.owner || f.team || f.assignee)) return false;
     if (flt.slaStatus && flt.slaStatus !== "all" && slaStatusOf(f) !== flt.slaStatus) return false;
     if (flt.cve && f.cve !== flt.cve) return false;
     if (flt.title && f.title !== flt.title) return false;
@@ -203,7 +203,7 @@ export function queueKpis(findings) {
   const sla = slaSummary(findings);
   const kev = findings.filter((f) => f.kev && f.kev.listed).length;
   const highEpss = findings.filter((f) => f.epss && f.epss.score >= 0.5).length;
-  const unowned = findings.filter((f) => !f.owner && !f.team).length;
+  const unowned = findings.filter((f) => !f.owner && !f.team && !f.assignee).length;
   const excepted = findings.filter((f) => f.exception).length;
   return { total: findings.length, breached: sla.breached, atRisk: sla.at_risk, onTrack: sla.on_track, kev, highEpss, unowned, excepted, byPriority: priorityBreakdown(findings) };
 }

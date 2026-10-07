@@ -1,7 +1,7 @@
 /* Styles for the rebuilt module pages (queue, assignments, approvals, exceptions, posture, risk, applications, fix PRs, pipeline gates, attack surface, AI security, connections, activity log)
    and the shared mxKit.js / findingDrawer.js components. Additive, loaded after soc.css; colours come from the theme variables. Prefix: mx-. Reuses sx- and ui- classes. */
 .mx-page { gap: 12px; }
-.mx-kpis { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
+.mx-kpis { grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); }
 .mx-kpis .sx-kpi-cell[data-kpi] { cursor: pointer; border-radius: var(--ui-radius); }
 .mx-kpis .sx-kpi-cell[data-kpi]:focus-visible { outline: none; box-shadow: var(--ui-focus); }
 .mx-kpis .sx-kpi-cell[aria-pressed="true"] .ui-kpi { border-color: var(--brand-accent); background: color-mix(in srgb, var(--brand-accent) 10%, var(--surface)); }
@@ -14,6 +14,7 @@
 .mx-count { margin-left: auto; font-size: .82rem; }
 .mx-sub { font-size: .74rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mx-card .mx-sub, .sx-card .mx-sub, .mx-callout .mx-sub { white-space: normal; overflow-wrap: anywhere; }
+.mx-card-head > .mx-sub { white-space: nowrap; overflow-wrap: normal; flex: none; }
 .mx-clip { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mx-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; line-height: 1.25; font-weight: 600; }
 .mx-id { font-weight: 700; }
@@ -167,7 +168,8 @@
 .mx-verdict-good .mx-score { color: var(--sx-good); } .mx-verdict-warn .mx-score { color: var(--sx-warn); } .mx-verdict-critical .mx-score { color: var(--sx-bad); }
 .mx-verdict > .mx-sub { grid-column: 1 / -1; }
 .mx-rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.mx-rule { display: flex; gap: 10px; } .mx-rule-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--sx-info); }
+.mx-rule { display: flex; gap: 10px; min-width: 0; } .mx-rule > div { min-width: 0; overflow-wrap: anywhere; } .mx-rule .ui-chip { white-space: normal; }
+.mx-verdict > * { min-width: 0; } .mx-rule-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: none; background: var(--sx-info); }
 .mx-rule-good .mx-rule-dot { background: var(--sx-good); } .mx-rule-warn .mx-rule-dot { background: var(--sx-warn); } .mx-rule-critical .mx-rule-dot { background: var(--sx-bad); }
 .mx-gateform { margin: 0; } .mx-gateform h4 { margin: 0 0 6px; }
 .mx-plain { width: 100%; border-collapse: collapse; } .mx-plain th, .mx-plain td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: .88rem; vertical-align: top; }

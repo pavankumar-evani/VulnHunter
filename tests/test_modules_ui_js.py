@@ -565,5 +565,34 @@ class AttackSurfaceLogicTests(unittest.TestCase):
         self.assertEqual(call("moduleLogic.js", '["new","reappeared","changed","disappeared","other"].map(M.changeTone)'), ["warn", "warn", "info", "good", "neutral"])
 
 
+REBUILT_PAGES = ["queue", "assignments", "remediationApprovals", "exceptions", "posture", "grc", "cyberRisk", "risk", "applications", "fixPrs", "pipelineGates", "attackSurface", "aiSecurity", "connections", "activityLog"]
+
+
+class RebuiltPageContractTests(unittest.TestCase):
+    """The router needs `title` and `render(container)` from every page module, and the stylesheet has to be linked. The DOM itself is checked in a browser."""
+
+    def test_every_rebuilt_page_keeps_the_page_contract(self):
+        for name in REBUILT_PAGES:
+            src = (JS / "pages" / f"{name}.js").read_text(encoding="utf-8")
+            self.assertRegex(src, r"export const title = ", name)
+            self.assertRegex(src, r"export async function render\(container", name)
+            self.assertIn("onCleanup", src, f"{name} must register its cleanup")
+
+    def test_pages_do_not_use_blocking_dialogs_or_inline_handlers(self):
+        for name in REBUILT_PAGES:
+            src = (JS / "pages" / f"{name}.js").read_text(encoding="utf-8")
+            for banned in ("window.confirm(", "window.prompt(", " onclick=", "javascript:"):
+                self.assertFalse(banned in src, f"{name} uses {banned}")
+
+    def test_stylesheet_is_linked_after_the_kit(self):
+        html = (JS.parent / "index.html").read_text(encoding="utf-8")
+        self.assertLess(html.index("/static/soc.css"), html.index("/static/modules.css"))
+
+    def test_routes_and_nav_entries_are_unchanged(self):
+        app = (JS / "app.js").read_text(encoding="utf-8")
+        for route in ("queue.js", "assignments.js", "remediationApprovals.js", "exceptions.js", "posture.js", "grc.js", "cyberRisk.js", "risk.js", "applications.js", "fixPrs.js", "pipelineGates.js", "attackSurface.js", "aiSecurity.js", "connections.js", "activityLog.js"):
+            self.assertIn(f"./pages/{route}", app)
+
+
 if __name__ == "__main__":
     unittest.main()

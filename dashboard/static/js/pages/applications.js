@@ -7,6 +7,7 @@ import { renderDependencyGraph } from "../depGraph.js";
 import { kpiTile, chip, emptyState, dataAgeBadge, mountDataAge, mountCounters, debounce, onCleanup } from "../ui.js";
 import { selectableTable, pageActions, skeletonPage, replaceSearch, tabBar, wireTabBar } from "../mxKit.js";
 import { filterRecords } from "../moduleLogic.js";
+import { modal } from "../sxKit.js";
 
 export const title = "Applications & SBOM";
 
@@ -232,7 +233,11 @@ export async function render(container) {
     const form = body.querySelector("#ctx");
     if (admin) {
       form.addEventListener("submit", async (e) => { e.preventDefault(); try { await api.applicationSave(a.application, readForm(form)); flash("Saved.", "success"); show(); } catch (err) { flash(err.message, "error"); } });
-      body.querySelector("#del").addEventListener("click", async () => { if (window.confirm("Remove this application's record and SBOM? Its findings are not deleted.")) { try { await api.applicationDelete(a.application); go(null); } catch (err) { flash(err.message, "error"); } } });
+      body.querySelector("#del").addEventListener("click", async () => {
+        const ok = await modal({ title: "Remove this application's record and SBOM?", confirmLabel: "Remove", danger: true, description: "Its findings are not deleted.", body: "" });
+        if (!ok) return;
+        try { await api.applicationDelete(a.application); go(null); } catch (err) { flash(err.message, "error"); }
+      });
       body.querySelector("#sbomfile").addEventListener("change", async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -254,7 +259,8 @@ export async function render(container) {
       body.querySelector("#osv").addEventListener("click", async () => {
         try {
           const pre = await api.applicationOsvCheck(a.application, false);
-          if (!window.confirm(`${pre.message}\n\n${pre.components} components. ${pre.sends}\n\nExample: ${pre.example.join(", ")}\n\nSend them to ${pre.service}?`)) return;
+          const ok = await modal({ title: `Send ${pre.components} components to ${pre.service}?`, confirmLabel: "Send", description: pre.message, body: `<p>${escapeHtml(pre.sends)}</p><p class="ui-muted">Example: ${escapeHtml(pre.example.join(", "))}</p>` });
+          if (!ok) return;
           const r = await api.applicationOsvCheck(a.application, true);
           flash(`${r.advisories} advisories found; ${r.added} finding(s) added, ${r.updated} updated, ${r.removed} cleared.`, "success"); show();
         } catch (err) { flash(err.message, "error"); }

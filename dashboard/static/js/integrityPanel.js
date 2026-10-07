@@ -1,7 +1,11 @@
 // Integrity tab of the Activity Log page (admin only): the code baseline, store consistency checks and the safe repairs.
 // Read-only until an administrator previews a repair and then confirms it. See docs/INTEGRITY.md.
 import { api } from "./api.js";
-import { escapeHtml, flash } from "./dom.js";
+import { escapeHtml } from "./dom.js";
+import { kpiTile, chip, toast, emptyState, mountCounters, onCleanup } from "./ui.js";
+import { modal } from "./sxKit.js";
+import { segmented, onSeg, copyButton, wireCopy } from "./mxKit.js";
+import { copyText } from "./sxKit.js";
 
 const LEVEL = { ok: "badge-low", info: "badge-outline", warn: "badge-high", fail: "badge-critical" };
 
@@ -28,56 +32,56 @@ function manifestHtml(m) {
       <ul style="margin:0 0 8px; padding-left:18px">${policyRows.slice(0, 30).map((f) => `<li><code>${escapeHtml(f)}</code>${ed[f] ? ` - ${escapeHtml(ed[f].actor)} (${escapeHtml(ed[f].action)}, ${escapeHtml(ed[f].at)})` : ""}</li>`).join("")}</ul>` : ""}`;
 }
 
+const TONE = { ok: "good", info: "neutral", warn: "warn", fail: "critical" };
+
 export async function renderIntegrity(container) {
-  container.innerHTML = `<div class="empty-state">Checking...</div>`;
+  let alive = true;
+  onCleanup(() => { alive = false; });
+  container.innerHTML = `<div class="ui-skel ui-skel-table" aria-hidden="true">${'<i class="ui-skel-line"></i>'.repeat(5)}</div><p class="ui-muted" role="status">Checking...</p>`;
   let report;
   try {
     report = await api.integrity();
   } catch (e) {
-    container.innerHTML = `<div class="callout">The integrity report needs an administrator sign-in (${escapeHtml(e.message || "failed")}).</div>`;
+    if (alive) container.innerHTML = emptyState({ title: "The integrity report is for administrators", body: e.message || "Sign in as an administrator.", iconName: "risk" });
     return;
   }
+  if (!alive) return;
   const c = report.counts;
-  container.innerHTML = `
-    <p class="subtitle">Whether the running code matches the release, whether the stores are consistent, and the few repairs that are safe to make automatically. Nothing here changes anything until you preview a repair and confirm it; every repair is written to the activity log and no customer data is ever deleted.</p>
-    <div class="kpi-grid">
-      <div class="kpi-card"><div class="kpi-value">${escapeHtml(report.status)}</div><div class="kpi-label">Overall (${escapeHtml(report.checked_at)})</div></div>
-      <div class="kpi-card"><div class="kpi-value">${c.fail}</div><div class="kpi-label">Failing</div></div>
-      <div class="kpi-card"><div class="kpi-value">${c.warn}</div><div class="kpi-label">Warnings</div></div>
-      <div class="kpi-card"><div class="kpi-value">${escapeHtml(report.code_state)}</div><div class="kpi-label">Code baseline</div></div>
-    </div>
-    <h3>Code baseline</h3>${manifestHtml(report.manifest)}
-    <h3>Store and host checks</h3>
-    <div class="table-scroll"><table class="data-table"><thead><tr><th>Check</th><th>Result</th><th>Detail</th><th>Repair</th></tr></thead><tbody>
-      ${report.checks.map((k) => `<tr><td>${escapeHtml(k.title)}</td><td><span class="badge ${LEVEL[k.level]}">${escapeHtml(k.level)}</span></td>
-        <td class="wrap-cell">${escapeHtml(k.detail)}${k.manual && (k.level === "warn" || k.level === "fail") ? `<br><span class="muted">Manual step: ${escapeHtml(k.manual)}</span>` : ""}</td>
-        <td>${k.fix ? `<code>${escapeHtml(k.fix)}</code>` : "-"}</td></tr>`).join("")}
-    </tbody></table></div>
-    <h3>Safe repairs</h3>
-    <p class="subtitle">${escapeHtml(Object.values(report.heal_actions).map((a) => a.title).join("; "))}.</p>
-    <p><button type="button" id="heal-preview">Preview repairs</button> <button type="button" id="heal-confirm" class="secondary-button" disabled>Apply previewed repairs</button> <button type="button" id="integrity-refresh" class="secondary-button">Re-check</button></p>
-    <div id="heal-result"></div>`;
+  let level = "all";
+  const tile = (label, value, extra = {}) => `<div class="sx-kpi-cell">${kpiTile({ label, value, ...extra })}</div>`;
+  const checksHtml = () => {
+    const list = report.checks.filter((k) => level === "all" || k.level === level);
+    return list.length ? `<div class="mx-grid-cards">${list.map((k) => `<article class="mx-card mx-chk mx-chk-${k.level}"><div class="mx-card-head"><h4>${escapeHtml(k.title)}</h4>${chip(k.level, { tone: TONE[k.level] || "neutral" })}</div>
+        <div class="mx-sub">${escapeHtml(k.detail)}</div>${k.manual && (k.level === "warn" || k.level === "fail") ? `<div class="mx-why-not">Manual step: ${escapeHtml(k.manual)}</div>` : ""}${k.fix ? `<div class="mx-actions"><code class="mx-code">${escapeHtml(k.fix)}</code>${copyButton(k.fix, "Copy command")}</div>` : ""}</article>`).join("")}</div>` : emptyState({ title: "No check at this level", body: "Choose another level.", iconName: "approved" });
+  };
+  container.innerHTML = `<p class="ui-muted">Whether the running code matches the release, whether the stores are consistent, and the few repairs that are safe to make automatically. Nothing here changes anything until you preview a repair and confirm it; every repair is written to the activity log and no customer data is ever deleted.</p>
+    <div class="sx-kpis mx-kpis">${tile("Overall", report.status, { tone: report.status === "ok" ? "good" : report.status === "fail" ? "danger" : "warn", hint: `Checked ${report.checked_at}` })}${tile("Failing", c.fail, { tone: c.fail ? "danger" : "good" })}${tile("Warnings", c.warn, { tone: c.warn ? "warn" : "good" })}${tile("Code baseline", report.code_state, { tone: report.code_state === "ok" ? "good" : report.code_state === "code-modified" ? "danger" : "" })}</div>
+    <h3 class="mx-h3">Code baseline</h3>${manifestHtml(report.manifest)}
+    <h3 class="mx-h3">Store and host checks</h3>
+    <div class="sx-toolbar">${segmented("Level", [{ id: "all", label: "All", count: report.checks.length }, ...["fail", "warn", "info", "ok"].filter((l) => report.checks.some((k) => k.level === l)).map((l) => ({ id: l, label: l, count: report.checks.filter((k) => k.level === l).length }))], level)}</div><div id="chk">${checksHtml()}</div>
+    <h3 class="mx-h3">Safe repairs</h3>
+    <p class="ui-muted">${escapeHtml(Object.values(report.heal_actions).map((a) => a.title).join("; "))}.</p>
+    <p class="sx-row"><button type="button" class="ui-btn sx-btn-sm" id="heal-preview">Preview repairs</button><button type="button" id="heal-confirm" class="ui-btn ui-btn-ghost sx-btn-sm" disabled>Apply previewed repairs</button><button type="button" id="integrity-refresh" class="ui-btn ui-btn-ghost sx-btn-sm">Re-check</button></p>
+    <div id="heal-result" role="status"></div>`;
+  mountCounters(container);
+  wireCopy(container, copyText);
+  onSeg(container, (id) => { level = id; container.querySelector("#chk").innerHTML = checksHtml(); container.querySelectorAll(".sx-seg [data-seg]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.seg === id))); });
   const out = container.querySelector("#heal-result");
   const applyBtn = container.querySelector("#heal-confirm");
   const show = (r) => {
     out.innerHTML = `<p><strong>${r.preview ? "Preview (nothing changed)" : "Applied"}</strong></p>
-      <ul style="padding-left:18px">${r.results.map((x) => `<li><strong>${escapeHtml(x.title)}</strong>: ${escapeHtml(x.status)}${x.planned.length ? `<br><code>${escapeHtml(JSON.stringify(x.planned).slice(0, 400))}</code>` : ""}</li>`).join("")}</ul>
-      ${r.manual.length ? `<p><strong>Needs a person</strong></p><ul style="padding-left:18px">${r.manual.map((m) => `<li>${escapeHtml(m.title)}: ${escapeHtml(m.manual)}</li>`).join("")}</ul>` : ""}`;
+      <ul class="mx-list">${r.results.map((x) => `<li><strong>${escapeHtml(x.title)}</strong>: ${escapeHtml(x.status)}${x.planned.length ? `<br><code class="mx-code">${escapeHtml(JSON.stringify(x.planned).slice(0, 400))}</code>` : ""}</li>`).join("")}</ul>
+      ${r.manual.length ? `<p><strong>Needs a person</strong></p><ul class="mx-list">${r.manual.map((m) => `<li>${escapeHtml(m.title)}: ${escapeHtml(m.manual)}</li>`).join("")}</ul>` : ""}`;
   };
   container.querySelector("#heal-preview").addEventListener("click", async () => {
-    try {
-      const r = await api.integrityHeal(false);
-      show(r);
-      applyBtn.disabled = !r.results.some((x) => x.planned.length);
-    } catch (e) { flash(e.message || "Preview failed", "error"); }
+    try { const r = await api.integrityHeal(false); show(r); applyBtn.disabled = !r.results.some((x) => x.planned.length); }
+    catch (e) { toast(e.message || "Preview failed", { tone: "bad" }); }
   });
   applyBtn.addEventListener("click", async () => {
-    if (!window.confirm("Apply the previewed repairs? Each one is recorded in the activity log.")) return;
-    try {
-      show(await api.integrityHeal(true));
-      flash("Repairs applied.", "success");
-      applyBtn.disabled = true;
-    } catch (e) { flash(e.message || "Repair failed", "error"); }
+    const ok = await modal({ title: "Apply the previewed repairs?", confirmLabel: "Apply", description: "Each repair is recorded in the activity log. No customer data is deleted.", body: "" });
+    if (!ok) return;
+    try { show(await api.integrityHeal(true)); toast("Repairs applied.", { tone: "good" }); applyBtn.disabled = true; }
+    catch (e) { toast(e.message || "Repair failed", { tone: "bad" }); }
   });
   container.querySelector("#integrity-refresh").addEventListener("click", () => renderIntegrity(container));
 }

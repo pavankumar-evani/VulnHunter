@@ -3,6 +3,7 @@
 import { api } from "../api.js";
 import { escapeHtml, flash } from "../dom.js";
 import { chip, toast, emptyState, onCleanup, dataAgeBadge, mountDataAge } from "../ui.js";
+import { modal } from "../sxKit.js";
 import { kpiStrip, tabBar, wireTabBar, radarSvg, meter, pageActions, readJson, writeJson, replaceSearch } from "../mxKit.js";
 import { pushReading, readingSeries, scoreTone } from "../moduleLogic.js";
 
@@ -93,7 +94,11 @@ export async function render(container) {
     container.querySelector("#new").addEventListener("click", () => { draft = blank(categories); show(); });
     container.querySelectorAll("[data-an]").forEach((b) => b.addEventListener("click", () => { analysisId = Number(b.dataset.an); tab = "analysis"; show(); }));
     container.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => { draft = JSON.parse(JSON.stringify(ss.find((x) => x.id === Number(b.dataset.edit)))); show(); }));
-    container.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => { if (window.confirm("Delete this scenario?")) { try { await api.cyberRiskDelete(Number(b.dataset.del)); show(); } catch (e) { flash(e.message, "error"); } } }));
+    container.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
+      const ok = await modal({ title: "Delete this scenario?", confirmLabel: "Delete", danger: true, description: "Its analysis goes with it. This is recorded in the activity log.", body: "" });
+      if (!ok) return;
+      try { await api.cyberRiskDelete(Number(b.dataset.del)); toast("Scenario deleted.", { tone: "good" }); show(); } catch (e) { toast(e.message, { tone: "bad" }); }
+    }));
   }
 
   function builder(categories) {
