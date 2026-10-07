@@ -15,11 +15,14 @@ import { initEnvBanner } from "./envBanner.js";
 import { initTopbarTenant } from "./topbarTenant.js";
 import { initInsightsPanel, resetInsightsContent } from "./insightsPanel.js";
 import { initIdleTimeout } from "./idleTimeout.js";
-import { initCommandPalette } from "./commandPalette.js";
+import { initCommandPalette, recordVisit } from "./commandPalette.js";
+import { runCleanups, pageSkeleton, errorBoundaryHtml, initShortcuts } from "./ui.js";
+import { live } from "./live.js";
 
 const routes = [
   { pattern: /^\/$/, load: () => import("./pages/overview.js") },
   { pattern: /^\/capabilities\/?$/, load: () => import("./pages/capabilities.js") },
+  { pattern: /^\/design-system\/?$/, load: () => import("./pages/designSystem.js") },
   { pattern: /^\/quanta-scan\/?$/, load: () => import("./pages/quanta-scan.js") },
   { pattern: /^\/remediate\/?$/, load: () => import("./pages/remediate.js") },
   { pattern: /^\/queue\/?$/, load: () => import("./pages/queue.js") },
@@ -53,6 +56,7 @@ const routes = [
   { pattern: /^\/access-governance\/?$/, load: () => import("./pages/iam.js") },
   { pattern: /^\/ai-security\/?$/, load: () => import("./pages/aiSecurity.js") },
   { pattern: /^\/api-security\/?$/, load: () => import("./pages/apiSecurity.js") },
+  { pattern: /^\/attack-surface\/?$/, load: () => import("./pages/attackSurface.js") },
   { pattern: /^\/firewall\/?$/, load: () => import("./pages/firewall.js") },
   { pattern: /^\/zero-day-watch\/?$/, load: () => import("./pages/zeroDay.js") },
   { pattern: /^\/devsecops\/?$/, load: () => import("./pages/devsecops.js") },
@@ -134,6 +138,7 @@ async function renderRoute() {
     currentCleanup();
     currentCleanup = null;
   }
+  runCleanups(); // anything the outgoing page registered with ui.js onCleanup() (timers, live subscriptions, tables)
   topbarExtraEl.innerHTML = "";
   resetInsightsContent();
 
@@ -149,6 +154,7 @@ async function renderRoute() {
     }
   }
 
+  if (!isAuthPage(pathname)) live.retrySSE(); // signed in: (re)try the live stream, which is refused until then
   document.querySelector(".app-shell").classList.toggle("auth-page", isAuthPage(pathname));
   if (isAuthPage(pathname)) {
     document.getElementById("sidebar").innerHTML = "";
@@ -173,16 +179,25 @@ async function renderRoute() {
     return;
   }
 
-  appEl.innerHTML = `<div class="empty-state">Loading…</div>`;
+  appEl.classList.remove("ui-page-enter");
+  appEl.innerHTML = pageSkeleton(); // skeleton in the shape of a page, so nothing jumps when the real content arrives
   try {
     const mod = await matched.route.load();
     const heading = typeof mod.title === "function" ? mod.title(...matched.params) : mod.title;
     titleEl.textContent = heading;
     document.title = `${heading} · Quanta`;
+    appEl.innerHTML = "";
     currentCleanup = (await mod.render(appEl, ...matched.params)) || null;
+    void appEl.offsetWidth; // restart the enter animation (ui.css; skipped under prefers-reduced-motion)
+    appEl.classList.add("ui-page-enter");
+    recordVisit(window.location.pathname + window.location.search, heading);
   } catch (err) {
+    // Error boundary: one page failing never takes the shell down.
     console.error(err);
-    appEl.innerHTML = `<div class="flash flash-error">Failed to load page: ${err.message || err}</div>`;
+    runCleanups();
+    appEl.innerHTML = errorBoundaryHtml(err, { title: "This page failed to load" });
+    const retry = appEl.querySelector("[data-retry]");
+    if (retry) retry.addEventListener("click", () => renderRoute());
   }
 }
 
@@ -213,4 +228,5 @@ initPageFooter();
 initEnvBanner();
 initIdleTimeout();
 initCommandPalette();
+initShortcuts();
 renderRoute();

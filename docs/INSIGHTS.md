@@ -77,7 +77,7 @@ policy drift) and, if they belong to a team, insights limited to other teams. On
 | `GET /api/insights/settings`, `PUT` `{settings:{...}}` | admin | thresholds in `insights.yaml`; unknown keys and wrong types are rejected |
 | `POST /api/ask/structured` `{query}` | login | see below |
 
-The leader's hourly tick refreshes (idempotent and cheap; `QUANTA_INSIGHTS=false` switches the feature off). Tables `insights` and `insight_baselines` (migration 8, additive).
+The leader's hourly tick refreshes (idempotent and cheap; `QUANTA_INSIGHTS=false` switches the feature off). Tables `insights` and `insight_baselines` (migration 12, additive).
 Routes are `core` in `licensing.yaml`.
 
 ## Structured Ask

@@ -70,8 +70,9 @@ Revoke it at any time; it stops working immediately. Each key is rate limited (`
 | `tickets:update` | `POST /api/inbound/ticket-status` |
 | `read:findings` | `GET /api/export/findings` |
 | `api:write` | `POST /api/ingest/api-traffic`, `POST /api/ingest/openapi`, `POST /api/ingest/api-test-results`, `POST /api/inbound/api-policy-status` (see [API_SECURITY.md](API_SECURITY.md)) |
+| `mcp:read` | `POST /mcp`, the read-only MCP endpoint for AI assistants (see [MCP_ENDPOINT.md](MCP_ENDPOINT.md)); each tool also needs `read:findings`. Bearer header only; an optional team binding narrows what the key can read |
 
-Only `/api/ingest/`, `/api/inbound/` and `/api/export/` accept a key in place of a browser login, and each
+`/mcp` sits outside `/api/` and answers only to a key (and only when `QUANTA_MCP_ENABLED=true`). Only `/api/ingest/`, `/api/inbound/` and `/api/export/` accept a key in place of a browser login, and each
 checks the key itself. Every other route still requires a signed-in user when `QUANTA_REQUIRE_LOGIN_FOR_READS`
 is on. In production the older `/api/ingest/generic` webhook now requires an `ingest:write` key too.
 
@@ -336,6 +337,12 @@ curl "https://quanta.example.com/api/export/findings?severity=critical&kev=true&
 ```
 
 Filters: `source`, `severity`, `kev`. Paged with `limit` (at most 5,000) and `offset`.
+
+### Attack-surface discovery output
+
+`POST /api/ingest/asm?tool=<subfinder|dnsx|httpx|naabu|nuclei>&scope=<domain or range>&complete=<bool>&publish=<bool>` (scope `asm:write`): the tool's raw JSON output (JSON lines or an array) as the
+request body. `complete=true` says the file is the whole answer for `scope`, so assets it omits are marked disappeared; a partial file never removes anything. `publish=true` refreshes the `asm` findings in the
+queue. The declared scope cannot be changed here (`tool=seeds` is refused). Quanta never scans; see `docs/ATTACK_SURFACE.md`.
 
 ### Dark-web monitoring output
 

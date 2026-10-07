@@ -61,6 +61,11 @@ function searchResults(index, query) {
   return [...codeScan, ...queue, ...assets];
 }
 
+// For the command palette (commandPalette.js): the same real matches the search bar shows, as plain rows.
+export async function lookupData(query) {
+  return searchResults(await loadIndex(), query);
+}
+
 // Wraps the first case-insensitive match of `query` within `text` in <mark> so the
 // dropdown visually shows *why* a result matched, not just that it did - the
 // underlying match logic (matches(), above) is unchanged, this only affects display.

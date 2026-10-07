@@ -80,6 +80,8 @@ def metrics(findings, engine=None):
         put("firewall", n_rules, f"{n_rules:,} rules from {_plural(devices, 'firewall')}")
 
     safe(firewall)
+    safe(lambda: put("attack-surface", _count(engine, t.asm_assets, (t.asm_assets.c.status == "active") & (t.asm_assets.c.in_scope == 1)),
+                     _plural(_count(engine, t.asm_assets, (t.asm_assets.c.status == "active") & (t.asm_assets.c.in_scope == 1)), "external asset") + " imported"))
     safe(lambda: put("api-inventory", _count(engine, t.api_endpoints), _plural(_count(engine, t.api_endpoints), "endpoint") + " in the inventory"))
     safe(lambda: put("api-policies", _count(engine, t.api_policies), _plural(_count(engine, t.api_policies), "protection policy", "protection policies")))
     safe(lambda: put("api-ci", _count(engine, t.scan_runs, t.scan_runs.c.scan_type == "api-test"), _plural(_count(engine, t.scan_runs, t.scan_runs.c.scan_type == "api-test"), "test upload")))

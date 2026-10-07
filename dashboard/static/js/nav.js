@@ -23,7 +23,7 @@ export const NAV = [
     { path: "/graphs?module=soc", label: "Relationship graph", feature: "relationship-graphs", icon: "blastRadius", tip: "How the things in this module are connected, drawn from what Quanta has recorded, with clusters, choke points and single points of failure worked out from the links." },
     { path: "/soc", label: "SOC Operations", icon: "rules", tip: "Admin: cases in L1, L2 and L3 queues with priority, service-level clocks, escalation with hand-off notes, case summaries, log investigation, technique identification and SOC metrics." },
     { path: "/hunting?tab=alerts", label: "Alert Triage", icon: "signal", tip: "Alerts from your SIEM or XDR ranked with vulnerability context, investigated step by step, with a recommended verdict a person validates." },
-    { path: "/hunting?tab=proposals", label: "Threat Hunting", icon: "search", tip: "Hunts proposed from known-exploited vulnerabilities in your estate, with queries to run in your own SIEM and verdicts that need an outcome to close." },
+    { path: "/hunting?tab=suggested", label: "Threat Hunting", icon: "search", tip: "Hypothesis-driven hunt suggestions from your intel, alerts, exposure, identities and detection gaps, each with the reason, queries to run in your own SIEM and verdicts that need an outcome to close." },
     { path: "/hunting?tab=detections", label: "Detection Engineering", icon: "rules", tip: "Per-rule health from analyst outcomes, ATT&CK coverage gaps, and tuning suggestions with before and after." },
     { path: "/threat-intel", label: "Threat Intelligence", icon: "risk", tip: "Zero-days, top vulnerabilities, and MITRE-documented threat-actor groups relevant to the selected tenant's industry - built from data already tagged elsewhere in this app." },
     { path: "/hunting?tab=intel", label: "Intel Intake", icon: "document", tip: "Paste a report or send STIX; Quanta extracts the CVEs, techniques and indicators and scores how much it matters to your estate." },
@@ -69,6 +69,7 @@ export const NAV = [
     { path: "/zero-day-watch", label: "Zero-day Watch", icon: "rules", tip: "Newly exploited vulnerabilities (CISA KEV) in products your estate appears to run that no scanner has reported yet. A name match, not a version check." },
     { path: "/compensating-controls", label: "Compensating Controls", icon: "exception", tip: "Findings that can't be remediated right now - Critical EOL/EOS, actively-exploited zero-days with no public POC, or an approved exception - with recommended controls for each." },
     { path: "/controls", label: "Security Controls", icon: "rules", tip: "Which firewalls, EDR, WAF and other controls protect which assets - what makes compensating-control advice specific to you." },
+    { path: "/attack-surface", label: "Attack Surface", icon: "infra", tip: "Admin: domains, addresses, ports, services and technologies imported from the output of subfinder, dnsx, httpx, naabu and nuclei, what changed since the last import, and findings for risky exposure. Quanta never scans; it reads what your own tools wrote." },
     { path: "/firewall", label: "Firewall Rules", icon: "rules", tip: "Firewall rules from your exports: broad, unused, shadowed and internet-exposed rules, recertification by owner, and access requests checked against the rules. Quanta never changes a firewall." },
     { path: "/attack-paths", label: "Attack Chains", icon: "risk", tip: "Findings on the same asset chained by tagged MITRE ATT&CK tactic into entry -> pivot -> impact - fix the pivot to break the whole chain. Heuristic, not runtime-validated." },
     { path: "/risk/blast-radius", label: "Blast Radius", icon: "blastRadius", tip: "If this asset is compromised, how far does the damage spread - business criticality and reachability, cross-referenced against real exploitability. Honestly scoped: 2 of 4 real profiling dimensions aren't measurable with this app's data yet." },
@@ -133,11 +134,13 @@ export const NAV = [
     { path: "/notification-settings", label: "Notification Settings", icon: "mail", tip: "Schedule sub-domain/team-wise reports (weekly-yearly) and critical/zero-day/threat-intel email alerts - requires real SMTP configuration to actually send." },
     { path: "/admin/people", label: "Users & Teams", icon: "users", tip: "Admin-only: user accounts and roles, team records and managers, who is on which team, each person's live workload, and the auto-routing rule." },
     { path: "/admin", label: "Admin Settings", icon: "rules", tip: "Admin-only: which real Claude Code model to use, per-user daily token limits (enforced server-side), real usage/cost by user, and read-only system health." },
+    { path: "/design-system", label: "Design system", icon: "dashboard", tip: "The living style guide: every component of the interface with a live example, the keyboard shortcuts and how pages are built." },
   ], connectors: [
   ] },
   { group: "Help", id: "help", items: [
     { path: "/support", label: "Support", icon: "support", tip: "How to get help, report a bug, and where the deeper docs live." },
     { path: "/faq", label: "FAQ", icon: "faq", tip: "Direct answers about what this product does and doesn't do (yet)." },
+    { path: "/design-system", label: "Design system", icon: "dashboard", tip: "The living style guide: every component of the interface with a live example, the keyboard shortcuts and how pages are built." },
   ] },
 ];
 

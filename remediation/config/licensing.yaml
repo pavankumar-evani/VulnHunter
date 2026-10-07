@@ -27,6 +27,7 @@ core:
   - /api/findings
   - /api/search
   - /api/notifications
+  - /api/events
   - /api/support
   - /api/teams
   - /api/assignable-users
@@ -34,6 +35,8 @@ core:
   - /api/connections
   - /api/simulation
   - /api/api-keys
+  - /mcp
+  - /api/mcp
   - /api/admin
   - /api/integrity
   - /api/export
@@ -58,6 +61,8 @@ modules:
   soc:
     - /api/graphs/soc
     - /api/soc
+    - /api/soc/incidents      # incident automation: grouping, routing, the live stream (docs/SOC_INCIDENTS.md)
+    - /api/soc/routing        # the routing preview
     - /api/hunting
     - /api/detections
     - /api/soar
@@ -66,6 +71,7 @@ modules:
     - /api/threat-intel
     - /api/cortex-xsiam
     - /api/ingest/alerts
+    - /api/ingest/itsm-ticket   # a ticket from the ITSM tool becomes an investigated alert (docs/INVESTIGATION_REPORTS.md)
     - /api/ingest/threat-intel
     - /api/ingest/darkweb
   appsec:
@@ -99,6 +105,8 @@ modules:
     - /api/active-directory
     - /api/assets
     - /api/firewall
+    - /api/asm
+    - /api/ingest/asm
     - /api/controls
     - /api/zero-day-watch
     - /api/attack-paths
@@ -141,6 +149,7 @@ shared:
   /api/splunk: [soc, remediation]
   /api/risk: [infra, grc]
   /api/graphs: [soc, appsec, devsecops, infra, ai, remediation, grc]   # the bare prefix; each module's own /api/graphs/<module> entry above is longer, so it decides
+  /api/ontology: [soc, appsec, devsecops, infra, ai, remediation, grc]   # reads every module's graph, so any one licensed module is enough (like /api/graphs)
 
 # Convenience bundles for the issuing tool (cli/quanta_license.py --edition). They are NOT prices and not the source of truth: a licence lists its modules explicitly.
 editions:

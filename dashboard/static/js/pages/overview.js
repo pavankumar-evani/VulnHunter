@@ -13,6 +13,8 @@ import { aiTrendAnalysisFabHtml, wireAiTrendAnalysis } from "../aiTrendAnalysis.
 import { mountInsights } from "../insightsCards.js";
 import { setInsightsContent, insightSectionHtml, insightAlertHtml } from "../insightsPanel.js";
 import { icon } from "../icons.js";
+import { kpiTile, dataAgeBadge, mountDataAge, mountCounters, debounce } from "../ui.js";
+import { live } from "../live.js";
 
 export const title = "Security Posture Overview";
 
@@ -644,6 +646,36 @@ function analyticsSection(data, queue, vh, teamByAssetName, triggeredPseudoFindi
     </div>`;
 }
 
+// Reference use of the UI kit (ui.js): the headline tiles. There is no server-side history, so the change arrows and sparklines
+// come from what THIS browser saw on its earlier visits (at most one reading per 5 minutes, the last 24 kept); until there are two
+// readings the tile shows the number alone. The tile hints say so.
+const HISTORY_KEY = "quanta.home.history";
+function recordHistory(snap) {
+  let list = [];
+  try { list = JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "[]"); } catch { list = []; }
+  const last = list[list.length - 1];
+  if (last && snap.t - last.t < 5 * 60 * 1000) list[list.length - 1] = snap; else list.push(snap);
+  list = list.slice(-24);
+  try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); } catch { /* private window: no trend, the numbers still show */ }
+  return list;
+}
+function homeKpiStrip(data, queue, fetchedAt) {
+  const snap = { t: Date.now(), breached: data.sla.breached, kev: data.kev_count, epss: data.high_epss_count, open: queue.findings.length };
+  const hist = recordHistory(snap);
+  const prev = hist.length > 1 ? hist[hist.length - 2] : null;
+  const series = (k) => hist.map((h) => h[k]);
+  const hint = "Change and trend come from this browser's earlier visits; they appear after the second reading.";
+  const tile = (k, label, href, tone) => kpiTile({ label, value: snap[k], previous: prev ? prev[k] : undefined, spark: hist.length > 1 ? series(k) : null, href, tone, hint });
+  return `<section class="home-kpis" aria-label="Headline numbers">
+    <div class="home-top"><h2 class="ui-sr">Headline numbers</h2><span class="ui-muted">What needs attention now</span>${dataAgeBadge(fetchedAt)}</div>
+    <div class="ui-grid">
+      ${tile("breached", "SLA breached", "/queue?slaStatus=breached", "danger")}
+      ${tile("kev", "Actively exploited (KEV)", "/queue?kevOnly=true", "danger")}
+      ${tile("epss", "High exploit probability", "/queue", "warn")}
+      ${tile("open", "Findings in the queue", "/queue", "")}
+    </div></section>`;
+}
+
 function renderBody(data, queue, vh, rankings, assets, teamByAssetName, remediationApprovals) {
   // Real remediation-trigger events (see remediation/remediation_approvals/store.py's
   // mark_remediation_triggered()), reshaped into the same {first_seen, priority}
@@ -665,6 +697,8 @@ function renderBody(data, queue, vh, rankings, assets, teamByAssetName, remediat
 
   return `
     <p class="subtitle">Real results from the last validated run of both pipelines — not simulated.</p>
+
+    ${homeKpiStrip(data, queue, new Date())}
 
     ${exposureScoreSectionHtml(data.exposure_score, data.exposure_score_rules)}
 
@@ -766,6 +800,7 @@ async function buildOverviewAiStats() {
 export async function render(container) {
   const topbarExtra = document.getElementById("topbar-extra");
   let lastFetched = null;
+  let painted = false;
 
   // The AI trend analysis FAB lives OUTSIDE #overview-body on purpose - #overview-body
   // is fully replaced every 20s by the auto-refresh below, which would otherwise wipe an
@@ -792,6 +827,8 @@ export async function render(container) {
     const rankings = buildTopRankings(queue.findings, ownerByAssetName, teamByAssetName);
     bodyEl.innerHTML = renderBody(data, queue, vh, rankings, assetsData.assets, teamByAssetName, remediationApprovalsData.approvals);
     renderLiveBadge();
+    mountDataAge(bodyEl);
+    if (!painted) { painted = true; mountCounters(bodyEl); } // count up once; the 20-second refresh must not replay it
     wireTopRankings(bodyEl, "overview", rankings);
     wireChartLinks(bodyEl);
     makeChartsReorderable(bodyEl, "overview");
@@ -825,11 +862,14 @@ export async function render(container) {
   }
 
   await load();
+  // Live: a recorded activity (approval, assignment, ingest ...) refreshes the page straight away instead of waiting for the timer.
+  const offLive = live.subscribe("activity", debounce(() => { load().catch((err) => console.error(err)); }, 800));
   const tickTimer = setInterval(renderLiveBadge, 1000);
   const refreshTimer = setInterval(() => { load().catch((err) => console.error(err)); }, REFRESH_MS);
 
   return () => {
     clearInterval(tickTimer);
     clearInterval(refreshTimer);
+    offLive();
   };
 }

@@ -73,7 +73,39 @@ def _m007_ai_asset_agent_fields(engine):
         store.backfill_new_fields(engine)
 
 
-def _m008_insights_tables(engine):
+def _m008_api_key_team(engine):
+    from remediation.utils import db
+    if inspect(engine).has_table("api_keys"):
+        _add_missing_columns(engine, db.api_keys)
+
+
+def _m009_hunt_hypotheses(engine):
+    """New tables only (expand-only): the hunt engine's hypotheses and their event history. Safe if ensure_schema already created them."""
+    from remediation.utils import db
+    db.hunt_hypotheses.create(engine, checkfirst=True)
+    db.hunt_hypothesis_events.create(engine, checkfirst=True)
+
+
+def _m010_soc_incidents(engine):
+    """Expand only: routing columns on soc_analysts, the three incident tables, and one incident per existing case so no case disappears from the new view."""
+    from remediation.soc.incidents import migrate
+    from remediation.utils import db
+    if inspect(engine).has_table("soc_analysts"):
+        _add_missing_columns(engine, db.soc_analysts)
+    for table in (db.soc_incidents, db.soc_incident_alerts, db.soc_incident_events):
+        table.create(engine, checkfirst=True)
+    if inspect(engine).has_table("soc_cases"):
+        migrate.backfill(engine)
+
+
+def _m011_investigation_reports(engine):
+    """New tables only (expand-only): stored incident investigation reports, analyst follow-ups, hunt allow-list entries and hunt report time-boxes. Safe if ensure_schema already created them."""
+    from remediation.utils import db
+    for table in (db.investigation_reports, db.incident_followups, db.hunt_allowlist, db.hunt_report_meta):
+        table.create(engine, checkfirst=True)
+
+
+def _m012_insights_tables(engine):
     """New tables only (expand-only): insights and insight_baselines. Safe if ensure_schema already created them."""
     from remediation.utils import db
     db.insights.create(engine, checkfirst=True)
@@ -88,7 +120,11 @@ MIGRATIONS = [
     (5, "simulation_provenance_columns", _m005_simulation_provenance),
     (6, "cvd_advisories_table", _m006_cvd_advisories),
     (7, "ai_asset_agent_mcp_lifecycle_fields", _m007_ai_asset_agent_fields),
-    (8, "insights_tables", _m008_insights_tables),
+    (8, "api_key_team_binding", _m008_api_key_team),
+    (9, "hunt_hypotheses_tables", _m009_hunt_hypotheses),
+    (10, "soc_incidents_and_analyst_routing", _m010_soc_incidents),
+    (11, "investigation_reports_followups_allowlist", _m011_investigation_reports),
+    (12, "insights_tables", _m012_insights_tables),
 ]
 
 

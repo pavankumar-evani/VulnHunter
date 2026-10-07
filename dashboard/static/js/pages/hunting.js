@@ -3,7 +3,7 @@ import { escapeHtml, flash } from "../dom.js";
 
 export const title = "Hunting & SOC";
 
-const TABS = [["overview", "Overview"], ["alerts", "Alert triage"], ["intel", "Threat intel"], ["proposals", "Proposed hunts"], ["hunts", "Hunts"], ["detections", "Detection engineering"]];
+const TABS = [["suggested", "Suggested hunts"], ["overview", "Overview"], ["alerts", "Alert triage"], ["intel", "Threat intel"], ["proposals", "Proposed hunts"], ["hunts", "Hunts"], ["detections", "Detection engineering"]];
 const SEV = { Critical: "badge-critical", High: "badge-high", Medium: "badge-medium", Low: "badge-low", Informational: "badge-outline" };
 const NOTE = "Quanta is not a SIEM. It knows which assets carry exploitable vulnerabilities, so it proposes where to look, adds that context to alerts and judges how well your detections work. Searches in your SIEM are read-only and only run when you confirm.";
 const RESULTS = ["", "hits", "no-hits", "not-run", "error"];
@@ -15,7 +15,7 @@ const TIER = { high_fidelity: "badge-auto_approvable", healthy: "badge-low", noi
 const PRIO = { high: "badge-critical", medium: "badge-medium", low: "badge-outline" };
 
 export async function render(container) {
-  let tab = new URLSearchParams(window.location.search).get("tab") || "overview";
+  let tab = new URLSearchParams(window.location.search).get("tab") || "suggested";
   let openHunt = null;
   let openAlert = null;
 
@@ -26,6 +26,33 @@ export async function render(container) {
   };
   const techniques = (list) => (list || []).map((t) => `<span class="badge badge-outline">${escapeHtml(t.technique_id)} ${escapeHtml(t.technique_name)}</span>`).join(" ") || '<span class="muted">none tagged</span>';
   const pct = (x) => (x === null || x === undefined ? "-" : Math.round(x * 100) + "%");
+
+  async function suggested() {
+    const out = await api.huntingSuggestions();
+    const ready = { connected: "badge-low", partial: "badge-medium", "cannot-tell": "badge-outline", "none-required": "badge-outline" };
+    shell(`<p class="muted">${escapeHtml(out.note)}</p>
+      <p class="muted">${out.shown} of ${out.total} suggestions shown${out.suppressed_hidden ? `, ${out.suppressed_hidden} hidden because past hunts of that kind found nothing` : ""}. Last refreshed ${escapeHtml(out.last_refresh || "never")}. <button type="button" class="secondary-button" id="sg-refresh">Refresh now</button></p>
+      ${out.suggestions.length ? out.suggestions.map((s) => `<div class="card" style="border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:4px 18px 14px;margin:14px 0">
+        <h3>${escapeHtml(s.title)} <span class="badge badge-outline">${escapeHtml(s.hunt_type)}</span> <span class="badge ${PRIO[s.expected_value] || "badge-outline"}">priority ${Math.round(s.priority.score)}</span> <span class="badge badge-outline">effort ${escapeHtml(s.effort)}</span></h3>
+        <p>${escapeHtml(s.hypothesis)}</p>
+        <p><strong>Why now:</strong> ${s.why_now.slice(0, 4).map((e) => escapeHtml(e.label)).join("; ")}${s.why_now.length > 4 ? ` and ${s.why_now.length - 4} more` : ""}</p>
+        <p>${techniques(s.techniques)} ${s.tactics.map((t) => `<span class="badge badge-outline">${escapeHtml(t)}</span>`).join(" ")}</p>
+        <p class="muted">Scope: ${s.scope.counts.assets} asset(s), ${s.scope.counts.identities} identit${s.scope.counts.identities === 1 ? "y" : "ies"}. Data: <span class="badge ${ready[s.data_readiness.status] || "badge-outline"}">${escapeHtml(s.data_readiness.status)}</span> ${s.queries.length} ready-made quer${s.queries.length === 1 ? "y" : "ies"}.</p>
+        <details><summary>Why this score</summary><ul>${s.priority.breakdown.map((r) => `<li><strong>${escapeHtml(r.factor)}</strong> ${r.points}: ${escapeHtml(r.note)}</li>`).join("")}</ul>${s.learned.note ? `<p class="muted">${escapeHtml(s.learned.note)}</p>` : ""}</details>
+        ${s.gaps.map((g) => `<p class="muted">${escapeHtml(g)}</p>`).join("")}
+        <button type="button" data-sg-accept="${escapeHtml(s.id)}">Accept and start hunt</button> <button type="button" class="secondary-button" data-sg-dismiss="${escapeHtml(s.id)}">Dismiss</button></div>`).join("") : '<p class="empty-state">No suggestions yet. Press Refresh now; the notes below say which data is missing.</p>'}
+      ${out.gaps.length ? `<h3>Data gaps</h3><ul>${out.gaps.map((g) => `<li class="muted">${escapeHtml(g.note)}</li>`).join("")}</ul>` : ""}`);
+    container.querySelector("#sg-refresh").addEventListener("click", async () => { try { await api.huntingSuggestionRefresh(); show(); } catch (e) { flash(e.message, "error"); } });
+    container.querySelectorAll("[data-sg-accept]").forEach((b) => b.addEventListener("click", async () => {
+      try { const r = await api.huntingSuggestionAccept(b.dataset.sgAccept); openHunt = r.hunt_id; tab = "hunts"; show(); } catch (e) { flash(e.message, "error"); }
+    }));
+    container.querySelectorAll("[data-sg-dismiss]").forEach((b) => b.addEventListener("click", async () => {
+      const reason = window.prompt("Reason: not-relevant, already-covered, no-data, accepted-risk or other", "not-relevant");
+      if (!reason) return;
+      const notes = window.prompt("Notes (required for other)", "") || "";
+      try { await api.huntingSuggestionDismiss(b.dataset.sgDismiss, { reason, notes }); show(); } catch (e) { flash(e.message, "error"); }
+    }));
+  }
 
   async function overview() {
     const o = await api.huntingOverview();
@@ -123,7 +150,7 @@ export async function render(container) {
         <label>Status <select name="status">${["proposed", "active", "closed"].map((s) => `<option${s === h.status ? " selected" : ""}>${s}</option>`).join("")}</select></label>
         <label>Outcome <select name="outcome">${["", "confirmed", "not-found", "needs-data"].map((s) => `<option value="${s}"${(h.outcome || "") === s ? " selected" : ""}>${s || "(none yet)"}</option>`).join("")}</select></label>
         <label><input type="checkbox" name="detection_created"${h.detection_created ? " checked" : ""}> This hunt led to a new detection</label>
-        <div><button type="submit">Save</button> <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=html">Download report (HTML)</a> &middot; <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report">Markdown for a ticket</a></div></form>`);
+        <div><button type="submit">Save</button> <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=html">Download report (HTML)</a> &middot; <a style="color:var(--brand-accent)" href="/api/hunting/hunts/${h.id}/report?format=md">Markdown for a ticket</a></div></form>`);
     container.querySelector("#back").addEventListener("click", () => { openHunt = null; show(); });
     const collect = () => h.queries.map((q, i) => ({ ...q, result: container.querySelector(`[data-q="${i}"]`).value || null, assessment: container.querySelector(`[data-a="${i}"]`).value || null }));
     container.querySelectorAll("[data-run]").forEach((b) => b.addEventListener("click", async () => {
@@ -311,7 +338,7 @@ export async function render(container) {
   }
 
   async function show() {
-    try { await { overview, intel, proposals, hunts, alerts, detections }[tab](); } catch (err) { shell(`<p class="callout callout-warn">${escapeHtml(err.message)}</p>`); }
+    try { await { suggested, overview, intel, proposals, hunts, alerts, detections }[tab](); } catch (err) { shell(`<p class="callout callout-warn">${escapeHtml(err.message)}</p>`); }
   }
   await show();
 }

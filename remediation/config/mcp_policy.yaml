@@ -1,0 +1,12 @@
+# Policy for the read-only MCP endpoint (docs/MCP_ENDPOINT.md). The endpoint itself stays OFF unless QUANTA_MCP_ENABLED=true.
+# enabled_tools: "all" or a list of tool names (search_findings, get_finding, list_assets, kev_open_findings, top_priorities,
+# attack_paths_for_asset, posture_summary). A tool not listed is invisible and refused. Every tool is read-only; none can be added that is not.
+enabled_tools: all
+max_result_bytes: 60000        # a result larger than this has its list trimmed and is marked truncated
+max_request_bytes: 65536
+call_timeout_seconds: 10       # a call still running after this is abandoned and reported as an error
+rate_limit_calls: 60           # per API key
+rate_limit_window_seconds: 60
+# Browser origins allowed to call the endpoint (DNS-rebinding guard). Non-browser MCP clients send no Origin and are unaffected.
+# More can be added with QUANTA_MCP_ALLOWED_ORIGINS (comma separated).
+allowed_origins: []

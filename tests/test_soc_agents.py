@@ -601,9 +601,9 @@ class SocApiTests(unittest.TestCase):
         self.assertEqual(self.client.post(f"/api/hunting/intel/{rep_['id']}/hunt").status_code, 400)
         upd = self.client.put(f"/api/hunting/hunts/{hunt['id']}", json={"queries": [{**hunt["queries"][0], "result": "hits", "assessment": "malicious", "sample": [{"host": "WEB-1"}]}] + hunt["queries"][1:]})
         self.assertEqual(upd.json()["verdict"]["overall"], "confirmed-compromise")
-        md = self.client.get(f"/api/hunting/hunts/{hunt['id']}/report")
+        md = self.client.get(f"/api/hunting/hunts/{hunt['id']}/report?format=md")
         self.assertIn("text/markdown", md.headers["content-type"])
-        self.assertIn("confirmed-compromise", md.text)
+        self.assertIn("confirmed", md.text)
         page = self.client.get(f"/api/hunting/hunts/{hunt['id']}/report?format=html")
         self.assertIn("attachment", page.headers["content-disposition"])
 

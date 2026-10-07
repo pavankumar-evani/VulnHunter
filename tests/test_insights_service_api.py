@@ -206,15 +206,15 @@ class ServiceTests(unittest.TestCase):
 
 
 class Plumbing(unittest.TestCase):
-    def test_migration_8_creates_the_tables_and_is_idempotent(self):
-        self.assertIn((8, "insights_tables"), [(v, n) for v, n, _ in migrations.MIGRATIONS])
+    def test_migration_12_creates_the_tables_and_is_idempotent(self):
+        self.assertIn((12, "insights_tables"), [(v, n) for v, n, _ in migrations.MIGRATIONS])
         self.assertEqual(len({v for v, _, _ in migrations.MIGRATIONS}), len(migrations.MIGRATIONS))     # numbers stay unique
         with tempfile.TemporaryDirectory() as tmp:
             eng = create_engine(f"sqlite:///{Path(tmp) / 'm.db'}")
             migrations.apply(eng)
             self.assertTrue({"insights", "insight_baselines"} <= set(inspect(eng).get_table_names()))
             self.assertEqual(migrations.apply(eng), [])
-            migrations._m008_insights_tables(eng)                                       # safe to run again
+            migrations._m012_insights_tables(eng)                                       # safe to run again
             eng.dispose()
 
     def test_licensing_lists_the_new_prefixes_as_core(self):

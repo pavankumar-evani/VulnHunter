@@ -1,0 +1,88 @@
+# SOC incident automation: how alerts are grouped into incidents, how an incident's severity and the tier it needs are worked out, and who it is routed to.
+# Everything is read live (edit it and the next alert sees it). All of it is explicit rules and plain numbers; nothing is learned, and an unknown is never a pass.
+
+incidents:
+  enabled: true            # false = alerts keep opening one case each through soc_ops.yaml's auto_case, with no incident layer
+
+# ---------------------------------------------------------------- correlation
+# A new alert joins the open incident it scores highest against, when the score reaches join_threshold. Each reason that applies adds its weight (once).
+# The reasons are stored on the alert's link so the analyst can see exactly why it was grouped.
+correlation:
+  window_minutes: 1440     # an incident only attracts alerts that arrive within this long of its last alert
+  burst_minutes: 60        # "same rule burst": the same detection rule firing again within this window
+  duplicate_minutes: 30    # same rule on the same host within this window is a duplicate: grouped, counted, not a new line of work
+  join_threshold: 1.0
+  weights:
+    shared_host: 1.0           # the alert's host (or any host in its entities) is already in the incident
+    shared_user: 1.0           # the same account
+    shared_indicator: 1.0      # the same public IP address, domain or file hash
+    same_rule_burst: 0.6       # the same rule within burst_minutes (on any host)
+    shared_cve: 0.6            # a known-exploited or open vulnerability both alerts' hosts carry
+    same_technique: 0.3        # the same ATT&CK technique on another host
+    kill_chain_progression: 0.4   # the alert is a different, later-or-earlier stage than the incident already holds (counts only with another reason)
+
+# ATT&CK tactics in kill-chain order. A tactic that is not in this list has no stage and does not count toward progression.
+kill_chain: [Reconnaissance, Resource Development, Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery,
+             Lateral Movement, Collection, Command and Control, Exfiltration, Impact]
+late_stage: [Lateral Movement, Collection, Command and Control, Exfiltration, Impact]
+
+# Severity of the incident = the highest alert severity, raised one level when the alerts span enough stages of the kill chain.
+severity_rollup:
+  raise_at_stages: 3                 # this many distinct stages -> one level up
+  raise_at_stages_with_late: 2       # ... or this many when one of them is a late stage
+  cap: Critical
+
+# Incident confidence (how likely it is a real threat): the strongest alert's own confidence from the decision layer, plus a small bonus per extra corroborating alert.
+confidence:
+  corroboration_bonus: 0.05
+  max_bonus: 0.15
+  low_below: 0.5                     # under this, a High or Critical incident is sent to at least tier 2 to look at
+
+# ---------------------------------------------------------------- automatic closing
+# An alert is auto-closed only when the decision layer routes its verdict "auto" (confidence at or above the auto threshold in decision_policy.yaml, and the decision
+# declared reversible and local), the verdict is a likely false positive, and its severity is not listed here. It lands in the auto-closed lane and can be undone.
+auto_close:
+  enabled: true
+  never_for_severities: [Critical]
+  also_never_when_kev_on_host: true   # a known-exploited vulnerability on the host means a person looks
+
+# ---------------------------------------------------------------- tier required
+# Start from the severity's tier; every rule that applies can only raise it. The rules that applied are listed in the incident's routing_reason.
+tier_required:
+  base_by_severity: {Critical: 2, High: 2, Medium: 1, Low: 1, Informational: 1}
+  rules:
+    - {name: known-exploited-vulnerability-on-host, when: kev, tier: 2}
+    - {name: crown-jewel-asset, when: crown_jewel, tier: 3}
+    - {name: critical-on-high-criticality-asset, when: critical_asset_critical_severity, tier: 3}
+    - {name: kill-chain-progression, when: late_stage_progression, tier: 3}
+    - {name: low-confidence-high-severity, when: low_confidence_high_severity, tier: 2}
+    - {name: multiple-hosts, when: many_hosts, tier: 2}
+  many_hosts_at: 4
+# Assets (names, case-insensitive; * allowed) that are crown jewels. A finding's asset.criticality of critical or high also counts as a high-criticality asset.
+crown_jewels: []
+
+# ---------------------------------------------------------------- the analysts
+analysts:
+  default_capacity: 12               # open incidents at once when an analyst has no capacity of their own
+  on_call_priorities: [P1, P2]       # an on-call analyst outside their shift may take these
+  # Which specialty an incident needs, from the alert category (hunting/soc_triage.yaml's classification). A category not listed needs no specialty.
+  specialty_by_category: {endpoint: endpoint, network: network, identity: identity, cloud: cloud, email: email}
+  specialty_by_asset_type: {iot-ot-device: ot, cloud-infrastructure: cloud}
+  known_specialties: [endpoint, network, identity, cloud, email, ot, malware, forensics]
+
+routing:
+  priority_weight: {P1: 4, P2: 3, P3: 2, P4: 1}      # one open incident counts this much toward an analyst's load
+  sla_multiplier: {ok: 1.0, at_risk: 1.5, breached: 2.0}
+  continuity_hours: 72               # an analyst who handled a related incident (same host or user) this recently keeps the new one
+  lead_email: null                   # who is told when nobody qualified is available (also reported in the activity log and the live stream); null = the activity log only
+
+# ---------------------------------------------------------------- escalation
+escalation:
+  on_sla: [breached]                 # SLA states that move an open incident up a tier: breached, at_risk
+  max_tier: 3
+  reroute_when_severity_rises: true
+
+stream:
+  poll_seconds: 2
+  heartbeat_seconds: 15
+  max_seconds: 3600                  # one connection lasts at most this long; the browser's EventSource reconnects and sends Last-Event-ID

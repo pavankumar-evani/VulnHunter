@@ -31,6 +31,11 @@ from sqlalchemy import insert, select
 from remediation.utils import db as db_module
 
 
+# Optional hook the dashboard sets so a recorded activity can be pushed to the live-updates stream (dashboard/events.py).
+# It is told only the action name, never the actor, target or details, and a failing listener never affects the write.
+listener = None
+
+
 def _row_to_record(row):
     record = dict(row)
     record["details"] = json.loads(record["details"]) if record.get("details") else {}
@@ -69,6 +74,11 @@ def record_activity(actor, action, target=None, details=None, engine=None, as_of
     with engine.begin() as conn:
         result = conn.execute(insert(db_module.activity_log), row)
         new_id = result.inserted_primary_key[0]
+    if listener is not None:
+        try:
+            listener(action)
+        except Exception:  # noqa: BLE001 - a live-update hiccup must never break an audit write
+            pass
     return {**row, "id": new_id, "details": details or {}}
 
 
