@@ -1510,6 +1510,48 @@ insight_baselines = Table(
     Column("updated_at", String, nullable=False),
 )
 
+# Hunting knowledge base (remediation/hunting/knowledge/): stored report versions, AI-drafted items (drafts only, labelled), and a planning list for suggested controls and rules.
+hunt_knowledge_reports = Table(
+    "hunt_knowledge_reports", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("subject_kind", String, nullable=False, index=True),
+    Column("subject_id", String, nullable=False, index=True),
+    Column("version", Integer, nullable=False),
+    Column("title", String, nullable=False),
+    Column("lookback_days", Integer, nullable=False),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+    Column("data_json", Text, nullable=False),
+)
+
+hunt_knowledge_drafts = Table(
+    "hunt_knowledge_drafts", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", String, nullable=False),            # hypothesis-refine | query-draft | result-summary
+    Column("subject_kind", String, nullable=False, index=True),
+    Column("subject_id", String, nullable=False, index=True),
+    Column("language", String, nullable=True),
+    Column("label", String, nullable=False),           # always "AI-drafted, unvalidated"
+    Column("status", String, nullable=False),          # draft | discarded
+    Column("content_json", Text, nullable=False),
+    Column("validation_json", Text, nullable=False),
+    Column("model", String, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
+hunt_planned_items = Table(
+    "hunt_planned_items", metadata,
+    Column("key", String, primary_key=True),           # control:<id>:<scenario> | rule:<scenario>:<n>
+    Column("kind", String, nullable=False),            # control | rule
+    Column("title", String, nullable=False),
+    Column("status", String, nullable=False),          # planned | discarded  (never "implemented": that is recorded on the Controls page or by enabling a rule)
+    Column("ref_json", Text, nullable=False),
+    Column("note", Text, nullable=True),
+    Column("created_by", String, nullable=True),
+    Column("created_at", String, nullable=False),
+)
+
 
 def ensure_schema(engine):
     """Creates any of this module's tables that don't already exist. Idempotent and
@@ -1537,6 +1579,7 @@ def ensure_schema(engine):
             hunts, hunt_hypotheses, hunt_hypothesis_events, soc_alerts, soc_cases, soc_case_events, soc_case_alerts, soc_analysts, detection_usecases, darkweb_hits, darkweb_sources, cvd_advisories, threat_intel_reports, intel_sources, soc_investigations, detection_rules, detection_assessments, soar_playbooks, soar_runs, risk_scenarios, scan_runs, devsecops_status, remediation_factory, fw_rules, fw_requests, ai_assets, iam_entitlements, iam_roster, iam_campaigns, iam_review_items,
             api_specs, api_endpoints, api_metrics, api_actor_hits, api_dependencies, api_data_classes, api_policies, api_policy_events, api_policy_pushes, api_rollout_state,
             applications, app_sboms, fix_proposals, gate_runs, devsecops_custom_controls, decision_log, asm_assets, asm_runs, asm_changes, asm_scope, asm_settings, soc_incidents, soc_incident_alerts, soc_incident_events, investigation_reports, incident_followups, hunt_allowlist, hunt_report_meta, insights, insight_baselines,
+            hunt_knowledge_reports, hunt_knowledge_drafts, hunt_planned_items,
         ])
     if engine not in _MIGRATED:
         from remediation.utils import migrations

@@ -1,0 +1,104 @@
+# Response playbook ids that scenarios recommend. These are RECOMMENDATIONS for a person: each step is something an analyst or the owning team decides and does,
+# never something Quanta does. Where a SOAR playbook with a matching purpose exists in your Quanta (Playbooks page) an administrator can link it; the ids here are stable
+# names for the pattern of response. `needs_approval` marks steps that change a customer system and so need a named approver in your process.
+playbooks:
+  pb-credential-compromise:
+    name: Suspected credential compromise
+    summary: Confirm the sign-in is not the user, cut the attacker's access, and find what they touched.
+    steps:
+      - {step: "Ask the user (out of band, not by replying to the suspicious message) whether they did the sign-in or approved the prompt", needs_approval: false}
+      - {step: "Revoke the account's sessions and refresh tokens; reset the password and re-register MFA once the user is confirmed on a clean device", needs_approval: true}
+      - {step: "Review mailbox rules, forwarding, OAuth grants and registered devices added since the first suspicious sign-in; remove what the user did not create", needs_approval: true}
+      - {step: "Search for the same source address and user agent against other accounts", needs_approval: false}
+  pb-email-purge-and-block:
+    name: Malicious email campaign
+    summary: Find every recipient, remove the message, block the infrastructure and check who engaged.
+    steps:
+      - {step: "List every recipient and who clicked or opened the attachment (message trace, proxy, endpoint)", needs_approval: false}
+      - {step: "Remove the message from mailboxes and block the sender, URL and attachment hash at the gateway", needs_approval: true}
+      - {step: "For every user who engaged, treat as credential compromise (pb-credential-compromise) and check their endpoint for execution", needs_approval: false}
+  pb-endpoint-containment:
+    name: Suspected endpoint compromise
+    summary: Preserve evidence, isolate the host if the owner agrees, and scope lateral movement.
+    steps:
+      - {step: "Collect volatile evidence (process list, network connections, triage image) before changing the host", needs_approval: false}
+      - {step: "Isolate the host from the network through your EDR once the system owner agrees; keep the management channel", needs_approval: true}
+      - {step: "Search the estate for the same file hashes, parent/child pattern and network indicators", needs_approval: false}
+      - {step: "Reset credentials that were present on the host (local admin, cached domain credentials, service accounts)", needs_approval: true}
+  pb-malware-eradication:
+    name: Malware investigation and eradication
+    summary: Identify the family, find persistence, remove it and confirm clean.
+    steps:
+      - {step: "Identify the sample (sandbox or reverse-engineering team) and map its persistence and C2", needs_approval: false}
+      - {step: "Block C2 indicators at the proxy and DNS; hunt for the same persistence artefacts across the estate", needs_approval: true}
+      - {step: "Rebuild rather than clean hosts where a rootkit, bootkit or kernel driver is involved", needs_approval: true}
+  pb-ad-compromise:
+    name: Active Directory credential-attack response
+    summary: Treat the domain as potentially exposed; contain the account, rotate secrets in the right order.
+    steps:
+      - {step: "Identify the account and the host the ticket or replication request came from; contain that host (pb-endpoint-containment)", needs_approval: false}
+      - {step: "Reset the targeted service account passwords; for a krbtgt or DCSync finding plan a double krbtgt reset with the identity team", needs_approval: true}
+      - {step: "Review privileged group membership, AdminSDHolder and recent GPO changes for persistence", needs_approval: false}
+  pb-cloud-account-containment:
+    name: Cloud account or key compromise
+    summary: Disable the credential, review what it created, and check the bill.
+    steps:
+      - {step: "Deactivate the access key or session and rotate the secret; do not delete it until evidence is collected", needs_approval: true}
+      - {step: "List resources, roles, users and keys created since first misuse (new regions, instances, functions, snapshots, exposures)", needs_approval: false}
+      - {step: "Re-enable logging that was disabled and confirm log delivery is intact", needs_approval: true}
+      - {step: "Tell finance or the cloud owner about unexpected spend and open a provider support case for abuse credits", needs_approval: false}
+  pb-cloud-cost-abuse:
+    name: Cloud cost or compute abuse
+    summary: Stop unexpected compute, find how it was created, close the path.
+    steps:
+      - {step: "Identify the identity and API call that created the resources and the first time it was used", needs_approval: false}
+      - {step: "Stop or quarantine the instances after snapshotting for evidence; set budget alerts and service quotas", needs_approval: true}
+      - {step: "Review how the credential was exposed (repository, CI, workstation) and rotate it", needs_approval: true}
+  pb-insider-case:
+    name: Insider-risk case
+    summary: Handle with HR and legal; preserve evidence, avoid tipping off, act proportionately.
+    steps:
+      - {step: "Open a confidential case with HR and legal before any confrontation; restrict who can see the case", needs_approval: true}
+      - {step: "Preserve logs and device images; record what was accessed, copied or sent, and when", needs_approval: false}
+      - {step: "Decide with HR on access reduction (read-only, remove export rights) or suspension; do not act alone", needs_approval: true}
+  pb-network-block-and-sinkhole:
+    name: Suspicious network communication
+    summary: Identify the talking process, block the destination, and look for the same elsewhere.
+    steps:
+      - {step: "Find the process and host behind the traffic (EDR or flow-to-process join)", needs_approval: false}
+      - {step: "Block or sinkhole the domain and address at DNS, proxy and firewall", needs_approval: true}
+      - {step: "Search other hosts for the same destination, JA3/JA4 fingerprint or beacon interval", needs_approval: false}
+  pb-ransomware-response:
+    name: Ransomware precursor or active encryption
+    summary: Stop spread first; protect backups; decide on recovery with the incident lead.
+    steps:
+      - {step: "Isolate affected hosts and disable the compromised accounts; protect backup systems and their credentials", needs_approval: true}
+      - {step: "Identify patient zero and the initial access route; confirm whether data left the network", needs_approval: false}
+      - {step: "Engage the incident lead, legal and insurer per your plan before any contact with the adversary", needs_approval: true}
+  pb-supply-chain-response:
+    name: Supply-chain or build-pipeline compromise
+    summary: Freeze the affected artefacts, rotate pipeline secrets, and find where the bad component ran.
+    steps:
+      - {step: "Freeze deployments that use the component; identify every build and environment that pulled it", needs_approval: true}
+      - {step: "Rotate every secret the pipeline held (tokens, signing keys, cloud keys)", needs_approval: true}
+      - {step: "Compare the artefact with a known-good build; report to the package registry or vendor", needs_approval: false}
+  pb-ai-incident:
+    name: AI system abuse or compromise
+    summary: Contain the model, agent or key; preserve prompts and tool-call traces; review downstream actions.
+    steps:
+      - {step: "Revoke or rotate the model API key or agent credential involved; pause the agent's tool access if it acted on injected instructions", needs_approval: true}
+      - {step: "Preserve the prompt, retrieved content and tool-call trace; identify the document, page or package that carried the instruction", needs_approval: false}
+      - {step: "Review everything the agent did with its tools (data read, messages sent, changes made) and reverse what it should not have done", needs_approval: true}
+  pb-account-takeover-social:
+    name: Social-engineering account takeover
+    summary: Verify the requester, undo the reset or approval, and brief the help desk.
+    steps:
+      - {step: "Contact the real employee on a known number; treat any reset, MFA change or device registration done during the call as hostile until verified", needs_approval: false}
+      - {step: "Reverse the reset or MFA change and force re-verification in person or by video with a manager", needs_approval: true}
+      - {step: "Brief the help-desk and finance teams on the pretext used; add a call-back verification step", needs_approval: false}
+  pb-ot-safety-first:
+    name: OT or industrial control anomaly
+    summary: Safety and availability first; involve the plant operator before any action.
+    steps:
+      - {step: "Call the control-room operator and engineering lead before touching anything; confirm whether the command or change was authorised", needs_approval: false}
+      - {step: "Capture network evidence passively; do not scan or isolate a controller without the operator's sign-off", needs_approval: true}

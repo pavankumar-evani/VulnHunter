@@ -35,6 +35,7 @@ Each is a pure function of a `Context` and returns hypotheses plus plain-sentenc
 | `identity-misuse` | hypothesis-driven | Access Governance findings IAM001 (leaver), IAM002 (dormant), IAM006 (shared/ownerless) | no entitlements loaded |
 | `lessons-learned` | hypothesis-driven | alerts closed true-positive and hunts concluded confirmed: where else the technique appears | nothing confirmed yet |
 | `credential-exposure` | intel-driven | dark-web credential-exposure hits (new/reviewing) | no hits |
+| `knowledge-group`, `knowledge-software` | intel-driven | MITRE groups and malware families named in stored reports, targeting your industry or tagged in your estate, expanded to their uncovered, not recently hunted techniques (see `docs/HUNT_KNOWLEDGE.md`) | no catalog, no industry or reports, everything covered |
 | `model-assisted` | model-assisted | untagged open alerts the Naive Bayes TTP classifier places confidently on one technique (3 or more) | none |
 
 ## Score

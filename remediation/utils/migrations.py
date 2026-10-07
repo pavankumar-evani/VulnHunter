@@ -120,6 +120,13 @@ def _m013_intel_watcher(engine):
         _add_missing_columns(engine, db.threat_intel_reports)
 
 
+def _m014_hunt_knowledge_tables(engine):
+    """New tables only (expand-only): hunt_knowledge_reports, hunt_knowledge_drafts, hunt_planned_items. Safe if ensure_schema already created them."""
+    from remediation.utils import db
+    for table in (db.hunt_knowledge_reports, db.hunt_knowledge_drafts, db.hunt_planned_items):
+        table.create(engine, checkfirst=True)
+
+
 MIGRATIONS = [
     (1, "baseline", _m001_baseline),
     (2, "support_ticket_itsm_and_csat_columns", _m002_support_ticket_columns),
@@ -134,6 +141,7 @@ MIGRATIONS = [
     (11, "investigation_reports_followups_allowlist", _m011_investigation_reports),
     (12, "insights_tables", _m012_insights_tables),
     (13, "intel_watcher_sources_and_report_arrival", _m013_intel_watcher),
+    (14, "hunt_knowledge_tables", _m014_hunt_knowledge_tables),
 ]
 
 

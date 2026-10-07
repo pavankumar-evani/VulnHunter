@@ -55,6 +55,9 @@ def resolves(c, e):
         return any(str(x["id"]) == r for x in c.hunts or [])
     if k == "asset":
         return r in (c.ownership or {})
+    if k == "catalog":      # a group or malware family in the ATT&CK catalog (the knowledge generator)
+        from remediation.hunting.knowledge import catalog as kcat
+        return bool(kcat.get().group(r) or kcat.get().software_item(r))
     if k == "actor":
         from remediation.enrichment import threat_actor_groups as g
         return any(x["id"] == r for x in g.THREAT_ACTOR_GROUPS)

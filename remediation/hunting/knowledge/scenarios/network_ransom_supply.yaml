@@ -1,0 +1,365 @@
+# Network behaviour, ransomware precursors and supply-chain compromise. Field names follow Zeek/Sigma conventions (id.orig_h, query, dest_domain) where logs are network-based.
+- id: net-beaconing
+  title: Periodic beaconing to rare destinations
+  category: network
+  hypothesis: "If an implant is checking in with its controller, we would expect to see regular, low-volume connections with a stable interval and little variance from one host to one rare destination on {scope}."
+  techniques: [T1071.001, T1095, T1573.002]
+  kill_chain: [command-and-control]
+  diamond:
+    capability: ["C2 frameworks with jittered sleep timers (interval plus jitter)"]
+    infrastructure: ["C2 domains and addresses; redirectors; cloud-hosted fronts"]
+    victim: ["The infected host and whatever the implant can reach"]
+  data_sources: [proxy, network-flow, dns]
+  leads:
+    - name: Regular intervals from one host to one destination
+      technique: T1071.001
+      spl: 'search sourcetype=proxy | sort 0 src, dest_domain, _time | streamstats current=f last(_time) as prev by src, dest_domain | eval delta=_time-prev | stats count, avg(delta) as mean, stdev(delta) as sd, dc(url) as paths by src, dest_domain | eval cv=sd/mean | where count > 30 AND cv < 0.3 AND mean > 20 | sort cv | head 50'
+      kql: 'DeviceNetworkEvents | where RemoteUrl != "" | sort by DeviceName asc, RemoteUrl asc, Timestamp asc | extend delta = datetime_diff("second", Timestamp, prev(Timestamp)), same = (DeviceName == prev(DeviceName) and RemoteUrl == prev(RemoteUrl)) | where same | summarize n=count(), mean=avg(delta), sd=stdev(delta) by DeviceName, RemoteUrl | where n > 30 and sd / mean < 0.3 and mean > 20'
+      not_expressible: {sigma: "Beaconing is a statistic over many events (interval and variance), which a single-event Sigma rule cannot say."}
+      notes: "Coefficient of variation below 0.3 over more than 30 connections is a starting point. C2 jitter pushes it up; software updaters and heartbeat agents pull it down, so exclude them."
+    - name: Connections to a destination contacted by a single internal host only, repeatedly
+      technique: T1095
+      spl: 'search sourcetype=zeek:conn id.resp_p NOT IN (53,80,443) | stats count, dc(id.orig_h) as sources by id.resp_h, id.resp_p | where sources=1 AND count > 100 | sort - count | head 50'
+  malicious: ["A fixed 60-second interval to a domain registered last week", "Constant tiny uploads at the same offset every minute"]
+  benign: ["Monitoring agents, software updaters, chat and mail clients", "Cloud sync tools"]
+  tuning: ["Build an allow-list of known periodic services by destination", "Join with domain age and rarity before alerting"]
+  severity: high
+  priority: high
+  playbook: pb-network-block-and-sinkhole
+  response: ["Find the process behind the connections; block the destination after capturing a sample"]
+
+- id: net-dns-tunnelling
+  title: DNS tunnelling and DNS-based command and control
+  category: network
+  hypothesis: "If data or commands are being carried over DNS, we would expect to see unusually long, high-entropy or numerous unique subdomains of one domain, and a high volume of TXT or NULL queries from {scope}."
+  techniques: [T1071.004, T1572, T1048]
+  kill_chain: [command-and-control, actions-on-objectives]
+  diamond:
+    capability: ["dnscat2, iodine, Cobalt Strike DNS beacons"]
+    infrastructure: ["An authoritative nameserver controlled by the adversary and its domain"]
+    victim: ["Hosts that can resolve external names, even when other egress is blocked"]
+  data_sources: [dns]
+  leads:
+    - name: Many unique subdomains under one parent domain from one host
+      technique: T1071.004
+      spl: 'search sourcetype=dns | eval labels=split(query,"."), parent=mvindex(labels,-2).".".mvindex(labels,-1), qlen=len(query) | stats dc(query) as uniques, avg(qlen) as avglen by src, parent | where uniques > 200 AND avglen > 40 | sort - uniques | head 50'
+      kql: 'DnsEvents | extend parent = strcat(tostring(split(Name, ".")[-2]), ".", tostring(split(Name, ".")[-1])) | summarize uniques=dcount(Name), avglen=avg(strlen(Name)) by ClientIP, parent | where uniques > 200 and avglen > 40'
+    - name: TXT or NULL record queries
+      technique: T1572
+      logsource: {category: dns}
+      selection: {record_type: ["TXT", "NULL", "CNAME"], query|endswith: [".xyz", ".top", ".click", ".icu", ".tk"]}
+      notes: "Single-event form. TXT is also used by SPF and domain verification, so pair with volume."
+  malicious: ["Thousands of long unique labels to one domain", "TXT-heavy traffic to a domain with no website"]
+  benign: ["Anti-virus and security cloud lookups encoded in DNS", "CDN and telemetry domains"]
+  tuning: ["Exclude known security-vendor lookup domains", "Use your resolver's passive-DNS rarity if available"]
+  severity: high
+  priority: medium
+  playbook: pb-network-block-and-sinkhole
+  response: ["Sinkhole the parent domain and find the process issuing the lookups"]
+
+- id: net-rare-domains-and-links
+  title: Rare domains and uncommon links
+  category: network
+  hypothesis: "If a host or user is talking to infrastructure no one else in the organisation uses, we would expect to see requests to domains contacted by one or two hosts only, especially with uncommon URL shapes, from {scope}."
+  techniques: [T1583.001, T1071.001, T1204.001]
+  kill_chain: [delivery, command-and-control]
+  diamond:
+    capability: ["Any adversary-operated site: payload hosts, C2, phishing pages"]
+    infrastructure: ["Domains and URLs seen by almost nobody else"]
+    victim: ["The few hosts that reached them"]
+  data_sources: [proxy, dns]
+  leads:
+    - name: Destinations contacted by one or two hosts and first seen recently
+      technique: T1583.001
+      spl: 'search sourcetype=proxy | stats earliest(_time) as first_seen, dc(src) as hosts, count by dest_domain | where hosts <= 2 AND first_seen > relative_time(now(), "-7d@d") AND count >= 5 | sort - count | head 100'
+      kql: 'DeviceNetworkEvents | where RemoteUrl != "" | summarize first=min(Timestamp), hosts=dcount(DeviceName), n=count() by RemoteUrl | where hosts <= 2 and first > ago(7d) and n >= 5'
+    - name: URLs with an IP address or non-standard port instead of a hostname
+      technique: T1071.001
+      logsource: {category: proxy}
+      selection: {c-uri|contains: [":8080/", ":8443/", ":4443/", ":8888/", ":1337/"], cs-host|startswith: ["http://1", "http://2"]}
+      notes: "Replace the host filter with a regular expression for dotted quads in your tool."
+  malicious: ["A recent domain reached by one host and used from a script host", "Direct-to-IP downloads on odd ports"]
+  benign: ["Rarely visited vendor sites", "Developers testing new services"]
+  tuning: ["Rank by domain age and category; ignore well-known CDNs"]
+  severity: medium
+  priority: medium
+  playbook: pb-network-block-and-sinkhole
+  response: ["Check the page or payload in a sandbox before blocking; find the referring process"]
+
+- id: net-newly-registered-domains
+  title: Contact with newly registered or newly observed domains
+  category: network
+  hypothesis: "If an adversary is using freshly bought domains, we would expect to see users or hosts visiting domains registered in the last 30 days, in {scope}."
+  techniques: [T1583.001, T1566.002]
+  kill_chain: [delivery, command-and-control]
+  diamond:
+    capability: ["Bulk domain registration, often with cheap TLDs and privacy services"]
+    infrastructure: ["Registrar accounts, name servers and hosting"]
+    victim: ["Users who click links; hosts that call out"]
+  data_sources: [dns, proxy]
+  leads:
+    - name: Queries for domains with a registration date in the last 30 days (needs a domain-age feed)
+      technique: T1583.001
+      spl: 'search sourcetype=dns | lookup domain_age domain AS query OUTPUT age_days | where isnotnull(age_days) AND age_days < 30 | stats count, dc(src) as hosts by query, age_days | sort age_days | head 100'
+      notes: "Needs a domain-age or newly-registered-domain lookup that you maintain or buy. Quanta does not hold one, so without it this hunt cannot run."
+    - name: Low-reputation TLDs commonly used for short-lived campaigns
+      technique: T1566.002
+      logsource: {category: dns}
+      selection: {query|endswith: [".zip", ".mov", ".top", ".xyz", ".click", ".icu", ".monster", ".rest", ".cfd"]}
+  malicious: ["A newly registered domain reached by several users after the same email", "A domain that mimics your brand"]
+  benign: ["Legitimate new product sites and event pages", "Partners' new domains"]
+  tuning: ["Use a partner and customer allow-list; consider blocking newly registered domains for a week"]
+  severity: medium
+  priority: medium
+  playbook: pb-email-purge-and-block
+  response: ["Block the domain and look for the mail or page that led there"]
+
+- id: net-dga-domains
+  title: Algorithmically generated domains (DGA)
+  category: network
+  hypothesis: "If malware is generating domains to find its controller, we would expect to see a host resolving many nonexistent, random-looking names with high failure rates in {scope}."
+  techniques: [T1568.002, T1568.001]
+  kill_chain: [command-and-control]
+  diamond:
+    capability: ["Domain generation algorithms in loaders and botnets"]
+    infrastructure: ["The small subset of generated domains that the adversary registers"]
+    victim: ["The infected host"]
+  data_sources: [dns]
+  leads:
+    - name: High rate of NXDOMAIN answers for high-entropy names from one host
+      technique: T1568.002
+      spl: 'search sourcetype=dns rcode_name=NXDOMAIN | stats count, dc(query) as uniques by src | where uniques > 100 | sort - uniques | head 50'
+      kql: 'DnsEvents | where ResultCode == 3 | summarize uniques=dcount(Name), n=count() by ClientIP, bin(TimeGenerated, 1h) | where uniques > 100'
+      notes: "Add an entropy or n-gram score if your tool has one; unique NXDOMAINs alone also finds misconfigured clients."
+  malicious: ["Hundreds of random-looking names per hour from one host", "A burst of failures that ends with one success to a new address"]
+  benign: ["Misconfigured software with wrong search domains", "Some browser features probing for captive portals"]
+  tuning: ["Exclude your resolver's own probes and known benign random lookups"]
+  severity: medium
+  priority: medium
+  playbook: pb-network-block-and-sinkhole
+  response: ["Isolate the host after identifying the process; collect memory if possible"]
+
+- id: net-tls-rare-asn
+  title: Encrypted traffic to rare autonomous systems or unusual TLS fingerprints
+  category: network
+  hypothesis: "If a host is using encrypted C2, we would expect to see TLS to a hosting network no one else contacts, with a self-signed or short-lived certificate, or a client fingerprint that matches known C2 tools, from {scope}."
+  techniques: [T1573.002, T1071.001]
+  kill_chain: [command-and-control]
+  diamond:
+    capability: ["C2 frameworks with default or reused TLS settings"]
+    infrastructure: ["Hosting providers and addresses; certificates; JA3/JA4 fingerprints"]
+    victim: ["The hosts initiating the connections"]
+  data_sources: [network-flow]
+  leads:
+    - name: TLS connections to an address with a self-signed certificate or empty server name
+      technique: T1573.002
+      spl: 'search sourcetype=zeek:ssl (validation_status="self signed certificate" OR server_name="") | stats count, dc(id.orig_h) as hosts by id.resp_h, ja3 | where count > 20 | sort - count | head 50'
+      notes: "Match JA3 or JA4 values against a public C2 fingerprint list you maintain."
+    - name: Destination ASN contacted by one host only
+      technique: T1071.001
+      spl: 'search sourcetype=zeek:conn id.resp_p=443 | lookup ip_asn ip AS id.resp_h OUTPUT asn, org | stats dc(id.orig_h) as hosts, count by asn, org | where hosts=1 AND count > 50 | sort - count | head 50'
+      notes: "Needs an IP-to-ASN lookup."
+  malicious: ["A stable beacon over TLS to a small VPS provider", "A client fingerprint seen only with C2 frameworks"]
+  benign: ["Appliances with self-signed certificates", "Niche SaaS on small hosting networks"]
+  tuning: ["List the internal appliances that use self-signed certificates", "Combine with beaconing"]
+  severity: medium
+  priority: medium
+  playbook: pb-network-block-and-sinkhole
+  response: ["Identify the process (EDR join) before blocking; capture the fingerprint for the estate search"]
+
+- id: net-exfiltration-volume
+  title: Unusual outbound data volume
+  category: network
+  hypothesis: "If data is leaving, we would expect to see a host or user sending far more outbound bytes than its own recent norm, to a single destination, especially outside working hours, from {scope}."
+  techniques: [T1041, T1048, T1567, T1030]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Archive and upload tools, rclone, curl, cloud sync"]
+    infrastructure: ["The destination host or storage service"]
+    victim: ["The source host and the data it holds"]
+  data_sources: [network-flow, proxy]
+  leads:
+    - name: Outbound bytes far above the host's own norm
+      technique: T1048
+      spl: 'search sourcetype=zeek:conn id.orig_h=* NOT cidrmatch("10.0.0.0/8", id.resp_h) NOT cidrmatch("192.168.0.0/16", id.resp_h) NOT cidrmatch("172.16.0.0/12", id.resp_h) | bin _time span=1d | stats sum(orig_bytes) as out by id.orig_h, _time | streamstats window=14 current=f avg(out) as avg14, stdev(out) as sd14 by id.orig_h | where out > avg14 + 3*sd14 AND out > 500000000 | sort - out | head 50'
+      not_expressible: {sigma: "Volume against a baseline is a time-series comparison, not a single event."}
+    - name: Data transfer tools run with remote targets
+      technique: T1567
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\rclone.exe", "\\megacmd.exe", "\\winscp.exe", "\\pscp.exe", "\\curl.exe"], CommandLine|contains: ["copy ", "sync ", "mega:", "s3:", "sftp://", "-T ", "--upload-file", "-F file=@"]}
+  malicious: ["Gigabytes to a single new destination at night", "Rclone with a configured remote on a file server"]
+  benign: ["Backups to an off-site provider", "Large software releases"]
+  tuning: ["Exclude your backup destinations; baseline per host"]
+  severity: high
+  priority: high
+  playbook: pb-network-block-and-sinkhole
+  response: ["Find out what was sent (file lists, DLP); consider legal notification duties early"]
+
+- id: ransom-backup-tamper-precursors
+  title: "Ransomware precursors: backup tampering and security-tool disabling"
+  category: ransomware
+  hypothesis: "If ransomware operators are preparing to encrypt, we would expect to see backup and shadow-copy deletion, security tools disabled and remote-management tools installed across several hosts on {scope} hours before encryption."
+  techniques: [T1490, T1685, T1489]
+  kill_chain: [installation, actions-on-objectives]
+  diamond:
+    capability: ["vssadmin, wbadmin, bcdedit, PowerShell Defender exclusions, GPO pushes"]
+    infrastructure: ["The staging host that fans out the commands"]
+    victim: ["Servers, hypervisors and backup infrastructure"]
+  data_sources: [endpoint, host-auth]
+  leads:
+    - name: Shadow copy, backup catalogue or recovery-option commands
+      technique: T1490
+      logsource: {category: process_creation, product: windows}
+      selection: {CommandLine|contains: ["vssadmin delete shadows", "vssadmin resize shadowstorage", "wbadmin delete", "wmic shadowcopy delete", "bcdedit /set {default} bootstatuspolicy ignoreallfailures", "recoveryenabled no", "Get-WmiObject Win32_Shadowcopy"]}
+    - name: Many services stopped on one host (databases, backup, mail, AV)
+      technique: T1489
+      spl: 'search sourcetype=WinEventLog:System EventCode=7036 Message="*stopped*" | bin _time span=10m | stats dc(Service_Name) as services by Computer, _time | where services >= 8 | sort - services | head 50'
+  malicious: ["vssadmin delete shadows run from a scripted session on several servers", "Defender exclusions added for entire drives"]
+  benign: ["Administrators freeing space", "Planned maintenance"]
+  tuning: ["Every backup deletion command outside your backup software is high value; exclude by exact parent"]
+  severity: critical
+  priority: high
+  playbook: pb-ransomware-response
+  response: ["Treat as imminent encryption: isolate affected hosts and protect backups now"]
+
+- id: ransom-mass-encryption
+  title: Ransomware encryption in progress
+  category: ransomware
+  hypothesis: "If encryption has started, we would expect to see a process rapidly renaming or rewriting many files with a new extension and writing a ransom note in many folders on {scope}."
+  techniques: [T1486, T1083]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Ransomware families with intermittent or full encryption modes"]
+    infrastructure: ["Leak sites and negotiation portals (outside the estate)"]
+    victim: ["File servers, endpoints, hypervisors, NAS"]
+  data_sources: [endpoint, file-activity]
+  leads:
+    - name: Ransom-note style files created
+      technique: T1486
+      logsource: {category: file_event, product: windows}
+      selection: {TargetFilename|endswith: ["README.txt", "HOW_TO_DECRYPT.txt", "RESTORE_FILES.txt", "readme.hta", "DECRYPT_INSTRUCTIONS.html", "_readme.txt"]}
+      notes: "Note names change per family; a file with this shape appearing in many folders at once is the signal."
+    - name: One process modifying many files in a minute
+      technique: T1486
+      spl: 'search sourcetype=sysmon EventCode=11 | bin _time span=1m | stats dc(TargetFilename) as files by Computer, Image, _time | where files > 500 | sort - files | head 50'
+      not_expressible: {sigma: "A rate of file events is a count over time; a single-event Sigma rule cannot express it."}
+  malicious: ["A single unsigned process rewriting hundreds of files per minute", "Ransom notes in every directory"]
+  benign: ["Backup and sync tools", "Anti-virus scans", "Software builds"]
+  tuning: ["Exclude backup and build hosts; use canary files for a cleaner signal"]
+  severity: critical
+  priority: high
+  playbook: pb-ransomware-response
+  response: ["Cut the host from the network immediately; do not power off if memory evidence is needed; start the incident plan"]
+
+- id: ransom-lateral-staging
+  title: "Ransomware staging: network discovery, tool transfer and remote execution"
+  category: ransomware
+  hypothesis: "If operators are preparing the estate for encryption, we would expect to see network share and host discovery, tools copied to many servers over admin shares, and remote execution from one host on {scope}."
+  techniques: [T1135, T1570, T1021.002, T1018]
+  kill_chain: [actions-on-objectives]
+  diamond:
+    capability: ["Network scanners, PsExec, GPO or management-tool deployment"]
+    infrastructure: ["The staging server, often a domain-joined host with a stolen administrator account"]
+    victim: ["Servers and workstations reachable by the staging account"]
+  data_sources: [host-auth, network-flow, endpoint]
+  leads:
+    - name: Network share and remote-system discovery tools
+      technique: T1135
+      logsource: {category: process_creation, product: windows}
+      selection: {Image|endswith: ["\\netscan.exe", "\\advanced_port_scanner.exe", "\\softperfect.exe"], CommandLine|contains: ["net view", "net share", "Invoke-ShareFinder", "Find-DomainShare"]}
+    - name: One executable copied to many hosts within minutes
+      technique: T1570
+      spl: 'search sourcetype=WinEventLog:Security EventCode=5145 ShareName IN ("*\\ADMIN$","*\\C$") RelativeTargetName IN ("*.exe","*.dll","*.bat") | bin _time span=10m | stats dc(dest) as hosts by Account_Name, src, RelativeTargetName, _time | where hosts >= 8 | sort - hosts | head 50'
+  malicious: ["The same binary written to ten servers by one account", "A scanner run from a server, not an admin laptop"]
+  benign: ["Software distribution tools", "Patching windows"]
+  tuning: ["Exclude your deployment system; alert on every other source"]
+  severity: critical
+  priority: high
+  playbook: pb-ransomware-response
+  response: ["Isolate the staging host and the account; protect domain controllers and backup servers first"]
+
+- id: supply-poisoned-package
+  title: Poisoned open-source dependency or typosquatted package
+  category: supply-chain
+  hypothesis: "If a malicious package has entered our builds, we would expect to see a new or changed dependency whose install script runs commands, contacts the network or reads environment secrets in {scope}."
+  techniques: [T1195.001, T1059]
+  kill_chain: [delivery, exploitation]
+  diamond:
+    capability: ["A typosquatted or hijacked package with a malicious install script or a changed release"]
+    infrastructure: ["The registry account and the package's callback host"]
+    victim: ["Developer machines and CI that install the package; later, production"]
+  data_sources: [vcs-ci, endpoint, proxy]
+  leads:
+    - name: Package manager spawning a shell or downloader during install
+      technique: T1059
+      logsource: {category: process_creation, product: linux}
+      selection: {ParentImage|endswith: ["/npm", "/node", "/pip", "/pip3", "/python3"], Image|endswith: ["/sh", "/bash", "/curl", "/wget", "/nc"], CommandLine|contains: ["curl ", "wget ", "base64 -d", "| sh", "| bash"]}
+      notes: "Install-time scripts that fetch and run content. Works on CI runners and Linux dev machines."
+    - name: New dependency added that has near-identical name to a popular package
+      technique: T1195.001
+      spl: 'search sourcetype=sbom_diff change=added | lookup popular_packages name OUTPUT edit_distance_1 | where edit_distance_1=1 | stats count by repo, ecosystem, name | head 50'
+      notes: "Needs an SBOM diff feed and a popular-package lookup that you maintain."
+  malicious: ["A one-letter-different package added in a pull request", "An install script that reads environment variables and posts them"]
+  benign: ["Packages that compile native code with shell steps", "Internal packages with install hooks"]
+  tuning: ["Pin and mirror dependencies; alert on any new package in a protected repository"]
+  severity: high
+  priority: medium
+  playbook: pb-supply-chain-response
+  response: ["Freeze deployments using the package; rotate secrets present on any host that installed it"]
+
+- id: supply-ci-token-abuse
+  title: CI/CD token, runner or workflow abuse
+  category: supply-chain
+  hypothesis: "If a pipeline credential or workflow has been abused, we would expect to see a token used from an unfamiliar address, workflow files changed to export secrets, or a runner doing work outside the usual jobs, in {scope}."
+  techniques: [T1195.002, T1552.001, T1078.004, T1072]
+  kill_chain: [exploitation, installation]
+  diamond:
+    capability: ["Stolen personal access tokens, malicious pull requests that run in privileged context, self-hosted runner compromise"]
+    infrastructure: ["Source addresses of token use; external hosts receiving secrets"]
+    victim: ["Repositories, secrets stores and the cloud roles pipelines assume"]
+  data_sources: [vcs-ci, cloud-audit]
+  leads:
+    - name: Workflow file changed to print or send secrets
+      technique: T1552.001
+      logsource: {product: github, service: audit}
+      selection: {action: ["workflows.created_workflow_run", "git.push", "pull_request.merge"], path|contains: [".github/workflows/"], diff|contains: ["printenv", "toJSON(secrets", "curl ", "base64 --decode", "ngrok"]}
+      notes: "Field names are illustrative; use your platform's diff or commit search. Any change to workflow files by a non-owner deserves review."
+    - name: Token or deploy key used from a new address
+      technique: T1078.004
+      spl: 'search sourcetype=github:audit actor_ip=* programmatic_access_type=* | stats earliest(_time) as first_seen by token_id, actor_ip | where first_seen > relative_time(now(), "-1d@d") | head 100'
+  malicious: ["A workflow that exposes secrets in logs", "A deploy key used from a residential address"]
+  benign: ["Contractors' new networks", "Runners moved to new subnets"]
+  tuning: ["Require review on workflow-file changes; restrict token scope and lifetime"]
+  severity: high
+  priority: high
+  playbook: pb-supply-chain-response
+  response: ["Revoke the token; review every action it took and every secret its workflows could read"]
+
+- id: supply-build-tamper
+  title: Build or release artefact tampering
+  category: supply-chain
+  hypothesis: "If a build output was altered after the source was reviewed, we would expect to see an artefact whose hash or signature does not match a rebuild, or a build step that downloads or patches code, in {scope}."
+  techniques: [T1195.002, T1554]
+  kill_chain: [installation]
+  diamond:
+    capability: ["Access to a build server or signing key"]
+    infrastructure: ["The build host and any external fetch in the build"]
+    victim: ["Every consumer of the artefact"]
+  data_sources: [vcs-ci, endpoint]
+  leads:
+    - name: Build steps that download executable content from outside the allowed sources
+      technique: T1195.002
+      logsource: {category: process_creation, product: linux}
+      selection: {CommandLine|contains: ["curl -sL http", "wget -qO- http", "| sudo bash", "pip install --index-url http", "npm install http"]}
+      notes: "Run on build runners. Allow-list the registries you mirror."
+    - name: Signed artefact whose digest differs from the reproducible rebuild
+      technique: T1554
+      spl: 'search sourcetype=build_attestation | stats values(digest) as digests, dc(digest) as n by artefact, version | where n > 1 | head 50'
+      notes: "Needs reproducible builds or provenance attestations (for example SLSA). Without them this cannot be answered."
+  malicious: ["A release whose digest differs from a clean rebuild", "A signing step run from an unusual host"]
+  benign: ["Non-reproducible builds with timestamps", "Different toolchain versions"]
+  tuning: ["Adopt provenance attestations so mismatches are meaningful"]
+  severity: critical
+  priority: medium
+  playbook: pb-supply-chain-response
+  response: ["Pull the release; rotate signing keys; notify downstream consumers"]
