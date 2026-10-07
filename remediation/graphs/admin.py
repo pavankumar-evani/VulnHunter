@@ -18,7 +18,7 @@ from remediation.utils import db as db_module
 
 CORE = "core:quanta"
 # Connection types whose module cannot be read from a connector page path in capabilities.yaml.
-_TYPE_MODULE = {"splunk-search": "soc", "reputation": "soc", "response-webhook": "soc", "notify-webhook": "soc",
+_TYPE_MODULE = {"splunk-search": "soc", "sentinel-search": "soc", "chronicle-search": "soc", "elastic-search": "soc", "falcon-search": "soc", "taxii": "soc", "reputation": "soc", "response-webhook": "soc", "notify-webhook": "soc",
                 "intelx": "soc", "dehashed": "soc", "leakcheck": "soc", "snusbase": "soc",
                 "api-policy-endpoint": "appsec", "github": "appsec", "gitlab": "appsec",
                 "anthropic-usage": "ai", "openai-usage": "ai"}

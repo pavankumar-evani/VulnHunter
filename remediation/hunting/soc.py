@@ -18,7 +18,7 @@ from pathlib import Path
 
 import yaml
 
-from remediation.hunting import generate, report, triage
+from remediation.hunting import generate, report, search_base, translate, triage
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "soc_triage.yaml"
 VERDICTS = ("likely-true-positive", "likely-false-positive", "escalate-l2")
@@ -75,6 +75,7 @@ def indicators(alert):
 
 
 SAFE_VALUE = re.compile(r"^[A-Za-z0-9_.@:/-]{1,255}$")
+LANG_KEY = {"splunk-spl": "spl"}   # the key a playbook template for a language is stored under (the language name itself, except SPL)
 GOLDEN_PATH = Path(__file__).resolve().parent / "golden_playbook.yaml"
 
 
@@ -109,10 +110,12 @@ def _private(ip):
         return False
 
 
-def siem_evidence(alert, run, cfg=None):
+def siem_evidence(alert, run, cfg=None, language=None):
     """Runs the golden playbook's searches for this alert, then the library searches that would corroborate its technique, through
     `run(query, earliest) -> {count, rows}`. Every look-back is capped at max_lookback_days. Returns one record per search."""
     cfg = cfg or config()
+    language = language or getattr(run, "language", None) or "splunk-spl"
+    key = LANG_KEY.get(language, language)
     cap = cfg.get("max_lookback_days", 90)
     limit = (cfg.get("siem_evidence") or {}).get("max_queries", 6)
     values = playbook_values(alert)
@@ -123,13 +126,17 @@ def siem_evidence(alert, run, cfg=None):
         applies = q.get("for") or []
         if applies and category not in applies and tech not in applies:
             continue
-        spl = _fill(q["spl"], values)
+        spl = _fill(q[key], values) if q.get(key) else None
         if spl and all(values.get(n) for n in q.get("needs") or []):
             planned.append({"name": q["name"], "kind": "context", "query": spl, "days": min(int(q.get("lookback_days", 7)), cap)})
     host = values["host"]
     if host and tech and SAFE_VALUE.match(str(host)):
         for q in generate.build_queries([tech], [host])[:2]:
-            planned.append({"name": q["name"], "kind": "corroboration", "query": q["query"], "days": min(7, cap)})
+            try:
+                text = translate.render(language, q["selection"], [host]) if language != "splunk-spl" else q["query"]
+            except translate.NotExpressible:
+                continue   # not expressible in this connection's language: left out of the plan, never sent half-translated
+            planned.append({"name": q["name"], "kind": "corroboration", "query": text, "days": min(7, cap)})
     out = []
     for q in planned[:limit]:
         base = {"name": q["name"], "technique": tech or None, "kind": q["kind"], "query": q["query"], "lookback_days": q["days"], "window": f"{q['days']} days"}
@@ -176,7 +183,7 @@ def investigate(alert, alerts, findings, owners=None, lookup=None, siem_run=None
             looked.append({**ind, **{k: r.get(k) for k in ("result", "malicious", "suspicious", "harmless", "undetected", "total", "reason")}})
     elif inds:
         lookup_note = "No reputation connection is configured, so indicators were not looked up."
-    evidence = siem_evidence(alert, siem_run, cfg) if siem_run else []
+    evidence = siem_evidence(alert, siem_run, cfg, getattr(siem_run, "language", None)) if siem_run else []
     related_kev = [f for f in ctx["findings"] if f["kev"] and f["related_to_alert"]]
     signals = {
         "ioc_malicious": any((x.get("malicious") or 0) >= threshold for x in looked),
@@ -260,10 +267,13 @@ def follow_up(alert, inv, kind, value, alerts, findings=(), siem_run=None, cfg=N
         q = f"Where else was {value} seen?"
         ans = f"In alerts on {len(hosts)} other host(s): {', '.join(hosts[:10])}." if hosts else f"{value} appears in no other alert Quanta holds."
         data = [{"host": h} for h in hosts[:20]]
-    if siem_run is not None and SAFE_VALUE.match(value):
+    sq = search_base.sighting_query(getattr(siem_run, "language", "splunk-spl"), value) if siem_run is not None and SAFE_VALUE.match(value) else None
+    if siem_run is not None and SAFE_VALUE.match(value) and not sq:
+        ans += " This SIEM connection's query language has no free-text search, so no SIEM count was added."
+    if sq:
         days = min(int(cfg.get("max_lookback_days", 90)), 90)
         try:
-            r = siem_run(f'search ("{value}") | stats count, dc(host) as hosts', f"-{days}d")
+            r = siem_run(sq, f"-{days}d")
             h = (r["rows"][0].get("hosts") if r["rows"] else None)
             ans += f" SIEM, last {days} days: {r['count']} result row(s)" + (f", {h} host(s)" if h else "") + "."
         except Exception as exc:  # noqa: BLE001

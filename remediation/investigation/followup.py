@@ -12,6 +12,7 @@ import re
 from collections import Counter
 
 from remediation.hunting import report as hunt_report
+from remediation.hunting import search_base
 from remediation.hunting import soc as hunt_soc
 from remediation.investigation.evidence import now_iso, parse
 from remediation.investigation.incident_report import _Index
@@ -104,9 +105,11 @@ def answer(incident, alert_rows, question, data, kind=None, value=None, window_d
         text = (f"{value} also appears in alerts on {len(hosts)} other host(s): {', '.join(hosts[:10])}." if hosts else f"{value} appears in no alert on another host within {window_days} days.")
         data_out = [{"host": h} for h in hosts[:20]]
         ev.append({"kind": "history", "source": "count over stored alerts and incidents", "detail": f"{len(hosts)} other host(s) carry {value}", "at": now_iso(now)})
-    if siem_run is not None and re.match(r"^[A-Za-z0-9_.@:/-]{1,255}$", value):
+    q = search_base.sighting_query(getattr(siem_run, "language", "splunk-spl"), value) if siem_run is not None and re.match(r"^[A-Za-z0-9_.@:/-]{1,255}$", value) else None
+    if siem_run is not None and not q and re.match(r"^[A-Za-z0-9_.@:/-]{1,255}$", value):
+        text += " This SIEM connection's query language has no free-text search, so no SIEM count was added."
+    if q:
         days = min(int(max_days), 90)
-        q = f'search ("{value}") | stats count, dc(host) as hosts'
         try:
             r = siem_run(q, f"-{days}d", 10)
             h = (r["rows"][0].get("hosts") if r.get("rows") else None)

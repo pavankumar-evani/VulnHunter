@@ -5,7 +5,7 @@ A trial hit is one lead: one query for one attack step. For each the report show
 many hits it returned, which entities those hits touched, and the query itself as Splunk SPL, a Sigma rule and Sentinel KQL so it can be run in whichever tool the analyst has.
 
 Rules kept here:
-  * Status is no-hit, needs-investigation or not-run. A hit nobody has assessed is needs-investigation, never benign. A lead that errored is not-run, with the error shown.
+  * Status is no-hit, needs-investigation or not-run. A hit nobody has assessed is needs-investigation, never benign. A lead that errored is not-run, with the error shown. `state` repeats the status but says `error` for a lead whose search failed; `language`, `query_run` and `connection` record exactly what was sent where, and a lead the connection's language cannot express is not-run with `not_expressible_reason`.
   * The allow-list is the analysts' recorded decision that a specific value (a scanner's address, a patch server) is benign for a given lead. It applies to every later run of
     that lead, removes matching rows from the sample, and the report shows how many rows it removed and why. If the sample is truncated, rows that were never seen cannot be
     checked, so the count after the allow-list is marked partial instead of guessed.
@@ -111,7 +111,9 @@ def _lead_row(i, q, hunt, entries_by_lead, lib, render_lib, hunt_id):
             "hits": raw, "hits_after_allowlist": after, "allowlisted_rows": len(suppressed), "allowlist_partial": partial, "assessment": q.get("assessment"),
             "entities": _entities(kept), "entities_all": _entities(q.get("sample") or []), "window": q.get("window"), "ran_at": q.get("ran_at"), "error": q.get("error"), "notes": q.get("notes") or "",
             "lead": {"hunt_id": hunt_id, "index": i, "path": f"/hunting?hunt={hunt_id}&lead={i}"}, "queries": renderings(q, hunt, render_lib),
-            "allowlist_entries": sorted(used), "judged_benign": status == "no-hit" and bool(raw) and q.get("assessment") == "benign"}
+            "allowlist_entries": sorted(used), "judged_benign": status == "no-hit" and bool(raw) and q.get("assessment") == "benign",
+            "state": "error" if q.get("result") == "error" else status, "language": q.get("language_run") or (q.get("language") if ran else None), "query_run": q.get("query_run") or (q.get("query") if ran else None),
+            "connection": q.get("connection"), "took_ms": q.get("took_ms"), "not_expressible_reason": q.get("not_expressible_reason") if q.get("result") == "not-expressible" else None}
 
 
 def _verdict(rows, hunt):
@@ -166,7 +168,7 @@ def timing(hunt, rows, cfg, boxes, now):
     hours = boxes.get(hunt["id"])
     default = (cfg.get("hunt_report") or {}).get("default_time_box_hours", 8)
     hours = hours or default
-    created = _dt(hunt.get("created_at"))
+    created = _dt(hunt.get("clock_start")) or _dt(hunt.get("created_at"))   # the report's arrival when the hunt came from a threat-intel report, else when the hunt was created
     ran_all = bool(rows) and all(r["status"] != "not-run" for r in rows)
     ready = _dt(hunt.get("closed_at")) if hunt.get("status") == "closed" else (max((_dt(r["ran_at"]) for r in rows if r["ran_at"]), default=None) if ran_all else None)
     ttr = round((ready - created).total_seconds() / 3600, 1) if (ready and created) else None
@@ -177,7 +179,8 @@ def timing(hunt, rows, cfg, boxes, now):
         state = "overdue"
     else:
         state = "open"
-    return {"time_box_hours": hours, "time_box_source": "hunt" if hunt["id"] in boxes and boxes[hunt["id"]] else "default", "created_at": hunt.get("created_at"), "due_at": due,
+    return {"time_box_hours": hours, "time_box_source": "hunt" if hunt["id"] in boxes and boxes[hunt["id"]] else "default", "created_at": hunt.get("created_at"), "clock_started_at": hunt.get("clock_start") or hunt.get("created_at"),
+            "clock_start_source": hunt.get("clock_start_source") or "hunt-created", "due_at": due,
             "report_ready_at": ready.strftime("%Y-%m-%dT%H:%M:%SZ") if ready else None, "time_to_report_hours": ttr, "state": state}
 
 
@@ -264,6 +267,14 @@ def to_markdown(r):
     for x in r["trial_hits"]:
         hits = "-" if x["hits"] is None else (str(x["hits_after_allowlist"]) + (f" (of {x['hits']} before allow-list)" if x["allowlisted_rows"] else "") + (", partial" if x["allowlist_partial"] else ""))
         L.append(f"| {x['n']} | {x['name']} ({x['technique'] or 'no technique'}) | {x['domain']} | {x['source_tool']} | {x['status']} | {hits} | {', '.join(x['entities'][:4]) or '-'} |")
+    ran_rows = [x for x in r["trial_hits"] if x.get("query_run")]
+    if ran_rows:
+        L += ["", "## Queries run (exact text, language and connection)"]
+        for x in ran_rows:
+            L.append(f"- Trial hit {x['n']} ({x['state']}; {x.get('language') or 'unknown language'}; {x.get('connection') or 'unnamed connection'}; window {x['window'] or 'unknown'}): `{x['query_run']}`")
+    nx = [x for x in r["trial_hits"] if x.get("not_expressible_reason")]
+    if nx:
+        L += ["", "## Not expressible in the connected SIEM's language"] + [f"- Trial hit {x['n']}: {x['not_expressible_reason']}" for x in nx]
     L += ["", "## Results by domain"]
     for dom, d in sorted(r["per_domain"].items()):
         L.append(f"- {dom}: {d['trial_hits']} trial hit(s), {d['run']} run, {d['no_hit']} no hit, {d['needs_investigation']} need investigation, {d['not_run']} not run")

@@ -7,7 +7,7 @@
 A self-hosted security operations platform that turns scanner noise into a ranked, owned, fix-ready queue, and drafts the fix as a pull request or a reviewable playbook that a person approves. Nothing it generates ever runs on its own.
 
 [![CI](https://github.com/pavankumar-evani/VulnHunter/actions/workflows/ci.yml/badge.svg)](https://github.com/pavankumar-evani/VulnHunter/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-2475%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-3707%20collected-blue)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
 
@@ -39,6 +39,21 @@ It is built on five principles, and each is enforced in code and covered by test
 
 ---
 
+## 🆕 What's new
+
+- **SOC incidents, not cases to create.** Every investigated alert is grouped into an incident (shared host, account or indicator, bursts, shared vulnerabilities, kill-chain progression), summarised and routed to an analyst or tier with the reason stored. [docs/SOC_INCIDENTS.md](docs/SOC_INCIDENTS.md)
+- **Investigation reports and hunt reports**, assembled from stored data with every statement tied to evidence, and a **proactive hunt engine** that suggests hypotheses and says "cannot tell" instead of guessing. [docs/INVESTIGATION_REPORTS.md](docs/INVESTIGATION_REPORTS.md), [docs/HUNT_ENGINE.md](docs/HUNT_ENGINE.md)
+- **Typed decisions and a confidence gate** with a calibration report: the decision layer decides when a person must look. [docs/DECISIONS.md](docs/DECISIONS.md)
+- **External attack surface** from the output of the discovery tools you run (Quanta never scans), and the **Anthropic CVD feed** as a threat-intelligence source. [docs/ATTACK_SURFACE.md](docs/ATTACK_SURFACE.md), [docs/CVD_FEED.md](docs/CVD_FEED.md)
+- **A read-only MCP endpoint** so an AI assistant can query Quanta safely (off by default, key-only, team-scoped). [docs/MCP_ENDPOINT.md](docs/MCP_ENDPOINT.md)
+- **Insights on Home** (17 deterministic detectors, "not enough history" instead of guessing) and **structured Ask**. [docs/INSIGHTS.md](docs/INSIGHTS.md)
+- **Security Posture Review**, **relationship graphs for every module** and an **ontology** with provenance. [docs/POSTURE.md](docs/POSTURE.md), [docs/ONTOLOGY.md](docs/ONTOLOGY.md)
+- **Integrity checks and safe self-heal**, **environments and a release process**, and **simulated connectors** that replay vendor-format responses through the real connector code. [docs/INTEGRITY.md](docs/INTEGRITY.md), [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md), [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md), [docs/SIMULATION.md](docs/SIMULATION.md)
+- **A new UI kit**: a command palette (Ctrl/Cmd+K), live updates and a rebuilt SOC and Hunting experience. [docs/UI_KIT.md](docs/UI_KIT.md), [docs/SOC_HUNT_UI.md](docs/SOC_HUNT_UI.md)
+- **Reviewing the repository?** [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md) says where things are, which command proves which claim, and what has not been verified.
+
+---
+
 ## 🧭 Pick your path
 
 Not sure where to start? Find the sentence that sounds like you.
@@ -52,6 +67,8 @@ Not sure where to start? Find the sentence that sounds like you.
 | **Push SBOMs, SARIF or CI results from a pipeline** | [docs/INTEGRATION_API.md](docs/INTEGRATION_API.md) | 15 min |
 | **Deploy it for a team** (Docker, PostgreSQL, TLS, Kubernetes) | [Deploying](#-deploying-it), [docs/PRODUCTION_GUIDE.md](docs/PRODUCTION_GUIDE.md) | 1 hr |
 | **Evaluate it** (architecture, RBAC, pricing, POC) | [Enterprise documentation suite](docs/enterprise-suite/hub.html) | 20 min |
+| **Let an AI assistant query Quanta** (read-only MCP) | [docs/MCP_ENDPOINT.md](docs/MCP_ENDPOINT.md) | 10 min |
+| **Review the repository** (person or model) | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md) | 15 min |
 | **Contribute or hand over** to another developer | [CLAUDE.md](CLAUDE.md), [BRANCHES.md](BRANCHES.md), [KNOWLEDGE_TRANSFER.md](KNOWLEDGE_TRANSFER.md) | 15 min |
 
 ---
@@ -125,7 +142,7 @@ flowchart LR
 
 ### Home
 
-Every page opens from the **Home** block: the **Dashboard** (KPIs, SLA status, coverage), **All modules** (browse by goal; selecting a module opens it and the sidebar then shows only that module), **Ask Quanta** (free search over your live data: no AI call, and it never invents a number), **AI Assist** (explain a finding or draft guidance; the preview is free and you confirm to spend) and the **Inbox** (SLA breaches, new known-exploited CVEs, expiring exceptions). **Support** is a real helpdesk and **FAQ** answers the usual questions.
+Every page opens from the **Home** block: the **Dashboard** (KPIs, SLA status, coverage), **All modules** (browse by goal; selecting a module opens it and the sidebar then shows only that module), **Insights** (what changed and why it matters, from 17 deterministic detectors; it says "not enough history" rather than guess) and **Ask Quanta** (a fixed-grammar structured question run with your own permissions, then free search over your live data: no AI call, and it never invents a number), **AI Assist** (explain a finding or draft guidance; the preview is free and you confirm to spend) and the **Inbox** (SLA breaches, new known-exploited CVEs, expiring exceptions). **Support** is a real helpdesk and **FAQ** answers the usual questions.
 
 <table>
 <tr><td valign="top" width="33%"><a href="docs/images/modules/home-dashboard.webp"><img src="docs/images/modules/home-dashboard.webp" width="300" alt="Dashboard page"></a><br><sub><b>Dashboard</b><br>KPIs, SLA status, and coverage across both pipelines at a glance</sub></td><td valign="top" width="33%"><a href="docs/images/modules/home-modules.webp"><img src="docs/images/modules/home-modules.webp" width="300" alt="All modules page"></a><br><sub><b>All modules</b><br>Pick what you want to do - vulnerability management, cyber risk, detection and hunting, the L1 SOC with SOAR, and more - and open the pages that belong to it</sub></td><td valign="top" width="33%"><a href="docs/images/modules/home-ask.webp"><img src="docs/images/modules/home-ask.webp" width="300" alt="Ask Quanta page"></a><br><sub><b>Ask Quanta</b><br>Free, real search over your live data - findings, CVEs, assets, real counts</sub></td></tr>
@@ -146,9 +163,11 @@ The SOC in one place: triage alerts, hunt, engineer detections, run threat intel
 
 **What it does**
 
-- **Cases** in L1/L2/L3 queues: priority from impact × urgency, service-level clocks derived on read, escalation that needs a written hand-off, and an automatic escalation once per tier when a resolve target is missed.
+- **Incidents, not cases to create**: every investigated alert is grouped into an incident automatically (shared host, account or public indicator, same-rule bursts, a shared vulnerability, the same technique, kill-chain progression), with the reason stored, a kill-chain view and a deterministic summary. Routing picks the tier and then the analyst (specialty, continuity, lowest sufficient tier, load, shift and capacity) and records a "why routed here" list; with nobody qualified it queues the incident and alerts the lead. Cases (L1/L2/L3 queues, priority from impact × urgency, service-level clocks, hand-off summaries, automatic escalation) are the work item an incident is routed as; manual creation is an audited exception.
+- **Investigation reports**: open an incident to a verdict with its rationale, bounded historical correlation, entities, indicators, ATT&CK next steps, an attack flow and recommended actions. Every statement cites evidence; one without it is dropped and counted, and unknown is shown as unknown. Live evidence runs only after you confirm.
 - **Alert triage and L1 investigation**: alerts (JSON or OCSF) ranked with vulnerability context, classified, matched to history and indicators, with optional read-only SIEM evidence. The verdict is advice a person validates, and a Critical alert is never called a false positive.
-- **Threat hunting**: one hunt per open CVE that is on the KEV list or has EPSS of 0.5 or more, with the affected hosts, the ATT&CK techniques Quanta tags and Splunk SPL rendered from Sigma-style selections. You run the query in your own SIEM and record the result; closing needs an outcome.
+- **Proactive hunt engine and hunt reports**: hypotheses built from intelligence, coverage gaps, baselines, exposure, identity, the Anthropic CVD feed and past outcomes, each with its evidence chain, SPL, KQL and Sigma leads, a scored priority and a data-readiness note that says "cannot tell" rather than guess. Accepting one creates an ordinary hunt; you run the queries in your own SIEM, record the result and close with an outcome, and the hunt report (one row per trial hit, an allow-list, detection recommendations) comes out of it. Quanta runs nothing by itself.
+- **Typed decisions and the confidence gate**: the alert verdict, finding routing and "does this need a change approval" are typed decisions with probabilities. The gate sends each to auto, review or a person, and auto is possible only for a reversible, local decision that does not touch your environment; a calibration report shows whether the confidence has been earned. With the shipped starting values nothing auto-closes.
 - **Detection engineering**: per-rule true-positive and noise rates over closed alerts, six health tiers (Maintain, Tune, Disable), Sigma before and after tuning, and ATT&CK coverage.
 - **SOAR**: validated playbooks. An action that changes the environment needs an approval step before it, a different person approves, dry runs contact nothing, and responses are signed webhooks to endpoints you own.
 - **Threat intelligence, Intel Intake and Dark Web Watch**: text or STIX scored for relevance to your estate, leak-site and credential-exposure matching raised as alerts.
@@ -157,18 +176,31 @@ The SOC in one place: triage alerts, hunt, engineer detections, run threat intel
 
 ```mermaid
 flowchart LR
-    A[Alert arrives<br/>JSON or OCSF] --> B[Rank with<br/>vulnerability context]
-    B --> C[L1 investigation<br/>history · indicators · SIEM evidence]
-    C --> D{Verdict<br/>a person validates}
-    D -->|escalate| E[Case L1 to L2 to L3<br/>SLA clocks]
-    D -->|respond| F[Playbook<br/>second-person approval]
-    D -->|benign| G[Close with outcome]
-    E --> H[Outcome feeds<br/>detection tuning]
-    G --> H
+    A[Alert arrives<br/>JSON, OCSF or ITSM ticket] --> B[Local investigation<br/>history · indicators · host context]
+    B --> C{Same incident?<br/>stored reasons}
+    C -->|yes| D[Join incident<br/>duplicates counted]
+    C -->|no| E[New incident<br/>kill chain · summary]
+    D --> F[Routing<br/>tier then analyst · why routed]
+    E --> F
+    F --> G[Investigation report<br/>evidence cited · confirm for live lookups]
+    G --> H{Verdict<br/>a person validates}
+    H -->|respond| I[Playbook<br/>second-person approval]
+    H -->|resolve| J[Outcome feeds<br/>calibration and tuning]
+```
+
+```mermaid
+flowchart LR
+    A[Intel · coverage gaps · exposure<br/>baselines · past outcomes] --> B[Hypotheses<br/>evidence chain · readiness]
+    B --> C[Accept<br/>creates a hunt]
+    C --> D[You run the leads<br/>in your own SIEM]
+    D --> E[Record results<br/>conclude]
+    E --> F[Hunt report<br/>allow-list · recommendations]
+    E --> G[Promote to a<br/>detection use case]
+    E --> A
 ```
 
 > [!NOTE]
-> **Limits.** Quanta is not a SIEM and runs no queries. It has not been run against a live SIEM; the models are classical statistics and Naive Bayes, not deep learning.
+> **Limits.** Quanta is not a SIEM and runs no queries. It has not been run against a live SIEM, reputation service or ITSM; the models are classical statistics and Naive Bayes, not deep learning, and the decision layer's starting probabilities are stated priors until calibration supports more.
 
 
 ### 2 · Application Security
@@ -257,7 +289,8 @@ Servers, network gear, OT, certificates and the exposure around them: what is re
 - **Infrastructure, OT and certificate vulnerability views** plus **quantum readiness**, each pre-filtered from the same finding store.
 - **Firewall rule analysis** from CSV, JSON, PAN-OS XML or FortiGate text: findings FW001 to FW013 (any-any, internet-exposed risky ports, shadowed, stale and more), owner recertification, and access requests checked against the rules.
 - **Attack chains** (entry, pivot, impact from tagged ATT&CK tactics) and **blast radius** (SBOM-derived), each honestly empty until the data exists.
-- **Compensating controls** and **network reachability** shown on every finding: verified, claimed, absent or unknown, never a guess. **Zero-day watch** matches new CISA KEV entries to your vendor and product vocabulary.
+- **External attack surface** (`/attack-surface`): import the JSON output of subfinder, dnsx, httpx, naabu and nuclei that you run against domains and ranges you own; Quanta tracks what is new, changed or disappeared between imports, flags anything outside your declared scope without raising findings, and says how old the data is. It never scans and never contacts a target.
+- **Compensating controls** and **network reachability** shown on every finding: verified, claimed, absent or unknown, never a guess. **Zero-day watch** matches new CISA KEV entries to your vendor and product vocabulary, and the **Anthropic CVD feed** (Anthropic's public disclosure payload) is matched to your estate there too (a name match is not a version check).
 
 **How the work flows**
 
@@ -267,12 +300,14 @@ flowchart LR
     B --> C[Exposure context<br/>topology · firewall · controls]
     C --> D[Attack chains<br/>and blast radius]
     D --> E[Remediation queue]
-    F[CISA KEV additions] --> G[Zero-day watch<br/>name match to your estate]
+    F[CISA KEV additions<br/>Anthropic CVD feed] --> G[Zero-day watch<br/>name match to your estate]
     G --> E
+    H[Imported discovery output<br/>subfinder · httpx · naabu · nuclei] --> I[Attack surface<br/>scope · delta]
+    I --> E
 ```
 
 > [!NOTE]
-> **Limits.** Every connector is built against the vendor's public API and unit-tested against a fake; none has been run against a live vendor account. Quanta never changes a firewall.
+> **Limits.** Every connector is built against the vendor's public API and unit-tested against a fake; none has been run against a live vendor account, and the CVD feed parser has never seen the live payload. Quanta never changes a firewall and never scans.
 
 
 ### 5 · AI Security
@@ -286,6 +321,8 @@ A register of the AI systems you run, checked against the OWASP LLM Top 10 and M
 **What it does**
 
 - **AI Security**: systems checked against the OWASP LLM Top 10 (2025), MCP exposure and governance with explicit rules. An unanswered question is a gap, not a pass.
+- **Agents, tools and MCP servers in the register**: provider, model ids, tools (scope, side effect, whether a person approves each call), MCP servers (transport, authentication, token audience, allowlist, sandbox, egress) and the AI lifecycle (prompt versioning, evaluation, release, observability). Rules cover the MCP controls (MCP001 to MCP008), agent-harness rules such as untrusted content reaching a side-effect tool with no approval (AGT001 to AGT004) and AI lifecycle gaps (AIDLC001 to AIDLC004), each with the exact setting that closes it. Quanta reads what you record; it does not connect to a server or probe an agent.
+- **A read-only MCP endpoint of Quanta's own** (Connections): off by default, a key with the `mcp:read` scope only, team-scoped, audited, seven read tools. See [docs/MCP_ENDPOINT.md](docs/MCP_ENDPOINT.md).
 - **AI Vulnerabilities**: findings on AI/ML systems, pre-filtered from the shared queue.
 - **AI Usage**: counts (never prompt text) from the Anthropic Usage and Cost Admin API, OpenAI organisation usage and OTLP. Cost is reported, estimated from your price list, or unknown, never zero.
 - **Discovery** of unreviewed AI applications from proxy or DNS exports.
@@ -350,6 +387,8 @@ Evidence and workflow for the people who answer to auditors and boards. Quanta s
 
 **What it does**
 
+- **Security Posture Review** (`/posture`): the recorded estate and this deployment assessed against ten frameworks (zero trust, secure by design, threat modelling, defence in depth, architecture, SDLC, AI lifecycle, software and AI supply chain, open source), 194 checks in all. A check is pass, partial, gap or not observable; what cannot be observed is listed, not counted, and every gap names the setting that closes it.
+- **Relationship graphs and an ontology**: every module has an interactive graph built from its own data (clusters, choke points, shortest routes, in the browser), and a typed vocabulary with provenance answers multi-hop questions across them.
 - **GRC**: framework catalogs (NIST 800-53, CSF 2.0, an AI-governance set, or a full OSCAL import), a risk register with suggestions from live findings, automated control tests (too little data gives n/a, never a pass), attestations, versioned policies and an OSCAL assessment-results export.
 - **Cyber risk**: FAIR-style Monte Carlo (annual loss expectancy, P90 and P95, treatment ROI) and a cyber health score. The inputs are your estimates.
 - **Access governance**: findings IAM001 to IAM007 (leavers, dormant, separation of duties and more), manager access reviews and an SoD pre-check.
@@ -385,7 +424,9 @@ Everything that keeps the platform safe to run, always included in every licence
 
 - **Connections**: credentials encrypted at rest (Fernet, key rotation), syncs scheduled through a durable job queue, and every connection type described as JSON Schema.
 - **Policies you edit in the app**: Priority Rules, Exploit Criteria, Remediation Policy, Asset Policy and Notification Settings, applied immediately.
-- **Users, teams and API keys**: local accounts or OIDC, an admin and user role narrowed by team, and scoped keys (`ingest:write`, `read:findings`, `tickets:update` and more) stored as hashes.
+- **Users, teams and API keys**: local accounts or OIDC, an admin and user role narrowed by team, and scoped keys (`ingest:write`, `read:findings`, `tickets:update`, `soc:write`, `asm:write`, `mcp:read` and more, optionally bound to one team) stored as hashes.
+- **Integrity and self-heal**: a SHA-256 baseline of the released code, read-only checks of the stores (database, schema, findings file, locks, snapshots, disk, clock, key and licence expiry) and four confirm-gated repairs, each logged. "Could not check" is never shown as OK.
+- **Environments, releases and simulation**: dev, test and prod from one image (`QUANTA_ENV`), a release preflight and a printed rollback plan, per-environment feature flags, and simulated connectors that are refused in prod unless an operator allows them.
 - **Support**: a real helpdesk with SLAs, routing rules, escalation and CSAT, kept inside Quanta.
 - **Module licensing**: a signed, offline-verified licence that works air-gapped; it starts in a non-blocking warn mode.
 
@@ -473,6 +514,8 @@ The pull request is the **only** place Quanta writes to a repository: always a n
 - **Pull requests**: new branch only, approval first, denied paths (pipeline files, CODEOWNERS, keys), no force-push, no merge, no package manager, no test run.
 - **Honest data**: KEV and EPSS apply only to findings with a CVE; an unmeasured domain is listed, not counted; "unknown" is shown instead of a guess; verification is evidence from the next scan, not proof.
 - **Hardened by default**: a same-origin-only Content-Security-Policy in production, a self-hosted font (no third-party request), throttled failed sign-ins, a `Secure` session cookie over HTTPS, and a guard that refuses XML entity declarations in anything Quanta parses from outside.
+- **Confidence gate**: a decision acts without a person only when it is reversible, local and does not touch an environment (the last part is fixed in code, not in a file you can edit); a Critical alert is never auto-closed.
+- **Read-only by construction** where it matters: the MCP endpoint registers read tools only and refuses to register another kind; Quanta never scans a target, changes a firewall, WAF or SIEM, merges a pull request or runs a generated playbook.
 - **Credentials** are encrypted at rest, passed as constructor arguments, and never put in an error message.
 
 > [!WARNING]
@@ -490,8 +533,9 @@ Quanta overlaps with several kinds of product but replaces none of them complete
 | **Application security posture (ASPM)** | Apiiro, Cycode, OX Security (commercial) | Correlating and de-duplicating findings from many AppSec scanners into one prioritised view, with deep source-control and CI/CD integration[^aspm] | A graph-based, application-centred ranking, fix pull requests, a release gate, and a library of pipeline controls | No code scanning of its own beyond the `/quanta-scan` pipeline; narrower scanner integrations |
 | **Software composition and SBOM** | OWASP Dependency-Track (open source) | Continuous component analysis of CycloneDX SBOMs against many vulnerability sources, policy, and VEX[^dt] | SBOM ingest and generation, a direct and transitive dependency graph, blast radius, and upgrade pull requests | Ships no advisory database: vulnerabilities come from scanner findings or the OSV check; no VEX export |
 | **Threat modelling** | IriusRisk, ThreatModeler (commercial); OWASP Threat Dragon (open source) | Diagram-driven modelling, large threat libraries, integrations[^tm] | Components, flows and trust zones entered as a form, a generated read-only data-flow diagram, and STRIDE threats from explicit rules joined to live findings and recorded controls | No drag-and-drop diagram editor and no large curated threat library |
-| **SOC and SOAR** | Wazuh, TheHive, Cortex, Shuffle, OpenCTI (open source stack); commercial SIEM and SOAR | Collecting and detecting on logs at scale, case management, observable analysis, and automation across many tools[^soc] | Cases with SLAs, alert triage and L1 investigation, hunts and detection health, playbooks with second-person approval | Not a SIEM: no log collection or detection at scale, and it runs no queries itself |
+| **SOC and SOAR** | Wazuh, TheHive, Cortex, Shuffle, OpenCTI (open source stack); commercial SIEM and SOAR | Collecting and detecting on logs at scale, case management, observable analysis, and automation across many tools[^soc] | Alerts grouped into routed incidents, cases with SLAs, L1 investigation and evidence-cited reports, hypothesis-driven hunts, detection health, playbooks with second-person approval | Not a SIEM: no log collection or detection at scale, and it runs no queries itself; never run against a live SIEM |
 | **GRC and compliance automation** | Vanta, Drata (commercial); CISO Assistant (open source) | Many framework mappings and integrations that collect compliance evidence automatically[^grc] | Control tests fed by live findings, a risk register, FAIR-style risk quantification, OSCAL import and export | Not a certifier, a smaller catalog (built-in subsets of NIST frameworks unless you import OSCAL), no auditor workflow |
+| **External attack surface management** | ProjectDiscovery's open-source tools (subfinder, httpx, naabu, nuclei); commercial EASM products | Discovering and probing the internet-facing estate, which Quanta never does | Reads those tools' JSON output, tracks what changed between imports, respects a declared scope, and puts findings in the same queue | No discovery, scanning or continuous monitoring; it sees only what you import and says how old that is |
 | **API security** | Salt Security, 42Crunch (commercial); Akto (open source) | Real-time traffic inspection, specification auditing, and a large library of API tests[^api] | Inventory from specifications and logs, OWASP API Top 10 findings with an evidence chain, signed protection-policy requests | No runtime blocking and no active testing; it does not sit in the traffic path |
 
 **Where Quanta is different**
@@ -580,10 +624,11 @@ Quanta would rather say what it has not done than imply it.
 
 | Status | What |
 |---|---|
-| ✅ Built and covered by tests | Ingest, scoring, the queue, approvals, exceptions, SBOM and graph, the pull-request lifecycle, the release gate, GRC, SOC cases, firewall analysis, licensing |
-| ⚠️ Unit-tested against fakes, **not run against a live vendor account** | Every connector, the Git host integration, OSV, signed webhooks, SIEM search, policy pushes |
+| ✅ Built and covered by tests | Ingest, scoring, the queue, approvals, exceptions, SBOM and graph, the pull-request lifecycle, the release gate, GRC, SOC incidents and routing, the decision gate, insights, integrity checks, firewall analysis, licensing |
+| ⚠️ Unit-tested against fakes, **not run against a live vendor account** | Every connector, the Git host integration, OSV, signed webhooks, SIEM search, reputation and ITSM lookups, policy pushes, the CVD feed (whose payload schema is undocumented), the MCP endpoint against a real client |
+| ⚠️ Not exercised in a real deployment | The live event stream behind a reverse proxy or several replicas, the release and rollback workflows, a live PostgreSQL or multi-replica integrity run, the decision layer's calibration on real outcomes |
 | ⚠️ Needs the Claude Code CLI | The AI fixers and the two slash commands |
-| ❌ Not done | Regenerating lock files or running a project's tests; shipping an advisory database (vulnerabilities come from scanner findings or the OSV check); acting on a firewall, WAF or SIEM; deep-learning models (the SOC models are classical statistics and Naive Bayes); a multi-machine file-lock story beyond the database leases |
+| ❌ Not done | Regenerating lock files or running a project's tests; shipping an advisory database (vulnerabilities come from scanner findings or the OSV check); scanning an external target, acting on a firewall, WAF or SIEM; deep-learning models (the SOC models are classical statistics and Naive Bayes); a multi-machine file-lock story beyond the database leases |
 | ℹ️ Scale | Findings are one stored file: tens of thousands, not millions. The Helm chart passes `helm lint` and `template` but has not been installed on a live cluster. |
 
 ---
@@ -600,6 +645,10 @@ Quanta would rather say what it has not done than imply it.
 | Going live | [docs/GOING_LIVE.md](docs/GOING_LIVE.md), [docs/PRODUCTION_GUIDE.md](docs/PRODUCTION_GUIDE.md), [docs/KUBERNETES.md](docs/KUBERNETES.md) |
 | Architecture and design rationale | [KNOWLEDGE_TRANSFER.md](KNOWLEDGE_TRANSFER.md), [dashboard/README.md](dashboard/README.md) |
 | Pricing, licensing, comparison | [docs/PRICING.md](docs/PRICING.md), [docs/LICENSING.md](docs/LICENSING.md), [docs/VR_PLATFORM_COMPARISON.md](docs/VR_PLATFORM_COMPARISON.md) |
+| The SOC, hunting and decision layers | [docs/SOC_INCIDENTS.md](docs/SOC_INCIDENTS.md), [docs/INVESTIGATION_REPORTS.md](docs/INVESTIGATION_REPORTS.md), [docs/HUNT_ENGINE.md](docs/HUNT_ENGINE.md), [docs/SOC_HUNT_UI.md](docs/SOC_HUNT_UI.md), [docs/DECISIONS.md](docs/DECISIONS.md) |
+| Exposure, intelligence and insight | [docs/ATTACK_SURFACE.md](docs/ATTACK_SURFACE.md), [docs/CVD_FEED.md](docs/CVD_FEED.md), [docs/INSIGHTS.md](docs/INSIGHTS.md), [docs/POSTURE.md](docs/POSTURE.md), [docs/ONTOLOGY.md](docs/ONTOLOGY.md) |
+| Operating it | [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md), [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md), [docs/INTEGRITY.md](docs/INTEGRITY.md), [docs/MCP_ENDPOINT.md](docs/MCP_ENDPOINT.md), [docs/SIMULATION.md](docs/SIMULATION.md), [docs/UI_KIT.md](docs/UI_KIT.md) |
+| Reviewing the repository | [docs/REVIEWER_GUIDE.md](docs/REVIEWER_GUIDE.md), [docs/AI_ENGINEERING_ROADMAP.md](docs/AI_ENGINEERING_ROADMAP.md) |
 | What changed | [CHANGELOG.md](CHANGELOG.md) |
 | Reporting a security issue | [SECURITY.md](SECURITY.md) |
 
@@ -611,12 +660,14 @@ Quanta would rather say what it has not done than imply it.
 .claude/commands/      /quanta-scan and /remediate
 cli/                   quanta.py (headless pipelines), quanta_admin.py (operator), quanta_license.py
 dashboard/             FastAPI backend (app.py, appsec_api.py) and the vanilla-JS single-page app (static/)
-remediation/           the engine: ingest, enrichment, scoring, appsec, gitops, devsecops, soc, soar, hunting,
-                       risk, grc, iam, firewall, aisec, aiusage, apisec, connectors, connections, licensing, config/
+remediation/           the engine: ingest, enrichment, scoring, appsec, gitops, devsecops, soc (incidents), soar,
+                       hunting (engine), investigation, decisions, insights, ontology, graphs, posture, integrity,
+                       asm, cvd, mcp, simulation, risk, grc, iam, firewall, aisec, aiusage, apisec, connectors,
+                       connections, licensing, config/
 tests/                 one unittest file per module; hand-rolled fakes, no real spend
 docs/                  guides, the integration API, docs/images/ and docs/enterprise-suite/ (16 HTML documents)
 deploy/, Dockerfile    Helm chart, Caddy, container build
-scripts/               migrations, end-to-end replica test, the PDF/offline documentation pipeline
+scripts/               CI sharding (ci_shard.py), data migration, end-to-end replica tests, the PDF/offline documentation pipeline
 vulnerable-demo-app/   the intentionally vulnerable scan target (never deploy)
 ```
 </details>
@@ -624,10 +675,10 @@ vulnerable-demo-app/   the intentionally vulnerable scan target (never deploy)
 ## 🧪 Tests and contributing
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py"    # 2475 tests, takes about ten to twenty minutes
+python -m unittest discover -s tests -p "test_*.py"    # 3,707 tests collected (2026-10-07); a serial run is slow, so CI uses four shards
 ```
 
-One `unittest` file per module, hand-rolled fakes, and no real spend in the suite. CI installs the four requirements files and runs it on every push and pull request.
+One `unittest` file per module, hand-rolled fakes, and no real spend in the suite. CI installs the four requirements files and runs it on every push and pull request in four parallel shards (`scripts/ci_shard.py`), each test module in its own process with a 900 second limit.
 Several sessions can work in parallel: [BRANCHES.md](BRANCHES.md) says which branch owns which folder, and [CLAUDE.md](CLAUDE.md) is the working guide for anyone (human or Claude Code) changing the code. Keep the [enterprise documentation suite](docs/enterprise-suite/MANIFEST.md) in step with any change that makes a claim in it wrong.
 
 ## Disclaimer

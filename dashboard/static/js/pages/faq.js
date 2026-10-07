@@ -524,7 +524,7 @@ const FAQS = [
     "It assesses what Quanta has recorded, and this deployment's own settings, against ten " +
     "frameworks: zero trust, secure by design, threat modelling, defence in depth, architecture, " +
     "the secure development lifecycle, the AI development lifecycle, software supply chain, AI " +
-    "supply chain and open-source dependencies, 183 checks in all. Each check is a pass, partial, " +
+    "supply chain and open-source dependencies, 194 checks in all. Each check is a pass, partial, " +
     "gap, or not observable, and opens to show the recorded facts it looked at, what to do, and " +
     "the exact setting to change (an environment variable, a config file key, a Helm value or a " +
     "page). A score appears only when enough could be observed; what Quanta cannot see (build " +
@@ -592,6 +592,151 @@ const FAQS = [
     "patents, so that alone is unlikely to be novel. A couple of narrower angles are " +
     "flagged as worth a real attorney's opinion, not claimed as patentable here - see " +
     "docs/enterprise-suite/whitepaper.html §04."],
+  ["Why was this incident routed to me?",
+    "Open the incident (the SOC page, or /soc?incident=ID) and read \"Why routed here\": it is a " +
+    "stored list, not a guess. Quanta first picked the tier from the alert's severity, any " +
+    "known-exploited vulnerability on the host, whether the host is a crown jewel, how far the " +
+    "kill chain has progressed and the confidence of the first-look verdict. It then picked the " +
+    "analyst from those who are available, in shift (or on call for P1 and P2) and under their " +
+    "capacity, preferring the right specialty, someone who already worked related incidents, the " +
+    "lowest tier that is sufficient and the lightest weighted load. If nobody qualified, the " +
+    "incident is queued and the lead is alerted instead of being given to someone who does not " +
+    "qualify. An administrator can test the rules without changing anything with 'POST " +
+    "/api/soc/routing/preview', and edits them in 'remediation/config/soc_routing.yaml'. " +
+    "Reassigning is a recorded action, not a hidden override. See SOC_INCIDENTS."],
+  ["Why are there no cases to create?",
+    "Analysts do not create cases. Every alert Quanta investigates is grouped into an incident " +
+    "automatically (same host, account or public indicator, a burst of the same rule, a shared " +
+    "vulnerability, the same technique, a kill-chain step forward), summarised and routed, and " +
+    "the existing case row is the work item the incident is routed as, with its service-level " +
+    "clocks. Repeats of the same rule on the same host within 30 minutes are counted as " +
+    "duplicates, never dropped. Manual creation still exists as an audited exception under More " +
+    "on the SOC page: it needs a written reason of at least 10 characters, which is recorded on " +
+    "the incident and in the activity log. An alert that was never investigated (below the " +
+    "auto-investigate severity floor, or past the per-request cap) is not grouped until someone " +
+    "investigates it. Setting 'incidents.enabled: false' in 'soc_routing.yaml' restores the older " +
+    "one-case-per-alert rule."],
+  ["What is in an incident investigation report, and how far can I trust it?",
+    "Open the incident from the SOC page. The report is assembled from stored data, not written " +
+    "by a model: a verdict with its rationale, a bounded historical correlation (\"None in 90 " +
+    "days\" or the exact counts), an entities table, indicators with reputation, ATT&CK next " +
+    "steps, an attack flow and recommended actions. Every statement cites evidence listed in the " +
+    "report; a statement with no valid evidence reference is dropped and counted, never filled " +
+    "in. Unknown is a value: an owner or privilege no record gives is shown as unknown, and an " +
+    "indicator nobody looked up is not-looked-up, never clean. Live evidence (reputation lookups, " +
+    "SIEM searches from a fixed query playbook with hard stops) runs only after you confirm, " +
+    "private addresses are never sent to the reputation service, and any action that would change " +
+    "an environment is flagged as needing a second person. A ServiceNow or Jira ticket sent to " +
+    "'POST /api/ingest/itsm-ticket' (key scope 'soc:write') becomes an alert and arrives with the " +
+    "report waiting; a comment back to the ticket is a dry run until confirmed and is never " +
+    "posted twice. See INVESTIGATION_REPORTS. Built against public documentation and fakes; never " +
+    "run against a live SIEM, reputation service or ITSM."],
+  ["How do suggested hunts work, and why do they say \"cannot tell\"?",
+    "The Threat Hunting page opens on Suggested hunts. Each card is a hypothesis to test (\"if " +
+    "this actor is active here, we would expect to see this evidence on these hosts\"), built from " +
+    "data Quanta already holds: imported intelligence reports, threat actors for your industry, " +
+    "Anthropic CVD advisories, known-exploited vulnerabilities, ATT&CK techniques that no enabled " +
+    "detection rule claims, baselines, exposure, identity and the outcomes of past hunts. It " +
+    "shows why now (records you can open), the evidence chain, the ATT&CK techniques, ready-made " +
+    "SPL, KQL and Sigma leads, likely benign explanations and a scored priority with its working. " +
+    "\"Cannot tell\" is deliberate: Quanta only marks a data source as connected when a connection " +
+    "proves it, and otherwise says it cannot tell, because your logs may live in a system it " +
+    "cannot see. A generator with no data (no reports imported, no industry set, no detection " +
+    "rules recorded) says so in a plain sentence, so an empty board is never mistaken for " +
+    "\"nothing to hunt\". Accept a hypothesis to create an ordinary hunt, run the leads in your own " +
+    "SIEM (or through the confirm-gated Splunk search if you connected one), record each result, " +
+    "and close the hunt with an outcome; concluding it feeds the next suggestions, and a hunt " +
+    "that found something can be promoted to a detection use case, which never counts as coverage " +
+    "until a rule is deployed. Quanta never runs anything by itself. See HUNT_ENGINE."],
+  ["How do I feed the attack surface page?",
+    "Quanta never scans and never contacts a target. You run discovery tools yourself, only " +
+    "against domains and ranges you own or are authorised in writing to test, and import their " +
+    "JSON output on Attack Surface (Module 4, administrators) under Import and scope, or from a " +
+    "pipeline with 'POST /api/ingest/asm?tool=httpx&scope=example.com' and an API key with the " +
+    "'asm:write' scope. Supported: subfinder ('-oJ'), dnsx ('-json'), httpx ('-json', ideally " +
+    "with '-tech-detect -web-server -tls-grab'), naabu ('-json') and nuclei ('-jsonl'). First " +
+    "declare your scope (domains and CIDR ranges; the seeds CSV is administrator only), because " +
+    "an asset outside it is stored and flagged but never raises a finding. Importing the same " +
+    "data twice changes nothing; each import records what is new, changed (a new technology or " +
+    "certificate) or disappeared, and \"disappeared\" counts only from a complete import " +
+    "('complete=true') by a tool that can speak for absence, for the scope you name. Findings " +
+    "publish to the queue as source 'asm' on request ('publish=true'). The page always says how " +
+    "old the import is. See ATTACK_SURFACE."],
+  ["What does the Integrity page check, and what will it repair?",
+    "On the Activity Log page, the Integrity tab (administrators) answers three questions: is the " +
+    "running code the released code, are the stores consistent, and what can be repaired safely. " +
+    "The code check compares a SHA-256 manifest built into the image ('python cli/quanta_admin.py " +
+    "integrity-manifest') with the files on disk; a changed policy file under " +
+    "'remediation/config/' is reported as a policy change, not tampering, and no manifest reports " +
+    "\"no baseline\", never ok. The store checks look at the database, tables against migrations, " +
+    "the findings file and its '.bak', orphaned assignments and approvals, stale lock files, file " +
+    "snapshots, disk space, clock skew and API key and licence expiry. \"Could not check\" is never " +
+    "shown as ok. Exactly four repairs exist: remove lock files whose owner process is gone, " +
+    "restore the findings file from its '.bak' (keeping the bad copy), recreate missing tables, " +
+    "and rebuild file snapshots. Each previews first, runs only with confirm ('python " +
+    "cli/quanta_admin.py check-integrity --heal --confirm' or the page) and is written to the " +
+    "activity log. Anything else (a corrupt database, an unknown file, a clock) is reported for a " +
+    "person. See INTEGRITY."],
+  ["How do I enable the MCP endpoint safely?",
+    "It is off until you set 'QUANTA_MCP_ENABLED=true' and restart (until then '/mcp' answers " +
+    "404). Then, on Connections, create an API key with the 'mcp:read' and 'read:findings' " +
+    "scopes, ideally bound to one team so it sees only that team's findings and assets, and point " +
+    "your MCP client at 'https://<your-quanta>/mcp' with an 'Authorization: Bearer' header (the " +
+    "Connections page shows a copy-paste config with a placeholder key). Only an API key opens " +
+    "it, never a browser session, never anonymous and never a token in a URL. It offers seven " +
+    "read-only tools (search findings, get a finding, list assets, known-exploited open findings, " +
+    "top priorities, attack paths for an asset and a posture summary), each checked on every " +
+    "call, with closed input schemas, size-capped and secret-masked output marked untrusted, rate " +
+    "limits and an audit entry for every call and denial (never the result body). It cannot " +
+    "change anything. Treat what an assistant does with the answers as you would any export of " +
+    "that data: it leaves Quanta. See MCP_ENDPOINT."],
+  ["What is the confidence gate, and when can Quanta act without a person?",
+    "Some Quanta judgements are typed decisions: a fixed set of answers, each with a probability " +
+    "and a confidence, from a deterministic evaluator. The gate routes each decision to auto, " +
+    "review or human by the lowest of its probability and confidence against thresholds in " +
+    "'remediation/config/decision_policy.yaml' (for the alert verdict: auto at 0.95 or more, " +
+    "review at 0.6 or more, otherwise a person decides). Auto is possible only when the policy " +
+    "says the decision is reversible and local AND the code says it does not touch a customer " +
+    "environment; that second flag is not editable in the YAML. A decision that touches an " +
+    "environment (whether a remediation needs a change approval) tops out at review whatever its " +
+    "confidence, and a Critical alert is never auto-closed as a likely false positive. The " +
+    "shipped starting probabilities are stated priors, below the auto threshold, so nothing " +
+    "reaches auto until the calibration report ('GET /api/decisions/calibration', administrators: " +
+    "reliability, Brier score, calibration error, override rate) supports raising it; the report " +
+    "only recommends and never changes the file. See DECISIONS."],
+  ["What are Insights on Home, and what is structured Ask?",
+    "Insights are things that changed and why they matter, found by 17 deterministic detectors " +
+    "over your own data (new known-exploited findings week over week, SLA trend, a burst of " +
+    "findings on one asset, an asset that became internet-facing or lost its owner, a control " +
+    "that disappeared, an expiring exception, a stalled approval, a quiet source, a noisy " +
+    "detection rule, an alert-volume anomaly and more). Each card has the evidence, a confidence, " +
+    "and a next best action on the right page. If a source is unavailable it is a gap note, and " +
+    "with too little history it says \"not enough history\" instead of guessing. Snooze, dismiss or " +
+    "mark one acted: the decision sticks to the situation across refreshes, and the learned " +
+    "weighting is bounded and visible to administrators. Refresh is hourly " +
+    "('QUANTA_INSIGHTS=false' turns it off). Ask Quanta tries structured Ask first: a fixed " +
+    "grammar is parsed into a structured query, run with your own permissions, and the exact " +
+    "query is shown. No model is called. See INSIGHTS."],
+  ["What is the Anthropic CVD feed, and how do I use it?",
+    "It is a threat-intelligence source: Anthropic's public coordinated-vulnerability-disclosure " +
+    "page and its published payload, read only (nothing about your estate is sent, and nothing " +
+    "unofficial is read). On Zero-day Watch, an administrator tests the connection and fetches (a " +
+    "preview until you confirm); advisories are matched to your findings. A CVE match is exact; a " +
+    "name match reuses the zero-day-watch product vocabulary and is NOT a version check. Ledger " +
+    "entries that have not yet revealed a project or CVE cannot match. The hourly refresh is off " +
+    "unless 'QUANTA_CVD_FEED_REFRESH=true'. Honest limit: the payload schema is undocumented, so " +
+    "the parser is tolerant and was never run against the live site; check the first real fetch. " +
+    "See CVD_FEED."],
+  ["How do I use the command palette and live updates?",
+    "Press Ctrl or Cmd+K anywhere to search every page you may open (a module your licence does " +
+    "not cover, a page behind a feature flag that is off, and admin-only pages for non-admins are " +
+    "not offered), recent pages, actions (switch module, toggle theme, copy link) and findings " +
+    "and assets. '/' focuses the search box, '?' lists the shortcuts, and 'g h', 'g m', 'g q' go " +
+    "to Home, all modules and the queue. Pages that show live work (the SOC board, the " +
+    "notification bell) share one read-only event stream ('GET /api/events'); if it drops, the " +
+    "browser falls back to polling and pauses while the tab is hidden. The Design System page " +
+    "('/design-system') is the living style guide for the shared components. See UI_KIT and " +
+    "SOC_HUNT_UI."],
   ["What if I find a bug or need help?",
     "See the Support page, or docs/SUPPORT.md in the repo."],
 ];
