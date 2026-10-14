@@ -90,7 +90,7 @@ jobs:
             BUILD_SHA=${{ github.sha }}
             BUILD_TIME=${{ steps.bt.outputs.time }}
       - name: Attest the image
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/quanta
           subject-digest: ${{ steps.push.outputs.digest }}
