@@ -120,7 +120,7 @@ jobs:
           mkdir -p release-record
           helm get values quanta -n quanta-dev -o yaml > release-record/values-before.yaml
           helm history quanta -n quanta-dev -o json > release-record/history-before.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-record-dev
           path: release-record
@@ -157,7 +157,7 @@ jobs:
           mkdir -p release-record
           helm get values quanta -n quanta-test -o yaml > release-record/values-before.yaml
           helm history quanta -n quanta-test -o json > release-record/history-before.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-record-test
           path: release-record
@@ -203,7 +203,7 @@ jobs:
           mkdir -p release-record
           helm get values quanta -n quanta-prod -o yaml > release-record/values-before.yaml
           helm history quanta -n quanta-prod -o json > release-record/history-before.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-record-prod
           path: release-record
